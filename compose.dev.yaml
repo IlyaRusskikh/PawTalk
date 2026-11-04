@@ -1,0 +1,8 @@
+# Local prototype: run the API and Electron on the host; only LiveKit is containerized.
+name: voicecord-dev
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.11
+    command: ["--config", "/etc/livekit.yaml", "--bind", "0.0.0.0"]
+    ports: ["127.0.0.1:7880:7880", "7881:7881/tcp", "7882:7882/udp"]
+    volumes: ["./deploy/generated/livekit.dev.yaml:/etc/livekit.yaml:ro"]

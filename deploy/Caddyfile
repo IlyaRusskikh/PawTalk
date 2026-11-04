@@ -1,0 +1,26 @@
+{
+	admin localhost:2019
+	default_sni {$SERVER_IP}
+}
+
+https://{$SERVER_HOST} {
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+			email {$ACME_EMAIL}
+			profile shortlived
+		}
+	}
+	@api path /api/* /healthz
+	handle @api {
+		reverse_proxy 127.0.0.1:8080 {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+	handle_path /rtc* {
+		reverse_proxy 127.0.0.1:7880
+	}
+	handle {
+		respond "Voicecord voice server" 200
+	}
+}

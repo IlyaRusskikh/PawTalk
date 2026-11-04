@@ -1,0 +1,64 @@
+<!doctype html><html><body><script type="module">
+import { VoiceSession } from '/src/session.ts';
+import { defaults } from '/src/settings.ts';
+import {Room,Track,RoomEvent,LocalAudioTrack} from 'livekit-client';
+const query = new URLSearchParams(location.search);
+const voice = new VoiceSession({...defaults, echoCancellation:false, noiseMode:query.get('noise') || 'off', autoGainControl:false, sounds:false, autoSensitivity:false, threshold:-80, inputMode:'ptt', pttReleaseMs:0}, {sharedAudioContext:query.get('shared')!=='false'});
+window.voice = voice; window.snapshot = {}; window.lastError = '';
+voice.onUpdate = value => window.snapshot = value;
+voice.onError = message => window.lastError = message;
+window.start = async data => {
+  await voice.connect(data.url, data.token, {required:data.e2eeRequired, key:data.e2eeKey}); voice.setPtt(true);
+  // Research-only override; production retains Chromium's adaptive buffer.
+  if(query.has('jitter')&&query.get('jitter')!=='auto') {
+    const apply=track=>{if(track.receiver&&'jitterBufferTarget' in track.receiver)track.receiver.jitterBufferTarget=Number(query.get('jitter'));};
+    voice.room.on(RoomEvent.TrackSubscribed,apply);for(const mixer of voice.mixers.values())apply(mixer.track);
+  }
+};
+// Deliberately modified sender: bypasses VoiceSession safeguards for the negative test.
+window.startPlain = async data => {
+  window.plain = new Room(); await window.plain.connect(data.url,data.token,{autoSubscribe:false});
+  window.plainStream = await navigator.mediaDevices.getUserMedia({audio:true});
+  await window.plain.localParticipant.publishTrack(new LocalAudioTrack(window.plainStream.getAudioTracks()[0]),{source:Track.Source.Microphone});
+};
+window.energy = async () => {
+  const track = [...voice.mixers.values()][0]?.track;
+  if (!track) return 0;
+  const analyser = voice.playback.createAnalyser(); analyser.fftSize = 2048;
+  const source = voice.playback.createMediaStreamSource(new MediaStream([track.mediaStreamTrack])); source.connect(analyser);
+  const data = new Float32Array(2048); await new Promise(r=>setTimeout(r,100)); analyser.getFloatTimeDomainData(data);
+  source.disconnect(); analyser.disconnect(); return data.reduce((s,x)=>s+x*x,0)/data.length;
+};
+let taps = [];
+const clockOffset = ctx => { const stamp = ctx.getOutputTimestamp(); if (!stamp.contextTime) throw Error('Audio clock not ready'); return performance.timeOrigin + stamp.performanceTime - stamp.contextTime*1000; };
+window.beginMeasure = async () => {
+  const input = voice.mic.context, output = voice.playback;
+  for (const ctx of new Set([input,output])) await ctx.audioWorklet.addModule('/tests/latency-meter.js');
+  // Tap the actual source feeding the gate. A second MediaStreamSource can
+  // introduce an independent capture queue and bias the latency reference.
+  const raw = voice.mic.source;
+  const gain = [...voice.mixers.values()][0].track.gainNode;
+  taps = [[input,raw],[output,gain],[input,voice.mic.node]].map(([ctx,source])=>{
+    const node = new AudioWorkletNode(ctx,'latency-meter');
+    const tap = {ctx,source,node,frames:[],offset:0};
+    node.port.onmessage = event => tap.frames.push(...event.data);
+    source.connect(node); node.connect(ctx.destination); return tap;
+  });
+  // Attaching a silent meter to the device can activate a previously capture-only
+  // context. Let its output clock settle before calibration and measurement.
+  await new Promise(r=>setTimeout(r,1500));
+  for (const tap of taps) { tap.offset=clockOffset(tap.ctx); tap.frames=[]; }
+};
+window.endMeasure = () => taps.map(tap => {
+  const offsetEnd = clockOffset(tap.ctx);
+  tap.source.disconnect(tap.node); tap.node.disconnect(); tap.node.port.onmessage = null;
+  return {frames:tap.frames, offset:tap.offset, offsetEnd};
+});
+window.ready = true;
+window.receiverStats = async () => {
+  const track=[...voice.mixers.values()][0]?.track;
+  if (!track) return null;
+  const stats=await track.getRTCStatsReport();
+  return {hintMs:track.receiver?.jitterBufferTarget, inbound:[...stats.values()].find(s=>s.type==='inbound-rtp'&&s.kind==='audio'),pair:[...stats.values()].find(s=>s.type==='candidate-pair'&&s.state==='succeeded'&&s.nominated),candidates:[...stats.values()].filter(s=>s.type==='local-candidate'||s.type==='remote-candidate')};
+};
+</script></body></html>

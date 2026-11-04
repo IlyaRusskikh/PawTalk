@@ -1,0 +1,36 @@
+# Dependencies and generated build output
+node_modules/
+/src/generated/
+/dist/
+/release/
+/native/build/
+/resources/server/
+*.log
+*.exe
+*.test
+*.tsbuildinfo
+coverage/
+
+# Server secrets, local configuration and certificates
+.env
+.env.*
+!.env.example
+!.env.*.example
+/deploy/generated/
+*.pem
+*.key
+*.pfx
+*.p12
+*.crt
+*.cer
+
+# Local handoff notes and network reports
+/CONTINUE.md
+connection-report*.json
+
+# Editor and OS state
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini

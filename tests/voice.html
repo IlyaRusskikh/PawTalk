@@ -1,0 +1,80 @@
+<!doctype html><html><body><script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { Participants } from '/src/Participants.tsx';
+import { GuestShare } from '/src/GuestShare.tsx';
+import '/src/style.css';
+import { VoiceSession } from '/src/session.ts';
+import { defaults } from '/src/settings.ts';
+import { Track, LocalVideoTrack, Room } from 'livekit-client';
+const c = new VoiceSession({ ...defaults, echoCancellation: false, noiseMode: new URLSearchParams(location.search).get('noise') === 'rnnoise' ? 'rnnoise' : 'off', autoGainControl: false, sounds: false, autoSensitivity: false, threshold: -75, inputMode: 'ptt', pttReleaseMs: 0 });
+window.voice = c;
+let uiRoot;
+const root = () => { if(!uiRoot){const el=document.createElement('div');el.style.padding='30px';document.body.append(el);uiRoot=createRoot(el);}return uiRoot;};
+window.renderParticipants = () => {
+ function Demo(){const [prefs,setPrefs]=React.useState({});return React.createElement(Participants,{people:window.snapshot.people,prefs,onChange:(id,volume,muted)=>{window.changedPref={id,volume,muted};c.setPerson(id,volume,muted);setPrefs(prev=>({...prev,[id]:{volume,muted}}));}});}
+ root().render(React.createElement(Demo));
+};
+window.renderGuestShare = target => root().render(React.createElement(GuestShare,{target,name:'Guest room',onClose:()=>root().render(null)}));
+window.snapshot = {};
+c.onUpdate = value => { window.snapshot = value; };
+c.onError = message => { window.lastError = message; };
+window.start = async data => { await c.connect(data.url,data.token,{required:data.e2eeRequired,key:data.e2eeKey}); c.setMute(false,false); c.setPtt(true); };
+let decodedEnergy = 0;
+const meters = new Map();
+setInterval(() => {
+ for (const [id,mixer] of c.mixers) {
+  if (!meters.has(id)) {
+   const source = c.playback.createMediaStreamSource(new MediaStream([mixer.track.mediaStreamTrack]));
+   const analyser = c.playback.createAnalyser(); analyser.fftSize = 2048;
+   source.connect(analyser); meters.set(id,{source,analyser,data:new Float32Array(2048),time:c.playback.currentTime});
+  }
+ }
+ for(const [id,meter] of meters) {
+  if(!c.mixers.has(id)) { meter.source.disconnect(); meter.analyser.disconnect(); meters.delete(id); continue; }
+  const now=c.playback.currentTime;
+  meter.analyser.getFloatTimeDomainData(meter.data);
+  decodedEnergy += meter.data.reduce((sum,x)=>sum+x*x,0)/meter.data.length*(now-meter.time);
+  meter.time=now;
+ }
+},20);
+window.energy = async () => {
+ let bytes = 0;
+ for(const p of c.room?.remoteParticipants.values() || []) {
+  const report = await p.getTrackPublication(Track.Source.Microphone)?.track?.getRTCStatsReport();
+  report?.forEach(stat => { if(stat.type === 'inbound-rtp' && stat.kind === 'audio') bytes += stat.bytesReceived || 0; });
+ }
+ return {energy:decodedEnergy,bytes};
+};
+window.tryCamera = async () => {
+ const canvas = document.createElement('canvas'); canvas.width=16; canvas.height=16;
+ const stream = canvas.captureStream(1); const track = new LocalVideoTrack(stream.getVideoTracks()[0],undefined,true);
+ try { await c.room.localParticipant.publishTrack(track,{source:Track.Source.Camera}); return false; }
+ catch { return true; } finally { track.stop(); stream.getTracks().forEach(t=>t.stop()); }
+};
+window.tryToken = async data => {
+ const room = new Room();
+ try { await room.connect(data.url,data.token); return false; }
+ catch { return true; } finally { await room.disconnect(); }
+};
+window.ready = true;
+// Measure samples after the actual SDK playback gain, rather than RTP energy
+// or just the slider value. Also verify the parallel HTML player is muted.
+window.outputRMS = async () => {
+ const mixer = [...c.mixers.values()][0];
+ const analyser = c.playback.createAnalyser(); analyser.fftSize = 2048;
+ const gain = mixer.track.gainNode;
+ if (!gain || mixer.track.attachedElements.some(el => !el.muted)) throw new Error('Playback bypasses WebAudio');
+ gain.connect(analyser);
+ const data = new Float32Array(analyser.fftSize);
+ let energy = 0;
+ try {
+  for(let i = 0; i < 30; i++) {
+   await new Promise(resolve => setTimeout(resolve, 20));
+   analyser.getFloatTimeDomainData(data);
+   energy += data.reduce((sum,x) => sum+x*x,0) / data.length;
+  }
+  return Math.sqrt(energy / 30);
+ } finally { gain.disconnect(analyser); analyser.disconnect(); }
+};
+</script></body></html>

@@ -1,0 +1,5 @@
+# docker compose -f compose.yaml -f compose.local.yaml up -d --build
+services:
+  proxy:
+    volumes:
+      - ./deploy/Caddyfile.local:/etc/caddy/Caddyfile:ro

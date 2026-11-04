@@ -1,0 +1,31 @@
+# Linux VPS: VOICECORD_PUBLIC_IP=203.0.113.10 docker compose -f compose.server.yaml up -d --build
+name: voicecord-server
+services:
+  server:
+    image: voicecord-server:local
+    build:
+      context: .
+      dockerfile: server/standalone.Dockerfile
+    network_mode: host
+    environment:
+      # Required only on first start; subsequent starts use the saved address.
+      VOICECORD_PUBLIC_IP: ${VOICECORD_PUBLIC_IP:-}
+      VOICECORD_PORT: ${VOICECORD_PORT:-18443}
+      VOICECORD_E2EE: ${VOICECORD_E2EE:-false}
+      VOICECORD_E2EE_KEY_ID: ${VOICECORD_E2EE_KEY_ID:-}
+    volumes:
+      - server_data:/data
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+volumes:
+  server_data:

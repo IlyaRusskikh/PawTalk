@@ -1,0 +1,123 @@
+import { spawn, spawnSync } from 'node:child_process';
+import assert from 'node:assert/strict';
+import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import tls from 'node:tls';
+const profile = await mkdtemp(path.join(os.tmpdir(), 'voicecord-packaged-'));
+const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.VOICECORD_DEV_URL;
+const invite = `voicecord://127.0.0.1:32443/${'a'.repeat(64)}`;
+const child = spawn(path.resolve(process.env.VOICECORD_PACKAGED_DIR || 'release/win-unpacked', 'Voicecord.exe'), ['--smoke', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=19337', `--user-data-dir=${profile}`, invite], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+let stderr = '';
+child.stderr.on('data', data => { stderr = (stderr + data.toString()).slice(-131072); });
+let socket;
+let next = 0;
+const pending = new Map();
+function rpc(method, params = {}) {
+  return new Promise((resolve, reject) => {
+    const id = ++next;
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`${method} timed out`)); }, 60000);
+    pending.set(id, { resolve: value => { clearTimeout(timer); resolve(value); }, reject });
+    socket.send(JSON.stringify({ id, method, params }));
+  });
+}
+async function evaluate(expression) {
+  const result = await rpc('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+  if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
+  return result.result.value;
+}
+try {
+  let target;
+  for (let i = 0; i < 100; i++) {
+    try { const list = await (await fetch('http://127.0.0.1:19337/json/list')).json(); target = list.find(item => item.type === 'page' && item.url.startsWith('file:')); if (target) break; } catch {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(target, 'packaged window loads');
+  socket = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, { once: true }); socket.addEventListener('error', reject, { once: true }); });
+  socket.addEventListener('message', event => {
+    const message = JSON.parse(event.data); const request = pending.get(message.id);
+    if (request) { pending.delete(message.id); if (message.error) request.reject(new Error(JSON.stringify(message.error))); else request.resolve(message.result); }
+  });
+  const info = await evaluate('window.desktop.capabilities()');
+  assert.equal(info.native, true); assert.equal(info.packaged, true);
+  assert.equal(await evaluate('typeof window.require'), 'undefined');
+  for(let i=0;i<100;i++) {
+    if(await evaluate('!!document.querySelector("h1")')) break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(await evaluate('document.querySelector("h1")?.textContent'), 'Разговор начинается здесь.');
+  assert.equal(await evaluate('window.desktop.pendingInvitation()'), invite, 'protocol argument reaches preload');
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('input')).some(el=>el.value===${JSON.stringify(invite)})`), true, 'protocol invitation fills the connection form');
+  assert.equal(await evaluate(`document.querySelectorAll('.person-card').length`), 0, 'opening invitation does not auto-connect');
+  await evaluate(`document.querySelector('button[title="Настройки"]').click()`);
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.equal(await evaluate('document.querySelector("dialog h2")?.textContent'), 'Настройки');
+  for(let i=0;i<100;i++) {
+    if(await evaluate(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Проверка микрофона'&&!b.disabled)`)) break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Проверка микрофона'&&!b.disabled)`),true,'packaged RNNoise model loads and microphone starts');
+  assert.equal(await evaluate(`document.querySelector('[aria-label="Режим шумоподавления"]').value`),'rnnoise');
+  await assert.rejects(evaluate(`window.desktop.connect({address:'http://127.0.0.1:8080',nickname:'test',password:'test'})`));
+  await evaluate(`window.selfhostPassword=crypto.randomUUID(); window.desktop.startHost({port:32443,password:window.selfhostPassword})`);
+  const hostStatus = await evaluate('window.desktop.hostStatus()');
+  assert.equal(hostStatus.running, true, 'packaged server resources start');
+  await evaluate(`document.querySelector('dialog [aria-label="Закрыть"]').click()`);
+  await evaluate(`Array.from(document.querySelectorAll('.home-action')).find(b=>b.textContent.includes('Создать комнату')).click()`);
+  for (let i = 0; i < 50; i++) {
+    if (await evaluate(`!!document.querySelector('.host-invite button')`)) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  const selectedInvitation = await evaluate(`document.querySelector('.host-invite input').value`);
+  assert.ok(hostStatus.invitations.includes(selectedInvitation), 'selected invitation belongs to the running host');
+  await evaluate(`document.querySelector('.host-invite button').click()`);
+  for (let i = 0; i < 50; i++) {
+    if (await evaluate(`document.querySelector('.host-invite button').textContent==='Скопировано'`)) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.equal(await evaluate(`document.querySelector('.host-invite button').textContent`), 'Скопировано', 'copy button uses installed preload and main');
+  const clipboard = spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Get-Clipboard -Raw'], { encoding: 'utf8', windowsHide: true });
+  assert.equal(clipboard.status, 0, 'system clipboard can be read');
+  assert.ok(clipboard.stdout.trim() === selectedInvitation, 'system clipboard contains the selected invitation');
+  const afterSharing = await evaluate('window.desktop.hostStatus().then(s=>({running:s.running,message:s.message}))');
+  assert.equal(afterSharing.running, true, `host is still running after sharing: ${afterSharing.message || 'no status message'}`);
+  const certificate = await new Promise((resolve, reject) => {
+    const socket = tls.connect({ host: '127.0.0.1', port: 32443, rejectUnauthorized: false }, () => {
+      const peer = socket.getPeerCertificate(); socket.destroy(); resolve(peer);
+    });
+    socket.setTimeout(5000, () => socket.destroy(new Error('Packaged TLS timed out')));
+    socket.once('error', reject);
+  });
+  for (const address of [hostStatus.localAddress, ...hostStatus.invitations]) {
+    assert.equal(tls.checkServerIdentity(new URL(address).hostname, certificate), undefined, 'packaged certificate covers every invitation IP');
+  }
+  const localDiagnosis = await evaluate('window.desktop.hostStatus().then(s=>window.desktop.diagnose(s.localAddress))');
+  assert.equal(localDiagnosis.ok, true, localDiagnosis.message);
+  const ownDiagnosis = await evaluate('window.desktop.hostStatus().then(s=>window.desktop.diagnose(s.invitations[0]))');
+  assert.equal(ownDiagnosis.ok, true, ownDiagnosis.message);
+  assert.match(ownDiagnosis.message, /напрямую/);
+  if (process.env.VOICECORD_EXPECT_PORT_MAPPING === '1') assert.equal(hostStatus.mapped, true, 'packaged mapper opens all ports on test router');
+  const hosted = await evaluate(`window.desktop.hostStatus().then(s=>window.desktop.connect({address:s.localAddress,nickname:'Packaged',password:window.selfhostPassword}))`);
+  assert.equal(hosted.error, undefined, hosted.error);
+  assert.ok(hosted.token, 'packaged TLS room returns token');
+  await evaluate('window.desktop.stopHost()');
+  assert.equal(await evaluate('window.desktop.hostStatus().then(s=>s.running)'), false);
+  await mkdir('release/qa', { recursive: true });
+  await writeFile('release/qa/packaged.txt', 'PASS packaged Windows executable\nPASS native resource loaded outside ASAR\nPASS renderer and settings navigation\nPASS isolated preload IPC\nPASS packaged client rejects plaintext HTTP\nPASS embedded API and LiveKit start from packaged resources\nPASS packaged invitation TLS and password authentication\nPASS embedded host shutdown\n');
+  console.log('PASS packaged executable, native module, renderer, IPC, HTTPS-only policy and embedded selfhost');
+} catch (error) {
+  await mkdir('release/qa', { recursive: true });
+  await writeFile('release/qa/packaged-stderr.log', stderr);
+  console.error(error.stack || error.message); process.exitCode = 1;
+} finally {
+  if (socket?.readyState === WebSocket.OPEN) await evaluate('window.desktop.stopHost()').catch(() => {});
+  socket?.close();
+  if (child.exitCode === null && child.signalCode === null) {
+    await new Promise(resolve => {
+      const timer = setTimeout(resolve, 10000);
+      child.once('exit', () => { clearTimeout(timer); resolve(); });
+      child.kill();
+    });
+  }
+}

@@ -1,0 +1,47 @@
+# Third-party notices
+
+Voicecord's original source is AGPL-3.0-only (see `LICENSE`). This does not
+relicense third-party components. Preserve their notices when redistributing.
+Pinned npm dependencies and their license identifiers are in `package-lock.json`;
+their original license files are installed by `npm ci`.
+
+## Desktop and UI
+
+- Electron: MIT, plus Chromium and other component licenses. Packaged builds
+  include `LICENSE.electron.txt` and `LICENSES.chromium.html` alongside the app.
+  Source: https://github.com/electron/electron (version in `package-lock.json`).
+- React / React DOM: Meta Platforms, Inc. and affiliates, MIT.
+  Source: https://github.com/facebook/react (versions in `package-lock.json`).
+- LiveKit JS client: LiveKit, Inc. and contributors, Apache License 2.0.
+  Source: https://github.com/livekit/client-sdk-js (version in `package-lock.json`).
+- Transitive JavaScript components retain their licenses and notices in the
+  packaged dependency tree. The frontend notices are also in `licenses/npm-runtime.txt`.
+
+## RNNoise audio processing
+
+Voicecord includes the default RNNoise neural model and WebAssembly code from
+`@shiguredo/rnnoise-wasm` 2025.1.5, generated from the package at build time.
+The JavaScript audio adapter and streaming pipeline in `shared/` are Voicecord code.
+
+- RNNoise: Xiph.Org Foundation and contributors; BSD 3-clause. See `licenses/RNNoise.BSD.txt`.
+- rnnoise-wasm build/wrapper: Copyright 2021–2025 Takeru Ohta and Shiguredo Inc.; Apache License 2.0. See `licenses/rnnoise-wasm.APACHE2.txt`.
+- Upstream: https://github.com/xiph/rnnoise and https://github.com/shiguredo/rnnoise-wasm.
+
+The build script extracts the embedded WASM unchanged; it does not modify the model.
+The original browser wrapper is not executed in the AudioWorklet.
+No endorsement or affiliation with Krisp or Discord is implied.
+
+## Embedded server and port mapping
+
+- LiveKit Server 1.13.11: LiveKit, Inc. and contributors, Apache License 2.0. The official Windows binary and `server/LIVEKIT-LICENSE` are bundled as resources. Upstream: https://github.com/livekit/livekit.
+- `@silentbot1/nat-api` 0.4.9: Brad Marsden and contributors, MIT. See `licenses/nat-api.MIT.txt`. Used for temporary UPnP and NAT-PMP mappings.
+- Go runtime and standard library: The Go Authors, BSD 3-clause. See the bundled `server/GO-LICENSE`.
+
+## Corresponding source
+
+Release publishers must link the exact Voicecord source tag alongside each binary
+and preserve upstream sources/notices for embedded components. LiveKit Server
+source for the bundled version: https://github.com/livekit/livekit/tree/v1.13.11.
+The npm lockfile and preparation scripts record reproducible dependency versions;
+build instructions are in both root READMEs. Local recordings, credentials and
+server keys are not part of corresponding source.
