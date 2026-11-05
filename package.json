@@ -76,6 +76,10 @@
     ],
     "extraResources": [
       {
+        "from": "scripts/check-selfhost.ps1",
+        "to": "diagnostics/check-selfhost.ps1"
+      },
+      {
         "from": "native/build/Release/voicecord.node",
         "to": "voicecord.node"
       },

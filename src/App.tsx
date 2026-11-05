@@ -10,6 +10,7 @@ import { JoinRoom } from './JoinRoom';
 import { GuestShare } from './GuestShare';
 import { Participants } from './Participants';
 import { HostPanel } from './HostPanel';
+import { ServerKey } from './ServerKey';
 
 type Bookmark = { address: string; name: string };
 type JoinTarget = { address: string; nickname: string; password: string; e2eeKey?: string };
@@ -20,7 +21,7 @@ function stored(key: string) { try { return localStorage.getItem(key) || ''; } c
 
 export function App() {
   const [settings, setSettings] = useState(loadSettings);
-  const [modal, setModal] = useState<'join' | 'create' | 'share' | 'settings' | null>(null);
+  const [modal, setModal] = useState<'join' | 'create' | 'share' | 'settings' | 'server-key' | null>(null);
   const [roomName, setRoomName] = useState('');
   const [hostRunning, setHostRunning] = useState(false);
   const [address, setAddress] = useState('');
@@ -192,6 +193,8 @@ export function App() {
         <div className="eyebrow">ВАШЕ МЕСТО ДЛЯ РАЗГОВОРА</div>
         <div className="page-title"><div><div className="room-title"><h1>{inRoom ? roomName || 'Вы в хорошей компании.' : 'Разговор начинается здесь.'}</h1>{inRoom && <button className="icon-button bookmark-add" title={bookmarks.some(v => v.address === currentTarget.current?.address.split('#')[0]) ? 'В закладках' : 'Добавить в закладки'} disabled={bookmarkBusy || bookmarks.some(v => v.address === currentTarget.current?.address.split('#')[0])} onClick={() => void addBookmark()}><Icon name="bookmark"/></button>}</div><p>{inRoom ? 'Одна комната. Знакомые голоса. Ничего лишнего.' : 'Voicecord — личная голосовая комната для вас и друзей. Подключитесь к серверу или создайте свой прямо на этом компьютере.'}</p></div>{!inRoom && <span className="badge">● Голосовая связь</span>}</div>
         {!active && <div className="home-actions"><button className="home-action" disabled={busy || hostBusy} onClick={() => setModal('join')}><Icon name="signal" size={30}/><strong>Присоединиться к комнате</strong><span>По адресу сервера или приглашению</span></button><button className="home-action" disabled={busy || hostBusy} onClick={() => setModal(hostRunning ? 'share' : 'create')}><Icon name="invite" size={30}/><strong>Создать комнату</strong><span>Пригласите друзей на свой сервер</span></button></div>}
+        {!active && <div className="server-setup"><span>Настраиваете сервер?</span><button className="e2ee-generate" onClick={() => setModal('server-key')}>Сгенерировать ключ шифрования</button></div>}
+        {modal === 'server-key' && <ServerKey onClose={() => setModal(null)}/>}
         {modal === 'join' && <JoinRoom address={address} setAddress={value => { setAddress(value); setError(''); }} nickname={nickname} busy={busy || hostBusy} error={error} onConnect={input => connect(input)} onClose={() => setModal(null)}/>}
         {inRoom && <>
           <div className="participants-heading"><h2>Участники <span>{snapshot.people.length}</span></h2><div className="room-presence">{snapshot.e2ee && <span className="e2ee-badge" title="Голос зашифрован между участниками. Экспериментальный режим.">E2EE</span>}<span>{states[snapshot.state]}</span>{<button className="icon-button" title="Пригласить пользователя" onClick={() => setModal('share')}><Icon name="invite"/></button>}</div></div>

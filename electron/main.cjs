@@ -5,6 +5,7 @@ const { X509Certificate, createHash } = require('node:crypto');
 const { serverURL, invitation } = require('./address.cjs');
 const { diagnosticCommand } = require('./diagnostic-command.cjs');
 const { SelfHost } = require('./selfhost.cjs');
+const { HostCheck } = require('./host-check.cjs');
 const { CredentialStore } = require('./credentials.cjs');
 let credentials;
 let pendingInvitation = '';
@@ -20,6 +21,7 @@ function acceptInvitation(args) {
   }
 }
 let hosting;
+const hostCheck = new HostCheck(app.isPackaged ? path.join(process.resourcesPath, 'diagnostics/check-selfhost.ps1') : path.join(__dirname, '../scripts/check-selfhost.ps1'));
 const certificatePins = new Map();
 function trustInvitation(address) {
   const room = invitation(address);
@@ -72,8 +74,15 @@ function registerIPC() {
   });
   ipcMain.handle('invitation-pending', event => { authorized(event); return pendingInvitation; });
   ipcMain.handle('host-status', event => { authorized(event); return hosting.status(); });
+  ipcMain.handle('host-check', (event, port) => {
+    authorized(event);
+    if (hosting.status().running || hosting.starting || hosting.stopping) throw new Error('Закройте комнату перед проверкой сети.');
+    return hostCheck.start(port);
+  });
+  ipcMain.handle('host-check-cancel', event => { authorized(event); return hostCheck.cancel(); });
   ipcMain.handle('host-start', async (event, input) => {
     authorized(event);
+    if (hostCheck.running) throw new Error('Дождитесь завершения проверки сети.');
     const result = await hosting.start(input);
     trustInvitation(result.localAddress);
     return result;
@@ -201,7 +210,7 @@ else {
     tray.setToolTip('Voicecord');
     tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Открыть Voicecord', click: () => win.show() }, { label: 'Выключить микрофон', click: () => send('action', 'force-mute') }, { type: 'separator' }, { label: 'Выйти', click: () => { quitting = true; app.quit(); } }]));
     tray.on('double-click', () => win.show());
-    powerMonitor.on('suspend', () => { restoreAudio(); send('suspend', true); if (hosting.starting) hosting.cancelled = true; else void hosting.stop('Комната закрыта: компьютер перешёл в сон'); });
+    powerMonitor.on('suspend', () => { restoreAudio(); send('suspend', true); void hostCheck.cancel(); if (hosting.starting) hosting.cancelled = true; else void hosting.stop('Комната закрыта: компьютер перешёл в сон'); });
     powerMonitor.on('lock-screen', () => { restoreAudio(); send('ptt', false); });
     if (devURL) await win.loadURL(devURL); else await win.loadFile(path.join(__dirname, '../dist/index.html'));
   });
@@ -210,7 +219,7 @@ else {
     quitting = true; restoreAudio(); native?.shutdown(); globalShortcut.unregisterAll();
     if (hosting && !hostShutdown) {
       event.preventDefault(); hostShutdown = true;
-      void (async () => { while (hosting.starting) await new Promise(resolve => setTimeout(resolve, 100)); await hosting.stop(); })().finally(() => app.quit());
+      void (async () => { await hostCheck.cancel(); while (hosting.starting) await new Promise(resolve => setTimeout(resolve, 100)); await hosting.stop(); })().finally(() => app.quit());
     }
   });
   app.on('window-all-closed', () => { if (quitting) app.quit(); });

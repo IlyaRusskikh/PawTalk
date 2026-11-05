@@ -49,3 +49,13 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:radial-gra
 .encryption-toggle input { width:16px; margin:0; flex-shrink:0; }
 .room-presence>.e2ee-badge { color:#a8d7a5; border:1px solid #446844; border-radius:6px; padding:3px 7px; font-size:12px; }
 .e2ee-generate { background:transparent; color:var(--accent); border:1px solid #555067; border-radius:7px; padding:8px 12px; font-size:12px; }
+.server-setup { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-top:24px; color:var(--muted); font-size:13px; }
+.server-key-field { margin-top:20px; }
+.server-key-field textarea { display:block; box-sizing:border-box; width:100%; margin:8px 0; padding:10px 12px; background:#1c1e27; color:inherit; border:1px solid #414555; border-radius:8px; font:12px/1.6 monospace; resize:vertical; overflow-wrap:anywhere; }
+.server-key-field .host-hint { margin:8px 0; }
+.host-check { margin:20px 0 4px; padding:16px; border:1px solid var(--line); border-radius:10px; background:#1c1e2780; }
+.host-check-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:13px; }
+.host-check-result { margin-top:14px; font-size:13px; line-height:1.6; }
+.host-check-result.success { color:#8ed6b5; }
+.host-check-result.warning { color:#e5c27c; }
+.host-check .host-hint { margin-bottom:0; }

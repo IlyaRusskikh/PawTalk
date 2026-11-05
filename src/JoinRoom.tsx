@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from './Modal';
-import { generateMediaKey, validMediaKey } from '../shared/encryption.mjs';
+import { validMediaKey } from '../shared/encryption.mjs';
 export function validAddress(value: string) {
   try {
     const url = new URL(value.includes('://') ? value.trim() : `https://${value.trim()}`);
@@ -53,7 +53,7 @@ export function JoinRoom({ address, setAddress, nickname, busy, error, onConnect
   </form></Modal>
   {askPassword && <Modal title="Пароль сервера" onClose={() => { if (!busy) { setAskPassword(false); setPassword(''); setE2EEKey(''); } }}><form onSubmit={e => { e.preventDefault(); const target = address.trim(); const url = target.startsWith('voicecord://') ? new URL(target) : null; if (url && e2eeRequired) { const params = new URLSearchParams(url.hash.slice(1)); params.set('e2ee', e2eeKey); url.hash = params.toString(); } void onConnect({ address: url?.toString() ?? target, nickname, password, ...(e2eeRequired ? { e2eeKey } : {}) }); }}>
     {error && <p role="alert" className="text-error">{error}</p>}<label>Пароль<input autoFocus type="password" required maxLength={1024} autoComplete="off" value={password} disabled={busy} onChange={e => setPassword(e.target.value)}/></label>
-    {e2eeRequired && <><label>Ключ E2EE<input type="password" autoComplete="off" value={e2eeKey} maxLength={64} disabled={busy} onChange={e => setE2EEKey(e.target.value.trim())}/></label><p className="host-hint">Используйте ключ от владельца комнаты. Если вы создаёте первую защищённую группу, создайте ключ здесь и передайте друзьям приглашение после входа.</p><button type="button" className="e2ee-generate" disabled={busy} onClick={() => setE2EEKey(generateMediaKey())}>Создать новый ключ</button></>}
+    {e2eeRequired && <><label>Ключ E2EE<input type="password" autoComplete="off" value={e2eeKey} maxLength={64} disabled={busy} onChange={e => setE2EEKey(e.target.value.trim())}/></label><p className="host-hint">Введите секретный ключ E2EE от владельца комнаты. Он должен соответствовать хэшу в настройках сервера.</p></>}
     <button className="primary join-submit" disabled={busy || !password || (e2eeRequired && !validMediaKey(e2eeKey))}>{busy ? 'Подключение…' : 'Присоединиться'}</button>
   </form></Modal>}</>;
 }

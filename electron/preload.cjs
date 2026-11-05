@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('desktop', {
   startHost: (input) => ipcRenderer.invoke('host-start', input),
   stopHost: () => ipcRenderer.invoke('host-stop'),
   hostStatus: () => ipcRenderer.invoke('host-status'),
+  checkHost: (port) => ipcRenderer.invoke('host-check', port),
+  cancelHostCheck: () => ipcRenderer.invoke('host-check-cancel'),
   onHostChanged: (fn) => listen('host-changed', fn),
   connect: (input) => ipcRenderer.invoke('connect', input),
   diagnose: (address) => ipcRenderer.invoke('connection-diagnose', address),

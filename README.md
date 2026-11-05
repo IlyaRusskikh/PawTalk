@@ -40,6 +40,8 @@ The download above is the published 0.1.0 preview.
 - Global shortcuts, tray integration, mute/deafen and per-participant volume.
 - Optional password storage protected by Electron/Windows safeStorage.
 - Optional experimental end-to-end encryption; see [security model](docs/E2EE.md).
+  Generate a VPS key from the home screen: «Настраиваете сервер?» →
+  «Сгенерировать ключ шифрования» (Generate encryption key), or use a [script](docs/E2EE.md).
 - Persistent Linux server with Docker Compose.
 
 ## Use the app
@@ -63,9 +65,34 @@ Built-in room invitations contain the room password and, when enabled, the E2EE
 key. Share them privately; do not put live invitations in issues or source files.
 
 Default incoming ports: TCP **18443**, TCP **18444**, UDP **18445**.
+In Create room, choose **«Проверить»** next to **«Могу ли я хостить в интернет?»**
+to check the selected ports via check-host.net. Green confirms TCP and UDP;
+yellow means internet access was not confirmed, with checker errors shown separately.
+Closing the dialog cancels the test and releases temporary mappings. The service
+receives your public IP and ports; allow Voicecord through the firewall after creating a room.
+
 Automatic port mapping does not guarantee internet access. CGNAT, double NAT and
 network restrictions may require a VPS. For a LAN, share the LAN invitation.
 Installers are currently unsigned and automatic updates are not configured.
+
+## Check self-hosting before installing
+
+Paste this into Windows PowerShell to fetch the script into memory, without
+installing Voicecord or dependencies:
+
+```powershell
+$code = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/IlyaRusskikh/voicecord/main/scripts/check-selfhost.ps1').Content; & ([ScriptBlock]::Create($code))
+```
+
+The script temporarily listens on TCP/UDP ports and tries UPnP forwarding. Both
+TCP ports and UDP are checked automatically via check-host.net with public reports;
+no browser is needed. Manual 2ip checks remain a fallback.
+The final verdict shows success, partial success or no confirmation.
+On full success it finishes immediately, keeping results in the existing console.
+For double-click launch, `scripts/check-selfhost.cmd` pauses before closing.
+Actual voice operation is not verified.
+See the [instructions](docs/SELFHOST-CHECK.md) for limitations and a full-script
+copy/paste option without fetching code in the command. The command becomes available once the script is published to `main`.
 
 ## Is Voicecord right for you?
 
