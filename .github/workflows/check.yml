@@ -18,7 +18,11 @@ jobs:
       - run: go test -race ./... && go vet ./...
         working-directory: server
       - run: docker build -f server/Dockerfile -t voicecord-api:test .
-      - run: docker compose -f compose.yaml config --no-env-resolution -q
+      - name: Validate legacy Compose without local secrets
+        run: |
+          mkdir -p deploy/generated
+          touch deploy/generated/api.env deploy/generated/proxy.env
+          docker compose -f compose.yaml config -q
       - uses: actions/setup-node@v4
         with:
           node-version: '24.22.1'
