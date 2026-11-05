@@ -27,8 +27,9 @@ VOICECORD_E2EE_KEY_ID=ПУБЛИЧНЫЙ_SHA256_ОТПЕЧАТОК_КЛЮЧА
 ```
 
 ```sh
-docker compose -f compose.server.yaml up -d --build
-docker compose -f compose.server.yaml exec server /voicecord serve info
+cd /opt/voicecord
+docker compose -f compose.server.ghcr.yaml up -d
+docker compose -f compose.server.ghcr.yaml exec server /voicecord serve info
 ```
 
 Передайте приглашение из последней команды в локальную команду генерации, если ключ ещё не создавали:
