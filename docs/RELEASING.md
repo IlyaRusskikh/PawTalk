@@ -12,8 +12,8 @@
 
 При увеличении старшего разряда младшие обнуляются. Это не обещание полной
 совместимости по SemVer: до 1.0 проект экспериментальный, несовместимости
-явно описываются в CHANGELOG. Первую версию **0.1.0** уже установили — перед первым
-релизом увеличивать её не нужно. Не меняйте версию на каждый рабочий коммит.
+явно описываются в CHANGELOG. Первая версия **0.1.0** уже опубликована как
+предварительный выпуск. Не меняйте версию на каждый рабочий коммит.
 
 1. Внесите изменения, обновите подходящие тесты и оба README, запишите результат
    в `CHANGELOG.md` в раздел Unreleased.
@@ -48,7 +48,13 @@
    `docker pull ghcr.io/ilyarusskikh/voicecord-server:X.Y.Z`, ссылку на исходный
    тег и digest образа из Summary. Обновите пример версии в `.env.server.example`
    перед выпуском, чтобы шаблон ссылался на этот же образ.
-7. Рядом с установщиком укажите, что соответствующие исходники доступны в этом
+7. Обновите в обоих README версию, прямую ссылку на фактическое имя установщика
+   в assets и ссылку на описание релиза. Для pre-release используйте ссылку
+   на конкретный тег: `/releases/latest` не выбирает предварительные выпуски.
+   Обновите также обе страницы в `website/` и `docs/FIRST-CALL.ru.md`.
+   Для сайта выполните `node scripts/check-website.mjs`; ручная публикация
+   описана в `website/README.md` и не запускается обычным push или тегом.
+   Рядом с установщиком укажите, что соответствующие исходники доступны в этом
    же релизе (**Source code**, точный тег) и что проект под `AGPL-3.0-only`.
    Для распространяемых встроенных бинарников также сохраните ссылки на их
    исходники и лицензии из `THIRD_PARTY_NOTICES.md`.
@@ -112,5 +118,9 @@ Publishing the GitHub Release itself is manual.
 After CI passes, draft a GitHub Release for the exact tag, attach the installer,
 SHA-256 and license files, and include changes, limitations and a clear link to
 the corresponding source at that tag. Preserve third-party source/license links.
+Update the version, actual installer asset URL and release-notes link in both
+READMEs. Link to the exact tag for previews; `/releases/latest` excludes pre-releases.
+Also update both `website/` pages and `docs/FIRST-CALL.ru.md`, and run
+`node scripts/check-website.mjs`. Website publishing is manual; see `website/README.md`.
 Review and publish. Never replace a released tag or binary; issue a new version.
 Do not upload local QA reports, recordings or an entire `release/` directory.

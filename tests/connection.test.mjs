@@ -34,3 +34,15 @@ test('bookmarked invitations without embedded passwords still use the current ho
  assert.equal(localInvitation(external, live), live.localAddress);
  assert.equal(localInvitation(external.replace(pin, 'b'.repeat(64)), live), external.replace(pin, 'b'.repeat(64)));
 });
+
+test('fetch causes preserve actionable DNS, TCP and timeout diagnostics without exposing addresses', () => {
+ for (const code of ['ENOTFOUND', 'EAI_AGAIN', 'ERR_NAME_NOT_RESOLVED']) {
+  const message = connectionError({ cause: { code, message: 'private-server.example secret-password' } });
+  assert.match(message, /DNS/);
+  assert.doesNotMatch(message, /private-server|secret-password/);
+ }
+ assert.match(connectionError({ cause: { code: 'ECONNREFUSED' } }), /отклонил/);
+ assert.match(connectionError({ cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } }), /CGNAT/);
+ assert.match(connectionError({ code: 'ETIMEDOUT' }), /UDP/);
+ assert.match(connectionError({ code: 'VOICECORD_CERTIFICATE_PIN', cause: { code: 'ENOTFOUND' } }), /сертификат/);
+});

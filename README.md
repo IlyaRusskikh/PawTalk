@@ -1,14 +1,35 @@
-# Voicecord
+# Voicecord — self-hosted voice chat for Windows
 
 [Русский](README.ru.md) · English
 
-Self-hosted voice rooms for Windows 10/11 (x64). Create a room in the desktop app
+[![Build and tests](https://github.com/IlyaRusskikh/voicecord/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/voicecord/actions/workflows/check.yml) · [AGPL-3.0-only](LICENSE)
+
+Open-source voice chat for Windows 10/11 (x64), with self-hosted rooms for friends,
+gaming groups and small communities. Create a room in the desktop app
 or run a persistent server on your own Linux VPS. Join with an invitation, a shared
 password and a nickname. No accounts, text chat or database.
 
-**Version: 0.1.0 — early release.** The desktop interface is currently in Russian.
+**[Download Voicecord 0.1.0 for Windows x64](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.1.0/Voicecord.Setup.0.1.0.exe)** ·
+[Release notes and SHA-256 checksums](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.1.0) ·
+[Linux server setup (Russian)](docs/SERVER.md) · [Report a bug](https://github.com/IlyaRusskikh/voicecord/issues/new/choose)
+
+**0.1.0 is a public preview (pre-release).** The desktop interface is currently in Russian.
 Real-device and external-network acceptance testing is still required; see
 [acceptance criteria](docs/ACCEPTANCE.md) and [verification history](docs/VERIFICATION.md).
+
+![Voicecord desktop home screen with options to join or create a room](website/assets/home.png)
+
+Actual interface from current source, captured in an isolated test profile.
+The download above is the published 0.1.0 preview.
+
+<details>
+<summary>Audio settings and room creation</summary>
+
+![Voicecord microphone, speaker and voice activation settings with synthetic audio devices](website/assets/audio-settings.png)
+
+![Room creation dialog with password, ports and optional E2EE](website/assets/create-room.png)
+
+</details>
 
 ## Features
 
@@ -23,21 +44,76 @@ Real-device and external-network acceptance testing is still required; see
 
 ## Use the app
 
-Download `Voicecord Setup <version>.exe` from this repository's **Releases**, when
-a Windows build has been published. Install it and choose **«Создать комнату»**
-(Create room), enter a room name and a password of at least 8 characters, and share
-the `voicecord://…` invitation and password privately. Guests paste the full
-invitation into the address field. The server runs while the host app remains
-running, including in the tray; exiting or putting the host PC to sleep closes it.
+For a guided first conversation and troubleshooting, see
+[First call on two PCs (Russian)](docs/FIRST-CALL.ru.md).
+
+1. Download and install [Voicecord.Setup.0.1.0.exe](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.1.0/Voicecord.Setup.0.1.0.exe)
+   on each participant's Windows PC. No Node.js, Go or Docker is needed for the client.
+2. Set your nickname in **«Настройки → Обо мне»** (Settings → About me).
+3. Choose **«Создать комнату»** (Create room), enter a room name and a password
+   of at least 8 characters.
+4. Share the `voicecord://…` invitation privately. Guests paste the full invitation
+   into the address field. For a LAN, use the LAN invitation.
+
+The server runs while the host app remains running, including in the tray;
+exiting or putting the host PC to sleep closes it. For a room that stays available
+without the host PC, use a [persistent Linux server](docs/SERVER.md).
 
 Built-in room invitations contain the room password and, when enabled, the E2EE
 key. Share them privately; do not put live invitations in issues or source files.
-Set your nickname in **«Настройки → Обо мне»** (Settings → About me).
 
 Default incoming ports: TCP **18443**, TCP **18444**, UDP **18445**.
 Automatic port mapping does not guarantee internet access. CGNAT, double NAT and
 network restrictions may require a VPS. For a LAN, share the LAN invitation.
 Installers are currently unsigned and automatic updates are not configured.
+
+## Is Voicecord right for you?
+
+Voicecord is for people who want a small, account-free voice room they control.
+If you are looking for a self-hosted alternative to Discord or TeamSpeak for
+voice conversations, start with the preview and its limitations below. Voicecord
+does not provide text channels, video, screen sharing or a public server directory.
+
+| Situation | Setup |
+| --- | --- |
+| Talk on the same local network | Built-in room and LAN invitation |
+| Host a temporary room over the internet | Built-in room with reachable incoming ports; NAT may need configuration |
+| Keep a room available when your PC is off, or avoid hosting behind CGNAT | Linux VPS with Docker Compose and a public IP |
+
+## Frequently asked questions
+
+### Is Voicecord peer-to-peer (P2P)?
+
+Voice uses WebRTC through a LiveKit media server. The server runs on the room
+host's PC or your Linux VPS; this is a client-server design. Guests do not need
+to deploy their own server.
+
+### Can I use Linux, macOS, a phone or a web browser to join?
+
+The released desktop client supports Windows 10/11 x64. Linux is supported as a
+server platform (amd64/arm64). There is no released Linux, macOS, mobile or web
+client; `dev:web` is a development UI preview.
+
+### Is voice end-to-end encrypted?
+
+E2EE is optional and experimental. Without E2EE, transport encryption does not
+make the media server unable to access audio. Read the [E2EE security model](docs/E2EE.md)
+before relying on it for sensitive conversations. Invitations can contain secrets.
+
+### Why can my friends not connect?
+
+Check the host's firewall and incoming TCP 18443, TCP 18444 and UDP 18445.
+UPnP/NAT-PMP may not work behind CGNAT or double NAT. Use the LAN invitation on
+the same network, or a reachable VPS for internet rooms. See the
+[troubleshooting guide (Russian)](docs/GUIDE.ru.md) and [server network checks (Russian)](docs/SERVER.md).
+
+### How do I update or get help?
+
+Download the new installer from [Releases](https://github.com/IlyaRusskikh/voicecord/releases)
+and read its release notes; updates are manual. Use
+[GitHub Issues](https://github.com/IlyaRusskikh/voicecord/issues/new/choose) for bugs,
+setup questions and feature requests. Include the app version and reproduction
+steps, and remove invitations, passwords and personal network details.
 
 ## Build and change the source
 
@@ -92,9 +168,9 @@ docker compose -f compose.server.ghcr.yaml exec server /voicecord serve info
 
 The first startup prints the generated password to the private server log.
 Keep it and the invitation private. Open the three ports listed above. Server
-data persists in a Docker volume. The image `ghcr.io/ilyarusskikh/voicecord-server:0.1.0`
-becomes available after the first release tag is published and the GHCR package is
-made public. The guide also covers that one-time setup, updates and password changes.
+data persists in a Docker volume. The public image
+`ghcr.io/ilyarusskikh/voicecord-server:0.1.0` is published for Linux amd64 and arm64.
+The guide also covers updates, network diagnostics and password changes.
 
 ## Verify changes
 
@@ -115,12 +191,15 @@ audio and do not replace tests on real microphones or across separate networks.
 ## Documentation and contribution
 
 - [Detailed setup and troubleshooting (Russian)](docs/GUIDE.ru.md)
+- [First call on two PCs (Russian)](docs/FIRST-CALL.ru.md)
 - [Server deployment](docs/SERVER.md), [API](docs/API.md), [E2EE](docs/E2EE.md)
 - [Contributing / Участие в разработке](CONTRIBUTING.md)
 - [Versions and releases / Версии и релизы](docs/RELEASING.md)
-- [First GitHub publication / Первая публикация](docs/PUBLISHING.ru.md)
-- [Publication checks and limitations (Russian)](docs/PUBLICATION-REVIEW.ru.md)
 - [Changelog](CHANGELOG.md)
+- [Project discoverability checklist for maintainers (Russian)](docs/DISCOVERABILITY.ru.md)
+- [Project website source and Pages publishing](website/README.md)
+- [Post-release repository review and remaining checks (Russian)](docs/REPOSITORY-REVIEW.ru.md)
+- [Historical pre-publication checks (Russian)](docs/PUBLICATION-REVIEW.ru.md)
 
 ## License
 

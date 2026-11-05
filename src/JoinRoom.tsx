@@ -26,30 +26,32 @@ export function JoinRoom({ address, setAddress, nickname, busy, error, onConnect
   useEffect(() => () => { revision.current++; }, []);
   async function submit() {
     if (!validAddress(address) || checking || busy) return;
+    const target = address.trim();
     setFailure('');
-    if (address.trim().startsWith('voicecord://')) {
+    if (target.startsWith('voicecord://')) {
       try {
-        const embedded = new URLSearchParams(new URL(address).hash.slice(1)).get('password');
-        if (embedded !== null) { await onConnect({ address, nickname, password: embedded }); return; }
+        const embedded = new URLSearchParams(new URL(target).hash.slice(1)).get('password');
+        if (embedded !== null) { await onConnect({ address: target, nickname, password: embedded }); return; }
       } catch { setFailure('Проверьте приглашение.'); return; }
     }
     const id = ++revision.current; setChecking(true);
     try {
       if (!window.desktop) throw new Error('Подключение доступно в десктопном приложении.');
-      const result = await window.desktop.diagnose(address);
+      const result = await window.desktop.diagnose(target);
       if (id !== revision.current) return;
       if (!result.ok) throw new Error(result.message);
-      setE2EERequired(result.e2eeRequired === true); setE2EEKey(address.startsWith('voicecord://') ? new URLSearchParams(new URL(address).hash.slice(1)).get('e2ee') ?? '' : '');
+      setE2EERequired(result.e2eeRequired === true); setE2EEKey(target.startsWith('voicecord://') ? new URLSearchParams(new URL(target).hash.slice(1)).get('e2ee') ?? '' : '');
       setPassword(''); setAskPassword(true);
     } catch (e) { if (id === revision.current) setFailure(e instanceof Error ? e.message : String(e)); }
     finally { if (id === revision.current) setChecking(false); }
   }
   return <><Modal title="Присоединиться к комнате" onClose={onClose}><form onSubmit={e => { e.preventDefault(); void submit(); }}>
     {(failure || error) && <p role="alert" className="text-error">{failure || error}</p>}
-    <label>Приглашение или адрес сервера<input autoFocus placeholder="voicecord://… или server.example.com" value={address} disabled={busy || checking} onChange={e => { revision.current++; setAddress(e.target.value); setFailure(''); }} autoComplete="off"/></label>
+    <label>Приглашение или адрес сервера<input autoFocus placeholder="voicecord://… или server.example.com" value={address} disabled={busy || checking} aria-describedby="join-address-hint" aria-invalid={!!address.trim() && !validAddress(address)} onChange={e => { revision.current++; setAddress(e.target.value); setFailure(''); }} autoComplete="off" spellCheck={false}/></label>
+    <p id="join-address-hint" className="host-hint" aria-live="polite">{address.trim() && !validAddress(address) ? 'Адрес не распознан. Вставьте полное приглашение voicecord://… или HTTPS-адрес сервера без пути. Ссылка на GitHub или файл установщика не подходит.' : 'Попросите владельца прислать приглашение из работающей комнаты. В одной локальной сети используйте LAN-приглашение. Ссылка может содержать пароль — не публикуйте её.'}</p>
     <button className="primary join-submit" disabled={!validAddress(address) || !nickname.trim() || busy || checking}>{checking ? 'Проверяем соединение…' : busy ? 'Подключение…' : 'Присоединиться'}</button>
   </form></Modal>
-  {askPassword && <Modal title="Пароль сервера" onClose={() => { if (!busy) { setAskPassword(false); setPassword(''); setE2EEKey(''); } }}><form onSubmit={e => { e.preventDefault(); const url = address.startsWith('voicecord://') ? new URL(address) : null; if (url && e2eeRequired) { const params = new URLSearchParams(url.hash.slice(1)); params.set('e2ee', e2eeKey); url.hash = params.toString(); } void onConnect({ address: url?.toString() ?? address, nickname, password, ...(e2eeRequired ? { e2eeKey } : {}) }); }}>
+  {askPassword && <Modal title="Пароль сервера" onClose={() => { if (!busy) { setAskPassword(false); setPassword(''); setE2EEKey(''); } }}><form onSubmit={e => { e.preventDefault(); const target = address.trim(); const url = target.startsWith('voicecord://') ? new URL(target) : null; if (url && e2eeRequired) { const params = new URLSearchParams(url.hash.slice(1)); params.set('e2ee', e2eeKey); url.hash = params.toString(); } void onConnect({ address: url?.toString() ?? target, nickname, password, ...(e2eeRequired ? { e2eeKey } : {}) }); }}>
     {error && <p role="alert" className="text-error">{error}</p>}<label>Пароль<input autoFocus type="password" required maxLength={1024} autoComplete="off" value={password} disabled={busy} onChange={e => setPassword(e.target.value)}/></label>
     {e2eeRequired && <><label>Ключ E2EE<input type="password" autoComplete="off" value={e2eeKey} maxLength={64} disabled={busy} onChange={e => setE2EEKey(e.target.value.trim())}/></label><p className="host-hint">Используйте ключ от владельца комнаты. Если вы создаёте первую защищённую группу, создайте ключ здесь и передайте друзьям приглашение после входа.</p><button type="button" className="e2ee-generate" disabled={busy} onClick={() => setE2EEKey(generateMediaKey())}>Создать новый ключ</button></>}
     <button className="primary join-submit" disabled={busy || !password || (e2eeRequired && !validMediaKey(e2eeKey))}>{busy ? 'Подключение…' : 'Присоединиться'}</button>

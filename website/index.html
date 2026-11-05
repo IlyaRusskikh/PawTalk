@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voicecord — open-source, self-hosted voice chat for Windows</title>
+  <meta name="description" content="Create account-free voice rooms for friends and gaming. Download Voicecord for Windows or host a persistent Linux server with Docker. Push-to-talk and RNNoise included.">
+  <meta name="theme-color" content="#14151b">
+  <link rel="canonical" href="https://ilyarusskikh.github.io/voicecord/">
+  <link rel="alternate" hreflang="en" href="https://ilyarusskikh.github.io/voicecord/">
+  <link rel="alternate" hreflang="ru" href="https://ilyarusskikh.github.io/voicecord/ru/">
+  <link rel="alternate" hreflang="x-default" href="https://ilyarusskikh.github.io/voicecord/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Voicecord — a voice room of your own">
+  <meta property="og:description" content="Open-source voice chat for Windows. No accounts. Host on your PC or a Linux VPS. Public preview 0.1.0.">
+  <meta property="og:url" content="https://ilyarusskikh.github.io/voicecord/">
+  <meta property="og:image" content="https://ilyarusskikh.github.io/voicecord/assets/home.png">
+  <meta property="og:image:alt" content="Voicecord desktop app with options to join or create a voice room">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ru_RU">
+  <link rel="icon" href="assets/voicecord.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header>
+  <a class="brand" href="./"><img src="assets/voicecord.svg" width="38" height="38" alt="">Voicecord</a>
+  <nav aria-label="Main navigation"><a class="desktop-link" href="#start">Get started</a><a href="#faq">FAQ</a><a href="https://github.com/IlyaRusskikh/voicecord">GitHub</a><a href="ru/" lang="ru" hreflang="ru">Русский</a></nav>
+</header>
+<main id="main">
+  <section class="hero">
+    <div class="eyebrow">Open source · Self-hosted · Windows</div>
+    <h1>Your friends.<br>Your server.<br><span>Your voice room.</span></h1>
+    <p class="lead">Voice chat for a game night or a small community. Create a room on your PC or keep it running on a Linux VPS. Join with an invitation and a nickname. No accounts.</p>
+    <div class="actions"><a class="button" href="https://github.com/IlyaRusskikh/voicecord/releases/download/v0.1.0/Voicecord.Setup.0.1.0.exe">Download for Windows x64 ↓</a><a class="button secondary" href="https://github.com/IlyaRusskikh/voicecord/blob/main/docs/SERVER.md">Host a Linux server ↗</a></div>
+    <p class="fine">0.1.0 public preview · Windows 10/11 x64 · App interface and detailed guides in Russian</p>
+    <p class="fine">Unsigned installer · Manual updates · <a href="https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.1.0">Release notes, checksums and source</a></p>
+  </section>
+  <figure class="hero-shot"><a href="assets/home.png"><img src="assets/home.png" width="1240" height="886" fetchpriority="high" alt="Voicecord home screen, with Join room and Create room buttons and audio controls"></a><figcaption>Actual desktop interface, captured in an isolated test profile. Screenshots show the current source; the download is the published 0.1.0 preview.</figcaption></figure>
+  <section class="section" aria-labelledby="features"><h2 id="features">A small room. The controls you need.</h2>
+    <div class="features"><article><h3>Host it yourself</h3><p>Temporary rooms on a Windows PC, or a persistent Docker server on Linux amd64/arm64. Your guests just install the client.</p></article><article><h3>Keep the noise down</h3><p>Local RNNoise noise suppression, echo cancellation and automatic gain control. Adjust devices, sensitivity and volume.</p></article><article><h3>Speak your way</h3><p>Voice activation or push-to-talk, global shortcuts, mute/deafen and per-person volume. Keep the app in the tray.</p></article></div>
+  </section>
+  <section class="section" id="start"><h2>From download to first conversation.</h2>
+    <ol class="steps"><li><strong>Install &amp; check your mic</strong><p>Install the Windows client on each PC. In Settings (Настройки), choose a nickname, select audio devices and test your microphone. No developer tools are needed.</p></li><li><strong>Create a room</strong><p>Choose Create room (Создать комнату), enter a name and a password of at least 8 characters. The room stays up while the host app runs.</p></li><li><strong>Invite a friend</strong><p>Share the full invitation privately. Your friend pastes it into Join room (Присоединиться к комнате). On the same network, use the LAN invitation.</p></li></ol>
+    <p>Across the internet, the host needs reachable ports. Automatic port mapping may not work behind CGNAT. A Linux VPS with a public IP is an alternative. <a href="https://github.com/IlyaRusskikh/voicecord/blob/main/README.md">Read the full setup guide →</a></p>
+  </section>
+  <section class="section split"><div><div class="eyebrow">Before the call</div><h2>Hear yourself.<br>Then join your friends.</h2><p>Choose your microphone and speakers, try noise suppression and listen to a microphone test before connecting.</p><p>Default hosting ports: TCP <strong>18443</strong>, TCP <strong>18444</strong>, UDP <strong>18445</strong>. The server setup guide covers firewall and connectivity checks.</p></div><figure><a href="assets/audio-settings.png"><img src="assets/audio-settings.png" width="1240" height="886" loading="lazy" alt="Voicecord settings showing microphone, speaker, monitoring and noise suppression controls"></a><figcaption>Real audio settings; capture uses a synthetic microphone.</figcaption></figure></section>
+  <section class="section"><h2>Try the preview with clear expectations.</h2><div class="limits"><p><strong>This is an early release.</strong> Real microphones, clean Windows installations, games/PTT, separate internet networks and full load still need hardware acceptance testing.</p><p>Windows desktop client only. Linux is a server platform. No text chat, video, screen sharing or released web/mobile client.</p><p>E2EE is optional and experimental. Transport encryption alone does not prevent the media server from accessing audio. Invitations can contain the password and E2EE key: keep them private. <a href="https://github.com/IlyaRusskikh/voicecord/blob/main/docs/E2EE.md">Read the security model</a>.</p></div></section>
+  <section class="section" id="faq"><h2>A few things to know.</h2>
+    <details><summary>Is this an alternative to Discord or TeamSpeak?</summary><p>For small, self-hosted voice rooms, that is the use case. Voicecord focuses on account-free conversations. It does not replace their broader community features.</p></details>
+    <details><summary>Is voice peer-to-peer?</summary><p>Voice uses WebRTC through a LiveKit media server running on the host PC or your VPS. Guests need the Windows client, not their own server.</p></details>
+    <details><summary>Why can my friend not connect?</summary><p>Check that the room is still running and the invitation is current. Use a LAN invitation on the same network. For internet access, check incoming ports, firewall, router forwarding and VPN. CGNAT may require a publicly reachable VPS. See <a href="https://github.com/IlyaRusskikh/voicecord/blob/main/docs/SERVER.md">network troubleshooting (Russian)</a>.</p></details>
+    <details><summary>How do I update or report a problem?</summary><p>Updates are manual: download a new installer from <a href="https://github.com/IlyaRusskikh/voicecord/releases">GitHub Releases</a>. Report bugs or ask setup questions in <a href="https://github.com/IlyaRusskikh/voicecord/issues/new/choose">GitHub Issues</a>. Include the version and reproduction steps; remove passwords, invitations and private network information.</p></details>
+    <details><summary>Can I modify and host it?</summary><p>The original code is licensed under GNU AGPL-3.0-only. Read the <a href="https://github.com/IlyaRusskikh/voicecord/blob/main/LICENSE">license</a> and <a href="https://github.com/IlyaRusskikh/voicecord/blob/main/THIRD_PARTY_NOTICES.md">third-party notices</a> for the terms that apply.</p></details>
+  </section>
+</main>
+<footer><span>Voicecord · Open-source voice rooms</span><div><a href="https://github.com/IlyaRusskikh/voicecord">Source</a><a href="https://github.com/IlyaRusskikh/voicecord/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/IlyaRusskikh/voicecord/blob/main/CONTRIBUTING.md">Contribute</a><a href="ru/" lang="ru">Русский</a></div></footer>
+</body>
+</html>

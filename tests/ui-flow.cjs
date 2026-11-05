@@ -22,6 +22,10 @@ app.whenReady().then(async () => {
   await click('Присоединиться к комнате'); await wait();
   assert.equal(await run(`document.querySelector('dialog input[type=password]')`), null);
   assert.equal(await run(`document.querySelector('.join-submit').disabled`), true);
+  await input('https://github.com/IlyaRusskikh/voicecord'); await wait();
+  assert.equal(await run(`document.querySelector('dialog input').getAttribute('aria-invalid')`), 'true');
+  assert.match(await run(`document.querySelector('#join-address-hint').textContent`), /Адрес не распознан/);
+  assert.equal(await run(`document.querySelector('.join-submit').disabled`), true);
   await input('voice.example.com'); await wait();
   assert.equal(await run(`document.querySelector('.join-submit').disabled`), false);
   await click('Присоединиться'); await wait();
@@ -32,10 +36,11 @@ app.whenReady().then(async () => {
   assert.equal(await run(`window.testCalls().find(v=>v[0]==='connect')[1].password`), 'typed-secret');
   await run(`document.querySelectorAll('dialog [aria-label="Закрыть"]')[1].click()`); await wait();
   assert.equal(await run(`document.querySelectorAll('dialog[open]').length`), 1);
-  await input('voicecord://192.168.0.13:18443/'+'a'.repeat(64)+'#password=invited-secret'); await wait();
+  await input('  voicecord://192.168.0.13:18443/'+'a'.repeat(64)+'#password=invited-secret  '); await wait();
   await click('Присоединиться'); await wait();
   assert.equal(await run(`window.testCalls().filter(v=>v[0]==='diagnose').length`), 1);
   assert.equal(await run(`window.testCalls().filter(v=>v[0]==='connect').at(-1)[1].password`), 'invited-secret');
+  assert.equal(await run(`window.testCalls().filter(v=>v[0]==='connect').at(-1)[1].address`), 'voicecord://192.168.0.13:18443/'+'a'.repeat(64)+'#password=invited-secret');
   await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`); await wait();
   await run(`document.querySelector('.bookmark-orb').click()`); await wait();
   assert.equal(await run(`window.testCalls().filter(v=>v[0]==='connect').at(-1)[1].password`), 'saved-secret');
