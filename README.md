@@ -78,6 +78,7 @@ Follow the **[step-by-step Linux deployment guide (Russian)](docs/SERVER.md)**:
 administrator/container permissions, Docker installation links for major Linux
 distributions, image download, IP/ports, startup and client connection. The VPS
 needs only Docker Engine, the Compose file and `.env`; no source or Windows client.
+One image tag includes **amd64 and arm64**; Docker selects the VPS architecture automatically.
 
 After preparing both files in `/opt/voicecord`:
 

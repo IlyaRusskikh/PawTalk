@@ -4,7 +4,11 @@ permissions:
   contents: read
 jobs:
   server:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -86,8 +90,11 @@ jobs:
           node scripts/check-public.mjs
           echo "name=ghcr.io/${GITHUB_REPOSITORY,,}-server" >> "$GITHUB_OUTPUT"
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -103,11 +110,11 @@ jobs:
           fi
       - name: Build and publish tested server
         id: publish
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: server/standalone.Dockerfile
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ steps.image.outputs.name }}:${{ steps.image.outputs.version }}
@@ -126,4 +133,5 @@ jobs:
         run: |
           echo "Published: ${IMAGE_NAME}:${IMAGE_VERSION}" >> "$GITHUB_STEP_SUMMARY"
           echo "Immutable reference: ${IMAGE_NAME}@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Platforms: linux/amd64, linux/arm64 (automatic selection on pull)." >> "$GITHUB_STEP_SUMMARY"
           echo "First publication: make the GHCR package public to allow anonymous pulls." >> "$GITHUB_STEP_SUMMARY"

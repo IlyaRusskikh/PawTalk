@@ -7,6 +7,9 @@
 - Added a prebuilt-image Compose file, configuration example and GHCR publishing
   after successful release-tag checks. / Добавлены установка готового образа,
   пример настроек и публикация в GHCR после проверок релизного тега.
+- Server images include Linux amd64 and arm64 under one tag, with native CI
+  lifecycle checks for both architectures. / Мультиплатформенный серверный образ
+  amd64/arm64 и отдельные нативные проверки обеих архитектур в CI.
 
 ## 0.1.0 — Initial release / Первый выпуск
 

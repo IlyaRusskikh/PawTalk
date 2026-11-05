@@ -37,6 +37,8 @@
 6. Дождитесь успешного GitHub Actions для этого тега, включая **Publish server
    image to GHCR**. Серверный образ получает теги `X.Y.Z` и `sha-<commit>`;
    публикация выполняется только после успешных server и windows jobs.
+   Server jobs включают нативные amd64/arm64-проверки, а тег образа содержит
+   общий manifest `linux/amd64,linux/arm64`.
    При первом выпуске сделайте пакет публичным по [SERVER.md](SERVER.md).
    Скачайте artifact
    `voicecord-windows`: в нём установщик, его SHA-256 и копии лицензий.
@@ -70,7 +72,9 @@ run the checks above, build and smoke-test the installer, then commit and create
 an annotated `vX.Y.Z` tag. Push the branch and the tag. CI validates tag/version
 consistency and uploads `voicecord-windows`. After both test jobs pass, a tag push
 also publishes `ghcr.io/<owner>/<repo>-server:X.Y.Z` and `:sha-<commit>` for
-Linux amd64. Make the GHCR package public once, and include its digest and source
+Linux amd64 and arm64 under one multi-platform manifest. Server lifecycle checks
+run on native runners for both architectures. Make the GHCR package public once,
+and include its digest and source
 tag in release notes. Update `.env.server.example` to match each release.
 Publishing the GitHub Release itself is manual.
 

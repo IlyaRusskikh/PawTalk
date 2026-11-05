@@ -49,8 +49,11 @@ id
 эта группа предоставляет административный доступ к хосту. Это прямо описано в
 [документации Docker о правах](https://docs.docker.com/engine/install/linux-postinstall/).
 Rootless Docker — другой режим; этот Compose рассчитан на обычный Docker Engine
-с сетью хоста. Первые публикуемые образы предназначены для **Linux x86_64/amd64**.
-Для ARM нужен отдельно собранный образ соответствующей архитектуры.
+с сетью хоста. Публикуемый образ содержит **Linux amd64 и arm64** под одним тегом:
+`x86_64` в `uname -m` соответствует amd64, `aarch64` — arm64. Docker автоматически
+скачивает нужный вариант; отдельные команды для ARM-сервера не требуются.
+32-битный ARM (например, `armv7l`) не поддерживается: базовый образ LiveKit
+этой версии опубликован только для amd64 и arm64.
 
 ## 2. Установите Docker Engine и Compose
 
@@ -371,7 +374,9 @@ docker compose -f compose.server.ghcr.yaml restart server
 ## Первая публикация образа для владельца репозитория
 
 Workflow `.github/workflows/check.yml` публикует образ после push тега `vX.Y.Z`,
-**только если прошли обе проверки server и windows**. Номер тега должен совпадать
+**только если прошли проверки server и windows**. Серверные Go/Docker lifecycle
+проверки выполняются на нативных amd64- и arm64-раннерах. Buildx/QEMU собирает
+оба варианта в общий multi-platform manifest. Номер тега должен совпадать
 с `package.json` и `package-lock.json`. Обычный push в `main` только проверяет
 проект; образ не публикуется.
 
@@ -386,6 +391,10 @@ Workflow `.github/workflows/check.yml` публикует образ после 
 4. Проверьте скачивание на машине без GitHub-логина:
    `docker pull ghcr.io/ilyarusskikh/voicecord-server:0.1.0`.
    После этого инструкция для VPS готова к использованию без авторизации.
+
+Проверьте общий manifest командой
+`docker buildx imagetools inspect ghcr.io/ilyarusskikh/voicecord-server:0.1.0`:
+в нём должны присутствовать `linux/amd64` и `linux/arm64`.
 
 При форке имя образа вычисляется из `<владелец>/<репозиторий>-server` в нижнем
 регистре; обновите `VOICECORD_IMAGE` и ссылки скачивания под свой fork.
