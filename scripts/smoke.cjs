@@ -7,7 +7,28 @@ const os = require('node:os');
 app.setPath('userData', path.join(os.tmpdir(), 'voicecord-renderer-smoke-' + process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
-if(process.env.VOICECORD_TEST_AUDIO_FILE) app.commandLine.appendSwitch('use-file-for-fake-audio-capture',path.resolve(process.env.VOICECORD_TEST_AUDIO_FILE));
+// Chromium's default fake microphone is an intermittent beep. Use a continuous,
+// speech-like PCM fixture so capture reopens cannot land in a silent interval.
+let audioFile = process.env.VOICECORD_TEST_AUDIO_FILE;
+if (!audioFile) {
+  audioFile = path.join(os.tmpdir(), `voicecord-renderer-audio-${process.pid}.wav`);
+  const rate = 48000, count = rate * 6, wav = Buffer.alloc(44 + count * 2);
+  wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate * 2, 28);
+  wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36);
+  wav.writeUInt32LE(count * 2, 40);
+  let phase = 0;
+  for (let i = 0; i < count; i++) {
+    const time = i / rate;
+    phase += 2 * Math.PI * (185 + 24 * Math.sin(2 * Math.PI * 0.7 * time)) / rate;
+    const envelope = 0.07 + 0.1 * (0.5 + 0.5 * Math.sin(2 * Math.PI * 3.1 * time));
+    const sample = envelope * (Math.sin(phase) + 0.45 * Math.sin(phase * 2) + 0.2 * Math.sin(phase * 4));
+    wav.writeInt16LE(Math.round(sample * 32767), 44 + i * 2);
+  }
+  require('node:fs').writeFileSync(audioFile, wav);
+}
+app.commandLine.appendSwitch('use-file-for-fake-audio-capture', path.resolve(audioFile));
 app.disableHardwareAcceleration();
 app.whenReady().then(async () => {
   const errors = [];
@@ -34,6 +55,9 @@ app.whenReady().then(async () => {
     await fs.writeFile(path.join(output,'room.png'),await capture());
     await win.webContents.executeJavaScript(`(()=>{
       window.testStreams=[];
+      window.testAudioContexts=[];
+      const Context=window.AudioContext;
+      window.AudioContext=new Proxy(Context,{construct(target,args){const context=Reflect.construct(target,args);window.testAudioContexts.push(context);return context;}});
       const capture=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
       navigator.mediaDevices.getUserMedia=async options=>{const stream=await capture(options);window.testStreams.push(stream);return stream;};
     })()`);
@@ -60,7 +84,8 @@ app.whenReady().then(async () => {
       await wait(100);
       if(await win.webContents.executeJavaScript(`Number(document.querySelector('[role=meter]').getAttribute('aria-valuenow')) > -80`)) break;
     }
-    assert.ok(await win.webContents.executeJavaScript(`Number(document.querySelector('[role=meter]').getAttribute('aria-valuenow')) > -80`), 'microphone level reaches UI');
+    const meterState = await win.webContents.executeJavaScript(`({db:Number(document.querySelector('[role=meter]').getAttribute('aria-valuenow')),contexts:window.testAudioContexts.map(c=>({state:c.state,time:c.currentTime})),tracks:window.testStreams.map(s=>s.getAudioTracks().map(t=>({ready:t.readyState,enabled:t.enabled,muted:t.muted})))})`);
+    assert.ok(meterState.db > -80, `microphone level reaches UI: ${JSON.stringify(meterState)}`);
     assert.ok(await win.webContents.executeJavaScript(`document.querySelectorAll('.mic-bars .lit').length > 0`),'test segments turn yellow on sound');
     await fs.writeFile(path.join(output,'audio-test.png'),await capture());
     await win.webContents.executeJavaScript(`(()=>{const select=document.querySelector('[aria-label="Режим шумоподавления"]');select.value='off';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
