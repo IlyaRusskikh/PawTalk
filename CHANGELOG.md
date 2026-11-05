@@ -2,6 +2,8 @@
 
 ## Unreleased / Не выпущено
 
+## 0.1.0 — 2026-11-05 — Initial release / Первый выпуск
+
 - Added a step-by-step Linux VPS guide with Docker installation links, host and
   container permissions, public GHCR image deployment, ports and operations.
 - Added a prebuilt-image Compose file, configuration example and GHCR publishing
@@ -10,11 +12,6 @@
 - Server images include Linux amd64 and arm64 under one tag, with native CI
   lifecycle checks for both architectures. / Мультиплатформенный серверный образ
   amd64/arm64 и отдельные нативные проверки обеих архитектур в CI.
-
-## 0.1.0 — Initial release / Первый выпуск
-
-Prepared for publication; the Git tag and GitHub Release mark the actual release.
-Подготовлено к публикации; фактический выпуск отмечается Git-тегом и GitHub Release.
 
 - Windows desktop voice client with voice activation, push-to-talk, device and
   volume controls, local RNNoise processing, tray and global shortcuts.
