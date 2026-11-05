@@ -39,7 +39,8 @@
    публикация выполняется только после успешных server и windows jobs.
    Server jobs включают нативные amd64/arm64-проверки, а тег образа содержит
    общий manifest `linux/amd64,linux/arm64`.
-   При первом выпуске сделайте пакет публичным по [SERVER.md](SERVER.md).
+   При первом выпуске сделайте пакет публичным по разделу
+   [«Первая публикация образа»](#первая-публикация-образа-для-владельца-репозитория).
    Скачайте artifact
    `voicecord-windows`: в нём установщик, его SHA-256 и копии лицензий.
    Откройте **Releases → Draft a new release**, выберите существующий тег,
@@ -58,6 +59,36 @@
 версии получает новый номер. Полный `release/` не загружается в Git или GitHub:
 там могут быть локальные отчёты и записи; прикладываются только проверенные файлы.
 SSH нужен для Git push, а не для сборки. GitHub Desktop также может работать через HTTPS.
+
+### Первая публикация образа для владельца репозитория
+
+Workflow `.github/workflows/check.yml` публикует образ после push тега `vX.Y.Z`,
+**только если прошли проверки server и windows**. Серверные Go/Docker lifecycle
+проверки выполняются на нативных amd64- и arm64-раннерах. Buildx/QEMU собирает
+оба варианта в общий multi-platform manifest. Номер тега должен совпадать
+с `package.json` и `package-lock.json`. Обычный push в `main` только проверяет
+проект; образ не публикуется.
+
+1. Отправьте коммит с workflow и этими файлами на GitHub. Для первого выпуска
+   создайте и отправьте `v0.1.0` по порядку выпуска выше.
+2. Дождитесь зелёного **Verify and package → Publish server image to GHCR**.
+   В Summary появятся имя, версия и digest образа. Для публикации используется
+   `GITHUB_TOKEN` с `packages: write`; личный PAT в Secrets не нужен.
+3. Откройте профиль GitHub → **Packages → voicecord-server → Package settings**.
+   В разделе видимости выберите **Change visibility → Public** и подтвердите.
+   Публичность репозитория сама по себе не делает новый пакет публичным.
+4. Проверьте скачивание на машине без GitHub-логина:
+   `docker pull ghcr.io/ilyarusskikh/voicecord-server:0.1.0`.
+   После этого инструкция для VPS готова к использованию без авторизации.
+
+Проверьте общий manifest командой
+`docker buildx imagetools inspect ghcr.io/ilyarusskikh/voicecord-server:0.1.0`:
+в нём должны присутствовать `linux/amd64` и `linux/arm64`.
+
+При форке имя образа вычисляется из `<владелец>/<репозиторий>-server` в нижнем
+регистре; обновите `VOICECORD_IMAGE` и ссылки скачивания под свой fork.
+Не заменяйте уже опубликованный тег версии; выпускайте новый номер.
+Механизм публикации и видимости описан в [документации GHCR](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
 ## English
 
