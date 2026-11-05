@@ -127,7 +127,7 @@ for (const shell of shells) test(`automatic TCP check verifies API results and r
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
-for (const scenario of ['timeout', 'udp-first', 'tcp-first', 'cancel']) test(`preflight cleanup and caller preservation (${scenario})`, { skip: process.platform !== 'win32', timeout: 20000 }, async () => {
+for (const scenario of ['timeout', 'udp-first', 'tcp-first', 'cancel', 'extra-port-in-use']) test(`preflight cleanup and caller preservation (${scenario})`, { skip: process.platform !== 'win32', timeout: 20000 }, async () => {
   let port;
   for (let attempt = 0; attempt < 30; attempt++) {
     const candidate = 20000 + Math.floor(Math.random() * 15000);
@@ -145,10 +145,13 @@ for (const scenario of ['timeout', 'udp-first', 'tcp-first', 'cancel']) test(`pr
   assert.ok(port, 'a free local TCP port range is available');
   const source = path.resolve('scripts/check-selfhost.ps1').replaceAll("'", "''");
   const seconds = scenario === 'timeout' ? 10 : 180;
-  const mockProbe = ['timeout', 'cancel'].includes(scenario) ? '' : `function Test-PublicIPv4 { return $true }; function New-UdpProbe { return @{ Client=(New-Object IO.MemoryStream); Received=$false; Confirmed=$false; Ready=[DateTime]::UtcNow.AddSeconds(${scenario === 'tcp-first' ? 1 : 0}) } }; function Receive-UdpProbe {}; function Update-UdpProbe($probe) { if ([DateTime]::UtcNow -ge $probe.Ready) { $probe.Received=$true; $probe.Confirmed=$true } };`;
-  const probeOptions = ['timeout', 'cancel'].includes(scenario) ? '-SkipUdpCheck' : "-PublicIP '203.0.113.20'";
+  const cancellation = ['cancel', 'extra-port-in-use'].includes(scenario);
+  const mockProbe = scenario === 'timeout' || cancellation ? '' : `function Test-PublicIPv4 { return $true }; function New-UdpProbe { return @{ Client=(New-Object IO.MemoryStream); Received=$false; Confirmed=$false; Ready=[DateTime]::UtcNow.AddSeconds(${scenario === 'tcp-first' ? 1 : 0}) } }; function Receive-UdpProbe {}; function Update-UdpProbe($probe) { if ([DateTime]::UtcNow -ge $probe.Ready) { $probe.Received=$true; $probe.Confirmed=$true } };`;
+  const probeOptions = scenario === 'timeout' || cancellation ? '-SkipUdpCheck' : "-PublicIP '203.0.113.20'";
   const application = scenario === 'timeout' ? '' : '-Application';
   const command = `. '${source}' -Port ${port} -Seconds ${seconds} ${probeOptions} -SkipTcpCheck ${application}; function Get-NetIPConfiguration { [pscustomobject]@{ IPv4DefaultGateway=1; IPv4Address=@([pscustomobject]@{IPAddress='127.0.0.1'}) } }; function Find-UPnPService { throw 'Synthetic: no router' }; ${mockProbe} Start-SelfHostCheck; Write-Output 'CALLER_STILL_RUNNING'`;
+  const extra = scenario === 'extra-port-in-use' ? createTCPServer() : null;
+  if (extra) await new Promise(resolve => extra.listen(port + 3, '0.0.0.0', resolve));
   const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   let output = '';
   const done = new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', code => code === 0 ? resolve() : reject(new Error(output))); });
@@ -163,18 +166,19 @@ for (const scenario of ['timeout', 'udp-first', 'tcp-first', 'cancel']) test(`pr
     for (const number of [port, port + 1]) {
       await new Promise((resolve, reject) => { const socket = createConnection(number, '127.0.0.1'); socket.on('error', reject); socket.on('connect', () => { socket.end(); resolve(); }); });
     }
-    if (scenario === 'cancel') child.stdin.end('q\n');
+    if (cancellation) child.stdin.end('q\n');
     await done;
-    if (!['timeout', 'cancel'].includes(scenario)) {
+    if (scenario !== 'timeout' && !cancellation) {
       assert.ok(Date.now() - connectedAt < 5000, 'full success exits immediately instead of waiting 180 seconds');
       assert.match(output, /=== RESULT ===\s+SUCCESS:/);
       assert.match(output, /VOICECORD_PREFLIGHT_RESULT:.*"state":"internet"/);
     }
-    if (scenario === 'cancel') assert.match(output, /VOICECORD_PREFLIGHT_RESULT:.*"state":"cancelled"/);
+    if (cancellation) assert.match(output, /VOICECORD_PREFLIGHT_RESULT:.*"state":"cancelled"/);
     assert.match(output, /CALLER_STILL_RUNNING/, 'the script returns to its caller without exit');
-    if (scenario !== 'cancel') assert.match(output, /TCP connection accepted/);
+    if (!cancellation) assert.match(output, /TCP connection accepted/);
     assert.match(output, /Synthetic: no router/);
     assert.match(output, /Listeners closed/);
+    if (extra) await new Promise(resolve => extra.close(resolve));
     for (const number of [port, port + 1, port + 3]) {
       const listener = createTCPServer();
       await new Promise((resolve, reject) => { listener.on('error', reject); listener.listen(number, '0.0.0.0', resolve); });
@@ -183,5 +187,25 @@ for (const scenario of ['timeout', 'udp-first', 'tcp-first', 'cancel']) test(`pr
     const udp = createSocket('udp4');
     try { await new Promise((resolve, reject) => { udp.on('error', reject); udp.bind(port + 2, '0.0.0.0', resolve); }); }
     finally { udp.close(); }
-  } finally { child.kill(); }
+  } finally { child.kill(); if (extra?.listening) await new Promise(resolve => extra.close(resolve)); }
+});
+
+for (const shell of shells) test(`external checker retries transient HTTP errors and confirms recovered requests (${shell})`, { skip: process.platform !== 'win32' }, async () => {
+  let attempts = 0;
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url.startsWith('/check-tcp?')) {
+      if (++attempts === 1) { res.writeHead(502); res.end('{}'); return; }
+      res.end(JSON.stringify({ ok: 1, request_id: 'retry-test', nodes: { mock: ['xx', 'Test', 'Test', '198.51.100.1'] } }));
+    } else res.end(JSON.stringify({ mock: [{ time: 0.02, address: '203.0.113.20' }] }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const source = path.resolve('scripts/check-selfhost.ps1').replaceAll("'", "''");
+  try {
+    const command = `$ErrorActionPreference='Stop'; . '${source}'; $probe=New-TcpProbe '203.0.113.20' 18443 'http://127.0.0.1:${server.address().port}'; try { $deadline=[DateTime]::UtcNow.AddSeconds(8); while (-not $probe.Finished -and [DateTime]::UtcNow -lt $deadline) { Update-PortProbe $probe; Start-Sleep -Milliseconds 20 }; if (-not $probe.Confirmed -or $probe.Error) { throw 'Recovered checker did not confirm TCP' } } finally { $probe.Client.Dispose() }`;
+    const result = await execute(shell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, timeout: 12000 });
+    assert.equal(attempts, 2);
+    assert.match(result.stdout, /retry 1\/2/);
+    assert.match(result.stdout, /PASS: TCP 18443 confirmed/);
+  } finally { await new Promise(resolve => server.close(resolve)); }
 });

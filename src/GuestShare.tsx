@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { useState } from 'react';
 import { Modal } from './Modal';
 export function GuestShare({ target, name, onClose }: { target: { address: string; password: string; e2eeKey?: string }; name: string; onClose(): void }) {
@@ -7,12 +8,12 @@ export function GuestShare({ target, name, onClose }: { target: { address: strin
  const link = url?.toString() || target.address;
  async function copy() {
   try { if (url && window.desktop) await window.desktop.copyInvitation(link); else await navigator.clipboard.writeText(link); setCopied(true); }
-  catch { setError('Не удалось скопировать. Выделите ссылку и нажмите Ctrl+C.'); }
+  catch { setError(t("Не удалось скопировать. Выделите ссылку и нажмите Ctrl+C.")); }
  }
- return <Modal title="Поделиться комнатой" onClose={onClose}>
-  {error && <p className="text-error" role="alert">{error}</p>}<label className="host-invite">{url ? 'Ссылка приглашения' : 'Адрес сервера'}<div><input readOnly value={link} onFocus={e => e.target.select()}/><button className="primary" onClick={() => void copy()}>{copied ? 'Скопировано' : 'Копировать'}</button></div></label>
-  {!url && <label>Пароль сервера<input readOnly value={target.password} onFocus={e => e.target.select()}/></label>}
-  {!url && target.e2eeKey && <label>Ключ E2EE<input readOnly value={target.e2eeKey} onFocus={e => e.target.select()}/></label>}
-  <p className="host-hint">{url ? 'Другу нужен Voicecord. Пароль уже включён в ссылку. Адрес доступен из той же сети, из которой подключились вы.' : 'Отправьте другу адрес и пароль. Для подключения нужен Voicecord.'}</p>
+ return <Modal title={t("Поделиться комнатой")} onClose={onClose}>
+  {error && <p className="text-error" role="alert">{error}</p>}<div className="form-fields"><label className="host-invite">{url ? t("Ссылка приглашения") : t("Адрес сервера")}<div><input readOnly value={link} onFocus={e => e.target.select()}/><button className="primary" onClick={() => void copy()}>{copied ? t("Скопировано") : t("Копировать")}</button></div></label>
+  {!url && <label>{t("Пароль сервера")}<input readOnly value={target.password} onFocus={e => e.target.select()}/></label>}
+  {!url && target.e2eeKey && <label>{t("Ключ E2EE")}<input readOnly value={target.e2eeKey} onFocus={e => e.target.select()}/></label>}
+  </div><p className="host-hint">{url ? t("Другу нужен Voicecord. Пароль уже включён в ссылку. Адрес доступен из той же сети, из которой подключились вы.") : t("Отправьте другу адрес и пароль. Для подключения нужен Voicecord.")}</p>
  </Modal>;
 }

@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import type { Settings } from './settings';
 import workletURL from './gate-worklet.ts?worker&url';
 import rnnoiseURL from './generated/rnnoise.wasm?url';
@@ -5,7 +6,7 @@ import rnnoiseURL from './generated/rnnoise.wasm?url';
 let compiledModel: Promise<WebAssembly.Module> | undefined;
 function loadModel() {
   return compiledModel ??= fetch(rnnoiseURL).then(response => {
-    if (!response.ok) throw new Error('Не удалось загрузить локальную модель RNNoise');
+    if (!response.ok) throw new Error(t("Не удалось загрузить локальную модель RNNoise"));
     return response.arrayBuffer();
   }).then(binary => WebAssembly.compile(binary)).catch(error => { compiledModel = undefined; throw error; });
 }
@@ -59,7 +60,7 @@ export class Microphone {
       await this.configure(this.settings);
     } catch (error) { this.stop(); throw error; }
   }
-  get track() { if (!this.destination) throw new Error('Микрофон не запущен'); return this.destination.stream.getAudioTracks()[0]; }
+  get track() { if (!this.destination) throw new Error(t("Микрофон не запущен")); return this.destination.stream.getAudioTracks()[0]; }
   update(settings: Settings, muted: boolean, ptt: boolean) {
     this.settings = settings; this.muted = muted; this.ptt = ptt;
     if (this.destination) this.track.enabled = !muted || this.testing;
@@ -136,7 +137,7 @@ export class Microphone {
     if (this.monitorGain) this.node?.disconnect(this.monitorGain);
     this.monitorGain?.disconnect(); this.monitorGain = undefined;
     this.update(this.settings, this.muted, this.ptt);
-    if (!this.stopped && this.stream) void this.configure(this.settings).catch(error => this.onError(`Не удалось восстановить обработку микрофона: ${String(error)}`));
+    if (!this.stopped && this.stream) void this.configure(this.settings).catch(error => this.onError(t("Не удалось восстановить обработку микрофона: {0}", String(error))));
   }
   stop() {
     this.stopped = true; this.stopMonitor();

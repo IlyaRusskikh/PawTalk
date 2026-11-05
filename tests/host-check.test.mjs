@@ -16,6 +16,10 @@ test('host check accepts only complete structured results and cannot turn partia
   assert.deepEqual(parseResult(prefix + '{"state":"internet","tcp":[true,true],"udp":true}'), { state: 'internet', tcp: [true, true], udp: true });
   for (const bad of ['{}', '{"state":"internet","tcp":[true,false],"udp":true}', '{"state":"internet","tcp":[true,true],"udp":false}']) assert.throws(() => parseResult(prefix + bad));
 });
+test('host check preserves bounded diagnostic reasons without passing worker output to the UI', () => {
+  assert.equal(parseResult(prefix + '{"state":"error","tcp":[true,false],"udp":false,"reason":"checker-unavailable"}').reason, 'checker-unavailable');
+  assert.equal(parseResult(prefix + '{"state":"error","tcp":[false,false],"udp":false,"reason":"private router output"}').reason, undefined);
+});
 test('host check isolates arguments, waits for cleanup/exit and blocks concurrent checks', async () => {
   const process = child(); let launch;
   const check = new HostCheck('C:\\App Folder\\check.ps1', (...args) => { launch = args; return process; });

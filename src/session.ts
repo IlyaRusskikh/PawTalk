@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { Room, RoomEvent, Track, LocalAudioTrack, AudioPresets, ConnectionState, ExternalE2EEKeyProvider, isE2EESupported, type RemoteAudioTrack, type RemoteTrackPublication } from 'livekit-client';
 import E2EEWorker from 'livekit-client/e2ee-worker?worker';
 import { mediaKeyBytes } from '../shared/encryption.mjs';
@@ -6,11 +7,12 @@ import type { Settings } from './settings';
 import { RttMeter } from '../shared/rtt.mjs';
 import { PacketLossMeter } from '../shared/packet-loss.mjs';
 
-export interface Person { id: string; name: string; speaking: boolean; muted: boolean; local: boolean; quality: string; rtt?: number; }
+export interface Person { id: string; name: string; speaking: boolean; muted: boolean; deafened?: boolean; local: boolean; quality: string; rtt?: number; }
 export interface Snapshot { state: string; people: Person[]; db: number; speaking: boolean; threshold?: number; rtt?: number; packetLoss?: number; e2ee?: boolean; }
 export class VoiceSession {
   room?: Room; mic?: Microphone; localTrack?: LocalAudioTrack;
   muted = false; deafened = false; ptt = false;
+  private peerDeafened = new Map<string, boolean>();
   private peopleVolume = new Map<string, { volume: number; muted: boolean }>();
   private speakers = new Set<string>();
   private elements = new Map<string, HTMLMediaElement[]>();
@@ -36,9 +38,10 @@ export class VoiceSession {
     const now = performance.now();
     this.rtt = this.state === 'connected' ? this.rttMeter.value(now) : undefined;
     const people = room ? [room.localParticipant, ...room.remoteParticipants.values()].map(p => ({
-      id: p.identity, name: p.name || 'Участник', local: p === room.localParticipant,
+      id: p.identity, name: p.name || t("Участник"), local: p === room.localParticipant,
       speaking: p === room.localParticipant ? this.speaking : this.speakers.has(p.identity),
       muted: p === room.localParticipant ? this.muted || this.deafened : p.getTrackPublication(Track.Source.Microphone)?.isMuted ?? true,
+      deafened: p === room.localParticipant ? this.deafened : this.peerDeafened.get(p.identity) === true,
       quality: String(p.connectionQuality),
       rtt: p === room.localParticipant ? this.rtt : now - (this.peerRtt.get(p.identity)?.received ?? -Infinity) <= 15000 ? this.peerRtt.get(p.identity)?.value : undefined,
     })) : [];
@@ -62,9 +65,9 @@ export class VoiceSession {
     });
   }
   async connect(url: string, token: string, encryption: { required?: boolean; key?: string } = {}) {
-    if (encryption.required && !isE2EESupported()) throw new Error('Этот клиент не поддерживает E2EE. Обновите Voicecord.');
-    if (encryption.required) mediaKeyBytes(encryption.key);
-    if (encryption.key && !encryption.required) throw new Error('Сервер не подтвердил обязательное E2EE.');
+    if (encryption.required && !isE2EESupported()) throw new Error(t("Этот клиент не поддерживает E2EE. Обновите Voicecord."));
+    if (encryption.required) { try { mediaKeyBytes(encryption.key); } catch { throw new Error(t('Нужен ключ E2EE из приглашения: 64 шестнадцатеричных символа.')); } }
+    if (encryption.key && !encryption.required) throw new Error(t("Сервер не подтвердил обязательное E2EE."));
     this.stopped = false;
     this.encrypted = encryption.required === true;
     const generation = ++this.generation;
@@ -83,14 +86,14 @@ export class VoiceSession {
       this.onError(message); void this.disconnect();
     };
     const subscribe = (publication: RemoteTrackPublication) => {
-      if (this.encrypted && !publication.isEncrypted) { failEncryption('Комната E2EE получила незашифрованную дорожку. Подключение закрыто.'); return; }
+      if (this.encrypted && !publication.isEncrypted) { failEncryption(t("Комната E2EE получила незашифрованную дорожку. Подключение закрыто.")); return; }
       publication.setSubscribed(true);
     };
-    if (worker) worker.addEventListener('error', () => failEncryption('Ошибка E2EE. Подключение закрыто без отключения шифрования.'));
-    room.on(RoomEvent.EncryptionError, () => failEncryption('Не удалось расшифровать голос. Проверьте ключ E2EE в приглашении.'));
+    if (worker) worker.addEventListener('error', () => failEncryption(t("Ошибка E2EE. Подключение закрыто без отключения шифрования.")));
+    room.on(RoomEvent.EncryptionError, () => failEncryption(t("Не удалось расшифровать голос. Проверьте ключ E2EE в приглашении.")));
     room.on(RoomEvent.TrackPublished, publication => { if (this.encrypted) subscribe(publication); });
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-      if (this.encrypted && !publication.isEncrypted) { failEncryption('Получена дорожка без E2EE. Подключение закрыто.'); return; }
+      if (this.encrypted && !publication.isEncrypted) { failEncryption(t("Получена дорожка без E2EE. Подключение закрыто.")); return; }
       if (track.kind === Track.Kind.Audio) this.attach(track as RemoteAudioTrack, participant.identity);
     });
     room.on(RoomEvent.TrackUnsubscribed, track => {
@@ -99,9 +102,13 @@ export class VoiceSession {
       track.detach().forEach(el => el.remove()); this.elements.delete(id);
     });
     room.on(RoomEvent.ActiveSpeakersChanged, speakers => { this.speakers = new Set(speakers.map(p => p.identity)); this.emit(); });
-    room.on(RoomEvent.ParticipantConnected, () => { if (this.settings.sounds) playCue(true); this.emit(); });
-    room.on(RoomEvent.ParticipantDisconnected, p => { this.peerRtt.delete(p.identity); });
+    room.on(RoomEvent.ParticipantConnected, () => { this.publishAudioState(); if (this.settings.sounds) playCue(true); this.emit(); });
+    room.on(RoomEvent.ParticipantDisconnected, p => { this.peerRtt.delete(p.identity); this.peerDeafened.delete(p.identity); });
     room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+      if (topic === 'voicecord.audio-state.v1' && participant && payload.length <= 100) {
+        try { const state = JSON.parse(new TextDecoder().decode(payload)); if (typeof state.deafened === 'boolean') { this.peerDeafened.set(participant.identity, state.deafened); this.emit(); } } catch {}
+        return;
+      }
       if (topic !== 'voicecord.rtt.v1' || !participant || payload.length > 100) return;
       try { const value = JSON.parse(new TextDecoder().decode(payload));
         if (value.rtt === null) this.peerRtt.delete(participant.identity);
@@ -112,10 +119,10 @@ export class VoiceSession {
     room.on(RoomEvent.ParticipantDisconnected, () => { if (this.settings.sounds) playCue(false); this.emit(); });
     room.on(RoomEvent.TrackMuted, () => this.emit()); room.on(RoomEvent.TrackUnmuted, () => this.emit());
     room.on(RoomEvent.ConnectionQualityChanged, () => this.emit());
-    room.on(RoomEvent.AudioPlaybackStatusChanged, () => { if (!room.canPlaybackAudio) this.onError('Не удалось включить воспроизведение. Переподключитесь к комнате.'); });
-    room.on(RoomEvent.ConnectionStateChanged, state => { this.state = state; if (state !== 'connected') { this.rttMeter.reset(); this.peerRtt.clear(); } this.syncGate(); this.emit(); });
-    room.on(RoomEvent.Disconnected, () => { if (!this.stopped) { this.onError('Соединение прервано. Подключитесь снова.'); void this.disconnect(); } });
-    room.on(RoomEvent.MediaDevicesError, error => this.onError(`Ошибка аудиоустройства: ${error.message}`));
+    room.on(RoomEvent.AudioPlaybackStatusChanged, () => { if (!room.canPlaybackAudio) this.onError(t("Не удалось включить воспроизведение. Переподключитесь к комнате.")); });
+    room.on(RoomEvent.ConnectionStateChanged, state => { this.state = state; if (state === 'connected') this.publishAudioState(); if (state !== 'connected') { this.rttMeter.reset(); this.peerRtt.clear(); this.peerDeafened.clear(); } this.syncGate(); this.emit(); });
+    room.on(RoomEvent.Disconnected, () => { if (!this.stopped) { this.onError(t("Соединение прервано. Подключитесь снова.")); void this.disconnect(); } });
+    room.on(RoomEvent.MediaDevicesError, error => this.onError(t("Ошибка аудиоустройства: {0}", error.message)));
     try {
       if (keyProvider) {
         await keyProvider.setKey(mediaKeyBytes(encryption.key).buffer as ArrayBuffer);
@@ -139,7 +146,7 @@ export class VoiceSession {
         this.lastDuck = active;
         void window.desktop?.duck({ active, factor: 1 - this.settings.duckAmount / 100 }).catch(() => {});
         if (this.rtt !== undefined && this.rttMeter.value() === undefined) this.emit();
-        if (++tick % 20 === 0) void this.collectStats();
+        if (++tick % 20 === 0) { void this.collectStats(); this.publishAudioState(); }
       }, 250);
       this.emit();
     } catch (error) { if (generation === this.generation) await this.disconnect(); throw error; }
@@ -155,7 +162,7 @@ export class VoiceSession {
     const mic = new Microphone(this.settings, this.transport.sharedAudioContext === false ? undefined : this.playback);
     mic.muted = this.muted || this.deafened; mic.ptt = this.ptt;
     mic.onMeter = (db, speaking, threshold) => { this.db = db; this.speaking = speaking; this.threshold = threshold; this.emit(); };
-    mic.onEnded = () => { this.onError('Микрофон отключён. Выберите доступное устройство.'); this.speaking = false; this.emit(); };
+    mic.onEnded = () => { this.onError(t("Микрофон отключён. Выберите доступное устройство.")); this.speaking = false; this.emit(); };
     mic.onError = message => this.onError(message);
     try {
       await mic.start();
@@ -177,7 +184,10 @@ export class VoiceSession {
     }
     this.applyVolumes(); this.emit();
   }
-  setMute(muted: boolean, deafened: boolean) { this.muted = muted; this.deafened = deafened; this.syncGate(); this.applyVolumes(); void this.syncMute().catch(error => this.onError(String(error))); }
+  private publishAudioState() {
+    if (this.room?.state === ConnectionState.Connected) void this.room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ deafened: this.deafened })), { reliable: true, topic: 'voicecord.audio-state.v1' }).catch(() => {});
+  }
+  setMute(muted: boolean, deafened: boolean) { this.muted = muted; this.deafened = deafened; this.publishAudioState(); this.emit(); this.syncGate(); this.applyVolumes(); void this.syncMute().catch(error => this.onError(String(error))); }
   setPtt(down: boolean) { this.ptt = down; this.syncGate(); }
   setPerson(id: string, volume: number, muted: boolean) { this.peopleVolume.set(id, { volume, muted }); this.applyVolumes(); }
   updateSettings(settings: Settings) {
@@ -188,7 +198,7 @@ export class VoiceSession {
       if (generation !== this.generation || this.stopped) return;
       if (this.state === 'connected') await this.mic?.configure(settings);
       if (previous.outputDevice !== settings.outputDevice && this.playback) await this.playback.setSinkId(settings.outputDevice === 'default' ? '' : settings.outputDevice);
-    }).catch(error => this.onError(`Не удалось применить устройство: ${error.message}`));
+    }).catch(error => this.onError(t("Не удалось применить устройство: {0}", error.message)));
   }
   async collectStats() {
     if (this.collecting || this.state !== 'connected') return;
@@ -226,7 +236,7 @@ export class VoiceSession {
     const worker = this.encryptionWorker; this.encryptionWorker = undefined; this.encrypted = false;
     this.peopleVolume.clear(); this.speakers.clear(); this.speaking = false; this.db = -100; this.ptt = false; this.state = 'disconnected';
     void window.desktop?.duck({ active: false, factor: 1 }).catch(() => {});
-    this.rtt = undefined; this.packetLoss = undefined; this.lossMeter.reset(); this.rttMeter.reset(); this.peerRtt.clear();
+    this.rtt = undefined; this.packetLoss = undefined; this.lossMeter.reset(); this.rttMeter.reset(); this.peerRtt.clear(); this.peerDeafened.clear();
     if (wasConnected && this.settings.sounds) playCue(false);
     this.emit();
     await Promise.allSettled([room?.disconnect(), playback?.close()]);

@@ -3,13 +3,14 @@ const calls = [];
 const noop = () => () => {};
 let cancelCheck;
 contextBridge.exposeInMainWorld('desktop', {
+ copyServerKey: async value => { calls.push(['copy-server-key', value]); },
  duck: async () => {},
  capabilities: async () => ({ native: true, secureStorage: true }), configureKeys: async () => ({ failed: [] }),
  hostStatus: async () => ({ running: false }), pendingInvitation: async () => '',
  checkHost: port => {
   calls.push(['host-check', port]);
   return new Promise(resolve => {
-   const finish = state => { clearTimeout(timer); cancelCheck = null; resolve({ state, tcp: [state === 'internet', state === 'internet'], udp: state === 'internet' }); };
+   const finish = state => { clearTimeout(timer); cancelCheck = null; resolve({ state, tcp: [state === 'internet', state === 'internet'], udp: state === 'internet', ...(state === 'error' ? {reason:'checker-unavailable'} : {}) }); };
    const timer = setTimeout(() => finish(port === 18443 ? 'internet' : port === 18444 ? 'unconfirmed' : 'error'), port === 18446 ? 10000 : 200);
    cancelCheck = () => finish('cancelled');
   });

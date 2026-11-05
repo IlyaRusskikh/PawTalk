@@ -1,0 +1,67 @@
+const { app, BrowserWindow, session } = require('electron');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const fs = require('node:fs/promises');
+app.setPath('userData', path.join(require('node:os').tmpdir(), 'voicecord-update-ui-' + process.pid));
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+app.commandLine.appendSwitch('use-fake-device-for-media-stream');
+app.whenReady().then(async () => {
+  session.defaultSession.setPermissionRequestHandler((_w, _p, cb) => cb(true));
+  session.defaultSession.setPermissionCheckHandler(() => true);
+  const win = new BrowserWindow({ show: false, width: 1100, height: 760, webPreferences: { preload: path.join(__dirname, 'updates-preload.cjs'), sandbox: true, contextIsolation: true, backgroundThrottling: false } });
+  const run = expression => win.webContents.executeJavaScript(expression, true);
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const until = async expression => { for (let i = 0; i < 100; i++) { if (await run(expression)) return; await wait(50); } throw new Error('Timed out: ' + expression); };
+  const click = text => run(`Array.from((document.querySelector('dialog[open]') || document).querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(text)}).click()`);
+  const screenshot = async name => { await fs.mkdir('release/qa', { recursive: true }); await fs.writeFile(`release/qa/${name}.png`, (await win.webContents.capturePage()).toPNG()); };
+  try {
+    await win.loadURL(process.env.VOICECORD_UI_TEST_URL);
+    await until(`!!document.querySelector('.home-actions')`);
+    for (const width of [940, 1100, 1240]) {
+      win.setSize(width, 760); await wait(80);
+      assert.ok(await run(`document.querySelector('.user-dock').getBoundingClientRect().left >= document.querySelector('.rail').getBoundingClientRect().right`), 'profile clears bookmark rail at ' + width);
+    }
+    await screenshot('profile-alignment');
+    await run(`document.querySelector('[title="Настройки"]').click()`);
+    await until(`!!document.querySelector('dialog[open]')`);
+    await run(`window.updateTest.offer()`); await wait(80);
+    assert.equal(await run(`document.querySelector('dialog h2').textContent`), 'Настройки', 'update waits for existing modal');
+    assert.equal(await run(`!!document.querySelector('.update-indicator')`), false);
+    await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`);
+    await until(`!!document.querySelector('.update-modal[open]')`);
+    const actions = await run(`Array.from(document.querySelectorAll('.update-actions button'),b=>{const r=b.getBoundingClientRect();return {center:r.top+r.height/2,height:r.height}})`);
+    assert.ok(Math.abs(actions[0].center - actions[1].center) <= 1, 'update action centers align');
+    assert.equal(actions[0].height, actions[1].height, 'update action heights match');
+    await screenshot('update-ru');
+    await click('Отложить'); await wait(80);
+    assert.ok(await run(`!!document.querySelector('.update-indicator')`));
+    await run(`document.querySelector('[title="Настройки"]').click()`); await wait(80);
+    assert.equal(await run(`!!document.querySelector('.update-indicator')`), false, 'deferred icon hidden by settings');
+    await run(`(()=>{const select=document.querySelector('select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'en');select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await until(`document.querySelector('dialog h2').textContent === 'Settings'`);
+    assert.equal(await run(`document.documentElement.lang`), 'en');
+    assert.ok(await run(`document.querySelector('.settings-modal').textContent.includes('Noise suppression')`));
+    assert.ok(await run(`document.querySelector('.settings-modal').textContent.includes('App language')`));
+    await screenshot('settings-en');
+    await run(`document.querySelector('dialog [aria-label="Close"]').click()`);
+    await until(`!!document.querySelector('.update-indicator')`);
+    await run(`window.updateTest.host();document.querySelector('.update-indicator').click()`); await wait(80);
+    assert.ok(await run(`document.querySelector('.update-modal').textContent.includes('disconnect all participants')`), await run(`document.querySelector('.update-modal').textContent`));
+    await screenshot('update-en');
+    await click('Download and install');
+    await until(`document.querySelector('.update-modal progress')?.value === 35`);
+    assert.equal(await run(`Array.from(document.querySelectorAll('.update-actions button')).every(b => b.disabled)`), true);
+    await until(`!!document.querySelector('.update-modal [role=alert]')`);
+    assert.equal(await run('window.updateTest.calls()'), 1);
+    await click('Download and install');
+    await until(`window.updateTest.calls() === 2`);
+    await until(`!!document.querySelector('.update-modal [role=alert]')`);
+    await click('Later');
+    await win.reload();
+    await until(`!!document.querySelector('.home-actions')`);
+    assert.equal(await run(`document.querySelector('h1').textContent`), 'The conversation starts here.');
+    console.log('PASS: dock geometry, update deferral/reopen/modal exclusion, host warning, progress/retry, Russian/English settings and language persistence.');
+  } catch (error) { console.error(error); app.exit(1); }
+  finally { win.destroy(); app.quit(); }
+});

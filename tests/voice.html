@@ -2,15 +2,19 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Participants } from '/src/Participants.tsx';
+import { ConnectionStatus } from '/src/ConnectionStatus.tsx';
 import { GuestShare } from '/src/GuestShare.tsx';
 import '/src/style.css';
 import { VoiceSession } from '/src/session.ts';
 import { defaults } from '/src/settings.ts';
+import { changeLanguage } from '/src/i18n.ts';
+window.changeLanguage=changeLanguage;
 import { Track, LocalVideoTrack, Room } from 'livekit-client';
 const c = new VoiceSession({ ...defaults, echoCancellation: false, noiseMode: new URLSearchParams(location.search).get('noise') === 'rnnoise' ? 'rnnoise' : 'off', autoGainControl: false, sounds: false, autoSensitivity: false, threshold: -75, inputMode: 'ptt', pttReleaseMs: 0 });
 window.voice = c;
 let uiRoot;
 const root = () => { if(!uiRoot){const el=document.createElement('div');el.style.padding='30px';document.body.append(el);uiRoot=createRoot(el);}return uiRoot;};
+window.renderConnection = delay => root().render(React.createElement(ConnectionStatus, {state: 'connected', label: 'На связи', delay}));
 window.renderParticipants = () => {
  function Demo(){const [prefs,setPrefs]=React.useState({});return React.createElement(Participants,{people:window.snapshot.people,prefs,onChange:(id,volume,muted)=>{window.changedPref={id,volume,muted};c.setPerson(id,volume,muted);setPrefs(prev=>({...prev,[id]:{volume,muted}}));}});}
  root().render(React.createElement(Demo));

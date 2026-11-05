@@ -8,7 +8,7 @@ app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 app.whenReady().then(async () => {
  session.defaultSession.setPermissionRequestHandler((_w,_p,cb)=>cb(true));
  session.defaultSession.setPermissionCheckHandler(()=>true);
- const win = new BrowserWindow({ show: false, width: 1100, height: 760, webPreferences: { preload: path.join(__dirname, 'ui-flow-preload.cjs'), contextIsolation: true, sandbox: true, backgroundThrottling: false } });
+ const win = new BrowserWindow({ show: false, width: 1100, height: 760, webPreferences: { preload: path.join(__dirname, 'ui-flow-preload.cjs'), contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: true } });
  win.webContents.on('console-message',event=>{if(event.level==='error')console.error('renderer:',event.message);});
  const run = source => win.webContents.executeJavaScript(`(async()=>{try{return await (${source});}catch(e){console.error(e.stack);throw e;}})()`);
  const wait = () => new Promise(r => setTimeout(r, 150));
@@ -93,6 +93,7 @@ app.whenReady().then(async () => {
   await click('Проверить'); await wait(); await wait();
   assert.match(await run(`document.querySelector('.host-check-result.warning').textContent`), /локальную сеть/);
   await setPort(18445); await wait(); await click('Проверить'); await wait(); await wait();
+  assert.ok(await run(`document.querySelector('.host-check').textContent.includes('ошибка внешней проверки')`),'checker outage has a specific explanation');
   assert.match(await run(`document.querySelector('.host-check-result.warning').textContent`), /неизвестна/);
   await setPort(18446); await wait(); await click('Проверить'); await wait();
   await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`); await wait();
@@ -107,6 +108,12 @@ app.whenReady().then(async () => {
   await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`);await wait();
   await click('Присоединиться к комнате');await wait();await input('encrypted.example.com');await wait();await click('Присоединиться');await wait();
   assert.equal(await run(`document.querySelectorAll('dialog:last-of-type input[type=password]').length`),2);
+  for (const width of [940,1100]) {
+   win.setSize(width,760);await wait();
+   const gap=await run("(()=>{const [a,b]=document.querySelectorAll('dialog:last-of-type .form-fields>label');return b.getBoundingClientRect().top-a.getBoundingClientRect().bottom})()");
+   assert.ok(gap>=20,'password/E2EE field spacing at '+width);
+  }
+  await require('node:fs/promises').writeFile(path.join(output,'e2ee-field-spacing.png'),(await win.webContents.capturePage()).toPNG());
   await input('room-password');await wait();
   assert.equal(await run(`document.querySelector('dialog:last-of-type .join-submit').disabled`),true);
   assert.equal(await run(`Array.from(document.querySelectorAll('dialog button')).some(b=>b.textContent==='Создать новый ключ')`),false);

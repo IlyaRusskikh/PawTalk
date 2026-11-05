@@ -42,7 +42,19 @@ try {
  assert.ok(geometry.scroll && geometry.overflow==='hidden' && geometry.height <= geometry.windowHeight,'modal shell clips scrolling body');
  const outDir=path.resolve('release/qa');await mkdir(outDir,{recursive:true});
  const image=await send('Page.captureScreenshot',{format:'png'});await writeFile(path.join(outDir,'packaged-settings.png'),Buffer.from(image.data,'base64'));
- console.log('PASS packaged Voicecord 0.1.0: launch, preload, native module, logo, settings modal.');
+ assert.equal(await evaluate('window.desktop.getLanguage()'), 'ru');
+ assert.equal(await evaluate('typeof window.desktop.installUpdate'), 'function');
+ assert.equal(await evaluate('typeof window.desktop.onUpdate'), 'function');
+ await evaluate("window.desktop.setLanguage('en')");
+ assert.equal(await evaluate('window.desktop.getLanguage()'), 'en');
+ const languageFile=JSON.parse(await (await import('node:fs/promises')).readFile(path.join(profile,'language.json'),'utf8'));
+ assert.equal(languageFile.language,'en','desktop persists language outside app directory');
+ assert.match(await (await import('node:fs/promises')).readFile('release/win-unpacked/resources/updates/install-update.ps1','utf8'), /--updated --force-run/);
+ await send('Page.reload');
+ for(let i=0;i<60;i++){if(await evaluate("document.querySelector('h1')?.textContent === 'The conversation starts here.'"))break;await sleep(100);}
+ assert.equal(await evaluate('document.documentElement.lang'),'en');
+ assert.equal(await evaluate("document.querySelector('h1').textContent"),'The conversation starts here.');
+ console.log('PASS packaged Voicecord: launch, preload, native module, logo, settings modal, language IPC/persistence, packaged update helper.');
  await send('Browser.close').catch(()=>{});
 } finally {
  ws?.close();

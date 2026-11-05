@@ -46,10 +46,9 @@ Do not advertise unreleased behavior as available in the installer.
 ## Screenshots
 
 `assets/voicecord.svg` is copied from the project's existing `assets/voicecord.svg`.
-PNG screenshots show the real current desktop renderer and preload, captured in
+PNG screenshots show the real 0.2.0 desktop renderer and preload in both languages, captured in
 an isolated profile with synthetic audio. No room is started and no invitation
-is generated. Audio settings show fake Chromium audio devices. Screenshots can
-precede a binary release; both pages explicitly state this distinction.
+is generated. Audio settings show fake Chromium audio devices. The published pages match the 0.2.0 release.
 
 After building, regenerate on Windows from the repository root:
 
@@ -57,7 +56,8 @@ After building, regenerate on Windows from the repository root:
 .\node_modules\electron\dist\electron.exe scripts/capture-docs.cjs
 ```
 
-The script requires the built native module, uses a new temporary profile, and
+The script captures home, creation, language and audio settings in Russian and
+English. It requires the built native module, uses a new temporary profile, and
 disables mute/deafen shortcuts in that profile to avoid conflicts with another
 running client. It does not change the user's profile. Inspect every screenshot
 before publication for layout, personal data and secrets.

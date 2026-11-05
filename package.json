@@ -1,6 +1,6 @@
 {
   "name": "voicecord",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Private, self-hosted voice room for Windows",
   "author": "Voicecord contributors",
@@ -90,6 +90,10 @@
           "*.exe",
           "*LICENSE*"
         ]
+      },
+      {
+        "from": "scripts/install-update.ps1",
+        "to": "updates/install-update.ps1"
       }
     ],
     "npmRebuild": false,
@@ -103,7 +107,14 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "assets/voicecord.ico",
-      "uninstallerIcon": "assets/voicecord.ico"
+      "uninstallerIcon": "assets/voicecord.ico",
+      "installerLanguages": [
+        "en_US",
+        "ru_RU"
+      ],
+      "displayLanguageSelector": true,
+      "include": "build/installer.nsh",
+      "deleteAppDataOnUninstall": false
     }
   }
 }

@@ -6,8 +6,8 @@
 
 ## 1. Установите клиент
 
-На обоих ПК скачайте `Voicecord.Setup.0.1.0.exe` из
-[выпуска 0.1.0](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.1.0).
+На обоих ПК скачайте `Voicecord.Setup.0.2.0.exe` из
+[выпуска 0.2.0](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.2.0).
 Архив Source code содержит исходники, а не готовое приложение. Для установки
 не нужны Node.js, Go, Docker или права администратора на роутере.
 
@@ -16,7 +16,7 @@
 релиза. В PowerShell в папке скачивания:
 
 ```powershell
-Get-FileHash -LiteralPath '.\Voicecord.Setup.0.1.0.exe' -Algorithm SHA256
+Get-FileHash -LiteralPath '.\Voicecord.Setup.0.2.0.exe' -Algorithm SHA256
 ```
 
 Сравните полученный `Hash` со строкой установщика в `SHA256SUMS.txt` (регистр
@@ -79,8 +79,7 @@ VPS с публичным IP: [пошаговая установка Linux-се�
 | Пароль принят, но нет голосового подключения | Проверьте голосовой сервис и TCP/UDP-порты; см. диагностику в руководстве сервера |
 | Подключение есть, но звука нет | Проверьте устройства, mute/deafen, индивидуальную громкость и PTT на обоих ПК |
 
-Точные формулировки могут отличаться между опубликованным 0.1.0 и текущими
-исходниками. Подробности: [руководство](GUIDE.ru.md), [сервер](SERVER.md).
+Инструкция соответствует 0.2.0. Формулировки зависят от выбранного языка. Подробности: [руководство](GUIDE.ru.md), [сервер](SERVER.md).
 
 Для обращения в [GitHub Issues](https://github.com/IlyaRusskikh/voicecord/issues/new/choose)
 укажите версии клиента/сервера, Windows, LAN или разные сети, шаги и точный

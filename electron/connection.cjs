@@ -1,3 +1,4 @@
+const { t } = require('../shared/i18n.cjs');
 const tls = require('node:tls');
 const { X509Certificate } = require('node:crypto');
 const { invitation, serverURL } = require('./address.cjs');
@@ -34,12 +35,12 @@ async function verifyInvitation(address, timeout = 5000) {
 function connectionError(error) {
   // Node/Electron fetch wraps DNS and TCP failures in a TypeError with a cause.
   if (error?.cause?.code && !error.code) error = error.cause;
-  if (['ENOTFOUND', 'EAI_AGAIN', 'ERR_NAME_NOT_RESOLVED'].includes(error.code)) return 'Не удалось найти сервер по имени. Проверьте адрес, подключение к интернету и DNS. Попросите владельца прислать актуальное приглашение.';
-  if (error.code === 'VOICECORD_CERTIFICATE_PIN') return 'Приглашение устарело или относится к другой комнате: сертификат не совпадает. Скопируйте новое приглашение из работающей комнаты. После каждого пересоздания оно меняется.';
-  if (error.code === 'ECONNREFUSED') return 'Сервер отклонил соединение: комната закрыта, порт неверный или подключение блокируется. Проверьте, что комната сейчас работает.';
-  if (['ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT'].includes(error.code) || error.name === 'TimeoutError') return 'Сервер не ответил. В одной сети с владельцем используйте LAN-приглашение. Через интернет проверьте проброс TCP-порта комнаты, TCP-порта +1 и UDP-порта +2, брандмауэр и VPN. При CGNAT может понадобиться VPS с публичным IP. Доступ через публичный IP из своей сети может не поддерживаться роутером.';
-  if (['ENETUNREACH', 'EHOSTUNREACH', 'EACCES', 'EPERM'].includes(error.code)) return 'Нет сетевого доступа к серверу. Проверьте подключение, VPN и правила брандмауэра.';
-  if (error.code === 'VOICECORD_TLS_TIMEOUT' || String(error.code).includes('TLS') || String(error.code).includes('SSL')) return 'TCP-соединение установлено, но защищённое соединение TLS не удалось. Проверьте порт комнаты, VPN и сетевые фильтры.';
-  return 'Не удалось подключиться к серверу. Проверьте, что комната работает и приглашение скопировано после её последнего запуска.';
+  if (['ENOTFOUND', 'EAI_AGAIN', 'ERR_NAME_NOT_RESOLVED'].includes(error.code)) return t("Не удалось найти сервер по имени. Проверьте адрес, подключение к интернету и DNS. Попросите владельца прислать актуальное приглашение.");
+  if (error.code === 'VOICECORD_CERTIFICATE_PIN') return t("Приглашение устарело или относится к другой комнате: сертификат не совпадает. Скопируйте новое приглашение из работающей комнаты. После каждого пересоздания оно меняется.");
+  if (error.code === 'ECONNREFUSED') return t("Сервер отклонил соединение: комната закрыта, порт неверный или подключение блокируется. Проверьте, что комната сейчас работает.");
+  if (['ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT'].includes(error.code) || error.name === 'TimeoutError') return t("Сервер не ответил. В одной сети с владельцем используйте LAN-приглашение. Через интернет проверьте проброс TCP-порта комнаты, TCP-порта +1 и UDP-порта +2, брандмауэр и VPN. При CGNAT может понадобиться VPS с публичным IP. Доступ через публичный IP из своей сети может не поддерживаться роутером.");
+  if (['ENETUNREACH', 'EHOSTUNREACH', 'EACCES', 'EPERM'].includes(error.code)) return t("Нет сетевого доступа к серверу. Проверьте подключение, VPN и правила брандмауэра.");
+  if (error.code === 'VOICECORD_TLS_TIMEOUT' || String(error.code).includes('TLS') || String(error.code).includes('SSL')) return t("TCP-соединение установлено, но защищённое соединение TLS не удалось. Проверьте порт комнаты, VPN и сетевые фильтры.");
+  return t("Не удалось подключиться к серверу. Проверьте, что комната работает и приглашение скопировано после её последнего запуска.");
 }
 module.exports = { localInvitation, verifyInvitation, connectionError };

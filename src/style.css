@@ -59,3 +59,20 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:radial-gra
 .host-check-result.success { color:#8ed6b5; }
 .host-check-result.warning { color:#e5c27c; }
 .host-check .host-hint { margin-bottom:0; }
+
+/* Keep the user dock entirely to the right of the bookmark rail. */
+.user-dock{left:82px;width:324px;max-width:calc(100vw - 90px)}
+.rail{padding-bottom:22px}.bookmark-list{overflow-y:auto;overflow-x:hidden;max-height:calc(100vh - 112px);flex:1}
+.person-status-icons{display:flex;align-items:center;gap:6px;min-height:19px;color:#f29ca9}.person-status-icons>span{display:inline-flex}
+.update-indicator{position:fixed;right:18px;top:16px;z-index:30;border:1px solid #8074cf;border-radius:12px;background:#302b49;color:#c7bdff;padding:10px}
+.update-actions{display:flex;gap:12px;align-items:center;justify-content:flex-end;margin-top:24px}.modal .update-actions>button{margin:0;min-height:40px;display:inline-flex;align-items:center;justify-content:center}.update-modal p{font-size:13px;line-height:1.7;margin:12px 0;color:#b9bfd1}.update-modal progress{width:100%;accent-color:#9383fa}.update-indicator~main .content{padding-top:64px}
+@media(max-width:900px){.user-dock{width:274px}.profile{gap:5px}.profile .icon-button{padding:4px}}
+
+/* Separate the profile fields and give compact participant cards breathing room. */
+.form-fields{display:flex;flex-direction:column;gap:20px}
+.form-grid{gap:20px}
+.person-card{padding-bottom:22px}
+.connection-mini.online.ping-good,.person-network.ping-good{color:#7ed4ac}
+.connection-mini.online.ping-warning,.person-network.ping-warning{color:#e5bd64}
+.connection-mini.online.ping-bad,.person-network.ping-bad{color:#ee8295}
+.connection-mini.online.ping-unknown,.person-network.ping-unknown{color:#858fa3}

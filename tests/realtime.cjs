@@ -23,7 +23,25 @@ app.whenReady().then(async()=>{
   await until(()=>a('window.snapshot.people.length===2'),'two actual clients');
   await until(()=>b('window.snapshot.people.some(p=>!p.local && p.rtt!==undefined)'),'peer RTT delivered over actual data channel');
   assert.ok(await b('window.snapshot.people.find(p=>!p.local).rtt>=0'));
-  await b('window.renderParticipants()');await delay(200);
+  for (const [rtt, level, color] of [[80,'good','rgb(126, 212, 172)'],[180,'warning','rgb(229, 189, 100)'],[450,'bad','rgb(238, 130, 149)'],[null,'unknown','rgb(133, 143, 163)']]) {
+   await b('window.renderConnection('+rtt+')');await delay(80);
+   assert.ok(await b("document.querySelector('.connection-mini').classList.contains('ping-"+level+"')"),'profile RTT color '+level);
+   assert.equal(await b("getComputedStyle(document.querySelector('.connection-mini')).color"),color);
+   await b('window.snapshot.people.find(p=>!p.local).rtt='+rtt+';window.renderParticipants()');await delay(80);
+   assert.ok(await b("document.querySelectorAll('.person-network')[1].classList.contains('ping-"+level+"')"),'card RTT color '+level);
+   assert.equal(await b("getComputedStyle(document.querySelectorAll('.person-network')[1]).color"),color);
+  }
+  for(const [quality,ru,en] of [['excellent','Отличное','Excellent'],['good','Хорошее','Good'],['poor','Плохое','Poor'],['lost','Связь потеряна','Connection lost'],['unknown','Нет данных','No data'],['future-sdk-value','Нет данных','No data']]) {
+   for(const [language,label] of [['ru',ru],['en',en]]) {
+    await b('window.changeLanguage('+JSON.stringify(language)+')');
+    await b('window.snapshot.people.find(p=>!p.local).quality='+JSON.stringify(quality)+';window.renderParticipants()');await delay(50);
+    assert.ok(await b("document.querySelectorAll('.person-network')[1].title.endsWith("+JSON.stringify(label)+")"),'localized SDK quality '+quality+' '+language);
+   }
+  }
+  await b("window.changeLanguage('ru')");
+  await b('window.snapshot.people.find(p=>!p.local).rtt=180;window.renderParticipants()');await delay(200);
+  assert.ok(await b("parseFloat(getComputedStyle(document.querySelector('.person-card')).paddingBottom)>=22"),'participant card bottom padding');
+  await require('node:fs/promises').writeFile('release/qa/participant-ping-colors.png',(await windows[1].webContents.capturePage()).toPNG());
   assert.equal(await b("document.querySelectorAll('.person-controls').length"),0,'volume controls removed from cards');
   await b("document.querySelectorAll('.person-card')[1].dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:180,clientY:100}))");await delay(100);
   assert.equal(await b("!!document.querySelector('.person-menu input[type=range]')"),true,'context menu has slider');
@@ -35,10 +53,22 @@ app.whenReady().then(async()=>{
   assert.equal(await b("document.querySelectorAll('.host-stop').length"),0,'guest cannot stop host');
   await b("document.querySelector('dialog [aria-label=\"Закрыть\"]').click()");
   await a('window.voice.setMute(false,true)');await until(()=>a('window.voice.localTrack.isMuted'),'deafen mutes published microphone');
+  await until(()=>b('window.snapshot.people.some(p=>!p.local && p.deafened && p.muted)'),'remote deafen state delivered over data channel');
+  await b('window.renderParticipants()');await delay(150);
+  assert.equal(await b("document.querySelectorAll('.person-card')[1].querySelectorAll('.person-status-icons svg').length"),2,'remote card shows crossed-out mic and headphones');
+  assert.equal(await b("/Говорит|Слушает|Микрофон выкл|Звук выключен/.test(document.querySelectorAll('.person-card')[1].textContent)"),false,'no textual status on card');
+  const fs=require('node:fs/promises');await fs.mkdir('release/qa',{recursive:true});await fs.writeFile('release/qa/participant-icons.png',(await windows[1].webContents.capturePage()).toPNG());
+  await a('window.voice.setMute(false,false)');
+  await until(()=>b('window.snapshot.people.some(p=>!p.local && !p.deafened && !p.muted)'),'unmute clears remote indicators');
+  await b('window.renderParticipants()');await delay(150);
+  await b("document.querySelectorAll('.person-card')[1].dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:180,clientY:100}))");await delay(100);
+  await b("document.querySelector('.person-menu input[type=checkbox]').click()");await delay(100);
+  assert.equal(await b("document.querySelectorAll('.person-card')[1].querySelectorAll('.person-status-icons svg').length"),1,'local mute has its own headphones icon');
+  await a('window.voice.setMute(false,true)');await until(()=>a('window.voice.localTrack.isMuted'),'restore deafen');
   await a(`(async()=>{const {Microphone}=await import('/src/audio.ts');window.preview=new Microphone(window.voice.settings);await window.preview.start();await window.preview.startMonitor();})()`);
   assert.equal(await a('window.preview.testing && window.voice.localTrack.isMuted'),true,'local mic test leaves published microphone muted');
   await a('window.preview.stop();window.voice.rttMeter.measuredAt=-Infinity;window.voice.emit()');assert.equal(await a('window.snapshot.rtt===undefined'),true,'stale local RTT removed');
   await b('for(const item of window.voice.peerRtt.values())item.received=-Infinity;window.voice.emit()');assert.equal(await b('window.snapshot.people.filter(p=>!p.local).every(p=>p.rtt===undefined)'),true,'stale remote RTT removed');
-  console.log('PASS real two-client voice session, peer RTT telemetry/expiry, microphone preview while deafened.');
+  console.log('PASS real two-client voice session, peer RTT telemetry/expiry, remote deafen synchronization, icon-only card states, local mute, microphone preview while deafened.');
  }catch(e){console.error(e);process.exitCode=1;}finally{for(const win of windows){await win.webContents.executeJavaScript('window.voice?.disconnect()').catch(()=>{});win.destroy();}await host.stop();app.exit(process.exitCode||0);}
 });

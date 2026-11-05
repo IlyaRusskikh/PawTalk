@@ -53,14 +53,18 @@ jobs:
       - run: npm test
       - run: npm run smoke
       - run: node scripts/ui-flow-smoke.mjs --built
+      - run: node scripts/updates-ui-smoke.mjs
+      - run: node scripts/fixes-main-smoke.mjs
       - run: npm run package
       - name: Prepare release files
         shell: pwsh
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $installer = "release/Voicecord Setup $version.exe"
-          $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  Voicecord Setup $version.exe" | Set-Content -Encoding utf8NoBOM release/SHA256SUMS.txt
+          $publishedInstaller = "release/Voicecord.Setup.$version.exe"
+          Move-Item -LiteralPath $installer -Destination $publishedInstaller
+          $hash = (Get-FileHash -LiteralPath $publishedInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Voicecord.Setup.$version.exe" | Set-Content -Encoding utf8NoBOM release/SHA256SUMS.txt
           Copy-Item LICENSE,THIRD_PARTY_NOTICES.md -Destination release
           Copy-Item licenses -Destination release -Recurse -Force
       - uses: actions/upload-artifact@v4
@@ -68,7 +72,7 @@ jobs:
           name: voicecord-windows
           if-no-files-found: error
           path: |
-            release/*.exe
+            release/Voicecord.Setup.*.exe
             release/SHA256SUMS.txt
             release/LICENSE
             release/THIRD_PARTY_NOTICES.md

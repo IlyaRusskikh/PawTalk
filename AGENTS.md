@@ -17,3 +17,14 @@
   Start at 0.1.0. Do not bump versions for every work-in-progress edit.
 - Local builds must not automatically publish. Release tags are `vX.Y.Z` and
   must match package metadata. Never replace published tags or binaries.
+- Group stacked input/select/textarea fields in the shared `.form-fields`
+  container with a 20px gap; use the shared `.form-grid` for columns. Include
+  conditional fields such as the E2EE key in the same group. Do not fix spacing
+  with a rule scoped to a single screen or `label + label` margins. Check actual
+  field geometry in each affected modal, including conditional/nested dialogs.
+- Align modal action buttons with a shared flex row (`align-items: center`),
+  equal minimum height and reset inherited button margins inside that row.
+  Verify button centers, not just the containing row.
+- Translate SDK/API enum values before displaying them (including connection
+  quality in tooltips); unknown values must use a localized fallback. Check both
+  Russian and English UI, not just the surrounding label.

@@ -1,3 +1,4 @@
+const { t } = require('../shared/i18n.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
@@ -9,12 +10,12 @@ class CredentialStore {
     await this.queue;
     if (!await this.encryption.isEncryptionAvailable()) return null;
     try { return await this.encryption.decryptString(await fs.readFile(this.file(origin))); }
-    catch (error) { if (error.code === 'ENOENT') return null; throw new Error('Не удалось прочитать сохранённый пароль'); }
+    catch (error) { if (error.code === 'ENOENT') return null; throw new Error(t("Не удалось прочитать сохранённый пароль")); }
   }
   save(origin, password) {
     const operation = this.queue.catch(() => {}).then(async () => {
       if (password === null) { await fs.rm(this.file(origin), { force: true }); return; }
-      if (!await this.encryption.isEncryptionAvailable()) throw new Error('Защищённое сохранение пароля недоступно');
+      if (!await this.encryption.isEncryptionAvailable()) throw new Error(t("Защищённое сохранение пароля недоступно"));
       const encrypted = await this.encryption.encryptString(password);
       await fs.mkdir(this.directory, { recursive: true });
       const target = this.file(origin), temporary = target + '.tmp';

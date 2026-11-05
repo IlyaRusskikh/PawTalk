@@ -1,5 +1,33 @@
 # Проверки
 
+## Voicecord 0.2.0 — 5 ноября 2026
+
+- Production build, Windows NSIS packaging, 72 JS tests, Go tests/vet, native smoke,
+  renderer/UI regression checks and two local WebRTC clients with synthetic audio.
+  / Сборка, Windows NSIS, 72 JS-проверки, Go tests/vet, native smoke, UI-сценарии
+  и два локальных WebRTC-клиента с синтетическим звуком.
+- Russian/English screenshots captured from the real main/preload/renderer in an
+  isolated profile. No room, live invitation, recording or personal network data
+  is included. Conditional E2EE fields retain 20px gaps at widths 940/1100;
+  SDK quality labels and RTT colors checked in both languages.
+- Clipboard key/hash/.env IPC checked with browser clipboard denied. The native
+  clipboard sink is mocked in that regression test to preserve the user's clipboard.
+- Local preflight and Electron IPC confirmed both TCP ports and UDP in the current
+  VPN network. Synthetic tests cover retry/recovery after HTTP 502, cancellation,
+  mapping cleanup, per-port results and an unrelated occupied TCP port.
+- A separate installed Windows fixture completed real NSIS 0.1.0 → 0.1.1 replacement
+  in 39 seconds, including helper readiness, visible installation status, new-app
+  startup confirmation and preservation of nickname/settings/language/bookmark/
+  protected password. The release/download source was synthetic. This fixture,
+  mock feed and temporary demonstration tooling have been removed before release.
+- Windows PowerShell process handoff is covered by an actual Electron-parent exit
+  test. Helper tests cover success/failure, stale tokens and installer retention.
+- Still outside this verification: real microphones, a second physical PC across
+  separate internet networks, game/PTT/load acceptance, per-machine UAC, and an
+  upgrade downloaded from two published GitHub Releases. Installers remain unsigned.
+  / Реальные устройства, разные внешние сети, игры/PTT/нагрузка и UAC ещё требуют
+  аппаратной приёмки. Установщики без подписи; источник релиза в upgrade-тесте — заглушка.
+
 ## LAN на Windows / Docker Desktop — 4 ноября 2026
 
 - Создан и запущен отдельный compose.lan.yaml (voicecord-lan): Go API, LiveKit, Caddy с обычным bridge networking и опубликованными TCP 443/7881, UDP 7882. API разделяет network namespace с Caddy и слушает только loopback; сохранена проверка доверенного X-Real-IP. Непосредственные API/SFU HTTP-порты не опубликованы.

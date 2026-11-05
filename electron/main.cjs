@@ -1,3 +1,4 @@
+const { t } = require('../shared/i18n.cjs');
 const { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage, powerMonitor, globalShortcut, net, safeStorage, clipboard } = require('electron');
 const path = require('node:path');
 const { localInvitation, verifyInvitation, connectionError } = require('./connection.cjs');
@@ -7,6 +8,12 @@ const { diagnosticCommand } = require('./diagnostic-command.cjs');
 const { SelfHost } = require('./selfhost.cjs');
 const { HostCheck } = require('./host-check.cjs');
 const { CredentialStore } = require('./credentials.cjs');
+const { Updater } = require('./updater.cjs');
+const { confirmUpdateStarted } = require('./update-progress.cjs');
+const fs = require('node:fs');
+const { setLanguage } = require('../shared/i18n.cjs');
+let updater;
+let language = 'ru';
 let credentials;
 let pendingInvitation = '';
 function acceptInvitation(args) {
@@ -37,11 +44,34 @@ try { native = require(app.isPackaged ? path.join(process.resourcesPath, 'voicec
 const devURL = process.env.VOICECORD_DEV_URL;
 if (devURL && devURL !== 'http://127.0.0.1:5173') throw new Error('Invalid development URL');
 function send(name, value) { if (win && !win.isDestroyed()) win.webContents.send(name, value); }
+function refreshTray() {
+  tray?.setContextMenu(Menu.buildFromTemplate([{ label: language === 'en' ? 'Open Voicecord' : t("Открыть Voicecord"), click: () => win.show() }, { label: language === 'en' ? 'Mute microphone' : t("Выключить микрофон"), click: () => send('action', 'force-mute') }, { type: 'separator' }, { label: language === 'en' ? 'Quit' : t("Выйти"), click: () => { quitting = true; app.quit(); } }]));
+}
 function restoreAudio() { clearTimeout(duckTimer); try { native?.setDucking(1); } catch {} }
 function authorized(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Unauthorized IPC');
 }
 function registerIPC() {
+  ipcMain.handle('server-key-copy', (event, value) => {
+    authorized(event);
+    if (typeof value !== 'string' || !/^(?:[a-f0-9]{64}|VOICECORD_E2EE=true\nVOICECORD_E2EE_KEY_ID=[a-f0-9]{64})$/.test(value)) throw new Error('Invalid encryption key field');
+    clipboard.writeText(value);
+  });
+  ipcMain.handle('language-get', event => { authorized(event); return language; });
+  ipcMain.handle('language-set', (event, value) => {
+    authorized(event);
+    if (!['en', 'ru'].includes(value)) throw new Error('Invalid language');
+    fs.writeFileSync(path.join(app.getPath('userData'), 'language.json'), JSON.stringify({ language: value }));
+    language = value; setLanguage(value); refreshTray();
+  });
+  ipcMain.handle('update-state', event => { authorized(event); return updater?.state ?? { status: 'idle' }; });
+  ipcMain.handle('update-install', async event => {
+    authorized(event);
+    if (!updater) throw new Error('Updates require an installed Windows app');
+    const state = await updater.install();
+    if (state.status === 'installing') { quitting = true; app.quit(); }
+    return state;
+  });
   ipcMain.handle('connection-diagnose', async (event, address) => {
     authorized(event);
     try {
@@ -53,41 +83,41 @@ function registerIPC() {
       for (const endpoint of invitation(effective) ? ['/healthz', '/rtc'] : ['/healthz']) {
         const response = await net.fetch(`${target}${endpoint}`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
         await response.body?.cancel();
-        if (!response.ok) return { ok: false, message: `${endpoint === '/rtc' ? 'Голосовой сервер' : 'Сервер комнаты'} ответил HTTP ${response.status}. Проверьте запуск сервера и порт в приглашении.` };
+        if (!response.ok) return { ok: false, message: t("{0} ответил HTTP {1}. Проверьте запуск сервера и порт в приглашении.", endpoint === '/rtc' ? t("Голосовой сервер") : t("Сервер комнаты"), response.status) };
       }
       const policyResponse = await net.fetch(`${target}/api/config`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
       const policy = policyResponse.ok ? await policyResponse.json() : {};
       return { ok: true, e2eeRequired: policy.e2eeRequired === true, message: effective !== address
-        ? 'Ваша комната доступна напрямую на этом компьютере. При подключении будет использован локальный адрес. Доступность для друга через интернет ещё не проверена.'
-        : `Сервер ${new URL(base).host} доступен, защищённое соединение${invitation(effective) ? ', сертификат приглашения и голосовой сервер' : ''} проверены. Пароль и передача голоса проверяются при подключении. Это проверка из вашей текущей сети.` };
+        ? t("Ваша комната доступна напрямую на этом компьютере. При подключении будет использован локальный адрес. Доступность для друга через интернет ещё не проверена.")
+        : t("Сервер {0} доступен, защищённое соединение{1} проверены. Пароль и передача голоса проверяются при подключении. Это проверка из вашей текущей сети.", new URL(base).host, invitation(effective) ? t(", сертификат приглашения и голосовой сервер") : '') };
     } catch (error) { return { ok: false, message: connectionError(error) }; }
   });
   ipcMain.handle('diagnostic-command-copy', (event, address) => {
     authorized(event);
-    if (typeof address !== 'string' || address.length > 14000) throw new Error('Неверное приглашение');
+    if (typeof address !== 'string' || address.length > 14000) throw new Error(t("Неверное приглашение"));
     clipboard.writeText(diagnosticCommand(address));
   });
   ipcMain.handle('invitation-copy', (event, address) => {
     authorized(event);
-    if (typeof address !== 'string' || address.length > 14000 || !invitation(address)) throw new Error('Неверное приглашение');
+    if (typeof address !== 'string' || address.length > 14000 || !invitation(address)) throw new Error(t("Неверное приглашение"));
     return clipboard.writeText(address);
   });
   ipcMain.handle('invitation-pending', event => { authorized(event); return pendingInvitation; });
   ipcMain.handle('host-status', event => { authorized(event); return hosting.status(); });
   ipcMain.handle('host-check', (event, port) => {
     authorized(event);
-    if (hosting.status().running || hosting.starting || hosting.stopping) throw new Error('Закройте комнату перед проверкой сети.');
+    if (hosting.status().running || hosting.starting || hosting.stopping) throw new Error(t("Закройте комнату перед проверкой сети."));
     return hostCheck.start(port);
   });
   ipcMain.handle('host-check-cancel', event => { authorized(event); return hostCheck.cancel(); });
   ipcMain.handle('host-start', async (event, input) => {
     authorized(event);
-    if (hostCheck.running) throw new Error('Дождитесь завершения проверки сети.');
+    if (hostCheck.running) throw new Error(t("Дождитесь завершения проверки сети."));
     const result = await hosting.start(input);
     trustInvitation(result.localAddress);
     return result;
   });
-  ipcMain.handle('host-stop', async event => { authorized(event); if (hosting.starting) throw new Error('Дождитесь запуска комнаты'); await hosting.stop(); });
+  ipcMain.handle('host-stop', async event => { authorized(event); if (hosting.starting) throw new Error(t("Дождитесь запуска комнаты")); await hosting.stop(); });
   ipcMain.handle('capabilities', async (event) => { authorized(event); return { native: !!native, platform: process.platform, packaged: app.isPackaged, secureStorage: await safeStorage.isAsyncEncryptionAvailable() }; });
   ipcMain.handle('credentials-load', async (event, address) => {
     authorized(event);
@@ -95,43 +125,43 @@ function registerIPC() {
   });
   ipcMain.handle('credentials-save', async (event, input) => {
     authorized(event);
-    if (!input || (input.password !== null && (typeof input.password !== 'string' || input.password.length > 1024))) throw new Error('Неверный пароль');
-    if (input.e2eeKey != null && (typeof input.e2eeKey !== 'string' || !/^[a-f0-9]{64}$/.test(input.e2eeKey))) throw new Error('Неверный ключ E2EE');
+    if (!input || (input.password !== null && (typeof input.password !== 'string' || input.password.length > 1024))) throw new Error(t("Неверный пароль"));
+    if (input.e2eeKey != null && (typeof input.e2eeKey !== 'string' || !/^[a-f0-9]{64}$/.test(input.e2eeKey))) throw new Error(t("Неверный ключ E2EE"));
     await credentials.save(credentialKey(input.address), input.password);
     if ('e2eeKey' in input || input.password === null) await credentials.save('e2ee:' + credentialKey(input.address), input.password === null ? null : input.e2eeKey ?? null);
   });
   ipcMain.handle('connect', async (event, input) => {
     authorized(event);
-    if (!input || typeof input.nickname !== 'string' || typeof input.password !== 'string' || input.nickname.length > 64 || input.password.length > 1024) throw new Error('Неверные параметры подключения');
+    if (!input || typeof input.nickname !== 'string' || typeof input.password !== 'string' || input.nickname.length > 64 || input.password.length > 1024) throw new Error(t("Неверные параметры подключения"));
     const address = app.isPackaged || invitation(input.address) ? localInvitation(input.address, hosting.status()) : input.address;
     const base = serverURL(address, !app.isPackaged);
     try {
       const e2eeKey = invitation(input.address)?.e2eeKey ?? input.e2eeKey;
-      if (e2eeKey != null && !/^[a-f0-9]{64}$/.test(e2eeKey)) return { error: 'Неверный ключ E2EE.' };
+      if (e2eeKey != null && !/^[a-f0-9]{64}$/.test(e2eeKey)) return { error: t("Неверный ключ E2EE.") };
       await verifyInvitation(address);
       trustInvitation(address);
       const response = await net.fetch(`${base}/api/connect`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, redirect: 'error',
         body: JSON.stringify({ nickname: input.nickname, password: invitation(input.address)?.password ?? input.password, ...(e2eeKey ? { e2ee: true, e2eeKeyId: createHash('sha256').update(Buffer.from(e2eeKey, 'hex')).digest('hex') } : {}) }), signal: AbortSignal.timeout(12000),
       });
-      if (Number(response.headers.get('content-length') || 0) > 16384) throw new Error('Некорректный ответ сервера');
-      const raw = await response.text(); if (raw.length > 16384) throw new Error('Некорректный ответ сервера');
+      if (Number(response.headers.get('content-length') || 0) > 16384) throw new Error(t("Некорректный ответ сервера"));
+      const raw = await response.text(); if (raw.length > 16384) throw new Error(t("Некорректный ответ сервера"));
       const body = JSON.parse(raw);
-      if (!response.ok) return { error: typeof body.error === 'string' ? body.error : `Ошибка сервера: ${response.status}` };
-      if (body.e2eeRequired === true && !e2eeKey) return { error: 'Для комнаты нужен ключ E2EE из приглашения.' };
-      if (e2eeKey && body.e2eeRequired !== true) return { error: 'Приглашение требует E2EE, но сервер не подтвердил защищённый режим.' };
+      if (!response.ok) return { error: typeof body.error === 'string' ? t(body.error) : t("Ошибка сервера: {0}", response.status) };
+      if (body.e2eeRequired === true && !e2eeKey) return { error: t("Для комнаты нужен ключ E2EE из приглашения.") };
+      if (e2eeKey && body.e2eeRequired !== true) return { error: t("Приглашение требует E2EE, но сервер не подтвердил защищённый режим.") };
       const mediaURL = new URL(body.url);
       const expected = new URL(base);
-      if (mediaURL.hostname !== expected.hostname || !['wss:', ...(!app.isPackaged ? ['ws:'] : [])].includes(mediaURL.protocol) || mediaURL.username || mediaURL.password || typeof body.token !== 'string') throw new Error('Неверный адрес голосового сервера');
+      if (mediaURL.hostname !== expected.hostname || !['wss:', ...(!app.isPackaged ? ['ws:'] : [])].includes(mediaURL.protocol) || mediaURL.username || mediaURL.password || typeof body.token !== 'string') throw new Error(t("Неверный адрес голосового сервера"));
       const healthURL = new URL(mediaURL); healthURL.protocol = mediaURL.protocol === 'wss:' ? 'https:' : 'http:';
       try {
         const health = await net.fetch(healthURL.toString(), { redirect: 'error', signal: AbortSignal.timeout(3000) });
         if (!health.ok) throw new Error('LiveKit unavailable');
       } catch {
         const help = expected.hostname === '127.0.0.1' && !app.isPackaged
-          ? 'Для локального запуска выполните: docker compose -f compose.dev.yaml up -d'
-          : 'Проверьте запуск LiveKit и HTTPS-прокси на сервере.';
-        return { error: `Пароль принят, но голосовой сервер ${mediaURL.host} недоступен. ${help}` };
+          ? t("Для локального запуска выполните: docker compose -f compose.dev.yaml up -d")
+          : t("Проверьте запуск LiveKit и HTTPS-прокси на сервере.");
+        return { error: t("Пароль принят, но голосовой сервер {0} недоступен. {1}", mediaURL.host, help) };
       }
       // Never accept a media key supplied by the server, even as an extra response field.
       return { url: body.url, token: body.token, identity: body.identity, e2eeRequired: body.e2eeRequired === true, ...(e2eeKey ? { e2eeKey } : {}) };
@@ -141,8 +171,8 @@ function registerIPC() {
   });
   ipcMain.handle('configure-keys', (event, config) => {
     authorized(event);
-    if (!config || !Number.isInteger(config.ptt) || config.ptt < 1 || config.ptt > 254) throw new Error('Неверная клавиша PTT');
-    for (const key of ['mute', 'deafen']) if (typeof config[key] !== 'string' || config[key].length > 64) throw new Error('Неверная комбинация');
+    if (!config || !Number.isInteger(config.ptt) || config.ptt < 1 || config.ptt > 254) throw new Error(t("Неверная клавиша PTT"));
+    for (const key of ['mute', 'deafen']) if (typeof config[key] !== 'string' || config[key].length > 64) throw new Error(t("Неверная комбинация"));
     globalShortcut.unregisterAll();
     keyConfig = config;
     native?.setPttKey(config.ptt);
@@ -169,7 +199,16 @@ else {
   app.on('second-instance', (_event, args) => { acceptInvitation(args); win?.restore(); win?.show(); win?.focus(); });
   app.on('open-url', (event, address) => { event.preventDefault(); acceptInvitation([address]); win?.show(); win?.focus(); });
   app.whenReady().then(async () => {
-    if (app.isPackaged) app.setAsDefaultProtocolClient('voicecord');
+    if (app.isPackaged && !process.argv.includes('--smoke')) app.setAsDefaultProtocolClient('voicecord');
+    for (const location of [path.join(app.getPath('userData'), 'language.json'), path.join(path.dirname(app.getPath('exe')), 'language.json')]) {
+      try { const saved = JSON.parse(fs.readFileSync(location, 'utf8')); if (['en', 'ru'].includes(saved.language)) { language = saved.language; break; } } catch {}
+    }
+    fs.mkdirSync(app.getPath('userData'), { recursive: true });
+    fs.writeFileSync(path.join(app.getPath('userData'), 'language.json'), JSON.stringify({ language }));
+    setLanguage(language);
+    if (app.isPackaged && process.platform === 'win32') updater = new Updater({ current: app.getVersion(),
+      directory: path.join(app.getPath('userData'), 'updates'), script: path.join(process.resourcesPath, 'updates/install-update.ps1'),
+      installDirectory: path.dirname(app.getPath('exe')), executable: app.getPath('exe'), language: () => language, onState: state => send('update-changed', state) });
     acceptInvitation(process.argv);
     hosting = new SelfHost(app.isPackaged ? path.join(process.resourcesPath, 'server') : path.join(__dirname, '../resources/server'), value => send('host-changed', value));
     session.defaultSession.setCertificateVerifyProc((request, callback) => {
@@ -208,11 +247,13 @@ else {
     if (icon.isEmpty()) throw new Error('Voicecord tray icon is missing');
     tray = new Tray(icon);
     tray.setToolTip('Voicecord');
-    tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Открыть Voicecord', click: () => win.show() }, { label: 'Выключить микрофон', click: () => send('action', 'force-mute') }, { type: 'separator' }, { label: 'Выйти', click: () => { quitting = true; app.quit(); } }]));
+    refreshTray();
     tray.on('double-click', () => win.show());
-    powerMonitor.on('suspend', () => { restoreAudio(); send('suspend', true); void hostCheck.cancel(); if (hosting.starting) hosting.cancelled = true; else void hosting.stop('Комната закрыта: компьютер перешёл в сон'); });
+    powerMonitor.on('suspend', () => { restoreAudio(); send('suspend', true); void hostCheck.cancel(); if (hosting.starting) hosting.cancelled = true; else void hosting.stop(t("Комната закрыта: компьютер перешёл в сон")); });
     powerMonitor.on('lock-screen', () => { restoreAudio(); send('ptt', false); });
     if (devURL) await win.loadURL(devURL); else await win.loadFile(path.join(__dirname, '../dist/index.html'));
+    await confirmUpdateStarted(path.join(app.getPath('userData'), 'updates'), app.getVersion(), app.getPath('exe'));
+    void updater?.check();
   });
   let hostShutdown = false;
   app.on('before-quit', event => {

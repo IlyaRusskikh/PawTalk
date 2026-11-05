@@ -9,25 +9,28 @@ gaming groups and small communities. Create a room in the desktop app
 or run a persistent server on your own Linux VPS. Join with an invitation, a shared
 password and a nickname. No accounts, text chat or database.
 
-**[Download Voicecord 0.1.0 for Windows x64](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.1.0/Voicecord.Setup.0.1.0.exe)** ·
-[Release notes and SHA-256 checksums](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.1.0) ·
+**[Download Voicecord 0.2.0 for Windows x64](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.2.0/Voicecord.Setup.0.2.0.exe)** ·
+[Release notes and SHA-256 checksums](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.2.0) ·
 [Linux server setup (Russian)](docs/SERVER.md) · [Report a bug](https://github.com/IlyaRusskikh/voicecord/issues/new/choose)
 
-**0.1.0 is a public preview (pre-release).** The desktop interface is currently in Russian.
+**0.2.0 is a public preview (pre-release).** Choose English or Russian during
+installation or in Settings. The app checks GitHub Releases at startup, including
+pre-releases, and offers verified updates; see [updates](docs/UPDATES.md).
+Participant quality tooltips are localized; dialogs share 20px field spacing.
 Real-device and external-network acceptance testing is still required; see
 [acceptance criteria](docs/ACCEPTANCE.md) and [verification history](docs/VERIFICATION.md).
 
-![Voicecord desktop home screen with options to join or create a room](website/assets/home.png)
+![Voicecord desktop home screen with options to join or create a room](website/assets/home-en.png)
 
 Actual interface from current source, captured in an isolated test profile.
-The download above is the published 0.1.0 preview.
+The download above is the published 0.2.0 preview.
 
 <details>
 <summary>Audio settings and room creation</summary>
 
-![Voicecord microphone, speaker and voice activation settings with synthetic audio devices](website/assets/audio-settings.png)
+![Voicecord microphone, speaker and voice activation settings with synthetic audio devices](website/assets/audio-settings-en.png)
 
-![Room creation dialog with password, ports and optional E2EE](website/assets/create-room.png)
+![Room creation dialog with password, ports and optional E2EE](website/assets/create-room-en.png)
 
 </details>
 
@@ -49,7 +52,7 @@ The download above is the published 0.1.0 preview.
 For a guided first conversation and troubleshooting, see
 [First call on two PCs (Russian)](docs/FIRST-CALL.ru.md).
 
-1. Download and install [Voicecord.Setup.0.1.0.exe](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.1.0/Voicecord.Setup.0.1.0.exe)
+1. Download and install [Voicecord.Setup.0.2.0.exe](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.2.0/Voicecord.Setup.0.2.0.exe)
    on each participant's Windows PC. No Node.js, Go or Docker is needed for the client.
 2. Set your nickname in **«Настройки → Обо мне»** (Settings → About me).
 3. Choose **«Создать комнату»** (Create room), enter a room name and a password
@@ -68,12 +71,16 @@ Default incoming ports: TCP **18443**, TCP **18444**, UDP **18445**.
 In Create room, choose **«Проверить»** next to **«Могу ли я хостить в интернет?»**
 to check the selected ports via check-host.net. Green confirms TCP and UDP;
 yellow means internet access was not confirmed, with checker errors shown separately.
+The checker retries temporary service failures and shows per-port details. Connection icons
+use green below 150 ms RTT, yellow at 150–299 ms, red at 300 ms or more, and
+gray when no recent measurement is available.
 Closing the dialog cancels the test and releases temporary mappings. The service
 receives your public IP and ports; allow Voicecord through the firewall after creating a room.
 
 Automatic port mapping does not guarantee internet access. CGNAT, double NAT and
 network restrictions may require a VPS. For a LAN, share the LAN invitation.
-Installers are currently unsigned and automatic updates are not configured.
+Installers are currently unsigned. Updates are downloaded from GitHub Releases
+and verified before installation. Published 0.1.0 needs one manual upgrade to 0.2.0.
 
 ## Check self-hosting before installing
 
@@ -137,7 +144,10 @@ the same network, or a reachable VPS for internet rooms. See the
 ### How do I update or get help?
 
 Download the new installer from [Releases](https://github.com/IlyaRusskikh/voicecord/releases)
-and read its release notes; updates are manual. Use
+and read its release notes. From 0.2.0, a startup dialog offers newer releases,
+including previews. Choose **Later**
+to keep an update icon in the top-right corner; click it to reopen the dialog.
+Installation restarts the app and keeps your profile; see [update details](docs/UPDATES.md). Use
 [GitHub Issues](https://github.com/IlyaRusskikh/voicecord/issues/new/choose) for bugs,
 setup questions and feature requests. Include the app version and reproduction
 steps, and remove invitations, passwords and personal network details.
@@ -171,7 +181,7 @@ Build a Windows installer with all local checks:
 .\build.cmd -InstallDependencies
 ```
 
-Output: `release/Voicecord Setup 0.1.0.exe`. The script also supports an optional
+Output: `release/Voicecord Setup 0.2.0.exe`. The script also supports an optional
 LLVM toolchain; see the [detailed Russian guide](docs/GUIDE.ru.md).
 `npm run dev:web` provides a browser UI preview; room connections use Electron IPC.
 
@@ -196,7 +206,7 @@ docker compose -f compose.server.ghcr.yaml exec server /voicecord serve info
 The first startup prints the generated password to the private server log.
 Keep it and the invitation private. Open the three ports listed above. Server
 data persists in a Docker volume. The public image
-`ghcr.io/ilyarusskikh/voicecord-server:0.1.0` is published for Linux amd64 and arm64.
+`ghcr.io/ilyarusskikh/voicecord-server:0.2.0` is published for Linux amd64 and arm64.
 The guide also covers updates, network diagnostics and password changes.
 
 ## Verify changes

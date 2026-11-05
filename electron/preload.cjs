@@ -5,6 +5,12 @@ function listen(channel, callback) {
   return () => ipcRenderer.removeListener(channel, listener);
 }
 contextBridge.exposeInMainWorld('desktop', {
+  copyServerKey: (value) => ipcRenderer.invoke('server-key-copy', value),
+  getLanguage: () => ipcRenderer.invoke('language-get'),
+  setLanguage: (value) => ipcRenderer.invoke('language-set', value),
+  updateState: () => ipcRenderer.invoke('update-state'),
+  installUpdate: () => ipcRenderer.invoke('update-install'),
+  onUpdate: (fn) => listen('update-changed', fn),
   copyDiagnosticCommand: (address) => ipcRenderer.invoke('diagnostic-command-copy', address),
   copyInvitation: (address) => ipcRenderer.invoke('invitation-copy', address),
   pendingInvitation: () => ipcRenderer.invoke('invitation-pending'),

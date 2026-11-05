@@ -152,12 +152,14 @@ function New-PortProbe([string]$Address, [int]$TestPort, [ValidateSet('TCP', 'UD
         $phase = 'nodes'
         if ($Protocol -eq 'TCP') {
             $target = [Uri]::EscapeDataString("${Address}:$TestPort")
-            $task = $client.GetAsync("$ApiBase/check-tcp?host=$target&max_nodes=2")
+            $requestURL = "$ApiBase/check-tcp?host=$target&max_nodes=2"
             $phase = 'submit'
-        } else { $task = $client.GetAsync("$ApiBase/nodes/ips") }
+        } else { $requestURL = "$ApiBase/nodes/ips" }
+        $task = $client.GetAsync($requestURL)
         return @{ Client = $client; Task = $task; Address = $Address; Port = $TestPort; Protocol = $Protocol; Nodes = @{}; AllowedIPs = @()
             ApiBase = $ApiBase; Phase = $phase; Started = [DateTime]::UtcNow; NextPoll = [DateTime]::UtcNow; Id = ''; Received = $false
-            Confirmed = $false; Echoes = 0; RemoteSuccess = $false; Error = ''; Finished = $false }
+            Confirmed = $false; Echoes = 0; RemoteSuccess = $false; Error = ''; Finished = $false
+            RequestURL = $requestURL; Retries = 0; RetryAt = $null }
     } catch { $client.Dispose(); throw }
 }
 
@@ -202,6 +204,11 @@ function Update-PortProbe($Probe) {
     try {
         $protocol = $Probe.Protocol
         if (([DateTime]::UtcNow - $Probe.Started).TotalSeconds -ge 45) { throw "$protocol probe timed out on $($Probe.Port); external availability is not confirmed." }
+        if ($Probe.RetryAt) {
+            if ([DateTime]::UtcNow -lt $Probe.RetryAt) { return }
+            $Probe.Task = $Probe.Client.GetAsync($Probe.RequestURL)
+            $Probe.RetryAt = $null
+        }
         if ($Probe.Task -and $Probe.Task.IsCompleted) {
             $response = $Probe.Task.GetAwaiter().GetResult()
             try {
@@ -213,7 +220,8 @@ function Update-PortProbe($Probe) {
                 $Probe.AllowedIPs = @($json.nodes | Where-Object { Test-PublicIPv4 ([string]$_) })
                 if ($Probe.AllowedIPs.Count -eq 0) { throw 'UDP checker returned no known IPv4 nodes.' }
                 $target = [Uri]::EscapeDataString("$($Probe.Address):$($Probe.Port)")
-                $Probe.Task = $Probe.Client.GetAsync("$($Probe.ApiBase)/check-udp?host=$target&max_nodes=2")
+                $Probe.RequestURL = "$($Probe.ApiBase)/check-udp?host=$target&max_nodes=2"
+                $Probe.Task = $Probe.Client.GetAsync($Probe.RequestURL)
                 $Probe.Phase = 'submit'
             } elseif ($Probe.Phase -eq 'submit') {
                 if ($json.ok -ne 1 -or $json.request_id -notmatch '^[a-zA-Z0-9_-]{1,80}$') { throw "$protocol checker returned no valid request ID." }
@@ -234,9 +242,19 @@ function Update-PortProbe($Probe) {
             if ($protocol -eq 'UDP') { Write-Host "PASS: UDP $($Probe.Port) round trip confirmed by an external checker." -ForegroundColor Green }
             else { Write-Host "PASS: TCP $($Probe.Port) confirmed by an external checker." -ForegroundColor Green }
         } elseif (-not $Probe.Task -and $Probe.Phase -eq 'poll' -and [DateTime]::UtcNow -ge $Probe.NextPoll) {
-            $Probe.Task = $Probe.Client.GetAsync("$($Probe.ApiBase)/check-result/$($Probe.Id)")
+            $Probe.RequestURL = "$($Probe.ApiBase)/check-result/$($Probe.Id)"
+            $Probe.Task = $Probe.Client.GetAsync($Probe.RequestURL)
         }
     } catch {
+        # A transient checker/VPN/HTTP failure says nothing about inbound ports.
+        # Retry the same API phase, preserving already confirmed protocols.
+        if ($Probe.Retries -lt 2 -and ([DateTime]::UtcNow - $Probe.Started).TotalSeconds -lt 40) {
+            $Probe.Retries++
+            $Probe.Task = $null
+            $Probe.RetryAt = [DateTime]::UtcNow.AddSeconds($Probe.Retries)
+            Write-Warning "$protocol checker request failed; retry $($Probe.Retries)/2."
+            return
+        }
         $Probe.Error = "$($Probe.Protocol) $($Probe.Port): $($_.Exception.GetBaseException().Message)"
         $Probe.Finished = $true
         Write-Warning $Probe.Error
@@ -267,6 +285,7 @@ function Start-SelfHostCheck {
     $wan = ''
     $cancelled = $false
     $checkError = $false
+    $reason = ''
     $cancelRead = $null
     if ($Application) {
         $cancelBuffer = New-Object byte[] 1
@@ -278,11 +297,11 @@ function Start-SelfHostCheck {
         Write-Host 'No firewall rules are changed. Allow the Windows firewall prompt if shown.'
         $configurations = @(Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address })
         if ($configurations.Count -gt 1) { Write-Warning 'Multiple IPv4 gateways detected (possibly VPN). Reply traffic may take a different route. Disable VPN for a conclusive test.' }
-        $configuration = $configurations | Select-Object -First 1
-        if (-not $configuration) { throw 'No IPv4 interface with a default gateway found.' }
+        $configuration = $configurations | Sort-Object @{ Expression = { $_.NetAdapter.HardwareInterface -eq $true }; Descending = $true }, @{ Expression = { $_.IPv4Interface.InterfaceMetric } } | Select-Object -First 1
+        if (-not $configuration) { $reason = 'no-interface'; throw 'No IPv4 interface with a default gateway found.' }
         $localIP = $configuration.IPv4Address[0].IPAddress
         Write-Host "LAN address: $localIP (disable VPN for this test)"
-        foreach ($number in @($Port, ($Port + 1), ($Port + 3))) {
+        foreach ($number in @($Port, ($Port + 1))) {
             $listener = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Any, $number)
             $listener.Server.ExclusiveAddressUse = $true
             $listeners += $listener
@@ -292,7 +311,7 @@ function Start-SelfHostCheck {
         $udp.Client.ExclusiveAddressUse = $true
         # Replies must use the same LAN source address as the router mapping.
         $udp.Client.Bind((New-Object Net.IPEndPoint([Net.IPAddress]::Parse($localIP), ($Port + 2))))
-        Write-Host "PASS: TCP $Port, $($Port+1), $($Port+3) and UDP $($Port+2) are free locally."
+        Write-Host "PASS: TCP $Port, $($Port+1) and UDP $($Port+2) are free locally."
         Write-Host 'Looking for a UPnP router...'
         try {
             $service = Find-UPnPService $localIP
@@ -331,7 +350,7 @@ function Start-SelfHostCheck {
             if (-not $SkipUdpCheck) {
                 try { $probe = New-UdpProbe $address ($Port + 2) } catch { Write-Warning "UDP checker unavailable: $($_.Exception.Message)" }
             } else { Write-Host 'External UDP check skipped (-SkipUdpCheck).' }
-        } elseif (-not $SkipTcpCheck -or -not $SkipUdpCheck) { Write-Warning 'External checks need a public IPv4. Rerun with -PublicIP <your public IPv4>.' }
+        } elseif (-not $SkipTcpCheck -or -not $SkipUdpCheck) { $reason = 'no-public-ip'; Write-Warning 'External checks need a public IPv4. Rerun with -PublicIP <your public IPv4>.' }
         Write-Host "Waiting up to $Seconds seconds; finishes automatically on full success. Press Q to finish and clean up (or Ctrl+C)."
         $deadline = [DateTime]::UtcNow.AddSeconds($Seconds)
         while ([DateTime]::UtcNow -lt $deadline) {
@@ -368,7 +387,13 @@ function Start-SelfHostCheck {
             if ($tcpConfirmed -and $probe -and $probe.Confirmed) { break }
             Start-Sleep -Milliseconds 100
         }
-    } catch { $checkError = $true; Write-Warning $_.Exception.Message }
+    } catch {
+        $checkError = $true
+        $cause = $_.Exception.GetBaseException()
+        if ($cause -is [Net.Sockets.SocketException] -and $cause.SocketErrorCode -eq [Net.Sockets.SocketError]::AddressAlreadyInUse) { $reason = 'ports-in-use' }
+        if (-not $reason) { $reason = 'check-failed' }
+        Write-Warning $_.Exception.Message
+    }
     finally {
         Write-Host ''
         Write-Host '=== RESULT ===' -ForegroundColor Cyan
@@ -393,11 +418,14 @@ function Start-SelfHostCheck {
             if ($tcpConfirmed -and $udpConfirmed) { $state = 'internet' }
             elseif ($checkError -or ($probe -and $probe.Error) -or @($tcpProbes | Where-Object { $_.Error }).Count -gt 0) { $state = 'error' }
             if ($cancelled) { $state = 'cancelled' }
+            if ($state -eq 'error' -and -not $reason) { $reason = 'checker-unavailable' }
             $tcpResults = @($Port, ($Port + 1)) | ForEach-Object {
                 $testPort = $_
                 [bool]($tcpConfirmed -or $tcpSeen[$testPort] -or @($tcpProbes | Where-Object { $_.Port -eq $testPort -and $_.Confirmed }).Count -gt 0)
             }
-            Write-Output ('VOICECORD_PREFLIGHT_RESULT:' + (@{ state = $state; tcp = @($tcpResults); udp = $udpConfirmed } | ConvertTo-Json -Compress))
+            $result = @{ state = $state; tcp = @($tcpResults); udp = $udpConfirmed }
+            if ($reason -and $state -notin @('internet', 'cancelled')) { $result.reason = $reason }
+            Write-Output ('VOICECORD_PREFLIGHT_RESULT:' + ($result | ConvertTo-Json -Compress))
         }
     }
 }
