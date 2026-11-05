@@ -17,6 +17,13 @@
   Start at 0.1.0. Do not bump versions for every work-in-progress edit.
 - Local builds must not automatically publish. Release tags are `vX.Y.Z` and
   must match package metadata. Never replace published tags or binaries.
+- Keep release assets compact: `Voicecord.Setup.X.Y.Z.exe`, `SHA256SUMS.txt`,
+  and one `Voicecord.Licenses.X.Y.Z.zip` containing `LICENSE`,
+  `THIRD_PARTY_NOTICES.md`, and `licenses/` from that release. Do not attach
+  individual license files or a duplicate source archive; keep GitHub's automatic
+  Source code ZIP/TAR downloads. Hash the exact uploaded EXE. Before removing
+  redundant assets from an older release, verify their contents are preserved in
+  the archive; preserve the installer/tag and update affected checksum/body links.
 - Group stacked input/select/textarea fields in the shared `.form-fields`
   container with a 20px gap; use the shared `.form-grid` for columns. Include
   conditional fields such as the E2EE key in the same group. Do not fix spacing

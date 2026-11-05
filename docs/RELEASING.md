@@ -42,7 +42,7 @@
    При первом выпуске сделайте пакет публичным по разделу
    [«Первая публикация образа»](#первая-публикация-образа-для-владельца-репозитория).
    Скачайте artifact
-   `voicecord-windows`: в нём установщик, его SHA-256 и копии лицензий.
+   `voicecord-windows`: в нём установщик, его SHA-256 и один архив лицензий.
    Откройте **Releases → Draft a new release**, выберите существующий тег,
    перенесите описание из CHANGELOG и приложите файлы из artifact. Укажите команду
    `docker pull ghcr.io/ilyarusskikh/voicecord-server:X.Y.Z`, ссылку на исходный
@@ -65,6 +65,25 @@
 версии получает новый номер. Полный `release/` не загружается в Git или GitHub:
 там могут быть локальные отчёты и записи; прикладываются только проверенные файлы.
 SSH нужен для Git push, а не для сборки. GitHub Desktop также может работать через HTTPS.
+
+### Шаблон ассетов
+
+В каждом релизе прикрепляйте только три основных файла:
+
+- `Voicecord.Setup.X.Y.Z.exe` — установщик Windows x64;
+- `SHA256SUMS.txt` — SHA-256 именно загруженного EXE (можно также указать ZIP);
+- `Voicecord.Licenses.X.Y.Z.zip` — `LICENSE`, `THIRD_PARTY_NOTICES.md` и
+  папка `licenses/` из той же версии/сборки.
+
+Не прикрепляйте лицензии по одному и не дублируйте исходники отдельным ассетом:
+GitHub автоматически добавляет **Source code (zip)** и **Source code (tar.gz)**
+для точного тега. В описании релиза должны быть ссылки на этот тег и архив лицензий.
+
+При упорядочивании старого релиза сначала проверьте содержимое ZIP и хэши,
+затем удаляйте только избыточные ассеты. Сохраняйте EXE и тег без изменений.
+Если переименован архив или удалён дубликат исходников, обновите имена в
+`SHA256SUMS.txt` и ссылки в описании. Готовый архив с правильным содержимым
+можно переименовать через метаданные GitHub, сохраняя его байты и digest.
 
 ### Первая публикация образа для владельца репозитория
 
@@ -124,3 +143,13 @@ Also update both `website/` pages and `docs/FIRST-CALL.ru.md`, and run
 `node scripts/check-website.mjs`. Website publishing is manual; see `website/README.md`.
 Review and publish. Never replace a released tag or binary; issue a new version.
 Do not upload local QA reports, recordings or an entire `release/` directory.
+
+Use exactly three primary assets: `Voicecord.Setup.X.Y.Z.exe`,
+`SHA256SUMS.txt` for the exact uploaded installer, and
+`Voicecord.Licenses.X.Y.Z.zip` containing `LICENSE`, `THIRD_PARTY_NOTICES.md`
+and `licenses/` from the same release/build. Do not attach licenses separately
+or upload a duplicate source archive; GitHub supplies Source code ZIP/TAR for
+the tag automatically. Link the tag and license ZIP in the release description.
+When tidying an older release, verify archive contents before removing redundant
+files, preserve the installer/tag, and update affected checksum filenames/links.
+An existing correct ZIP can be renamed in GitHub metadata without replacing its bytes.
