@@ -74,19 +74,26 @@ LLVM toolchain; see the [detailed Russian guide](docs/GUIDE.ru.md).
 
 ## Run a persistent server
 
-On a Linux VPS with Docker Engine and Compose, from the source root, replace the
-example IP with the VPS public IP:
+Follow the **[step-by-step Linux deployment guide (Russian)](docs/SERVER.md)**:
+administrator/container permissions, Docker installation links for major Linux
+distributions, image download, IP/ports, startup and client connection. The VPS
+needs only Docker Engine, the Compose file and `.env`; no source or Windows client.
+
+After preparing both files in `/opt/voicecord`:
 
 ```sh
-VOICECORD_PUBLIC_IP=203.0.113.10 docker compose -f compose.server.yaml up -d --build
-docker compose -f compose.server.yaml logs server
-docker compose -f compose.server.yaml exec server /voicecord serve info
+cd /opt/voicecord
+docker compose -f compose.server.ghcr.yaml pull
+docker compose -f compose.server.ghcr.yaml up -d --no-build
+docker compose -f compose.server.ghcr.yaml logs server
+docker compose -f compose.server.ghcr.yaml exec server /voicecord serve info
 ```
 
 The first startup prints the generated password to the private server log.
 Keep it and the invitation private. Open the three ports listed above. Server
-data persists in a Docker volume. See [server operations](docs/SERVER.md) for
-password changes, backups and limitations (currently in Russian).
+data persists in a Docker volume. The image `ghcr.io/ilyarusskikh/voicecord-server:0.1.0`
+becomes available after the first release tag is published and the GHCR package is
+made public. The guide also covers that one-time setup, updates and password changes.
 
 ## Verify changes
 

@@ -19,6 +19,7 @@ jobs:
         with:
           node-version: '24.22.1'
       - run: node scripts/check-public.mjs
+      - run: docker compose --env-file .env.server.example -f compose.server.ghcr.yaml config -q
       - run: node scripts/server-smoke.mjs
   windows:
     runs-on: windows-latest
@@ -62,3 +63,67 @@ jobs:
             release/LICENSE
             release/THIRD_PARTY_NOTICES.md
             release/licenses/**
+  publish-server:
+    name: Publish server image to GHCR
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [server, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: publish-server-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+      - name: Validate release and select image name
+        id: image
+        shell: bash
+        run: |
+          node scripts/check-public.mjs
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}-server" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prevent replacing an existing release image
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_VERSION: ${{ steps.image.outputs.version }}
+        run: |
+          if docker manifest inspect "${IMAGE_NAME}:${IMAGE_VERSION}" >/dev/null 2>&1; then
+            echo "::error::Image version already exists. Publish a new version instead of replacing it."
+            exit 1
+          fi
+      - name: Build and publish tested server
+        id: publish
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/standalone.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ steps.image.outputs.version }}
+            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.image.outputs.version }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+            org.opencontainers.image.description=Self-hosted Voicecord voice room server
+      - name: Record image and digest
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_VERSION: ${{ steps.image.outputs.version }}
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          echo "Published: ${IMAGE_NAME}:${IMAGE_VERSION}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Immutable reference: ${IMAGE_NAME}@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          echo "First publication: make the GHCR package public to allow anonymous pulls." >> "$GITHUB_STEP_SUMMARY"

@@ -54,6 +54,8 @@ const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'ut
 if (pkg.version !== lock.version || pkg.version !== lock.packages[''].version) issues.add('Package and lockfile versions differ');
 if (pkg.license !== 'AGPL-3.0-only' || lock.packages[''].license !== pkg.license) issues.add('Expected consistent AGPL-3.0-only metadata');
 if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) issues.add('Expected X.Y.Z version');
+const serverExample = await readFile(path.join(root, '.env.server.example'), 'utf8');
+if (!serverExample.split(/\r?\n/).some(line => /^VOICECORD_IMAGE=/.test(line) && line.endsWith(`:${pkg.version}`))) issues.add('Server image example must match package version');
 if (process.env.GITHUB_REF_TYPE === 'tag' && process.env.GITHUB_REF_NAME !== `v${pkg.version}`) issues.add('Release tag must match package version');
 for (const required of ['LICENSE', 'README.md', 'README.ru.md', 'CHANGELOG.md', 'CONTRIBUTING.md']) {
   if (!candidates.includes(required)) issues.add(`Missing public file: ${required}`);

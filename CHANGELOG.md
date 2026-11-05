@@ -2,6 +2,12 @@
 
 ## Unreleased / Не выпущено
 
+- Added a step-by-step Linux VPS guide with Docker installation links, host and
+  container permissions, public GHCR image deployment, ports and operations.
+- Added a prebuilt-image Compose file, configuration example and GHCR publishing
+  after successful release-tag checks. / Добавлены установка готового образа,
+  пример настроек и публикация в GHCR после проверок релизного тега.
+
 ## 0.1.0 — Initial release / Первый выпуск
 
 Prepared for publication; the Git tag and GitHub Release mark the actual release.

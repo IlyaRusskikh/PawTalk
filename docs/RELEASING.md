@@ -34,10 +34,17 @@
    git push origin v0.1.0
    ```
 
-6. Дождитесь успешного GitHub Actions для этого тега. Скачайте artifact
+6. Дождитесь успешного GitHub Actions для этого тега, включая **Publish server
+   image to GHCR**. Серверный образ получает теги `X.Y.Z` и `sha-<commit>`;
+   публикация выполняется только после успешных server и windows jobs.
+   При первом выпуске сделайте пакет публичным по [SERVER.md](SERVER.md).
+   Скачайте artifact
    `voicecord-windows`: в нём установщик, его SHA-256 и копии лицензий.
    Откройте **Releases → Draft a new release**, выберите существующий тег,
-   перенесите описание из CHANGELOG и приложите файлы из artifact.
+   перенесите описание из CHANGELOG и приложите файлы из artifact. Укажите команду
+   `docker pull ghcr.io/ilyarusskikh/voicecord-server:X.Y.Z`, ссылку на исходный
+   тег и digest образа из Summary. Обновите пример версии в `.env.server.example`
+   перед выпуском, чтобы шаблон ссылался на этот же образ.
 7. Рядом с установщиком укажите, что соответствующие исходники доступны в этом
    же релизе (**Source code**, точный тег) и что проект под `AGPL-3.0-only`.
    Для распространяемых встроенных бинарников также сохраните ссылки на их
@@ -61,7 +68,11 @@ Use `npm version patch|minor|major --no-git-tag-version --ignore-scripts`
 (choose one keyword) to update both manifests. Update CHANGELOG and both READMEs,
 run the checks above, build and smoke-test the installer, then commit and create
 an annotated `vX.Y.Z` tag. Push the branch and the tag. CI validates tag/version
-consistency and uploads `voicecord-windows`; publishing a release is manual.
+consistency and uploads `voicecord-windows`. After both test jobs pass, a tag push
+also publishes `ghcr.io/<owner>/<repo>-server:X.Y.Z` and `:sha-<commit>` for
+Linux amd64. Make the GHCR package public once, and include its digest and source
+tag in release notes. Update `.env.server.example` to match each release.
+Publishing the GitHub Release itself is manual.
 
 After CI passes, draft a GitHub Release for the exact tag, attach the installer,
 SHA-256 and license files, and include changes, limitations and a clear link to

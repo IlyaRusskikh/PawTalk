@@ -1,104 +1,434 @@
-# Постоянный сервер Voicecord в одном контейнере
+# Установка сервера Voicecord на Linux — пошагово
 
-Нужен Linux VPS с доступным извне статическим IP и Docker Engine с Compose. Node.js, Go, домен, база данных и настройка Caddy на сервере не нужны. Клиент продолжает работать после выключения компьютера владельца комнаты.
+Путь установки: **Docker → готовый образ из GitHub → порты → запуск контейнера → подключение**.
+На VPS нужны только Docker Engine с Compose, два файла настройки и доступный
+извне постоянный IP. Исходники, Node.js, Go, Windows-клиент и компилятор на VPS
+не нужны. Домен и публичный TLS-сертификат также не требуются.
 
-В контейнер входят Go API, HTTPS-прокси и LiveKit. API запускает голосовой процесс, ожидает его готовности и завершает контейнер при его выходе. `restart: unless-stopped` возвращает сервер в работу после сбоя или перезагрузки VPS.
+Образ: `ghcr.io/ilyarusskikh/voicecord-server:0.1.0`.
+Он появляется после публикации тега `v0.1.0` и успешного GitHub Actions.
+Если первая публикация ещё не выполнена, сначала выполните раздел
+[«Первая публикация образа»](#первая-публикация-образа-для-владельца-репозитория).
+Наличие исходников в GitHub само по себе не означает наличия готового образа.
 
-Опциональный экспериментальный E2EE включается через `VOICECORD_E2EE=true` (либо аргумент образа `--e2ee`). Ключ остаётся на клиентах; настройка обязательного режима и отпечатка ключа описана в [E2EE.md](E2EE.md).
+## 1. Подключитесь к VPS и определите права
 
-## Запуск
-
-Скопируйте проект на VPS, перейдите в его корневую папку и выполните, подставив **публичный IP вашего VPS**:
-
-```sh
-VOICECORD_PUBLIC_IP=203.0.113.10 docker compose -f compose.server.yaml up -d --build
-docker compose -f compose.server.yaml logs server
-```
-
-На первом запуске сервер создаст случайный пароль и выведет `Initial room password` в журнал. Сохраните пароль: на диске хранится только хеш, повторно пароль не выводится. Начальные Docker-журналы содержат пароль, поэтому доступны только администратору сервера. При утрате пароля задайте новый, как описано ниже.
-
-Получите приглашение:
+На своём компьютере откройте терминал и подключитесь, заменив пример на IP VPS:
 
 ```sh
-docker compose -f compose.server.yaml exec server /voicecord serve info
+ssh root@203.0.113.10
 ```
 
-Передайте друзьям приглашение `voicecord://IP:18443/отпечаток` и пароль. В клиенте вставьте **полное приглашение** в поле адреса, введите никнейм и пароль. Один IP без приглашения для этого режима не подходит: доверие к сертификату устанавливается по отпечатку. Домен, публичный сертификат и установка корневого CA не требуются. Этот способ предназначен для клиента Voicecord; обычный браузер не доверяет сертификату.
+Далее **все команды, кроме явно отмеченных, выполняются на VPS**.
+Проверьте систему, процессор и пользователя:
 
-После первого запуска IP сохраняется в volume, повторять переменную окружения для дальнейших команд не нужно. Если задаёте её постоянно через `.env`, она должна совпадать с сохранённым адресом. Отсутствующий IP при первом запуске, повреждённые данные и несовпадающий IP приводят к явной ошибке; сервер не заменяет сохранённые ключи автоматически.
+```sh
+cat /etc/os-release
+uname -m
+id
+```
 
-## Сеть
+Эта инструкция использует административную оболочку `root`. Если вы вошли как
+обычный администратор, выполните `sudo -i`. На Debian при входе под `root`
+устанавливать `sudo` для этой инструкции не нужно.
 
-Разрешите входящие порты в сетевых правилах провайдера VPS и в брандмауэре Linux:
-
-| Порт | Назначение |
+| Что | Под какими правами работает |
 | --- | --- |
-| TCP 18443 | HTTPS API и WebSocket-сигнализация |
-| TCP 18444 | Голос через WebRTC TCP, когда UDP недоступен |
-| UDP 18445 | Основной голосовой транспорт |
+| Установка Docker, firewall, запуск/обновление контейнера | Администратор VPS: `root` либо через `sudo` |
+| Docker daemon в этом варианте установки | `root` на хосте |
+| Процессы Voicecord и LiveKit внутри контейнера | Непривилегированный UID/GID `65532:65532` |
+| Файлы настройки `/opt/voicecord` | Владелец `root`; `.env` с правами `600` |
+| Данные комнаты | Docker volume, доступ к данным у UID `65532` внутри контейнера |
 
-Например, если на VPS уже используется UFW:
+Отдельного пользователя `voicecord` на самом VPS создавать не требуется:
+пользователь приложения уже определён в образе. Контейнер запускается без
+`--privileged`, без capabilities, с основной файловой системой только для чтения.
+Запись разрешена в `/data` и во временный `/tmp`.
+
+Не добавляйте обычных пользователей в группу `docker` ради «ограниченных прав»:
+эта группа предоставляет административный доступ к хосту. Это прямо описано в
+[документации Docker о правах](https://docs.docker.com/engine/install/linux-postinstall/).
+Rootless Docker — другой режим; этот Compose рассчитан на обычный Docker Engine
+с сетью хоста. Первые публикуемые образы предназначены для **Linux x86_64/amd64**.
+Для ARM нужен отдельно собранный образ соответствующей архитектуры.
+
+## 2. Установите Docker Engine и Compose
+
+Выполните **одну** готовую инструкцию для своего дистрибутива. Нужны Docker Engine,
+Compose plugin и запущенный Docker daemon. Docker Desktop на VPS не нужен.
+
+| Дистрибутив | Инструкция установки |
+| --- | --- |
+| Debian | [Docker Engine on Debian](https://docs.docker.com/engine/install/debian/) |
+| Ubuntu | [Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/) |
+| Fedora | [Docker Engine on Fedora](https://docs.docker.com/engine/install/fedora/) |
+| RHEL | [Docker Engine on RHEL](https://docs.docker.com/engine/install/rhel/) |
+| CentOS Stream | [Docker Engine on CentOS](https://docs.docker.com/engine/install/centos/) |
+| Rocky Linux | [Документация Rocky Linux](https://docs.rockylinux.org/gemstones/containers/docker/) |
+| AlmaLinux и другие производные | [Docker: другие дистрибутивы](https://docs.docker.com/engine/install/#other-linux-distributions); используйте совместимый репозиторий для своей версии ОС |
+| openSUSE | [Docker в openSUSE](https://en.opensuse.org/SDB:Docker) |
+| Arch Linux | [Docker в ArchWiki](https://wiki.archlinux.org/title/Docker) |
+| Alpine Linux | [Docker и Compose в Alpine Wiki](https://wiki.alpinelinux.org/wiki/Docker) |
+
+На Debian начинайте с раздела **Install using the apt repository**: добавьте
+официальный репозиторий Docker и установите указанные там пакеты. Команды из
+документации с `sudo` под `root` выполняются без слова `sudo`. Не удаляйте
+установленные пакеты или контейнеры вслепую, если VPS уже используется другими
+сервисами; сначала проверьте наличие старого Docker/Podman.
+
+Проверка после установки:
 
 ```sh
-sudo ufw allow 18443/tcp
-sudo ufw allow 18444/tcp
-sudo ufw allow 18445/udp
+docker version
+docker compose version
+docker run --rm hello-world
 ```
 
-TCP 18446 — внутренний LiveKit API, слушает только loopback. Публиковать его не нужно. Compose использует сеть хоста Linux. Порты 18443–18446 должны быть свободны. Адрес VPS должен напрямую достигаться клиентами; при NAT нужны соответствующие пробросы без изменения номеров портов. TURN-ретранслятора здесь нет, поэтому сети, блокирующие и UDP, и прямой WebRTC TCP, могут не подключиться. Разделение сигнализации и медиапортов соответствует [документации LiveKit](https://docs.livekit.io/transport/self-hosting/ports-firewall/).
+Ожидается: `docker version` показывает **Client и Server**, Compose отвечает
+версией, `hello-world` печатает подтверждение успешного запуска. Нужен современный
+`docker compose` с пробелом, а не старый Python `docker-compose`.
+Если эти проверки не прошли, к запуску Voicecord пока не переходите.
 
-Если порты заняты, добавьте `VOICECORD_PORT=19443` в `.env` в корне проекта перед запуском. Тогда используются TCP 19443, TCP 19444, UDP 19445 и внутренний TCP 19446. Допустимый базовый порт — 1024–65532. Сохраняйте эту настройку для последующих запусков; изменение базового порта меняет адрес приглашения.
-
-## Обслуживание
+На системах с systemd автозапуск Docker включается так:
 
 ```sh
-# Состояние и журнал
-docker compose -f compose.server.yaml ps
-docker compose -f compose.server.yaml logs --tail 50 server
-
-# Проверка HTTPS и доступности LiveKit внутри контейнера
-docker compose -f compose.server.yaml exec server /voicecord serve healthcheck
-
-# Перезапуск / остановка с сохранением данных
-docker compose -f compose.server.yaml restart server
-docker compose -f compose.server.yaml down
-
-# Запуск после остановки
-docker compose -f compose.server.yaml up -d
-
-# Обновление после получения новой версии исходников
-docker compose -f compose.server.yaml up -d --build
+systemctl enable --now docker
 ```
 
-Healthcheck проверяет HTTPS с сохранённым сертификатом и ответ голосового сервера; он не доказывает проходимость UDP из другой сети. Docker помечает зависший процесс `unhealthy`, но сам по этому статусу контейнер не перезапускает. При завершении LiveKit API выходит с ошибкой, и применяется политика перезапуска. Реальный голос после развёртывания проверьте между двумя клиентами из разных сетей.
+На Alpine используйте OpenRC-команды из Alpine Wiki вместо `systemctl`.
+Остальные шаги одинаковы для перечисленных Linux-систем; установка на каждой
+из них отдельно не проходила аппаратную проверку проекта.
 
-Для смены пароля без помещения его в историю shell (Bash):
+## 3. Скачайте два файла для запуска
+
+Для этого шага нужны `curl` и любой текстовый редактор. На Debian, если их нет:
 
 ```sh
-read -r -s -p 'Новый пароль (от 8 символов): ' ROOM_PASSWORD; printf '\n'
-printf '%s' "$ROOM_PASSWORD" | docker compose -f compose.server.yaml exec -T server /voicecord serve reset-password
+apt-get update
+apt-get install -y ca-certificates curl nano
+```
+
+Создайте папку и скачайте Compose и шаблон конфигурации **одной версии**:
+
+```sh
+install -d -m 755 /opt/voicecord
+cd /opt/voicecord
+VOICECORD_RELEASE=0.1.0
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/compose.server.ghcr.yaml" -o compose.server.ghcr.yaml
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/.env.server.example" -o .env.server.example
+if [ ! -e .env ]; then cp .env.server.example .env; fi
+chmod 600 .env
+nano .env
+```
+
+В `nano`: сохранить — `Ctrl+O`, Enter; выйти — `Ctrl+X`.
+Замените **только пример IP** на публичный IP VPS:
+
+```dotenv
+VOICECORD_IMAGE=ghcr.io/ilyarusskikh/voicecord-server:0.1.0
+VOICECORD_PUBLIC_IP=203.0.113.10
+VOICECORD_PORT=18443
+VOICECORD_E2EE=false
+VOICECORD_E2EE_KEY_ID=
+```
+
+`203.0.113.10` здесь — пример, его нельзя оставлять как адрес своего сервера.
+Укажите IP из панели хостинга. Для IPv6 в `.env` адрес пишется без квадратных
+скобок; доступность IPv6 нужна у всех клиентов. В начале проще использовать IPv4.
+Пароль сюда не вписывается: Voicecord сгенерирует его при первом запуске.
+E2EE пока оставьте выключенным; отдельная настройка описана в [E2EE.md](E2EE.md).
+
+В `/opt/voicecord` должны находиться `compose.server.ghcr.yaml` и `.env`;
+`.env.server.example` можно оставить как образец. Ничего из локальных
+`deploy/generated/`, `node_modules/`, `resources/server/`, Windows `.exe` или
+всей рабочей папки с компьютера копировать на VPS не нужно.
+
+При повторной установке не перезаписывайте существующий `.env` шаблоном:
+в нём должны остаться действующие IP, версия образа и настройки комнаты.
+
+## 4. Скачайте образ сервера
+
+Из папки `/opt/voicecord`:
+
+```sh
+cd /opt/voicecord
+docker compose -f compose.server.ghcr.yaml config -q
+docker compose -f compose.server.ghcr.yaml pull
+```
+
+Первая команда проверяет настройку; при успехе ничего не печатает. Вторая
+скачивает готовый образ. Это и есть получение серверной части: сборки на VPS нет.
+Публичный пакет GHCR скачивается без `docker login`, PAT и SSH-ключа GitHub.
+
+При `denied`, `unauthorized` или `manifest unknown` сначала проверьте, что:
+версия опубликована, пакет сделан публичным, имя и тег в `.env` написаны верно.
+Не создавайте токен на VPS для обхода ещё не опубликованного/закрытого пакета.
+
+## 5. Откройте порты
+
+В панели хостинга (firewall/security group) разрешите входящие:
+
+| Порт по умолчанию | Протокол | Назначение |
+| --- | --- | --- |
+| `18443` | TCP | Подключение, HTTPS и WebSocket-сигнализация |
+| `18444` | TCP | WebRTC TCP, если UDP недоступен |
+| `18445` | UDP | Основной голосовой трафик |
+
+Для доступа участников из любых сетей правила должны разрешать их исходные IP;
+если ограничиваете список адресов, включите адреса всех участников. Сохраните
+правило для своего SSH-порта. Порты `80` и `443` этому варианту не нужны.
+**TCP `18446` наружу не открывайте**: это внутренний LiveKit API на loopback.
+
+Повторите разрешения в firewall самого Linux, если он включён. Выберите только
+уже используемый способ управления firewall.
+
+**Если активен UFW:**
+
+```sh
+ufw status
+ufw allow 18443/tcp
+ufw allow 18444/tcp
+ufw allow 18445/udp
+```
+
+Не включайте неактивный UFW вслепую по SSH: сначала нужно разрешить фактический
+SSH-порт. Установка UFW ради Voicecord не обязательна.
+
+**Если активен firewalld:** сначала найдите зону внешнего интерфейса командой
+`firewall-cmd --get-active-zones`. Ниже `public` — пример; подставьте свою зону.
+
+```sh
+firewall-cmd --zone=public --add-port=18443/tcp --permanent
+firewall-cmd --zone=public --add-port=18444/tcp --permanent
+firewall-cmd --zone=public --add-port=18445/udp --permanent
+firewall-cmd --reload
+```
+
+Если правила ведутся напрямую в nftables/iptables или панелью хостинга,
+добавьте эти три разрешения в существующую политику. Не сбрасывайте весь ruleset
+и не отключайте firewall или SELinux.
+
+Compose использует **host networking**: порты слушаются прямо на VPS, секция
+`ports:` и ручные `-p` здесь не нужны. См. [Docker host networking](https://docs.docker.com/engine/network/drivers/host/).
+Проверьте занятость портов перед запуском, если доступен `ss`:
+
+```sh
+ss -lntup
+```
+
+Если `18443`–`18446` заняты, в `.env` можно поставить `VOICECORD_PORT=19443`:
+тогда наружу открываются TCP `19443`, TCP `19444`, UDP `19445`, а TCP `19446`
+остаётся внутренним. Допустимый базовый порт: `1024`–`65532`.
+При NAT нужен доступный публичный IP и проброс этих же портов без перенумерации;
+за CGNAT без внешнего проброса такой сервер недоступен. TURN здесь не настроен.
+
+## 6. Запустите контейнер
+
+```sh
+cd /opt/voicecord
+docker compose -f compose.server.ghcr.yaml up -d --no-build
+docker compose -f compose.server.ghcr.yaml ps
+docker compose -f compose.server.ghcr.yaml logs server
+```
+
+При первом старте найдите строку **`Initial room password`** и сохраните пароль
+в менеджере паролей. Он выводится только один раз; после старта на диске хранится
+его хеш. Начальные Docker-журналы содержат пароль — не публикуйте их в issues.
+Строка `Voicecord ready` означает, что API и голосовой сервер запущены.
+
+Через некоторое время `ps` должен показывать `Up` и `(healthy)`.
+Проверьте процесс и внутреннюю готовность:
+
+```sh
+docker compose -f compose.server.ghcr.yaml exec server id
+docker compose -f compose.server.ghcr.yaml exec server /voicecord serve healthcheck
+```
+
+`id` показывает UID/GID `65532`, а `healthcheck` завершается без ошибки.
+`-d` оставляет сервер в фоне: SSH можно закрыть. Docker и политика
+`restart: unless-stopped` поднимут его после перезагрузки VPS, если вы сами
+не остановили контейнер. Отдельный systemd unit для Voicecord не требуется.
+
+Healthcheck проверяет HTTPS и доступность LiveKit внутри VPS; он не подтверждает
+проходимость голосовых портов из интернета. Docker сам по статусу `unhealthy`
+контейнер не перезапускает. При завершении LiveKit сервер выходит, и применяется
+политика перезапуска.
+
+## 7. Получите приглашение и подключитесь
+
+```sh
+docker compose -f compose.server.ghcr.yaml exec server /voicecord serve info
+```
+
+Результат — `voicecord://IP:18443/отпечаток`. Передайте участнику полную ссылку
+и пароль лично. В Windows-клиенте задайте никнейм в **«Настройки → Обо мне»**,
+нажмите **«Присоединиться к комнате»**, вставьте ссылку и введите пароль,
+когда приложение его запросит.
+
+В этом VPS-режиме `serve info` **не включает пароль в ссылку**. Это отличается
+от приглашений временной комнаты из Windows-приложения. Один IP без отпечатка
+не заменяет приглашение: приложение проверяет самоподписанный сертификат по нему.
+Открывать ссылку в браузере, ставить корневой сертификат или отключать TLS-проверку
+не нужно. Домен и Let's Encrypt для этого режима не используются.
+
+Проверьте разговор двух клиентов из разных сетей: речь должна идти в обе стороны.
+Если вход работает, но звука нет, проверьте UDP `18445`, TCP `18444`, firewall
+провайдера, публичный IP и сетевые ограничения клиентов.
+
+## Обслуживание и обновление
+
+Все команды ниже выполняются на VPS из `/opt/voicecord`.
+
+```sh
+# Состояние / свежий журнал
+cd /opt/voicecord
+docker compose -f compose.server.ghcr.yaml ps
+docker compose -f compose.server.ghcr.yaml logs --tail 50 server
+
+# Перезапуск / остановка / запуск без изменения данных
+docker compose -f compose.server.ghcr.yaml restart server
+docker compose -f compose.server.ghcr.yaml stop server
+docker compose -f compose.server.ghcr.yaml start server
+```
+
+Для обновления сначала сохраните данные комнаты. Затем измените **только тег
+версии образа** в `VOICECORD_IMAGE` файла `.env`, например на опубликованный
+`0.1.1`, и выполните:
+
+```sh
+docker compose -f compose.server.ghcr.yaml pull
+docker compose -f compose.server.ghcr.yaml up -d --no-build
+docker compose -f compose.server.ghcr.yaml exec server /voicecord serve healthcheck
+```
+
+Контейнер пересоздаётся, разговор прерывается. Данные комнаты сохраняются в volume,
+приглашение и пароль при том же IP остаются прежними. Обычный `restart` не
+переключает контейнер на новый образ. Для отката задайте предыдущий тег и повторите
+`pull` / `up`, предварительно проверив совместимость данных в release notes.
+Не используйте `latest` для воспроизводимой установки. Можно закрепить digest
+`ghcr.io/ilyarusskikh/voicecord-server@sha256:…` из результата публикации.
+
+### Сменить или восстановить пароль
+
+В **Bash** выполните (на Alpine при необходимости сначала установите Bash):
+
+```bash
+read -r -s -p 'Новый пароль (от 8 символов): ' ROOM_PASSWORD
+printf '\n'
+printf '%s' "$ROOM_PASSWORD" | docker compose -f compose.server.ghcr.yaml exec -T server /voicecord serve reset-password
 unset ROOM_PASSWORD
-docker compose -f compose.server.yaml restart server
 ```
 
-Новый пароль применяется после перезапуска, текущие разговоры прерываются. Приглашение остаётся прежним.
-
-## Данные и перенос
-
-Volume `voicecord-server_server_data` содержит `state.json`: IP, хеш пароля, ключи LiveKit и приватный TLS-ключ. Контейнер работает без root, с файловой системой только для чтения и отдельным временным каталогом в памяти. Журналы ограничены тремя файлами по 10 МБ.
-
-Для резервного копирования остановите сервер и сохраните volume средствами Docker/вашего провайдера. Восстановление всего volume на сервер с тем же IP сохраняет пароль и приглашение. Храните резервную копию как секрет; друзьям её передавать нельзя. `docker compose down` сохраняет volume; **`down -v` удаляет его и создаст новую комнату при следующем запуске**.
-
-Сертификат фиксируется на десять лет и сохраняется при пересборке образа. При смене IP, потере ключей или истечении срока сертификата создайте отдельный новый volume/Compose-проект, укажите новый IP и раздайте новое приглашение и пароль. Одновременно запускать старый и новый проект с теми же портами нельзя.
-
-## Проверки разработки
+Если команда ответила `Password updated`, примените новый пароль:
 
 ```sh
-# Сборка, запуск, TLS, пароль, сохранение приглашения, отказ LiveKit и SIGTERM
-node scripts/server-smoke.mjs
+docker compose -f compose.server.ghcr.yaml restart server
+```
 
-# То же и реальный двусторонний звук двух Electron-клиентов
+Команда не помещает пароль в историю shell. Приглашение не меняется; текущие
+разговоры прерываются после перезапуска. При ошибке `permission denied` не
+меняйте права на `777`: проверьте пользователя контейнера и владельца данных.
+
+### Где данные и как сохранить комнату
+
+Данные находятся **не в `/opt/voicecord` и не внутри образа**, а в Docker volume
+`voicecord-server_server_data`: `state.json` содержит IP, хеш пароля, ключи LiveKit,
+сертификат и приватный TLS-ключ. Пересборка или замена образа их не стирает.
+Имя volume зависит от `name: voicecord-server`; не меняйте имя проекта случайно.
+
+Для резервной копии остановите комнату, сохраните весь volume средствами Docker
+или snapshot хостинга, затем запустите комнату. Копия volume, `.env`, версия
+образа и исходный IP нужны для восстановления. Храните копию как секрет и вне VPS.
+`docker compose down` сохраняет volume; **`down -v` и удаление volume уничтожают
+состояние комнаты**. Для обычной остановки используйте `stop`.
+
+Восстановление полного volume на том же IP сохраняет приглашение и пароль;
+файлы должны оставаться доступны UID/GID `65532:65532`. Сертификат действует
+десять лет. При смене IP, утрате ключей или истечении сертификата создайте
+**отдельный новый volume/Compose-проект**, укажите новый IP и раздайте новое
+приглашение. Не удаляйте старый volume до проверки резервной копии; старый и новый
+серверы не могут одновременно занимать те же порты.
+
+## Если что-то не работает
+
+| Симптом | Что проверить |
+| --- | --- |
+| `docker: command not found` | Docker Engine установлен и терминал видит его CLI |
+| `Cannot connect to the Docker daemon` | Демон запущен; выбран правильный Docker context |
+| `docker: 'compose' is not a docker command` | Установлен современный Compose plugin |
+| `denied` / `unauthorized` при pull | Пакет GHCR опубликован и сделан публичным владельцем |
+| `manifest unknown` | Тег существует; версия в `.env` совпадает с опубликованной |
+| `no matching manifest` / `exec format error` | Архитектура VPS совпадает с архитектурой образа |
+| `address already in use` | Свободны все четыре порта от базового до базового + 3 |
+| `VOICECORD_PUBLIC_IP differs from saved state` | В `.env` верните сохранённый IP; для нового IP нужна новая комната |
+| Клиент получает timeout | Проверьте три порта на VPS и у хостинга, IP, NAT и маршрут |
+| Сервер healthy, голос не проходит | Проверьте медиапорты, UDP/TCP и разговор из другой сети |
+
+Не публикуйте `state.json`, полные приглашения с секретами или начальные журналы.
+При обращении за помощью достаточно указать версию, ОС, стадию ошибки и текст
+ошибки без секретов.
+
+## Первая публикация образа для владельца репозитория
+
+Workflow `.github/workflows/check.yml` публикует образ после push тега `vX.Y.Z`,
+**только если прошли обе проверки server и windows**. Номер тега должен совпадать
+с `package.json` и `package-lock.json`. Обычный push в `main` только проверяет
+проект; образ не публикуется.
+
+1. Отправьте коммит с workflow и этими файлами на GitHub. Для первого выпуска
+   создайте и отправьте `v0.1.0` по [RELEASING.md](RELEASING.md).
+2. Дождитесь зелёного **Verify and package → Publish server image to GHCR**.
+   В Summary появятся имя, версия и digest образа. Для публикации используется
+   `GITHUB_TOKEN` с `packages: write`; личный PAT в Secrets не нужен.
+3. Откройте профиль GitHub → **Packages → voicecord-server → Package settings**.
+   В разделе видимости выберите **Change visibility → Public** и подтвердите.
+   Публичность репозитория сама по себе не делает новый пакет публичным.
+4. Проверьте скачивание на машине без GitHub-логина:
+   `docker pull ghcr.io/ilyarusskikh/voicecord-server:0.1.0`.
+   После этого инструкция для VPS готова к использованию без авторизации.
+
+При форке имя образа вычисляется из `<владелец>/<репозиторий>-server` в нижнем
+регистре; обновите `VOICECORD_IMAGE` и ссылки скачивания под свой fork.
+Не заменяйте уже опубликованный тег версии; выпускайте новый номер.
+Механизм публикации и видимости описан в [документации GHCR](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+## Сборка из исходников и разработка
+
+Альтернатива GHCR: склонируйте публичный репозиторий на Linux-машину с Docker,
+затем соберите образ:
+
+```sh
+git clone https://github.com/IlyaRusskikh/voicecord.git
+cd voicecord
+docker build -f server/standalone.Dockerfile -t voicecord-server:local .
+```
+
+На машине сборки сохраните образ в архив:
+
+```sh
+docker image save -o voicecord-server.tar voicecord-server:local
+```
+
+Передайте архив на VPS по SFTP/SCP и загрузите его там:
+
+```sh
+docker image load -i voicecord-server.tar
+```
+
+В `.env` поставьте `VOICECORD_IMAGE=voicecord-server:local`.
+В таком режиме пропустите `pull` и запускайте `up -d --no-build --pull never`.
+На VPS по-прежнему достаточно Compose, `.env` и загруженного образа той же
+архитектуры; исходники и Windows-бинарники не требуются.
+Старый `compose.server.yaml` с `build:` остаётся вариантом для локальной сборки.
+
+Проверки разработчика (Node.js нужен только на машине тестирования):
+
+```sh
+node scripts/server-smoke.mjs
 npm run test:server
 ```
 
-Первая проверка требует Docker и Node.js только на машине разработчика/CI. Проверка звука также требует установленных npm-зависимостей; на Linux — окружения для Electron. Тест создаёт собственный временный контейнер и volume, удаляет их после завершения и не изменяет `deploy/generated`. Для теста должны быть свободны 31443–31445 и, при проверке звука, 5173.
+Первый тест проверяет сборку, TLS, пароль, данные, отказ LiveKit и SIGTERM;
+второй добавляет двусторонний синтетический звук Electron. Тесты используют
+изолированные контейнеры/volume, не меняют пользовательские конфигурации и требуют
+свободных тестовых портов 31443–31445 (для звука также 5173).

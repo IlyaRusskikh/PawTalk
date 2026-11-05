@@ -76,19 +76,26 @@ push-to-talk и приглушение других Windows-аудиосесси
 
 ## Постоянный сервер
 
-На Linux VPS с Docker Engine и Compose из корня исходников выполните команды,
-заменив пример на публичный IP своего VPS:
+Начните с **[пошаговой установки на Linux](docs/SERVER.md)**: права пользователя,
+ссылки на установку Docker для основных дистрибутивов, скачивание готового образа,
+настройка IP и портов, запуск и подключение. На VPS нужны только Docker Engine,
+Compose-файл и `.env`; копировать исходники или Windows-приложение не требуется.
+
+После подготовки двух файлов в `/opt/voicecord`:
 
 ```sh
-VOICECORD_PUBLIC_IP=203.0.113.10 docker compose -f compose.server.yaml up -d --build
-docker compose -f compose.server.yaml logs server
-docker compose -f compose.server.yaml exec server /voicecord serve info
+cd /opt/voicecord
+docker compose -f compose.server.ghcr.yaml pull
+docker compose -f compose.server.ghcr.yaml up -d --no-build
+docker compose -f compose.server.ghcr.yaml logs server
+docker compose -f compose.server.ghcr.yaml exec server /voicecord serve info
 ```
 
 При первом запуске пароль выводится в закрытый журнал сервера. Сохраните его
 и приглашение и не публикуйте их. Откройте три указанных выше порта. Данные
-сохраняются в Docker volume. Смена пароля, резервное копирование и ограничения:
-[руководство сервера](docs/SERVER.md).
+сохраняются в Docker volume. Образ `ghcr.io/ilyarusskikh/voicecord-server:0.1.0`
+станет доступен после первой публикации тега и переключения пакета GHCR в Public.
+Для владельца репозитория этот шаг также описан в [руководстве сервера](docs/SERVER.md).
 
 ## Проверка изменений
 
