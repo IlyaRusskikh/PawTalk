@@ -197,7 +197,7 @@ app.on('browser-window-created',(_e,win)=>{
    assert.equal(await js(`document.querySelector('.chat-avatar img')?.src`),savedAvatar);
    assert.equal(await js(`document.querySelector('.composer-avatar img')?.src`),savedAvatar);
    assert.match(await js(`document.querySelector('.chat-meta time').textContent`), /^\d{2}:\d{2}$/);
-   await js(`document.querySelector('.chat-meta time').focus()`);
+   await js(`document.querySelector('.chat-meta time').focus({preventScroll:true})`);
    assert.match(await js(`document.querySelector('.chat-date-tip')?.textContent`), /\d{4}.*\d{2}:\d{2}/);
    assert.equal(await js(`document.querySelector('.person-card .avatar img')?.src`),savedAvatar);
    await until(()=>js(`document.querySelector('.chat-stream').hasAttribute('data-more-above')`),'overflowing messages fade below the chat header');
