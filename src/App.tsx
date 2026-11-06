@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Microphone } from './audio';
 import { VoiceSession, type Snapshot } from './session';
 import { defaults, loadSettings, remember, type Settings } from './settings';
-import { Icon } from './Controls';
+import { Icon, Toggle } from './Controls';
 import { VoiceSettings } from './VoiceSettings';
 import { ConnectionStatus } from './ConnectionStatus';
 import { Modal } from './Modal';
@@ -27,6 +27,26 @@ export function App() {
   const [settings, setSettings] = useState(loadSettings);
   const [modal, setModal] = useState<'join' | 'create' | 'share' | 'settings' | 'server-key' | null>(null);
   const [roomName, setRoomName] = useState('');
+  const [autoStart, setAutoStart] = useState<boolean | null>(null);
+  const [autoStartBusy, setAutoStartBusy] = useState(false);
+  const [autoStartAvailable, setAutoStartAvailable] = useState(false);
+  const [startInTray, setStartInTray] = useState(false);
+  useEffect(() => { void window.desktop?.getStartInTray?.().then(setStartInTray).catch(() => setError(t("Не удалось прочитать настройки автозапуска."))); }, []);
+  useEffect(() => { void window.desktop?.getAutoStart?.().then(setAutoStart).catch(() => setError(t("Не удалось прочитать настройки автозапуска."))); }, []);
+  async function changeAutoStart(value: boolean) {
+    if (!window.desktop?.setAutoStart) return;
+    setAutoStartBusy(true);
+    try { setAutoStart(await window.desktop.setAutoStart(value)); }
+    catch { setError(t("Не удалось изменить автозапуск.")); }
+    finally { setAutoStartBusy(false); }
+  }
+  async function changeStartInTray(value: boolean) {
+    if (!window.desktop?.setStartInTray) return;
+    setAutoStartBusy(true);
+    try { setStartInTray(await window.desktop.setStartInTray(value)); }
+    catch { setError(t("Не удалось изменить автозапуск.")); }
+    finally { setAutoStartBusy(false); }
+  }
   const [hostRunning, setHostRunning] = useState(false);
   const [address, setAddress] = useState('');
   const [nickname, setNickname] = useState(() => stored('voicecord.nickname') || t("Гость"));
@@ -100,7 +120,7 @@ export function App() {
     const c = new VoiceSession(currentSettings.current); controller.current = c;
     c.onUpdate = setSnapshot; c.onError = setError;
     void refreshDevices();
-    void window.desktop?.capabilities().then(info => { setNative(info.native); });
+    void window.desktop?.capabilities().then(info => { setNative(info.native); setAutoStartAvailable(info.platform === 'win32' && info.packaged); });
     const offPtt = window.desktop?.onPtt(down => { setPtt(down); c.setPtt(down); const mic = testMic.current; mic?.update(currentSettings.current, false, down); });
     const offAction = window.desktop?.onAction(action => {
       if (action === 'mute') setMuted(value => !value);
@@ -208,7 +228,7 @@ export function App() {
       </>
       {modal === 'share' && !hostRunning && currentTarget.current && <GuestShare target={currentTarget.current} name={roomName} onClose={() => setModal(null)}/>}
       <HostPanel nickname={nickname} active={active || busy} modal={modal} onClose={() => setModal(null)} onCreated={name => { setRoomName(name); setModal('share'); }} onStatus={setHostRunning} onJoin={input => connect(input, true)} onStop={disconnect} onError={setError} onBusy={setHostBusy}/>
-      {modal === 'settings' && <Modal title={t("Настройки")} className="settings-modal" onClose={() => setModal(null)}>{error && <p role="alert" className="text-error">{error}</p>}<section className="settings-page"><div className="settings-card profile-settings"><h1>{t("Обо мне")}</h1><div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label><label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div><p>{t("Используется при следующем подключении к комнате.")}</p></div></section>
+      {modal === 'settings' && <Modal title={t("Настройки")} className="settings-modal" onClose={() => setModal(null)}>{error && <p role="alert" className="text-error">{error}</p>}<section className="settings-page"><div className="settings-card profile-settings"><h1>{t("Обо мне")}</h1><div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label><label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div><p>{t("Используется при следующем подключении к комнате.")}</p>{autoStart !== null && <Toggle label={t("Запускать Voicecord при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</div></section>
       <VoiceSettings settings={settings} update={update} devices={devices} keys={keys} db={db} threshold={threshold} speaking={active && !testing ? snapshot.speaking : testSpeaking} active={active} busy={busy} testing={testing} testBusy={testBusy} ready={previewReady} native={native} keyError={keyError} onTest={() => void toggleTest()} onReset={() => setSettings({ ...defaults })}/></Modal>}
     </div>
     </main>

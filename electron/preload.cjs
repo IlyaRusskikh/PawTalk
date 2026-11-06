@@ -5,6 +5,10 @@ function listen(channel, callback) {
   return () => ipcRenderer.removeListener(channel, listener);
 }
 contextBridge.exposeInMainWorld('desktop', {
+  getStartInTray: () => ipcRenderer.invoke('start-in-tray-get'),
+  setStartInTray: (value) => ipcRenderer.invoke('start-in-tray-set', value),
+  getAutoStart: () => ipcRenderer.invoke('autostart-get'),
+  setAutoStart: (enabled) => ipcRenderer.invoke('autostart-set', enabled),
   copyServerKey: (value) => ipcRenderer.invoke('server-key-copy', value),
   getLanguage: () => ipcRenderer.invoke('language-get'),
   setLanguage: (value) => ipcRenderer.invoke('language-set', value),

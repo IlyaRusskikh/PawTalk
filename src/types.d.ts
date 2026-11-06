@@ -5,6 +5,10 @@ interface HostStatus { running: boolean; e2ee?: boolean; name?: string; port?: n
 interface HostCheckResult { state: 'internet' | 'unconfirmed' | 'error' | 'cancelled'; tcp: [boolean, boolean]; udp: boolean; reason?: 'no-interface' | 'no-public-ip' | 'ports-in-use' | 'check-failed' | 'checker-unavailable'; }
 interface Window {
   desktop?: {
+    getStartInTray?(): Promise<boolean>;
+    setStartInTray?(value: boolean): Promise<boolean>;
+    getAutoStart?(): Promise<boolean>;
+    setAutoStart?(enabled: boolean): Promise<boolean>;
     copyServerKey(value: string): Promise<void>;
     getLanguage?(): Promise<'ru' | 'en'>;
     setLanguage?(value: 'ru' | 'en'): Promise<void>;

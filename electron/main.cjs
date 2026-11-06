@@ -10,9 +10,11 @@ const { HostCheck } = require('./host-check.cjs');
 const { CredentialStore } = require('./credentials.cjs');
 const { Updater } = require('./updater.cjs');
 const { confirmUpdateStarted } = require('./update-progress.cjs');
+const { StartupSettings } = require('./startup.cjs');
 const fs = require('node:fs');
 const { setLanguage } = require('../shared/i18n.cjs');
 let updater;
+let startup;
 let language = 'ru';
 let credentials;
 let pendingInvitation = '';
@@ -52,6 +54,21 @@ function authorized(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Unauthorized IPC');
 }
 function registerIPC() {
+  ipcMain.handle('autostart-get', event => {
+    authorized(event);
+    return process.platform === 'win32' && app.isPackaged && startup.enabled();
+  });
+  ipcMain.handle('autostart-set', (event, enabled) => {
+    authorized(event);
+    if (typeof enabled !== 'boolean' || process.platform !== 'win32' || !app.isPackaged) throw new Error(t("Автозапуск доступен в установленном приложении Windows."));
+    return startup.setEnabled(enabled);
+  });
+  ipcMain.handle('start-in-tray-get', event => { authorized(event); return startup.inTray; });
+  ipcMain.handle('start-in-tray-set', (event, value) => {
+    authorized(event);
+    if (typeof value !== 'boolean' || process.platform !== 'win32' || !app.isPackaged) throw new Error(t("Автозапуск доступен в установленном приложении Windows."));
+    return startup.setInTray(value);
+  });
   ipcMain.handle('server-key-copy', (event, value) => {
     authorized(event);
     if (typeof value !== 'string' || !/^(?:[a-f0-9]{64}|VOICECORD_E2EE=true\nVOICECORD_E2EE_KEY_ID=[a-f0-9]{64})$/.test(value)) throw new Error('Invalid encryption key field');
@@ -204,6 +221,7 @@ else {
       try { const saved = JSON.parse(fs.readFileSync(location, 'utf8')); if (['en', 'ru'].includes(saved.language)) { language = saved.language; break; } } catch {}
     }
     fs.mkdirSync(app.getPath('userData'), { recursive: true });
+    startup = new StartupSettings(app, path.join(app.getPath('userData'), 'startup.json'));
     fs.writeFileSync(path.join(app.getPath('userData'), 'language.json'), JSON.stringify({ language }));
     setLanguage(language);
     if (app.isPackaged && process.platform === 'win32') updater = new Updater({ current: app.getVersion(),
@@ -230,7 +248,7 @@ else {
       callback(contents === win?.webContents && permission === 'media' && details.mediaTypes?.every(type => type === 'audio'));
     });
     session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) => contents === win?.webContents && permission === 'media' && details.mediaType === 'audio');
-    win = new BrowserWindow({ show: !process.argv.includes('--smoke'), width: 1240, height: 820, minWidth: 940, minHeight: 650, backgroundColor: '#191b22', title: 'Voicecord', icon: path.join(__dirname, '../assets/voicecord.ico'),
+    win = new BrowserWindow({ show: !process.argv.includes('--smoke') && !(process.argv.includes('--start-in-tray') && !pendingInvitation), width: 1240, height: 820, minWidth: 940, minHeight: 650, backgroundColor: '#191b22', title: 'Voicecord', icon: path.join(__dirname, '../assets/voicecord.ico'),
       webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false, offscreen: process.argv.includes('--offscreen-smoke') },
     });
     win.removeMenu();
