@@ -303,5 +303,7 @@
   "Автозапуск доступен в установленном приложении Windows.": "Startup is available in the installed Windows app.",
   "Запускать Voicecord при входе в Windows": "Start Voicecord when signing in to Windows",
   "Запускать свёрнутым в трее": "Start minimized to the system tray",
-  "При автозапуске окно будет скрыто; открыть его можно через значок в трее.": "At Windows sign-in, keep the window hidden; open it from the system tray icon."
+  "При автозапуске окно будет скрыто; открыть его можно через значок в трее.": "At Windows sign-in, keep the window hidden; open it from the system tray icon.",
+  "Устройство ввода": "Input device",
+  "Устройство вывода": "Output device"
 }

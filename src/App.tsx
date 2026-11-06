@@ -4,6 +4,7 @@ import { Microphone } from './audio';
 import { VoiceSession, type Snapshot } from './session';
 import { defaults, loadSettings, remember, type Settings } from './settings';
 import { Icon, Toggle } from './Controls';
+import { AudioQuickMenu } from './AudioQuickMenu';
 import { VoiceSettings } from './VoiceSettings';
 import { ConnectionStatus } from './ConnectionStatus';
 import { Modal } from './Modal';
@@ -207,7 +208,7 @@ export function App() {
     {menu && <div className="bookmark-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={e => e.stopPropagation()}><button autoFocus role="menuitem" onClick={() => void removeBookmark(menu.address)}>{t("Удалить закладку")}</button></div>}
     <aside className="user-dock" aria-label={t("Профиль и управление звуком")}>
 
-      <div className="profile"><div className={`avatar small ${snapshot.speaking ? 'speaking' : ''}`}>{(nickname || t("Вы")).slice(0, 1).toUpperCase()}</div><span>{nickname || t("Ваш профиль")}</span><ConnectionStatus compact state={snapshot.state} label={states[snapshot.state] || snapshot.state} delay={snapshot.rtt} loss={snapshot.packetLoss}/><button className={`icon-button ${muted || deafened ? 'off' : ''}`} aria-pressed={muted || deafened} title={t("Микрофон")} onClick={() => setMuted(v => !v)}><Icon name={muted || deafened ? 'mic-off' : 'mic'}/></button><button className={`icon-button ${deafened ? 'off' : ''}`} aria-pressed={deafened} title={t("Входящий звук")} onClick={() => setDeafened(v => !v)}><Icon name={deafened ? 'headphones-off' : 'headphones'}/></button><button className="icon-button" title={t("Настройки")} onClick={() => setModal('settings')}><Icon name="settings"/></button>{(active || busy) && <button className="icon-button off" title={t("Отключиться")} onClick={() => void disconnect()}><Icon name="exit"/></button>}</div>
+      <div className="profile"><div className={`avatar small ${snapshot.speaking ? 'speaking' : ''}`}>{(nickname || t("Вы")).slice(0, 1).toUpperCase()}</div><span>{nickname || t("Ваш профиль")}</span><ConnectionStatus compact state={snapshot.state} label={states[snapshot.state] || snapshot.state} delay={snapshot.rtt} loss={snapshot.packetLoss}/><AudioQuickMenu kind="input" settings={settings} update={update} devices={devices} onOpen={refreshDevices}><button className={`icon-button ${muted || deafened ? 'off' : ''}`} aria-pressed={muted || deafened} title={t("Микрофон")} onClick={() => setMuted(v => !v)}><Icon name={muted || deafened ? 'mic-off' : 'mic'}/></button></AudioQuickMenu><AudioQuickMenu kind="output" settings={settings} update={update} devices={devices} onOpen={refreshDevices}><button className={`icon-button ${deafened ? 'off' : ''}`} aria-pressed={deafened} title={t("Входящий звук")} onClick={() => setDeafened(v => !v)}><Icon name={deafened ? 'headphones-off' : 'headphones'}/></button></AudioQuickMenu><button className="icon-button" title={t("Настройки")} onClick={() => setModal('settings')}><Icon name="settings"/></button>{(active || busy) && <button className="icon-button off" title={t("Отключиться")} onClick={() => void disconnect()}><Icon name="exit"/></button>}</div>
     </aside>
     <UpdateNotice blocked={modal !== null} active={active || busy} hosting={hostRunning}/>
     <main>
