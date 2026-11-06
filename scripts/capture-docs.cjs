@@ -1,23 +1,66 @@
-// Capture the real main/preload/renderer in an isolated profile, never a user's room.
+// Capture the real main/preload/renderer in an isolated profile and demo room.
 // Run after npm run build: electron scripts/capture-docs.cjs
-const { app } = require('electron');
+const { app, BrowserWindow, session } = require('electron');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const https = require('node:https');
+const { X509Certificate, createHash, randomBytes } = require('node:crypto');
+const { invitation } = require('../electron/address.cjs');
 app.setPath('userData', path.join(os.tmpdir(), 'voicecord-docs-' + process.pid));
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 delete process.env.VOICECORD_DEV_URL;
 process.argv.push('--smoke', '--offscreen-smoke');
-const timeout = setTimeout(() => { console.error('Documentation capture timed out'); app.exit(1); }, 30000);
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function until(check, label) {
+  for (let i = 0; i < 150; i++) {
+    if (await check()) return;
+    await wait(100);
+  }
+  throw new Error('Timed out waiting for ' + label);
+}
+
+function demoRequest(origin, fingerprint, endpoint, body, token) {
+  return new Promise((resolve, reject) => {
+    const request = https.request(origin + endpoint, {
+      method: 'POST', rejectUnauthorized: false, agent: false,
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+    }, response => {
+      let data = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { data += chunk; });
+      response.on('end', () => {
+        if (response.statusCode !== 200) return reject(new Error(endpoint + ' returned ' + response.statusCode));
+        try { resolve(JSON.parse(data)); } catch (error) { reject(error); }
+      });
+    });
+    request.on('socket', socket => socket.once('secureConnect', () => {
+      if (socket.getPeerX509Certificate()?.fingerprint256.replaceAll(':', '').toLowerCase() !== fingerprint) {
+        request.destroy(new Error('Unexpected demo server certificate'));
+      }
+    }));
+    request.on('error', reject);
+    request.setTimeout(5000, () => request.destroy(new Error('Demo server request timed out')));
+    request.end(JSON.stringify(body));
+  });
+}
+
+let handled = false;
 app.on('browser-window-created', (_event, win) => {
+  if (handled) return;
+  handled = true;
   win.setContentSize(1240, 860);
   win.webContents.once('did-finish-load', async () => {
-    const run = source => win.webContents.executeJavaScript(source);
-    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const run = source => win.webContents.executeJavaScript(`(async () => {
+      try { return await (${source}); } catch (error) { console.error(error.stack); throw error; }
+    })()`);
+    win.webContents.on('console-message', event => { if (event.level === 'error') console.error('renderer:', event.message); });
     const click = text => run(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent.startsWith(${JSON.stringify(text)})).click()`);
+    let vite, exitCode = 0;
+    const guests = [];
     try {
       const output = path.resolve(__dirname, '../website/assets');
       await fs.mkdir(output, { recursive: true });
@@ -55,12 +98,106 @@ app.on('browser-window-created', (_event, win) => {
         assert.equal(await run(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent===${JSON.stringify(test)}&&!b.disabled)`), true);
         await run(`document.querySelector('.voice-settings').scrollIntoView({block:'start'})`);
         await capture(`audio-settings${suffix}.png`);
+        const avatarFile = path.join(app.getPath('userData'), 'demo-avatar.png');
+        const png = await run(`(() => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 360; canvas.height = 256;
+          const ctx = canvas.getContext('2d');
+          const sky = ctx.createLinearGradient(0, 0, 0, 256);
+          sky.addColorStop(0, '#332456'); sky.addColorStop(1, '#a75684');
+          ctx.fillStyle = sky; ctx.fillRect(0, 0, 360, 256);
+          ctx.fillStyle = '#ffcb92'; ctx.beginPath(); ctx.arc(192, 101, 42, 0, Math.PI * 2); ctx.fill();
+          for (const [color, points] of [
+            ['#514379', [[0,219],[103,138],[157,187],[216,128],[360,223]]],
+            ['#27234e', [[0,225],[76,197],[153,217],[250,166],[360,222]]],
+          ]) {
+            ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0,256);
+            for (const point of points) ctx.lineTo(...point);
+            ctx.lineTo(360,256); ctx.fill();
+          }
+          return canvas.toDataURL().split(',')[1];
+        })()`);
+        await fs.writeFile(avatarFile, Buffer.from(png, 'base64'));
+        const devtools = win.webContents.debugger;
+        devtools.attach('1.3');
+        try {
+          const { root } = await devtools.sendCommand('DOM.getDocument');
+          const { nodeId } = await devtools.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector: '.profile-avatar input[type=file]' });
+          await devtools.sendCommand('DOM.setFileInputFiles', { nodeId, files: [avatarFile] });
+        } finally { devtools.detach(); }
+        await until(() => run('!!document.querySelector(".avatar-crop-preview")'), 'avatar crop');
+        assert.equal(await run('getComputedStyle(document.querySelector(".avatar-crop-preview")).borderRadius'), '50%');
+        await capture(`avatar-crop${suffix}.png`);
+        await run(`document.querySelector('.avatar-editor .primary').click()`);
+        await until(() => run('!document.querySelector(".avatar-editor")'), 'saved avatar');
+        await run(`document.querySelector('.settings-modal [aria-label=${JSON.stringify(close)}]').click()`);
+        const demo = language === 'en' ? {
+          room: 'Weekend lobby', names: ['Maya', 'Alex'],
+          messages: ['I’ve set up a private lobby for tonight.', 'Nice! I’ll be ready in five.', 'I’m in. Let’s start with a warm-up round.'],
+        } : {
+          room: 'Вечерняя комната', names: ['Майя', 'Алекс'],
+          messages: ['Я создала закрытое лобби на вечер.', 'Отлично! Буду готов через пять минут.', 'Я уже здесь. Начнём с разминочного раунда.'],
+        };
+        const password = randomBytes(18).toString('base64url');
+        await click(create);
+        await until(() => run('!!document.querySelector("dialog[open] .encryption-toggle")'), 'room creation form');
+        await run(`(() => {
+          const form = document.querySelector('dialog[open] form');
+          const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+          for (const [index, value] of ${JSON.stringify([[0, demo.room], [1, password], [2, '36443']])}) {
+            const field = form.querySelectorAll('input')[index];
+            set.call(field, value); field.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          document.querySelector('.encryption-toggle input').click();
+        })()`);
+        await run(`document.querySelector('dialog[open] form').requestSubmit()`);
+        await until(() => run('!!document.querySelector(".room-content dialog[open] .host-stop") && !!document.querySelector(".chat-compose")'), 'demo room and invitation');
         await run(`document.querySelector('dialog [aria-label=${JSON.stringify(close)}]').click()`);
+        const status = await run('window.desktop.hostStatus()');
+        const { origin, e2eeKey } = invitation(status.localAddress);
+        if (!vite) {
+          const { createServer } = await import('vite');
+          vite = await createServer({ server: { host: '127.0.0.1', port: 0 } });
+          await vite.listen();
+        }
+        const guestSession = session.fromPartition('docs-demo-' + language + '-' + process.pid);
+        guestSession.setPermissionRequestHandler((_win, _permission, done) => done(true));
+        guestSession.setPermissionCheckHandler(() => true);
+        guestSession.setCertificateVerifyProc((request, callback) => {
+          callback(new X509Certificate(request.certificate.data).fingerprint256.replaceAll(':', '').toLowerCase() === status.fingerprint ? 0 : -3);
+        });
+        const { chatKey, encryptChat } = await import('../src/chat.ts');
+        const e2eeKeyId = createHash('sha256').update(Buffer.from(e2eeKey, 'hex')).digest('hex');
+        for (const [index, nickname] of demo.names.entries()) {
+          const credentials = await demoRequest(origin, status.fingerprint, '/api/connect', { nickname, password, e2ee: true, e2eeKeyId });
+          const guest = new BrowserWindow({ show: false, webPreferences: { session: guestSession, sandbox: true, offscreen: true, backgroundThrottling: false } });
+          guests.push(guest);
+          await guest.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/tests/voice.html`);
+          await until(() => guest.webContents.executeJavaScript('window.ready === true'), 'demo guest');
+          await guest.webContents.executeJavaScript(`window.start(${JSON.stringify({ ...credentials, e2eeKey })})`);
+          await guest.webContents.executeJavaScript('window.voice.setMute(true, false)');
+          const packet = await encryptChat(await chatKey(e2eeKey, credentials.chatFeed), demo.messages[index]);
+          await demoRequest(origin, status.fingerprint, '/api/chat', packet, credentials.chatToken);
+        }
+        await win.webContents.insertText(demo.messages[2]);
+        await run(`document.querySelector('.chat-compose').requestSubmit()`);
+        await until(() => run('document.querySelectorAll(".person-card").length === 3 && document.querySelectorAll(".chat-message").length === 3'), 'demo chat');
+        assert.equal(await run('document.querySelectorAll("dialog[open]").length'), 0, 'no invitation is visible in the capture');
+        await capture(`room-chat${suffix}.png`);
+        while (guests.length) guests.pop().destroy();
+        await run('window.desktop.stopHost()');
+        await until(() => run('!!document.querySelector(".home-actions")'), 'return to lobby');
       }
-      console.log('PASS: real app screenshots, isolated profile, synthetic microphone; no room or invitation created.');
-      clearTimeout(timeout);
-      app.quit();
-    } catch (error) { console.error(error); clearTimeout(timeout); app.exit(1); }
+      console.log('PASS: bilingual app screenshots with a temporary E2EE room and demo profiles.');
+    } catch (error) {
+      console.error(error);
+      exitCode = 1;
+    } finally {
+      while (guests.length) guests.pop().destroy();
+      await vite?.close();
+      await run('window.desktop.stopHost()').catch(() => {});
+      app.exit(exitCode);
+    }
   });
 });
 require('../electron/main.cjs');

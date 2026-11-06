@@ -4,9 +4,9 @@
 
 Voicecord is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
 
-**[Download Voicecord 0.3.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.3.0/Voicecord.Setup.0.3.0.exe)** · [Get started](#get-started) · [Self-hosting guide (Russian)](docs/SERVER.md)
+**[Download Voicecord 0.4.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.4.0/Voicecord.Setup.0.4.0.exe)** · [Get started](#get-started) · [Self-hosting guide (Russian)](docs/SERVER.md)
 
-![Voicecord home screen with options to create a room and join by invitation](website/assets/home-en.png)
+![Voicecord room with three participants, call controls and encrypted text chat](website/assets/room-chat-en.png)
 
 ## What you can do with Voicecord
 
@@ -21,7 +21,7 @@ Voicecord takes inspiration from **Discord** for easy-to-join voice rooms and in
 - **Set up audio the way you like it.** Choose your microphone and headphones, listen to a mic test, and adjust each person's volume separately.
 - **Talk when you speak or hold a key.** Choose voice activation or Push-to-Talk. Use global shortcuts for microphone mute and incoming audio while your game is open.
 - **Manage your call.** Use the controls above the chat divider to mute, switch audio devices, or leave. Hover over an avatar to reveal the participant’s name and signal icon. Rest the pointer on the icon to see their server ping and incoming audio packet loss.
-- **Set a profile picture.** Under **Settings → About me**, choose a PNG, JPEG, or WebP, then zoom and position the crop. Participants see your current nickname and avatar in the room and in retained chat history.
+- **Set a profile picture.** Under **Settings → About me**, choose a PNG, JPEG, or WebP. Zoom and position the image in the circular preview. Participants see your current nickname and avatar in the room and in retained chat history.
 - **Make speech easier to hear.** RNNoise reduces background noise on your PC, echo cancellation reduces echo, and automatic gain control evens out the level of your voice.
 - **Return to your favorite rooms.** Bookmark a server so you can find it again quickly.
 - **Send messages during a call.** The room opens with chat below the participant cards. Press Enter to send or Shift+Enter for a new line. You can send up to three messages per second and see when someone else is typing. Drag the divider to resize either section. Hover over **Features** to see how the room handles encryption and history. Built-in E2EE rooms keep history in memory until the server stops. Standalone servers configured with E2EE and a key fingerprint keep encrypted history for up to seven days.
@@ -37,7 +37,7 @@ Voicecord takes inspiration from **Discord** for easy-to-join voice rooms and in
 
 ## Get started
 
-1. **Install Voicecord.** [Download the installer](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.3.0/Voicecord.Setup.0.3.0.exe) on each Windows PC. Choose English or Russian.
+1. **Install Voicecord.** [Download the installer](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.4.0/Voicecord.Setup.0.4.0.exe) on each Windows PC. Choose English or Russian.
 2. **Pick a nickname.** Open **Settings → About me** and enter a nickname. You can test your microphone under **Voice**.
 3. **Get your friends together.** Select **Create a room**, give the room a name, and choose a password of at least 8 characters. Share the full invitation privately. Your friend opens **Join a room** and pastes the link.
 
@@ -100,4 +100,4 @@ Voicecord is licensed under [GNU AGPL-3.0-only](LICENSE). Third-party components
 
 ## Project status
 
-**0.3.0 is a public pre-release.** It adds participant counts and drag-to-reorder bookmarks, quick audio device selection, and tray startup. Counts on a VPS require server 0.3.0. Corresponding source and SHA-256 are available in the [v0.3.0 release](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.3.0). [Changelog](CHANGELOG.md).
+**0.4.0 is a public pre-release.** It adds room chat, avatars, and a resizable call layout. Encrypted chat history on a VPS requires server 0.4.0 with E2EE and a configured key fingerprint. See the [v0.4.0 release](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.4.0) for the corresponding source and SHA-256. [Changelog](CHANGELOG.md).
