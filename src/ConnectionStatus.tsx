@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { t, useLanguage } from './i18n';
 import { Icon } from './Controls';
@@ -10,6 +10,15 @@ export function ConnectionStatus({ name, delay, loss }: { name: string; delay?: 
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLButtonElement>(null);
   const tooltip = useRef<HTMLDivElement>(null);
+  const hoverTimer = useRef<number>(undefined);
+
+  useEffect(() => () => window.clearTimeout(hoverTimer.current), []);
+
+  const hide = () => {
+    window.clearTimeout(hoverTimer.current);
+    setOpen(false);
+  };
+
   useLayoutEffect(() => {
     if (!open) return;
     const place = () => {
@@ -35,9 +44,9 @@ export function ConnectionStatus({ name, delay, loss }: { name: string; delay?: 
   return <span className="person-network-wrap">
     <button ref={anchor} type="button" className={`icon-button person-network ping-${pingLevel(delay)}`}
       aria-label={t("Соединение {0}", name)} aria-describedby={open ? id : undefined}
-      onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onClick={() => setOpen(true)}
-      onKeyDown={event => { if (event.key === 'Escape') setOpen(false); }}>
+      onMouseEnter={() => { hoverTimer.current = window.setTimeout(() => setOpen(true), 250); }} onMouseLeave={hide}
+      onFocus={() => setOpen(true)} onBlur={hide} onClick={() => setOpen(true)}
+      onKeyDown={event => { if (event.key === 'Escape') hide(); }}>
       <Icon name="signal" size={15}/>
     </button>
     {open && createPortal(<div ref={tooltip} className="connection-popover" role="tooltip" id={id}>
