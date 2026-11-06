@@ -2,6 +2,17 @@
 
 ## Unreleased / Не выпущено
 
+## 0.3.0 — 2026-11-06 — Bookmarks and quick audio / Закладки и быстрый выбор звука
+
+- Added persistent local server names editable from the bookmark context menu. / Добавлено переименование через ПКМ по закладке; имя сохраняется и отображается в комнате и закладке.
+- Added a filled star toggle to add/remove bookmarks and drag-and-drop to persist their order. / Звёздочка добавляет и удаляет закладки, заполняется для избранного; порядок закладок меняется перетаскиванием и сохраняется.
+- Added optional Windows sign-in startup, including minimized-to-tray startup. / Добавлен автозапуск при входе в Windows с возможностью запуска свёрнутым в трее.
+- Added participant-count badges on bookmarks and a cached aggregate server presence endpoint. Other rooms refresh every 10 seconds while the window is visible and focused; older or unavailable servers show `?`. / Добавлены счётчики участников на закладках и серверный запрос количества участников; другие комнаты обновляются каждые 10 секунд, пока окно видно и активно, старые или недоступные серверы показывают `?`.
+- Added microphone/headphone arrow menus for device selection and volume without opening Settings. / Стрелки рядом с микрофоном и наушниками открывают выбор устройства и громкости без перехода в настройки.
+- Clicking the active server returns to its room without reconnecting. The home lobby remains accessible during a voice session. / Нажатие на активный сервер возвращает в комнату без переподключения; стартовое лобби доступно во время голосового соединения.
+- Fixed sharing the currently connected remote room while a separate built-in host is running. / Исправлено приглашение в текущую удалённую комнату при одновременно работающем селфхосте.
+- Validated client build, 75 client tests, Go tests/vet and Electron flows with synthetic audio in Russian and English. Windows sign-in startup and real-device/external-network acceptance remain to be checked. / Проверены сборка, 75 тестов клиента, Go test/vet и сценарии Electron с синтетическим аудио на русском и английском; автозапуск при входе в Windows, реальные аудиоустройства и внешняя сеть требуют проверки.
+
 ## 0.2.0 — 2026-11-05 — Languages and verified updates / Языки и обновления
 
 - Added English/Russian language selection in the installer and Settings, with translated screens, tray and connection-quality tooltips. / Добавлены выбор языка установщика и приложения, перевод экранов, трея и качества связи.

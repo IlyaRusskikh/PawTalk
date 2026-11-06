@@ -5,7 +5,7 @@
 извне постоянный IP. Исходники, Node.js, Go, Windows-клиент и компилятор на VPS
 не нужны. Домен и публичный TLS-сертификат также не требуются.
 
-Образ: `ghcr.io/ilyarusskikh/voicecord-server:0.2.0`.
+Образ: `ghcr.io/ilyarusskikh/voicecord-server:0.3.0`.
 Для установки используется готовый публичный образ: публиковать его самостоятельно
 или настраивать GitHub Actions не требуется.
 
@@ -123,7 +123,7 @@ apt-get install -y ca-certificates curl nano
 ```sh
 install -d -m 755 /opt/voicecord
 cd /opt/voicecord
-VOICECORD_RELEASE=0.2.0
+VOICECORD_RELEASE=0.3.0
 curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/compose.server.ghcr.yaml" -o compose.server.ghcr.yaml
 curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/.env.server.example" -o .env.server.example
 if [ ! -e .env ]; then cp .env.server.example .env; fi
@@ -135,7 +135,7 @@ nano .env
 Замените пример IP на публичный IP VPS и выберите режим E2EE по пояснениям ниже:
 
 ```dotenv
-VOICECORD_IMAGE=ghcr.io/ilyarusskikh/voicecord-server:0.2.0
+VOICECORD_IMAGE=ghcr.io/ilyarusskikh/voicecord-server:0.3.0
 VOICECORD_PUBLIC_IP=203.0.113.10
 VOICECORD_PORT=18443
 VOICECORD_E2EE=false
