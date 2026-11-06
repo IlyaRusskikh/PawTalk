@@ -102,6 +102,12 @@ app.on('browser-window-created',(_e,win)=>{
      await until(()=>js('document.activeElement === document.querySelector(".chat-compose textarea") && !document.querySelector("dialog[open]")'),'chat receives focus after dismissing the invitation');
    };
    await closeHostInvite();
+   const toggleDeafen = () => js(`document.querySelector('[title="Входящий звук"]').click()`);
+   const micPressed = () => js(`document.querySelector('[title="Микрофон"]').getAttribute('aria-pressed')`);
+   await toggleDeafen();
+   await until(async () => (await micPressed()) === 'true', 'deafen visibly mutes the microphone in an active room');
+   await toggleDeafen();
+   await until(async () => (await micPressed()) === 'false', 'turning sound back on restores the microphone');
    assert.equal(await js('getComputedStyle(document.querySelector(".person-card .avatar")).borderRadius'),'50%');
    assert.equal(await js('getComputedStyle(document.querySelector(".person-details")).visibility'),'hidden');
    const paneHeights = () => js(`['.room-participants','.room-chat'].map(selector => document.querySelector(selector).getBoundingClientRect().height)`);

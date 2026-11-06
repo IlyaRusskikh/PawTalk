@@ -62,10 +62,7 @@ app.whenReady().then(async () => {
   await click('Удалить закладку'); await wait();
   assert.equal(await run(`document.querySelectorAll('.bookmark-orb').length`), 0);
   assert.equal(await run(`window.testCalls().filter(v=>v[0]==='save').at(-1)[1].password`), null);
-  await run(`document.querySelector('[title="Входящий звук"]').click()`); await wait();
-  assert.equal(await run(`document.querySelector('[title="Микрофон"]').getAttribute('aria-pressed')`), 'true', 'deafen visibly mutes mic');
-  await run(`document.querySelector('[title="Входящий звук"]').click()`); await wait();
-  assert.equal(await run(`document.querySelector('[title="Микрофон"]').getAttribute('aria-pressed')`), 'false');
+  assert.equal(await run(`!!document.querySelector('.call-controls')`), false, 'failed connection leaves call controls hidden');
   await run(`document.querySelector('[title="Настройки"]').click()`); await wait();
   assert.equal(await run(`document.querySelector('dialog h2').textContent`), 'Настройки');
   assert.equal(await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).querySelector('input').checked`),false);
