@@ -2,7 +2,9 @@ const { t } = require('../shared/i18n.cjs');
 const { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage, powerMonitor, globalShortcut, net, safeStorage, clipboard } = require('electron');
 const path = require('node:path');
 const { localInvitation, verifyInvitation, connectionError } = require('./connection.cjs');
-const { X509Certificate, createHash } = require('node:crypto');
+const { X509Certificate, createHash, randomUUID } = require('node:crypto');
+const { requestChat, validChatAccess } = require('./chat.cjs');
+const { profileSigner } = require('./profile.cjs');
 const { serverURL, invitation } = require('./address.cjs');
 const { diagnosticCommand } = require('./diagnostic-command.cjs');
 const { SelfHost } = require('./selfhost.cjs');
@@ -17,6 +19,8 @@ let updater;
 let startup;
 let language = 'ru';
 let credentials;
+let signProfile;
+let chatAccess;
 let pendingInvitation = '';
 function acceptInvitation(args) {
   for (const address of args) {
@@ -173,14 +177,29 @@ function registerIPC() {
       if (e2eeKey != null && !/^[a-f0-9]{64}$/.test(e2eeKey)) return { error: t("Неверный ключ E2EE.") };
       await verifyInvitation(address);
       trustInvitation(address);
-      const response = await net.fetch(`${base}/api/connect`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, redirect: 'error',
-        body: JSON.stringify({ nickname: input.nickname, password: invitation(input.address)?.password ?? input.password, ...(e2eeKey ? { e2ee: true, e2eeKeyId: createHash('sha256').update(Buffer.from(e2eeKey, 'hex')).digest('hex') } : {}) }), signal: AbortSignal.timeout(12000),
-      });
-      if (Number(response.headers.get('content-length') || 0) > 16384) throw new Error(t("Некорректный ответ сервера"));
-      const raw = await response.text(); if (raw.length > 16384) throw new Error(t("Некорректный ответ сервера"));
-      const body = JSON.parse(raw);
-      if (!response.ok) return { error: typeof body.error === 'string' ? t(body.error) : t("Ошибка сервера: {0}", response.status) };
+      const login = { nickname: input.nickname, password: invitation(input.address)?.password ?? input.password, ...(e2eeKey ? { e2ee: true, e2eeKeyId: createHash('sha256').update(Buffer.from(e2eeKey, 'hex')).digest('hex') } : {}) };
+      const scope = invitation(address)?.fingerprint ?? base;
+      const join = async () => {
+        let profile;
+        if (e2eeKey) {
+          const policy = await net.fetch(`${base}/api/config`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
+          if (policy.ok) {
+            const config = await policy.text();
+            if (config.length <= 1024) profile = await signProfile(scope, JSON.parse(config).profileChallenge, input.nickname);
+          } else await policy.body?.cancel();
+        }
+        const response = await net.fetch(`${base}/api/connect`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, redirect: 'error',
+          body: JSON.stringify({ ...login, ...(profile ? { profile } : {}) }), signal: AbortSignal.timeout(12000),
+        });
+        if (Number(response.headers.get('content-length') || 0) > 16384) throw new Error(t("Некорректный ответ сервера"));
+        const raw = await response.text(); if (raw.length > 16384) throw new Error(t("Некорректный ответ сервера"));
+        const body = JSON.parse(raw);
+        if (!response.ok) return { error: typeof body.error === 'string' ? t(body.error) : t("Ошибка сервера: {0}", response.status) };
+        return body;
+      };
+      const body = await join();
+      if (body.error) return { error: body.error };
       if (body.e2eeRequired === true && !e2eeKey) return { error: t("Для комнаты нужен ключ E2EE из приглашения.") };
       if (e2eeKey && body.e2eeRequired !== true) return { error: t("Приглашение требует E2EE, но сервер не подтвердил защищённый режим.") };
       const mediaURL = new URL(body.url);
@@ -199,10 +218,25 @@ function registerIPC() {
       // Never accept a media key supplied by the server, even as an extra response field.
       const local = hosting.status();
       const ownHost = local.running && !!invitation(address) && invitation(address).fingerprint === invitation(local.localAddress)?.fingerprint;
-      return { url: body.url, token: body.token, identity: body.identity, ownHost, e2eeRequired: body.e2eeRequired === true, ...(e2eeKey ? { e2eeKey } : {}) };
+      const profileId = typeof body.profileId === 'string' && /^[a-f0-9]{64}$/.test(body.profileId) ? body.profileId : undefined;
+      chatAccess = e2eeKey && validChatAccess(body)
+        ? { handle: randomUUID(), feed: body.chatFeed, token: body.chatToken, profileId, base, join, renewAfter: 0 }
+        : undefined;
+      return { url: body.url, token: body.token, identity: body.identity, ownHost, e2eeRequired: body.e2eeRequired === true, ...(e2eeKey ? { e2eeKey } : {}),
+        ...(chatAccess ? { chat: { handle: chatAccess.handle, feed: chatAccess.feed, ephemeral: body.chatEphemeral === true, profileId } } : {}) };
     } catch (error) {
       return { error: connectionError(error) };
     }
+  });
+  ipcMain.handle('chat-request', async (event, handle, input) => {
+    authorized(event);
+    const access = chatAccess;
+    if (!access || access.handle !== handle) throw new Error('Chat is disconnected');
+    return requestChat(net.fetch.bind(net), access, input);
+  });
+  ipcMain.handle('chat-close', (event, handle) => {
+    authorized(event);
+    if (chatAccess?.handle === handle) chatAccess = undefined;
   });
   ipcMain.handle('configure-keys', (event, config) => {
     authorized(event);
@@ -262,6 +296,7 @@ else {
       encryptString: value => safeStorage.encryptStringAsync(value),
       decryptString: async value => (await safeStorage.decryptStringAsync(value)).result,
     });
+    signProfile = profileSigner(credentials);
     session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
       callback(contents === win?.webContents && permission === 'media' && details.mediaTypes?.every(type => type === 'audio'));
     });

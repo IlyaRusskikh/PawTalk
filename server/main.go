@@ -23,8 +23,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"unicode"
-	"unicode/utf8"
 )
 
 const roomName = "common"
@@ -42,11 +40,13 @@ type attempt struct {
 	start time.Time
 }
 type app struct {
-	cfg       config
-	mu        sync.Mutex
-	attempts  map[string]attempt
-	hashSlots chan struct{}
-	now       func() time.Time
+	cfg            config
+	chat           *chatStore
+	mu             sync.Mutex
+	attempts       map[string]attempt
+	usedChallenges map[string]int64
+	hashSlots      chan struct{}
+	now            func() time.Time
 }
 
 func parseHash(encoded string) ([]byte, []byte, error) {
@@ -145,10 +145,11 @@ func (a *app) connect(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var body struct {
-		Nickname  string `json:"nickname"`
-		Password  string `json:"password"`
-		E2EE      bool   `json:"e2ee"`
-		E2EEKeyID string `json:"e2eeKeyId"`
+		Nickname  string        `json:"nickname"`
+		Password  string        `json:"password"`
+		E2EE      bool          `json:"e2ee"`
+		E2EEKeyID string        `json:"e2eeKeyId"`
+		Profile   *profileProof `json:"profile"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -164,9 +165,9 @@ func (a *app) connect(w http.ResponseWriter, r *http.Request) {
 		fail(w, 403, "Ключ E2EE не соответствует комнате. Получите актуальное приглашение.")
 		return
 	}
-	body.Nickname = strings.TrimSpace(body.Nickname)
-	invalidName := strings.IndexFunc(body.Nickname, func(r rune) bool { return unicode.IsControl(r) }) >= 0
-	if !utf8.ValidString(body.Nickname) || utf8.RuneCountInString(body.Nickname) < 1 || utf8.RuneCountInString(body.Nickname) > 32 || invalidName || len(body.Password) > 1024 {
+	rawName := body.Nickname
+	body.Nickname = strings.TrimSpace(rawName)
+	if !validNickname(body.Nickname) || len(body.Password) > 1024 {
 		fail(w, 400, "Никнейм должен содержать от 1 до 32 символов без управляющих знаков")
 		return
 	}
@@ -180,6 +181,15 @@ func (a *app) connect(w http.ResponseWriter, r *http.Request) {
 	if !verifyPassword(a.cfg.PasswordHash, body.Password) {
 		fail(w, 401, "Неверный пароль сервера")
 		return
+	}
+	var profileID string
+	if body.Profile != nil && a.chat != nil {
+		var ok bool
+		profileID, ok = a.verifyProfile(*body.Profile, rawName)
+		if !ok {
+			fail(w, 403, "Invalid profile proof")
+			return
+		}
 	}
 	identity := make([]byte, 16)
 	if _, e = rand.Read(identity); e != nil {
@@ -196,15 +206,27 @@ func (a *app) connect(w http.ResponseWriter, r *http.Request) {
 	if local, ok := r.Context().Value(mediaURLKey{}).(string); ok {
 		mediaURL = local
 	}
-	respond(w, 200, map[string]any{"url": mediaURL, "token": token, "identity": id, "room": roomName, "expiresIn": 300, "e2eeRequired": a.cfg.RequireE2EE})
+	result := map[string]any{"url": mediaURL, "token": token, "identity": id, "room": roomName, "expiresIn": 300, "e2eeRequired": a.cfg.RequireE2EE}
+	if a.chat != nil {
+		result["chatFeed"] = a.chat.feed
+		result["chatToken"] = a.chatToken(body.Nickname, profileID)
+		result["chatEphemeral"] = a.chat.ephemeral
+		if profileID != "" {
+			result["profileId"] = profileID
+		}
+	}
+	respond(w, 200, result)
 }
 func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/presence", a.presenceHandler())
 	mux.HandleFunc("POST /api/connect", a.connect)
-	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
-		respond(w, 200, map[string]any{"e2eeRequired": a.cfg.RequireE2EE})
-	})
+	if a.chat != nil {
+		mux.HandleFunc("GET /api/chat", a.chatHistory)
+		mux.HandleFunc("POST /api/chat", a.chatPost)
+		mux.HandleFunc("POST /api/chat/profile", a.chatProfile)
+	}
+	mux.HandleFunc("GET /api/config", a.roomConfig)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]string{"status": "ok"}) })
 	return mux
 }

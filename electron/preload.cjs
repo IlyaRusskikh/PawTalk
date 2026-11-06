@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('desktop', {
   cancelHostCheck: () => ipcRenderer.invoke('host-check-cancel'),
   onHostChanged: (fn) => listen('host-changed', fn),
   connect: (input) => ipcRenderer.invoke('connect', input),
+  chatRequest: (handle, input) => ipcRenderer.invoke('chat-request', handle, input),
+  chatClose: (handle) => ipcRenderer.invoke('chat-close', handle),
   diagnose: (address) => ipcRenderer.invoke('connection-diagnose', address),
   capabilities: () => ipcRenderer.invoke('capabilities'),
   loadPassword: (address) => ipcRenderer.invoke('credentials-load', address),

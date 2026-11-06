@@ -20,11 +20,23 @@
 {"url":"wss://203.0.113.10/rtc","token":"<JWT>","identity":"<random-id>","room":"common","expiresIn":300}
 ```
 
-Токен HS256 содержит `iss`, `sub`, `name`, `nbf`, `exp` и LiveKit video grant: `roomJoin=true`, комната `common`, `canPublish=true`, `canSubscribe=true`, `canPublishSources=["microphone"]`, `canPublishData=false`, `canUpdateOwnMetadata=false`. Права администратора не выдаются. Начальный TTL — пять минут; LiveKit управляет обновлением токена установленной сессии.
+Токен HS256 содержит `iss`, `sub`, `name`, `nbf`, `exp` и LiveKit video grant с `roomJoin=true`, комнатой `common`, `canPublish=true`, `canSubscribe=true`, `canPublishSources=["microphone"]`, `canPublishData=true` и `canUpdateOwnMetadata=false`. Права администратора не выдаются. Начальный TTL составляет пять минут. LiveKit управляет обновлением токена установленной сессии.
 
 Ошибки: `{"error":"сообщение"}` с HTTP 400, 401, 413/400 для большого тела, 415, 429 или 503. При превышении пяти запросов подключения с одного IP в минуту возвращается `Retry-After: 60`. Максимум четыре параллельных PBKDF2-проверки во всём процессе. После рестарта лимиты сбрасываются.
 
 Пароли, токены и тела запросов не журналируются. Ответы имеют `Cache-Control: no-store`. CORS не открыт: API вызывается main-процессом Electron, не произвольным сайтом.
+
+## GET /api/chat и POST /api/chat
+
+На встроенном сервере с E2EE и на отдельном сервере с E2EE и заданным отпечатком ключа успешный вход дополнительно возвращает `chatFeed`, `chatToken` и `chatEphemeral`. Значение `chatEphemeral: true` означает, что лента хранится в памяти и очищается при остановке сервера. Токен действует 12 часов и передаётся в `Authorization: Bearer …`. Клиент обновляет его через обычный вход в API.
+
+`GET /api/chat?after=0` возвращает `first` с первым доступным номером (0 для пустой ленты) и массив `messages` в порядке возрастания `id`. При следующем запросе клиент передаёт самый большой полученный номер в `after`. Записи содержат `id`, `author`, `sent` (Unix-время в миллисекундах), `requestId`, `nonce` и `ciphertext`. Сообщения подтверждённого профиля также содержат `authorId`.
+
+`GET /api/config` выдаёт одноразовый `profileChallenge`, когда сервер поддерживает историю чата. Клиент передаёт в `POST /api/connect` объект `profile` с публичным ключом Ed25519 (`key`), `challenge` и `signature`. Ключ и подпись кодируются в Base64URL без дополнения. Подписывается строка `voicecord-profile-v1\n<challenge>\n<nickname>` с исходным никнеймом запроса. Ответ содержит `profileId` с SHA-256 публичного ключа, а токен чата привязан к этому ID.
+
+`POST /api/chat/profile` обновляет никнейм подтверждённого автора и, при наличии, зашифрованный аватар. В теле передаются `nickname` и необязательные `nonce` и `ciphertext` в Base64. Чтобы получить актуальные профили вместе с сообщениями, клиент добавляет `profilesAfter=0` к первому запросу истории. Затем передаёт наибольшую полученную `revision`. Профили содержат `id`, `revision`, `nickname` и зашифрованный аватар. Новый клиент получает профиль автора даже в его отсутствие.
+
+`POST /api/chat` принимает JSON с `requestId` (32 строчных шестнадцатеричных символа), `nonce` (12 байт в Base64) и `ciphertext` (до 4112 байт в Base64). Ответ содержит `id` сохранённого сообщения. Повтор того же пакета с тем же `requestId` возвращает исходный номер, пока запись доступна. Другой пакет с тем же `requestId` получает HTTP 409.
 
 ## GET /healthz
 

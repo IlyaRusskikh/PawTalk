@@ -169,9 +169,9 @@ func mediaReady() bool {
 	return res.StatusCode == http.StatusOK
 }
 
-func standaloneHandler(state serverState) http.Handler {
+func standaloneHandler(state serverState, chat *chatStore) http.Handler {
 	required, keyID, _ := encryptionPolicy() // Validated by standalone before accepting connections.
-	a := &app{cfg: config{APIKey: state.APIKey, APISecret: state.APISecret, PasswordHash: state.PasswordHash, LivekitURL: "wss://" + net.JoinHostPort(state.IP, fmt.Sprint(standalonePort)) + "/rtc", RequireE2EE: required, E2EEKeyID: keyID}, attempts: make(map[string]attempt), hashSlots: make(chan struct{}, 4), now: time.Now}
+	a := &app{cfg: config{APIKey: state.APIKey, APISecret: state.APISecret, PasswordHash: state.PasswordHash, LivekitURL: "wss://" + net.JoinHostPort(state.IP, fmt.Sprint(standalonePort)) + "/rtc", RequireE2EE: required, E2EEKeyID: keyID}, chat: chat, attempts: make(map[string]attempt), hashSlots: make(chan struct{}, 4), now: time.Now}
 	target, _ := url.Parse(mediaAddress)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	a.cfg.PresenceURL = mediaAddress
@@ -210,7 +210,8 @@ func standalone(args []string) error {
 		}
 		args = args[1:]
 	}
-	if _, _, err := encryptionPolicy(); err != nil {
+	required, keyID, err := encryptionPolicy()
+	if err != nil {
 		return err
 	}
 	if raw := os.Getenv("VOICECORD_PORT"); raw != "" {
@@ -342,11 +343,17 @@ func standalone(args []string) error {
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
-	srv := &http.Server{Addr: fmt.Sprintf(":%d", standalonePort), Handler: standaloneHandler(state), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}}
-	listener, err := net.Listen("tcp", srv.Addr)
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", standalonePort))
 	if err != nil {
 		return err
 	}
+	defer listener.Close()
+	chat, closeChat, err := startRoomChat(filepath.Join(dir, "chat.sqlite"), required, keyID)
+	if err != nil {
+		return fmt.Errorf("open chat history: %w", err)
+	}
+	defer closeChat()
+	srv := &http.Server{Handler: standaloneHandler(state, chat), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}}
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(tls.NewListener(listener, srv.TLSConfig)) }()
 	log.Printf("Voicecord ready. Invitation: %s", invitation(state))

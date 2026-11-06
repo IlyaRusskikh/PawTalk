@@ -36,6 +36,7 @@ No endorsement or affiliation with Krisp or Discord is implied.
 - LiveKit Server 1.13.11: LiveKit, Inc. and contributors, Apache License 2.0. The official Windows binary and `server/LIVEKIT-LICENSE` are bundled as resources. Upstream: https://github.com/livekit/livekit.
 - `@silentbot1/nat-api` 0.4.9: Brad Marsden and contributors, MIT. See `licenses/nat-api.MIT.txt`. Used for temporary UPnP and NAT-PMP mappings.
 - Go runtime and standard library: The Go Authors, BSD 3-clause. See the bundled `server/GO-LICENSE`.
+- SQLite and its Go driver (`modernc.org/sqlite`) store the chat ciphertext. See `licenses/go-runtime.txt` for their notices and those of the Go dependencies pinned in `server/go.mod`.
 
 ## Corresponding source
 

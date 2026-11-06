@@ -77,7 +77,7 @@ func TestStandaloneIgnoresForwardedHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := standaloneHandler(state)
+	handler := standaloneHandler(state, nil)
 	for i := 0; i < 6; i++ {
 		r := httptest.NewRequest("POST", "/api/connect", strings.NewReader(`{}`))
 		r.RemoteAddr = "127.0.0.1:1234"

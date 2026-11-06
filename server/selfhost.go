@@ -69,7 +69,7 @@ func roomCertificateFor(addresses []string, lifetime time.Duration) (tls.Certifi
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}, hex.EncodeToString(fingerprint[:]), nil
 }
 
-// Ephemeral configuration arrives over stdin, never in process arguments or on disk.
+// Runtime configuration arrives over stdin.
 func selfhost() error {
 	var c struct {
 		Port            int
@@ -131,7 +131,17 @@ func selfhost() error {
 		return e
 	}
 	cfg := config{APIKey: c.Key, APISecret: c.Secret, PasswordHash: "pbkdf2-sha256$600000$" + b64.EncodeToString(salt) + "$" + b64.EncodeToString(digest), RequireE2EE: c.RequireE2EE, E2EEKeyID: c.E2EEKeyID}
-	a := &app{cfg: cfg, attempts: make(map[string]attempt), hashSlots: make(chan struct{}, 4), now: time.Now}
+	listener, e := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", c.Port))
+	if e != nil {
+		return e
+	}
+	defer listener.Close()
+	chat, closeChat, e := startRoomChat(":memory:", cfg.RequireE2EE, cfg.E2EEKeyID)
+	if e != nil {
+		return fmt.Errorf("open chat history: %w", e)
+	}
+	defer closeChat()
+	a := &app{cfg: cfg, chat: chat, attempts: make(map[string]attempt), hashSlots: make(chan struct{}, 4), now: time.Now}
 	a.cfg.PresenceURL = fmt.Sprintf("http://127.0.0.1:%d", c.MediaPort)
 	apiHandler := a.handler()
 	target, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", c.MediaPort))
@@ -153,14 +163,9 @@ func selfhost() error {
 		// Each request gets its own config: local host and remote guests use different addresses.
 		apiHandler.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mediaURLKey{}, "wss://"+r.Host+"/rtc")))
 	})
-	listener, e := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", c.Port))
-	if e != nil {
-		return e
-	}
 	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}}
 	go func() { <-mediaDone; _ = srv.Close() }()
 	if e = json.NewEncoder(os.Stdout).Encode(map[string]string{"fingerprint": fingerprint}); e != nil {
-		listener.Close()
 		return e
 	}
 	// Parent closes stdin on exit. This also releases listeners after an unexpected parent crash.

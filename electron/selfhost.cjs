@@ -41,7 +41,12 @@ function childReady(child, ready) {
   }), 15000, t("Встроенный сервер не запустился вовремя"));
 }
 class SelfHost {
-  constructor(resources, onChange = () => {}) { this.resources = resources; this.onChange = onChange; this.state = { running: false }; this.children = []; }
+  constructor(resources, onChange = () => {}) {
+    this.resources = resources;
+    this.onChange = onChange;
+    this.state = { running: false };
+    this.children = [];
+  }
   status() { return this.state; }
   async start(input) {
     if (this.starting || this.stopping || this.state.running) throw new Error(t("Комната уже запущена или меняет состояние"));
