@@ -9,6 +9,7 @@ export const chatEncoder = new TextEncoder();
 export const chatDecoder = new TextDecoder('utf-8', { fatal: true });
 export const chatTextLimit = 4096;
 export const chatMessageLimit = 500;
+export const chatSendsPerSecond = 3;
 
 export const base64 = (data: Uint8Array) => btoa(String.fromCharCode(...data));
 export const unbase64 = (data: string) => Uint8Array.from(atob(data), c => c.charCodeAt(0));

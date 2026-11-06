@@ -268,6 +268,7 @@ func (a *app) chatHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 var errChatConflict = errors.New("chat request ID reused")
+var errChatRate = errors.New("chat message rate exceeded")
 
 func (s *chatStore) post(ctx context.Context, packet chatPacket, author, profileID string, now time.Time) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -287,6 +288,14 @@ func (s *chatStore) post(ctx context.Context, packet chatPacket, author, profile
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
+	}
+	var recent int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM chat_messages WHERE feed = ? AND sent > ? AND author_id = ?
+		AND (author_id <> '' OR author = ?)`, s.feed, now.Add(-time.Second).UnixMilli(), profileID, author).Scan(&recent); err != nil {
+		return 0, err
+	}
+	if recent >= 3 {
+		return 0, errChatRate
 	}
 	if profileID != "" {
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO chat_profiles(feed, profile_id, nickname, updated) VALUES (?, ?, ?, ?)`,
@@ -335,6 +344,9 @@ func (a *app) chatPost(w http.ResponseWriter, r *http.Request) {
 	number, err := a.chat.post(r.Context(), packet, claims.Name, claims.ProfileID, a.now())
 	if errors.Is(err, errChatConflict) {
 		fail(w, 409, "Chat request ID reused")
+	} else if errors.Is(err, errChatRate) {
+		w.Header().Set("Retry-After", "1")
+		fail(w, 429, "Chat message rate exceeded")
 	} else if err != nil {
 		fail(w, 503, "Chat storage unavailable")
 	} else {

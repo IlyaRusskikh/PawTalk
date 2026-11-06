@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { chatDecoder, chatEncoder, chatKey, chatMessageLimit, chatTextLimit, decodeHistory, decryptChat, encryptChat, readChatCursor, readChatPosition, writeChatCursor, writeChatPosition, type ChatAccess, type ChatMessage, type ChatPacket, type ChatProfile } from './chat';
+import { chatDecoder, chatEncoder, chatKey, chatMessageLimit, chatSendsPerSecond, chatTextLimit, decodeHistory, decryptChat, encryptChat, readChatCursor, readChatPosition, writeChatCursor, writeChatPosition, type ChatAccess, type ChatMessage, type ChatPacket, type ChatProfile } from './chat';
 import { decodeChatProfiles, encodeChatProfile } from './chatProfiles';
 import { Icon } from './Controls';
 import { Avatar } from './Avatar';
@@ -36,6 +36,8 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
   const [ready, setReady] = useState(!access);
   const [historyError, setHistoryError] = useState(false);
   const [sendError, setSendError] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
+  const sendTimes = useRef<number[]>([]);
   const [typing, setTyping] = useState(new Map<string, number>());
   const typingSent = useRef(0);
   const [sending, setSending] = useState(false);
@@ -301,9 +303,13 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
   async function send() {
     const text = draft.trim();
     if (!connected || sending || !text || chatEncoder.encode(text).length > chatTextLimit) return;
+    const now = Date.now();
+    sendTimes.current = sendTimes.current.filter(time => now - time < 1000);
+    if (sendTimes.current.length >= chatSendsPerSecond) { setRateLimited(true); return; }
     const origin = composer.current?.getBoundingClientRect();
     setSending(true);
     setSendError(false);
+    setRateLimited(false);
     try {
       let packet: ChatPacket | undefined;
       if (key) {
@@ -313,7 +319,8 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
       let id: number;
       const author = profile.nickname.trim() || nickname;
       if (access && packet) {
-        const result = await window.desktop!.chatRequest(access.handle, { packet }) as { id?: number } | null;
+        const result = await window.desktop!.chatRequest(access.handle, { packet }) as { id?: number; rateLimited?: boolean } | null;
+        if (result?.rateLimited) { setRateLimited(true); return; }
         if (typeof result?.id !== 'number' || !Number.isSafeInteger(result.id) || result.id <= 0) throw new Error('Chat save unconfirmed');
         id = result.id;
         const confirmed = { id, key: packet.requestId, author, authorId: access.profileId, text, sent: Date.now() };
@@ -325,6 +332,7 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
       } else {
         throw new Error('Chat key missing');
       }
+      sendTimes.current.push(Date.now());
       arrival.current = { id, x: origin?.left ?? 0, y: origin?.top ?? 0 };
       if (id > readRef.current) {
         readRef.current = id;
@@ -411,6 +419,7 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
       {historyError && <p className="text-error" role="status">{t("Не удалось загрузить историю чата. Повторяем подключение…")}</p>}
       {tooLong && <p className="text-error" role="status">{t("Сообщение слишком длинное.")}</p>}
       {sendError && <p className="text-error" role="alert">{t("Отправка не подтверждена. Попробуйте снова.")}</p>}
+      {rateLimited && <p className="text-error" role="status">{t("Слишком много сообщений. Подождите секунду.")}</p>}
       {typists.length > 0 && <p className="chat-typing" role="status">
         <span className="chat-typing-dots" aria-hidden="true"><i/><i/><i/></span>
         {typists.length === 1 ? t("{0} печатает…", typists[0].name) : t("Несколько участников печатают…")}

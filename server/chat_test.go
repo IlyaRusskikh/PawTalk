@@ -227,7 +227,7 @@ func TestChatCapacityAndConflictingRetry(t *testing.T) {
 	defer store.db.Close()
 	for i := range 502 {
 		packet := chatPacket{RequestID: fmt.Sprintf("%032x", i), Nonce: make([]byte, 12), Ciphertext: make([]byte, 32)}
-		if _, err := store.post(context.Background(), packet, "Alice", "", now); err != nil {
+		if _, err := store.post(context.Background(), packet, "Alice", "", now.Add(time.Duration(i)*time.Second)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -238,5 +238,36 @@ func TestChatCapacityAndConflictingRetry(t *testing.T) {
 	conflicting := chatPacket{RequestID: fmt.Sprintf("%032x", 501), Nonce: make([]byte, 12), Ciphertext: bytes.Repeat([]byte{1}, 32)}
 	if _, err := store.post(context.Background(), conflicting, "Alice", "", now); !errors.Is(err, errChatConflict) {
 		t.Fatalf("conflicting retry: %v", err)
+	}
+}
+
+func TestChatRateLimit(t *testing.T) {
+	now := time.Now()
+	store, err := openChat(filepath.Join(t.TempDir(), "chat.sqlite"), strings.Repeat("a", 64), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.db.Close()
+	post := func(i int, author string, at time.Time) error {
+		packet := chatPacket{RequestID: fmt.Sprintf("%032x", i), Nonce: make([]byte, 12), Ciphertext: make([]byte, 32)}
+		_, err := store.post(context.Background(), packet, author, "", at)
+		return err
+	}
+	for i := range 3 {
+		if err := post(i, "Alice", now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := post(3, "Alice", now.Add(999*time.Millisecond)); !errors.Is(err, errChatRate) {
+		t.Fatalf("fourth message within a second: %v", err)
+	}
+	if err := post(0, "Alice", now); err != nil {
+		t.Fatalf("idempotent retry: %v", err)
+	}
+	if err := post(4, "Bob", now); err != nil {
+		t.Fatalf("independent author: %v", err)
+	}
+	if err := post(3, "Alice", now.Add(time.Second)); err != nil {
+		t.Fatalf("message after the window expired: %v", err)
 	}
 }

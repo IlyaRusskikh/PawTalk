@@ -20,8 +20,11 @@ Voicecord takes inspiration from **Discord** for easy-to-join voice rooms and in
 
 - **Set up audio the way you like it.** Choose your microphone and headphones, listen to a mic test, and adjust each person's volume separately.
 - **Talk when you speak or hold a key.** Choose voice activation or Push-to-Talk. Use global shortcuts for microphone mute and incoming audio while your game is open.
+- **Manage your call.** Use the controls above the chat divider to mute, switch audio devices, or leave. Hover over an avatar to reveal the participant’s name and signal icon. Rest the pointer on the icon to see their server ping and incoming audio packet loss.
+- **Set a profile picture.** Under **Settings → About me**, choose a PNG, JPEG, or WebP, then zoom and position the crop. Participants see your current nickname and avatar in the room and in retained chat history.
 - **Make speech easier to hear.** RNNoise reduces background noise on your PC, echo cancellation reduces echo, and automatic gain control evens out the level of your voice.
 - **Return to your favorite rooms.** Bookmark a server so you can find it again quickly.
+- **Send messages during a call.** The room opens with chat below the participant cards. Press Enter to send or Shift+Enter for a new line. You can send up to three messages per second and see when someone else is typing. Drag the divider to resize either section. Hover over **Features** to see how the room handles encryption and history. Built-in E2EE rooms keep history in memory until the server stops. Standalone servers configured with E2EE and a key fingerprint keep encrypted history for up to seven days.
 
 <details>
 <summary>See audio settings and room creation</summary>

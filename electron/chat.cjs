@@ -65,6 +65,7 @@ async function requestChat(fetch, access, input) {
   }
   if (!response.ok) {
     await response.body?.cancel();
+    if (response.status === 429 && input?.packet) return { rateLimited: true };
     throw new Error('Chat request failed');
   }
   return readJSON(response, body ? 1024 : (access.profileId ? 16 : 4) * 1024 * 1024);

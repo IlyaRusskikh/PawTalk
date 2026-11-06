@@ -7,6 +7,7 @@ import type { Settings } from './settings';
 import { RttMeter } from '../shared/rtt.mjs';
 import { PacketLossMeter } from '../shared/packet-loss.mjs';
 import { avatarPayloadLimit, validAvatar } from './avatarImage';
+import { chatSendsPerSecond } from './chat';
 
 const chatTopic = 'voicecord.chat.v1';
 const typingTopic = 'voicecord.typing.v1';
@@ -121,8 +122,10 @@ export class VoiceSession {
     });
     room.on(RoomEvent.ActiveSpeakersChanged, speakers => { this.speakers = new Set(speakers.map(p => p.identity)); this.emit(); });
     room.on(RoomEvent.ParticipantConnected, p => { this.publishAudioState(); if (this.avatar) this.publishAvatar(p.identity); this.publishNickname(p.identity); if (this.settings.sounds) playCue(true); this.emit(); });
+    const peerChatTimes = new Map<string, number[]>();
     room.on(RoomEvent.ParticipantDisconnected, p => {
       this.peerNetwork.delete(p.identity); this.peerDeafened.delete(p.identity); this.peerAvatars.delete(p.identity); this.peerNicknames.delete(p.identity);
+      peerChatTimes.delete(p.identity);
     });
     room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
       if (topic === typingTopic && participant && payload.length === 1 && (payload[0] === 0 || payload[0] === 1)) {
@@ -131,6 +134,10 @@ export class VoiceSession {
       }
       if (topic === chatTopic && participant && payload.length <= 6144) {
         const { identity } = participant;
+        const now = performance.now();
+        const recent = (peerChatTimes.get(identity) ?? []).filter(time => now - time < 1000);
+        if (recent.length >= chatSendsPerSecond) return;
+        peerChatTimes.set(identity, [...recent, now]);
         this.onChat?.(payload, this.peerNicknames.get(identity) || participant.name || t("Участник"), identity);
         return;
       }
