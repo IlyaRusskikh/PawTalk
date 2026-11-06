@@ -36,6 +36,8 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
   const [ready, setReady] = useState(!access);
   const [historyError, setHistoryError] = useState(false);
   const [sendError, setSendError] = useState(false);
+  const [typing, setTyping] = useState(new Map<string, number>());
+  const typingSent = useRef(0);
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState('');
   const [read, setRead] = useState(() => readChatCursor(access));
@@ -93,7 +95,40 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
     return id;
   }
 
-  useEffect(() => () => stopHighlight.current?.(), []);
+  useEffect(() => {
+    session.onTyping = (person, active) => {
+      setTyping(previous => {
+        const next = new Map(previous);
+        if (active) next.set(person, Date.now() + 4500);
+        else next.delete(person);
+        return next;
+      });
+    };
+    const timer = setInterval(() => {
+      setTyping(previous => {
+        const now = Date.now();
+        const remaining = [...previous].filter(([, until]) => until > now);
+        return remaining.length === previous.size ? previous : new Map(remaining);
+      });
+    }, 1000);
+    return () => { session.onTyping = undefined; clearInterval(timer); session.publishTyping(identity, false); stopHighlight.current?.(); };
+  }, [session, identity]);
+
+  useEffect(() => {
+    const stop = () => {
+      if (!typingSent.current) return;
+      typingSent.current = 0;
+      session.publishTyping(identity, false);
+    };
+    if (!visible || !connected || sending || !draft.trim()) { stop(); return; }
+    const now = Date.now();
+    if (now - typingSent.current >= 1500) {
+      typingSent.current = now;
+      session.publishTyping(identity, true);
+    }
+    const timer = setTimeout(stop, 3000);
+    return () => clearTimeout(timer);
+  }, [session, identity, draft, sending, visible, connected]);
 
   useEffect(() => {
     if (access) return;
@@ -308,6 +343,7 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
   const tooLong = chatEncoder.encode(draft.trim()).length > chatTextLimit;
   if (!visible) return null;
   const peopleById = new Map(people.map(person => [person.id, person]));
+  const typists = people.filter(person => !person.local && typing.has(person.id));
 
   return <section className="room-chat" aria-label={t("Текстовый чат")}>
     <div className="chat-heading">
@@ -375,6 +411,10 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
       {historyError && <p className="text-error" role="status">{t("Не удалось загрузить историю чата. Повторяем подключение…")}</p>}
       {tooLong && <p className="text-error" role="status">{t("Сообщение слишком длинное.")}</p>}
       {sendError && <p className="text-error" role="alert">{t("Отправка не подтверждена. Попробуйте снова.")}</p>}
+      {typists.length > 0 && <p className="chat-typing" role="status">
+        <span className="chat-typing-dots" aria-hidden="true"><i/><i/><i/></span>
+        {typists.length === 1 ? t("{0} печатает…", typists[0].name) : t("Несколько участников печатают…")}
+      </p>}
       <form className="chat-compose" ref={composer} data-sending={sending || undefined} onSubmit={event => { event.preventDefault(); void send(); }}>
         <Avatar name={profile.nickname || nickname} image={profile.avatar} className="chat-avatar composer-avatar"/>
         <textarea ref={input} rows={1} aria-label={t("Сообщение")} placeholder={t("Написать сообщение…")} value={draft}

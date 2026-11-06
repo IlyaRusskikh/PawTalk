@@ -9,6 +9,7 @@ import { PacketLossMeter } from '../shared/packet-loss.mjs';
 import { avatarPayloadLimit, validAvatar } from './avatarImage';
 
 const chatTopic = 'voicecord.chat.v1';
+const typingTopic = 'voicecord.typing.v1';
 const avatarTopic = 'voicecord.avatar.v1';
 const nicknameTopic = 'voicecord.nickname.v1';
 
@@ -41,6 +42,7 @@ export class VoiceSession {
   onUpdate: (snapshot: Snapshot) => void = () => {};
   onError: (message: string) => void = () => {};
   onChat?: (payload: Uint8Array, author: string, authorIdentity: string) => void;
+  onTyping?: (identity: string, typing: boolean) => void;
   constructor(public settings: Settings, private transport: { sharedAudioContext?: boolean } = {}) {}
   private syncGate() { this.mic?.update(this.settings, this.muted || this.deafened || this.state !== 'connected', this.ptt); }
   private emit() {
@@ -123,6 +125,10 @@ export class VoiceSession {
       this.peerNetwork.delete(p.identity); this.peerDeafened.delete(p.identity); this.peerAvatars.delete(p.identity); this.peerNicknames.delete(p.identity);
     });
     room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+      if (topic === typingTopic && participant && payload.length === 1 && (payload[0] === 0 || payload[0] === 1)) {
+        this.onTyping?.(participant.identity, payload[0] === 1);
+        return;
+      }
       if (topic === chatTopic && participant && payload.length <= 6144) {
         const { identity } = participant;
         this.onChat?.(payload, this.peerNicknames.get(identity) || participant.name || t("Участник"), identity);
@@ -255,6 +261,11 @@ export class VoiceSession {
   async sendChat(payload: Uint8Array<ArrayBuffer>, identity: string) {
     if (this.room?.state !== ConnectionState.Connected || this.room.localParticipant.identity !== identity) throw new Error('Chat is disconnected');
     await this.room.localParticipant.publishData(payload, { reliable: true, topic: chatTopic });
+  }
+  publishTyping(identity: string, typing: boolean) {
+    const room = this.room;
+    if (room?.state !== ConnectionState.Connected || room.localParticipant.identity !== identity) return;
+    void room.localParticipant.publishData(Uint8Array.of(typing ? 1 : 0), { reliable: false, topic: typingTopic }).catch(() => {});
   }
   setMute(muted: boolean, deafened: boolean) { this.muted = muted; this.deafened = deafened; this.publishAudioState(); this.emit(); this.syncGate(); this.applyVolumes(); void this.syncMute().catch(error => this.onError(String(error))); }
   setPtt(down: boolean) { this.ptt = down; this.syncGate(); }
