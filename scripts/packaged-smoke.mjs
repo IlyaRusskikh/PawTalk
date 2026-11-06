@@ -64,7 +64,13 @@ try {
   const hostStatus = await evaluate('window.desktop.hostStatus()');
   assert.equal(hostStatus.running, true, 'packaged server resources start');
   await evaluate(`document.querySelector('dialog [aria-label="Закрыть"]').click()`);
-  await evaluate(`Array.from(document.querySelectorAll('.home-action')).find(b=>b.textContent.includes('Создать комнату')).click()`);
+  const myRoomButton = `Array.from(document.querySelectorAll('.home-action')).find(b=>b.textContent.startsWith('Моя комната'))`;
+  for (let i = 0; i < 50; i++) {
+    if (await evaluate(`!!(${myRoomButton})`)) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(await evaluate(`!!(${myRoomButton})`), 'lobby reflects the running host');
+  await evaluate(`(${myRoomButton}).click()`);
   for (let i = 0; i < 50; i++) {
     if (await evaluate(`!!document.querySelector('.host-invite button')`)) break;
     await new Promise(resolve => setTimeout(resolve, 100));
