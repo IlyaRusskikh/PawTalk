@@ -1,27 +1,51 @@
+import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { t, useLanguage } from './i18n';
-import { useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from './Controls';
 import { pingLevel } from '../shared/ping.mjs';
-export function ConnectionStatus({ state, label, delay, loss, compact = false }: { compact?: boolean; state: string; label: string; delay?: number; loss?: number }) {
+
+export function ConnectionStatus({ name, delay, loss }: { name: string; delay?: number; loss?: number }) {
   const language = useLanguage();
+  const id = useId();
   const [open, setOpen] = useState(false);
-  const connected = state === 'connected';
-  const visible = connected && open;
-  const anchor = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ left: 12, bottom: 80 });
+  const anchor = useRef<HTMLButtonElement>(null);
+  const tooltip = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    if (!visible) return;
+    if (!open) return;
     const place = () => {
       const rect = anchor.current?.getBoundingClientRect();
-      if (rect) setPosition({ left: Math.max(12, Math.min(rect.left + rect.width / 2 - 110, window.innerWidth - 232)), bottom: window.innerHeight - rect.top + 8 });
+      const panel = tooltip.current;
+      if (!rect || !panel) return;
+      const width = panel.offsetWidth;
+      const height = panel.offsetHeight;
+      const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+      const top = rect.top >= height + 12 ? rect.top - height - 6 : rect.bottom + 6;
+      panel.style.left = left + 'px';
+      panel.style.top = Math.min(top, window.innerHeight - height - 8) + 'px';
     };
-    place(); window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
-  }, [visible]);
-  return <div ref={anchor} className={`connection-status-wrap ${compact ? 'compact' : ''}`} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} onFocus={() => setOpen(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }} onKeyDown={event => { if (event.key === 'Escape') setOpen(false); }}>
-    <button type="button" className={`connection-mini ${connected ? `online ping-${pingLevel(delay)}` : ''}`} title={label} aria-label={connected ? t("Качество соединения") : label} aria-describedby={visible ? 'connection-tooltip' : undefined} onClick={() => setOpen(true)}>
-      <Icon name="signal"/>{!compact && <span>{label}{!connected && <small>{t("Подключитесь к своему серверу")}</small>}</span>}
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, language]);
+
+  return <span className="person-network-wrap">
+    <button ref={anchor} type="button" className={`icon-button person-network ping-${pingLevel(delay)}`}
+      aria-label={t("Соединение {0}", name)} aria-describedby={open ? id : undefined}
+      onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onClick={() => setOpen(true)}
+      onKeyDown={event => { if (event.key === 'Escape') setOpen(false); }}>
+      <Icon name="signal" size={15}/>
     </button>
-    {visible && <div className="connection-popover" style={{ position: 'fixed', left: position.left, right: 'auto', bottom: position.bottom, transform: 'none' }} role="tooltip" id="connection-tooltip"><strong>{t("Качество соединения")}</strong><dl><div><dt>{t("Задержка")}</dt><dd>{delay === undefined ? '—' : t("{0} мс", Math.round(delay))}</dd></div><div><dt>{t("Потеря пакетов")}</dt><dd>{loss === undefined ? '—' : `${new Intl.NumberFormat(language === 'en' ? 'en-US' : 'ru-RU', { maximumFractionDigits: 1 }).format(loss)} %`}</dd></div></dl></div>}
-  </div>;
+    {open && createPortal(<div ref={tooltip} className="connection-popover" role="tooltip" id={id}>
+      <strong>{t("Соединение {0}", name)}</strong>
+      <dl>
+        <div><dt>{t("Пинг до сервера")}</dt><dd>{delay === undefined ? '—' : t("{0} мс", Math.round(delay))}</dd></div>
+        <div><dt>{t("Потеря входящих аудиопакетов")}</dt><dd>{loss === undefined ? '—' : `${new Intl.NumberFormat(language === 'en' ? 'en-US' : 'ru-RU', { maximumFractionDigits: 1 }).format(loss)} %`}</dd></div>
+      </dl>
+    </div>, document.body)}
+  </span>;
 }

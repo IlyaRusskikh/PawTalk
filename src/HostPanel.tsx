@@ -71,6 +71,13 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
     catch (error) { setFailure(error instanceof Error ? error.message : String(error)); onError(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   }
+  async function rejoin() {
+    if (!status.localAddress) return;
+    setBusy(true);
+    try {
+      await onJoin({ address: status.localAddress, nickname, password: '' });
+    } finally { setBusy(false); }
+  }
   if ((modal !== 'create' && modal !== 'host-share') || (modal === 'host-share' && !status.running)) return null;
   const lan = (status.invitations || []).slice(status.internet ? 1 : 0).sort((a, b) => Number(!a.startsWith('voicecord://192.168.')) - Number(!b.startsWith('voicecord://192.168.')));
   const selected = level === 'global' ? status.internet ? status.invitations?.[0] || '' : '' : lan.includes(local) ? local : lan[0] || '';
@@ -88,12 +95,23 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
       {selected ? <label className="host-invite">{t("Ссылка приглашения")}<div><input readOnly value={selected} onFocus={e => e.target.select()}/><button className="primary" onClick={() => void (window.desktop ? window.desktop.copyInvitation(selected) : navigator.clipboard.writeText(selected)).then(() => setCopied(selected)).catch(() => onError(t("Не удалось скопировать приглашение.")))}>{copied === selected ? t("Скопировано") : t("Копировать")}</button></div></label> : <p role="status" className="host-hint">{level === 'global' ? t("Глобальная ссылка недоступна: порты не открыты или у провайдера дополнительный NAT. Выберите локальный уровень сети.") : t("Локальный адрес недоступен.")}</p>}
       </div><p className="host-hint">{t("Другу нужен Voicecord. Пароль уже включён в ссылку. Комната работает, пока приложение запущено, в том числе в трее.")}</p>
       <div className="diagnostic-row"><button className="diagnostic-copy" disabled={!selected} onClick={() => void window.desktop?.copyDiagnosticCommand(selected).then(() => setCopiedScript(selected)).catch(() => setFailure(t("Не удалось скопировать скрипт проверки подключения.")))}>{copiedScript === selected ? t("Скрипт скопирован") : t("Скопировать скрипт проверки")}</button><span>{t("Скрипт для проверки соединения без загрузки приложения (вставляется в CMD)")}</span></div>
-      <button className="host-stop danger-button" disabled={busy} onClick={() => void stop()}>{t("Закрыть комнату для всех")}</button>
-    </> : <form onSubmit={e => { e.preventDefault(); void start(); }}><div className="form-grid">
+      <div className="modal-actions">
+        {!active && <button className="primary" disabled={busy || !nickname.trim()} onClick={() => void rejoin()}>{t("Войти в комнату")}</button>}
+        <button className="host-stop danger-button" disabled={busy} onClick={() => void stop()}>{t("Закрыть комнату для всех")}</button>
+      </div>
+    </> : <form onSubmit={e => { e.preventDefault(); void start(); }}><div className="form-fields"><div className="form-grid">
       <label className="wide">{t("Название комнаты")}<input required maxLength={80} value={name ?? t("{0} хостит", nickname)} onChange={e => setName(e.target.value)} disabled={busy}/></label>
       <label>{t("Пароль комнаты")}<input required type="password" minLength={8} maxLength={1024} value={password} onChange={e => setPassword(e.target.value)} disabled={busy} autoComplete="new-password" placeholder={t("Не менее 8 символов")}/></label>
       <label>{t("Порт комнаты")}<input required type="number" min={1024} max={65532} value={port} onChange={e => { setPort(Number(e.target.value)); setCheckResult(null); setCheckFailure(''); }} disabled={busy || checking}/></label>
-    </div><label className="encryption-toggle"><input type="checkbox" checked={e2ee} disabled={busy} onChange={e => setE2EE(e.target.checked)}/> {t(" Сквозное шифрование E2EE (экспериментально)")}</label><p className="host-hint">{e2ee && t("Ключ включён в приглашение. Все участники должны использовать клиент с поддержкой E2EE. ")}{t("Попробуем открыть порты на роутере автоматически. Для интернета нужны входящие TCP ")}{port}, TCP {port + 1} {t(" и UDP ")}{port + 2}{t(". При CGNAT может понадобиться VPS; в локальной сети используйте LAN-приглашение.")}</p>
+    </div>
+      <label className="encryption-toggle"><input type="checkbox" checked={e2ee} disabled={busy} onChange={e => setE2EE(e.target.checked)}/>{t("Сквозное шифрование E2EE")}</label>
+    </div>
+      <div className="host-chat-hints" aria-live="polite">
+        {e2ee ? <>
+          <p className="host-chat-kept">{t("Сообщения не пропадут при перезаходе в комнату")}</p>
+          <p className="host-chat-ends">{t("Сообщения пропадут, как только вы закроете комнату")}</p>
+        </> : <p className="host-chat-warning">{t("Сообщения пропадут, как только вы покинете комнату")}</p>}
+      </div>
       <section className="host-check" aria-label={t("Проверка хостинга в интернете")}>
         <div className="host-check-heading"><strong>{t("Могу ли я хостить в интернет?")}</strong><button type="button" className="e2ee-generate" disabled={busy || checking || active || !window.desktop || !Number.isInteger(port) || port < 1024 || port > 65532} onClick={() => void check()}>{checking ? t("Проверяем…") : t("Проверить")}</button></div>
         <div role="status" aria-live="polite">
@@ -102,7 +120,7 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
           {checkResult && checkResult.state !== 'cancelled' && <p className="host-hint host-check-ports">TCP {port}: {checkResult.tcp[0] ? '✓' : '—'} · TCP {port + 1}: {checkResult.tcp[1] ? '✓' : '—'} · UDP {port + 2}: {checkResult.udp ? '✓' : '—'}</p>}
           {(checkFailure || checkResult?.reason) && <p className="host-hint" role="status">{checkFailure || checkReasons[checkResult!.reason!]}</p>}
         </div>
-        <p className="host-hint">{t("Проверка через check-host.net: сервис получает публичный IP и порты, создаёт публичные отчёты. После создания комнаты разрешите Voicecord доступ в брандмауэре. Проверка не оценивает качество голоса.")}</p>
+        <p className="host-hint">{t("Попробуем открыть порты и проверить соединение из сети интернет")}</p>
       </section>
       <button className="primary" disabled={busy || checking || active || !nickname.trim()}>{busy ? t("Создаём комнату…") : t("Создать и войти →")}</button></form>}
   </Modal>;

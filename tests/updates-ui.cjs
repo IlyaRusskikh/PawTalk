@@ -20,9 +20,9 @@ app.whenReady().then(async () => {
     await until(`!!document.querySelector('.home-actions')`);
     for (const width of [940, 1100, 1240]) {
       win.setSize(width, 760); await wait(80);
-      assert.ok(await run(`document.querySelector('.user-dock').getBoundingClientRect().left >= document.querySelector('.rail').getBoundingClientRect().right`), 'profile clears bookmark rail at ' + width);
+      assert.ok(await run(`document.querySelector('.rail').getBoundingClientRect().bottom - document.querySelector('.rail-settings').getBoundingClientRect().bottom < 28`), 'settings are at the bottom of the rail at ' + width);
     }
-    await screenshot('profile-alignment');
+    await screenshot('sidebar-settings-alignment');
     await run(`document.querySelector('[title="Настройки"]').click()`);
     await until(`!!document.querySelector('dialog[open]')`);
     await run(`window.updateTest.offer()`); await wait(80);

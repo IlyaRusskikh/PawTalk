@@ -6,6 +6,7 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
     edit: <path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14z"/>,
     chevron: <path d="m6 14 6-6 6 6"/>,
     'chevron-right': <path d="m9 6 6 6-6 6"/>,
+    'arrow-down': <path d="M12 4v16m-6-6 6 6 6-6"/>,
     bookmark: <><path d="M6 3h12v19l-6-4-6 4z"/><path d="M12 7v6M9 10h6"/></>,
     invite: <><circle cx="9" cy="7" r="4"/><path d="M2 21v-3a7 7 0 0 1 13-3M19 8v8M15 12h8"/></>,
     'mic-off': <><path d="m3 3 18 18M9 9v3a3 3 0 0 0 5 2M9 5a3 3 0 0 1 6 0v5M5 10v2a7 7 0 0 0 12 5M12 19v3M8 22h8"/></>,
@@ -17,6 +18,7 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
     signal: <><path d="M4 20v-3M9 20v-7M14 20V9M19 20V4"/></>,
     exit: <><path d="M10 4H4v16h6M10 12h11m-4-4 4 4-4 4"/></>,
     shield: <><path d="m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6zM8 12l3 3 5-6"/></>,
+    info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></>,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.mic}</svg>;
 }

@@ -29,7 +29,9 @@ interface Window {
     checkHost(port: number): Promise<HostCheckResult>;
     cancelHostCheck(): Promise<void>;
     onHostChanged(callback: (status: HostStatus) => void): () => void;
-    connect(input: { address: string; nickname: string; password: string; e2eeKey?: string }): Promise<{ url: string; token: string; identity: string; ownHost?: boolean; error?: string; e2eeRequired?: boolean; e2eeKey?: string }>;
+    connect(input: { address: string; nickname: string; password: string; e2eeKey?: string }): Promise<{ url: string; token: string; identity: string; ownHost?: boolean; error?: string; e2eeRequired?: boolean; e2eeKey?: string; chat?: import('./chat').ChatAccess }>;
+    chatRequest(handle: string, input: { after: number; profilesAfter?: number } | { packet: import('./chat').ChatPacket } | { profile: import('./chat').ChatProfilePacket }): Promise<unknown>;
+    chatClose(handle: string): Promise<void>;
     capabilities(): Promise<{ native: boolean; platform: string; packaged: boolean; secureStorage: boolean }>;
     loadPassword(address: string): Promise<{ password: string | null; e2eeKey?: string | null }>;
     savePassword(input: { address: string; password: string | null; e2eeKey?: string | null }): Promise<void>;

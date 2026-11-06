@@ -7,7 +7,10 @@ import type { Settings } from './settings';
 import { RttMeter } from '../shared/rtt.mjs';
 import { PacketLossMeter } from '../shared/packet-loss.mjs';
 
-export interface Person { id: string; name: string; speaking: boolean; muted: boolean; deafened?: boolean; local: boolean; quality: string; rtt?: number; }
+const chatTopic = 'voicecord.chat.v1';
+const nicknameTopic = 'voicecord.nickname.v1';
+
+export interface Person { id: string; name: string; avatar?: string; speaking: boolean; muted: boolean; deafened?: boolean; local: boolean; rtt?: number; packetLoss?: number; }
 export interface Snapshot { state: string; people: Person[]; db: number; speaking: boolean; threshold?: number; rtt?: number; packetLoss?: number; e2ee?: boolean; }
 export class VoiceSession {
   room?: Room; mic?: Microphone; localTrack?: LocalAudioTrack;
@@ -26,25 +29,33 @@ export class VoiceSession {
   private queue = Promise.resolve(); private generation = 0; private stopped = false;
   private lastDuck = false; private rtt?: number; private packetLoss?: number;
   private rttMeter = new RttMeter();
-  private peerRtt = new Map<string, { value: number; received: number }>();
+  private peerNetwork = new Map<string, { rtt?: number; packetLoss?: number; received: number }>();
+  private peerNicknames = new Map<string, string>();
+  private nickname?: string;
   private collecting = false;
   private lossMeter = new PacketLossMeter();
   onUpdate: (snapshot: Snapshot) => void = () => {};
   onError: (message: string) => void = () => {};
+  onChat?: (payload: Uint8Array, author: string, authorIdentity: string) => void;
   constructor(public settings: Settings, private transport: { sharedAudioContext?: boolean } = {}) {}
   private syncGate() { this.mic?.update(this.settings, this.muted || this.deafened || this.state !== 'connected', this.ptt); }
   private emit() {
     const room = this.room;
     const now = performance.now();
     this.rtt = this.state === 'connected' ? this.rttMeter.value(now) : undefined;
-    const people = room ? [room.localParticipant, ...room.remoteParticipants.values()].map(p => ({
-      id: p.identity, name: p.name || t("Участник"), local: p === room.localParticipant,
-      speaking: p === room.localParticipant ? this.speaking : this.speakers.has(p.identity),
-      muted: p === room.localParticipant ? this.muted || this.deafened : p.getTrackPublication(Track.Source.Microphone)?.isMuted ?? true,
-      deafened: p === room.localParticipant ? this.deafened : this.peerDeafened.get(p.identity) === true,
-      quality: String(p.connectionQuality),
-      rtt: p === room.localParticipant ? this.rtt : now - (this.peerRtt.get(p.identity)?.received ?? -Infinity) <= 15000 ? this.peerRtt.get(p.identity)?.value : undefined,
-    })) : [];
+    const people = room ? [room.localParticipant, ...room.remoteParticipants.values()].map(p => {
+      const local = p === room.localParticipant;
+      const peer = this.peerNetwork.get(p.identity);
+      const fresh = peer && now - peer.received <= 15000 ? peer : undefined;
+      return {
+        id: p.identity, name: (local ? this.nickname : this.peerNicknames.get(p.identity)) || p.name || t("Участник"), local,
+        speaking: local ? this.speaking : this.speakers.has(p.identity),
+        muted: local ? this.muted || this.deafened : p.getTrackPublication(Track.Source.Microphone)?.isMuted ?? true,
+        deafened: local ? this.deafened : this.peerDeafened.get(p.identity) === true,
+        rtt: local ? this.rtt : fresh?.rtt,
+        packetLoss: local ? this.packetLoss : fresh?.packetLoss,
+      };
+    }) : [];
     this.onUpdate({ state: this.state, people, db: this.db, speaking: this.speaking, threshold: this.threshold, rtt: this.rtt, packetLoss: this.packetLoss, e2ee: this.encrypted });
   }
   private attach(track: RemoteAudioTrack, identity: string) {
@@ -102,25 +113,41 @@ export class VoiceSession {
       track.detach().forEach(el => el.remove()); this.elements.delete(id);
     });
     room.on(RoomEvent.ActiveSpeakersChanged, speakers => { this.speakers = new Set(speakers.map(p => p.identity)); this.emit(); });
-    room.on(RoomEvent.ParticipantConnected, () => { this.publishAudioState(); if (this.settings.sounds) playCue(true); this.emit(); });
-    room.on(RoomEvent.ParticipantDisconnected, p => { this.peerRtt.delete(p.identity); this.peerDeafened.delete(p.identity); });
+    room.on(RoomEvent.ParticipantConnected, p => { this.publishAudioState(); this.publishNickname(p.identity); if (this.settings.sounds) playCue(true); this.emit(); });
+    room.on(RoomEvent.ParticipantDisconnected, p => {
+      this.peerNetwork.delete(p.identity); this.peerDeafened.delete(p.identity); this.peerNicknames.delete(p.identity);
+    });
     room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+      if (topic === chatTopic && participant && payload.length <= 6144) {
+        const { identity } = participant;
+        this.onChat?.(payload, this.peerNicknames.get(identity) || participant.name || t("Участник"), identity);
+        return;
+      }
+      if (topic === nicknameTopic && participant && payload.length <= 128) {
+        try {
+          const name = new TextDecoder('utf-8', { fatal: true }).decode(payload).trim();
+          if (!name || Array.from(name).length > 32 || /\p{Cc}/u.test(name)) return;
+          this.peerNicknames.set(participant.identity, name);
+          this.emit();
+        } catch { /* Ignore malformed nicknames. */ }
+        return;
+      }
       if (topic === 'voicecord.audio-state.v1' && participant && payload.length <= 100) {
         try { const state = JSON.parse(new TextDecoder().decode(payload)); if (typeof state.deafened === 'boolean') { this.peerDeafened.set(participant.identity, state.deafened); this.emit(); } } catch {}
         return;
       }
       if (topic !== 'voicecord.rtt.v1' || !participant || payload.length > 100) return;
       try { const value = JSON.parse(new TextDecoder().decode(payload));
-        if (value.rtt === null) this.peerRtt.delete(participant.identity);
-        else if (typeof value.rtt === 'number' && Number.isFinite(value.rtt) && value.rtt >= 0 && value.rtt <= 60000) this.peerRtt.set(participant.identity, { value: value.rtt, received: performance.now() });
+        const rtt = typeof value.rtt === 'number' && value.rtt >= 0 && value.rtt <= 60000 ? value.rtt : undefined;
+        const packetLoss = typeof value.loss === 'number' && value.loss >= 0 && value.loss <= 100 ? value.loss : undefined;
+        this.peerNetwork.set(participant.identity, { rtt, packetLoss, received: performance.now() });
         this.emit();
       } catch { /* Ignore malformed peer telemetry. */ }
     });
     room.on(RoomEvent.ParticipantDisconnected, () => { if (this.settings.sounds) playCue(false); this.emit(); });
     room.on(RoomEvent.TrackMuted, () => this.emit()); room.on(RoomEvent.TrackUnmuted, () => this.emit());
-    room.on(RoomEvent.ConnectionQualityChanged, () => this.emit());
     room.on(RoomEvent.AudioPlaybackStatusChanged, () => { if (!room.canPlaybackAudio) this.onError(t("Не удалось включить воспроизведение. Переподключитесь к комнате.")); });
-    room.on(RoomEvent.ConnectionStateChanged, state => { this.state = state; if (state === 'connected') this.publishAudioState(); if (state !== 'connected') { this.rttMeter.reset(); this.peerRtt.clear(); this.peerDeafened.clear(); } this.syncGate(); this.emit(); });
+    room.on(RoomEvent.ConnectionStateChanged, state => { this.state = state; if (state === 'connected') { this.publishAudioState(); this.publishNickname(); } else { this.rttMeter.reset(); this.lossMeter.reset(); this.packetLoss = undefined; this.peerNetwork.clear(); this.peerDeafened.clear(); } this.syncGate(); this.emit(); });
     room.on(RoomEvent.Disconnected, () => { if (!this.stopped) { this.onError(t("Соединение прервано. Подключитесь снова.")); void this.disconnect(); } });
     room.on(RoomEvent.MediaDevicesError, error => this.onError(t("Ошибка аудиоустройства: {0}", error.message)));
     try {
@@ -187,6 +214,23 @@ export class VoiceSession {
   private publishAudioState() {
     if (this.room?.state === ConnectionState.Connected) void this.room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ deafened: this.deafened })), { reliable: true, topic: 'voicecord.audio-state.v1' }).catch(() => {});
   }
+  private publishNickname(identity?: string) {
+    const room = this.room;
+    if (!this.nickname || room?.state !== ConnectionState.Connected) return;
+    const payload = new TextEncoder().encode(this.nickname);
+    void room.localParticipant.publishData(payload, { reliable: true, topic: nicknameTopic, destinationIdentities: identity ? [identity] : undefined }).catch(() => {});
+  }
+  setNickname(value: string) {
+    const nickname = value.trim();
+    if (!nickname || nickname === this.nickname || Array.from(nickname).length > 32 || /\p{Cc}/u.test(nickname)) return;
+    this.nickname = nickname;
+    this.publishNickname();
+    this.emit();
+  }
+  async sendChat(payload: Uint8Array<ArrayBuffer>, identity: string) {
+    if (this.room?.state !== ConnectionState.Connected || this.room.localParticipant.identity !== identity) throw new Error('Chat is disconnected');
+    await this.room.localParticipant.publishData(payload, { reliable: true, topic: chatTopic });
+  }
   setMute(muted: boolean, deafened: boolean) { this.muted = muted; this.deafened = deafened; this.publishAudioState(); this.emit(); this.syncGate(); this.applyVolumes(); void this.syncMute().catch(error => this.onError(String(error))); }
   setPtt(down: boolean) { this.ptt = down; this.syncGate(); }
   setPerson(id: string, volume: number, muted: boolean) { this.peopleVolume.set(id, { volume, muted }); this.applyVolumes(); }
@@ -216,10 +260,13 @@ export class VoiceSession {
         const inbound = await track?.getRTCStatsReport();
         inbound?.forEach(stat => { if (stat.type === 'inbound-rtp' && stat.kind === 'audio') streams.push({ id: participant.identity + ':' + stat.id, received: stat.packetsReceived, lost: stat.packetsLost }); });
       }
-      if (generation !== this.generation) return;
+      if (generation !== this.generation || this.state !== 'connected') return;
       this.rtt = rtt;
-      if (this.state === 'connected') void this.room?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ rtt: rtt ?? null })), { reliable: false, topic: 'voicecord.rtt.v1' }).catch(() => {});
-      this.packetLoss = this.lossMeter.sample(streams); this.emit();
+      const loss = this.lossMeter.sample(streams);
+      this.packetLoss = streams.length ? loss : undefined;
+      const telemetry = { rtt: rtt ?? null, loss: this.packetLoss ?? null };
+      void this.room?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(telemetry)), { reliable: false, topic: 'voicecord.rtt.v1' }).catch(() => {});
+      this.emit();
     } catch { this.emit(); /* Existing measurements still expire if polling fails. */ }
     finally { this.collecting = false; }
   }
@@ -236,7 +283,7 @@ export class VoiceSession {
     const worker = this.encryptionWorker; this.encryptionWorker = undefined; this.encrypted = false;
     this.peopleVolume.clear(); this.speakers.clear(); this.speaking = false; this.db = -100; this.ptt = false; this.state = 'disconnected';
     void window.desktop?.duck({ active: false, factor: 1 }).catch(() => {});
-    this.rtt = undefined; this.packetLoss = undefined; this.lossMeter.reset(); this.rttMeter.reset(); this.peerRtt.clear(); this.peerDeafened.clear();
+    this.rtt = undefined; this.packetLoss = undefined; this.lossMeter.reset(); this.rttMeter.reset(); this.peerNetwork.clear(); this.peerDeafened.clear(); this.peerNicknames.clear();
     if (wasConnected && this.settings.sounds) playCue(false);
     this.emit();
     await Promise.allSettled([room?.disconnect(), playback?.close()]);
