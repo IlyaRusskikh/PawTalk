@@ -5,8 +5,11 @@ interface HostStatus { running: boolean; e2ee?: boolean; name?: string; port?: n
 interface HostCheckResult { state: 'internet' | 'unconfirmed' | 'error' | 'cancelled'; tcp: [boolean, boolean]; udp: boolean; reason?: 'no-interface' | 'no-public-ip' | 'ports-in-use' | 'check-failed' | 'checker-unavailable'; }
 interface Window {
   desktop?: {
+    windowActive?(): Promise<boolean>;
+    onWindowActive?(callback: (active: boolean) => void): () => void;
     getStartInTray?(): Promise<boolean>;
     setStartInTray?(value: boolean): Promise<boolean>;
+    roomPresence?(address: string): Promise<number | null>;
     getAutoStart?(): Promise<boolean>;
     setAutoStart?(enabled: boolean): Promise<boolean>;
     copyServerKey(value: string): Promise<void>;
@@ -26,7 +29,7 @@ interface Window {
     checkHost(port: number): Promise<HostCheckResult>;
     cancelHostCheck(): Promise<void>;
     onHostChanged(callback: (status: HostStatus) => void): () => void;
-    connect(input: { address: string; nickname: string; password: string; e2eeKey?: string }): Promise<{ url: string; token: string; identity: string; error?: string; e2eeRequired?: boolean; e2eeKey?: string }>;
+    connect(input: { address: string; nickname: string; password: string; e2eeKey?: string }): Promise<{ url: string; token: string; identity: string; ownHost?: boolean; error?: string; e2eeRequired?: boolean; e2eeKey?: string }>;
     capabilities(): Promise<{ native: boolean; platform: string; packaged: boolean; secureStorage: boolean }>;
     loadPassword(address: string): Promise<{ password: string | null; e2eeKey?: string | null }>;
     savePassword(input: { address: string; password: string | null; e2eeKey?: string | null }): Promise<void>;

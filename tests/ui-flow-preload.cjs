@@ -2,10 +2,18 @@ const { contextBridge } = require('electron');
 const calls = [];
 const noop = () => () => {};
 let cancelCheck;
+let active = true, activeListener, presenceReads = 0, autoStart = false, inTray = false;
 contextBridge.exposeInMainWorld('desktop', {
+ windowActive: async () => active,
+ onWindowActive: fn => { activeListener = fn; return () => { activeListener = null; }; },
+ roomPresence: async () => { presenceReads++; return 3; },
+ getAutoStart: async () => autoStart,
+ setAutoStart: async value => { autoStart = value; return value; },
+ getStartInTray: async () => inTray,
+ setStartInTray: async value => { inTray = value; return value; },
  copyServerKey: async value => { calls.push(['copy-server-key', value]); },
  duck: async () => {},
- capabilities: async () => ({ native: true, secureStorage: true }), configureKeys: async () => ({ failed: [] }),
+ capabilities: async () => ({ native: true, secureStorage: true, platform: 'win32', packaged: true }), configureKeys: async () => ({ failed: [] }),
  hostStatus: async () => ({ running: false }), pendingInvitation: async () => '',
  checkHost: port => {
   calls.push(['host-check', port]);
@@ -23,3 +31,6 @@ contextBridge.exposeInMainWorld('desktop', {
  savePassword: async input => { calls.push(['save', input]); },
 });
 contextBridge.exposeInMainWorld('testCalls', () => calls);
+
+contextBridge.exposeInMainWorld('testWindowActive', value => { active = value; activeListener?.(value); });
+contextBridge.exposeInMainWorld('testPresenceReads', () => presenceReads);

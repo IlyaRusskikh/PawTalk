@@ -2,7 +2,7 @@ import { t } from './i18n';
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from './Modal';
 export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatus, onJoin, onStop, onError, onBusy }: {
-  nickname: string; active: boolean; modal: 'join' | 'create' | 'share' | 'settings' | 'server-key' | null;
+  nickname: string; active: boolean; modal: 'join' | 'create' | 'host-share' | 'share' | 'settings' | 'server-key' | null;
   onClose(): void; onCreated(name: string): void; onStatus(running: boolean): void;
   onJoin(input: { address: string; nickname: string; password: string }): Promise<void>;
   onStop(): Promise<void>; onError(message: string): void; onBusy(value: boolean): void;
@@ -71,7 +71,7 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
     catch (error) { setFailure(error instanceof Error ? error.message : String(error)); onError(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   }
-  if ((modal !== 'create' && modal !== 'share') || (modal === 'share' && !status.running)) return null;
+  if ((modal !== 'create' && modal !== 'host-share') || (modal === 'host-share' && !status.running)) return null;
   const lan = (status.invitations || []).slice(status.internet ? 1 : 0).sort((a, b) => Number(!a.startsWith('voicecord://192.168.')) - Number(!b.startsWith('voicecord://192.168.')));
   const selected = level === 'global' ? status.internet ? status.invitations?.[0] || '' : '' : lan.includes(local) ? local : lan[0] || '';
   const checkReasons: Record<string, string> = {

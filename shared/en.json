@@ -302,8 +302,18 @@
   "Не удалось изменить автозапуск.": "Could not change startup settings.",
   "Автозапуск доступен в установленном приложении Windows.": "Startup is available in the installed Windows app.",
   "Запускать Voicecord при входе в Windows": "Start Voicecord when signing in to Windows",
-  "Запускать свёрнутым в трее": "Start minimized to the system tray",
-  "При автозапуске окно будет скрыто; открыть его можно через значок в трее.": "At Windows sign-in, keep the window hidden; open it from the system tray icon.",
+  "Переименовать": "Rename",
+  "Переименовать сервер": "Rename server",
+  "Название сервера": "Server name",
+  "Название изменится только у вас.": "This name changes only for you.",
+  "Участников: {0}": "Participants: {0}",
+  "Вернуться в комнату: {0}": "Return to room: {0}",
   "Устройство ввода": "Input device",
-  "Устройство вывода": "Output device"
+  "Устройство вывода": "Output device",
+  "Количество участников недоступно": "Participant count unavailable",
+  "Отмена": "Cancel",
+  "Сохранить": "Save",
+  "Не удалось изменить закладку в защищённом хранилище.": "Could not update the bookmark in secure storage.",
+  "Запускать свёрнутым в трее": "Start minimized to the system tray",
+  "При автозапуске окно будет скрыто; открыть его можно через значок в трее.": "At Windows sign-in, keep the window hidden; open it from the system tray icon."
 }

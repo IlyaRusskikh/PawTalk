@@ -54,6 +54,22 @@ function authorized(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Unauthorized IPC');
 }
 function registerIPC() {
+  ipcMain.handle('window-active', event => { authorized(event); return win.isVisible() && !win.isMinimized() && win.isFocused(); });
+  ipcMain.handle('room-presence', async (event, address) => {
+    authorized(event);
+    try {
+      const effective = invitation(address) ? localInvitation(address, hosting.status()) : address;
+      const base = serverURL(effective, !app.isPackaged);
+      await verifyInvitation(effective);
+      trustInvitation(effective);
+      const response = await net.fetch(`${base}/api/presence`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
+      if (!response.ok) { await response.body?.cancel(); return null; }
+      const raw = await response.text();
+      if (raw.length > 1024) return null;
+      const body = JSON.parse(raw);
+      return Number.isSafeInteger(body.participants) && body.participants >= 0 ? body.participants : null;
+    } catch { return null; }
+  });
   ipcMain.handle('autostart-get', event => {
     authorized(event);
     return process.platform === 'win32' && app.isPackaged && startup.enabled();
@@ -181,7 +197,9 @@ function registerIPC() {
         return { error: t("Пароль принят, но голосовой сервер {0} недоступен. {1}", mediaURL.host, help) };
       }
       // Never accept a media key supplied by the server, even as an extra response field.
-      return { url: body.url, token: body.token, identity: body.identity, e2eeRequired: body.e2eeRequired === true, ...(e2eeKey ? { e2eeKey } : {}) };
+      const local = hosting.status();
+      const ownHost = local.running && !!invitation(address) && invitation(address).fingerprint === invitation(local.localAddress)?.fingerprint;
+      return { url: body.url, token: body.token, identity: body.identity, ownHost, e2eeRequired: body.e2eeRequired === true, ...(e2eeKey ? { e2eeKey } : {}) };
     } catch (error) {
       return { error: connectionError(error) };
     }
@@ -252,6 +270,7 @@ else {
       webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false, offscreen: process.argv.includes('--offscreen-smoke') },
     });
     win.removeMenu();
+    for (const event of ['show', 'hide', 'minimize', 'restore', 'focus', 'blur']) win.on(event, () => send('window-active-changed', win.isVisible() && !win.isMinimized() && win.isFocused()));
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.webContents.on('will-navigate', event => event.preventDefault());
     win.webContents.on('render-process-gone', restoreAudio);

@@ -5,6 +5,8 @@ import { VoiceSession, type Snapshot } from './session';
 import { defaults, loadSettings, remember, type Settings } from './settings';
 import { Icon, Toggle } from './Controls';
 import { AudioQuickMenu } from './AudioQuickMenu';
+import { BookmarkRail, type Bookmark } from './BookmarkRail';
+import { presencePoll } from '../shared/presence-poll.mjs';
 import { VoiceSettings } from './VoiceSettings';
 import { ConnectionStatus } from './ConnectionStatus';
 import { Modal } from './Modal';
@@ -16,7 +18,6 @@ import { ServerKey } from './ServerKey';
 import { UpdateNotice } from './UpdateNotice';
 import { useLanguage, changeLanguage } from './i18n';
 
-type Bookmark = { address: string; name: string };
 type JoinTarget = { address: string; nickname: string; password: string; e2eeKey?: string };
 const initial: Snapshot = { state: 'disconnected', people: [], db: -100, speaking: false };
 function stored(key: string) { try { return localStorage.getItem(key) || ''; } catch { return ''; } }
@@ -26,8 +27,10 @@ export function App() {
   const states: Record<string, string> = { disconnected: t("Не подключено"), connecting: t("Подключение…"), connected: t("На связи"), reconnecting: t("Восстанавливаем связь…"), signalReconnecting: t("Восстанавливаем связь…") };
   const keys: [number, string][] = [[5, t("Боковая кнопка мыши 4")], [6, t("Боковая кнопка мыши 5")], [32, t("Пробел")], [162, t("Левый Ctrl")], [163, t("Правый Ctrl")], [164, t("Левый Alt")], [165, t("Правый Alt")], [160, t("Левый Shift")], [161, t("Правый Shift")], [20, 'Caps Lock'], ...Array.from({ length: 26 }, (_, i) => [65 + i, String.fromCharCode(65 + i)] as [number, string]), ...Array.from({ length: 12 }, (_, i) => [112 + i, `F${i + 1}`] as [number, string])];
   const [settings, setSettings] = useState(loadSettings);
-  const [modal, setModal] = useState<'join' | 'create' | 'share' | 'settings' | 'server-key' | null>(null);
+  const [modal, setModal] = useState<'join' | 'create' | 'share' | 'host-share' | 'settings' | 'server-key' | null>(null);
   const [roomName, setRoomName] = useState('');
+  const [page, setPage] = useState<'home' | 'room'>('home');
+  const [renaming, setRenaming] = useState<Bookmark | null>(null);
   const [autoStart, setAutoStart] = useState<boolean | null>(null);
   const [autoStartBusy, setAutoStartBusy] = useState(false);
   const [autoStartAvailable, setAutoStartAvailable] = useState(false);
@@ -65,6 +68,7 @@ export function App() {
   const joinedOwnHost = useRef(false);
   const active = snapshot.state !== 'disconnected';
   const inRoom = ['connected','reconnecting','signalReconnecting'].includes(snapshot.state);
+  const showRoom = inRoom && page === 'room';
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => setSettings(previous => ({ ...previous, [key]: value }));
   const currentTarget = useRef<JoinTarget | null>(null);
   const [bookmarkBusy, setBookmarkBusy] = useState(false);
@@ -72,6 +76,23 @@ export function App() {
     try { const data = JSON.parse(stored('voicecord.bookmarks') || '[]'); return Array.isArray(data) ? data.filter(v => v && typeof v.address === 'string' && typeof v.name === 'string' && !v.address.includes('#')).slice(0, 50) : []; } catch { return []; }
   });
   const [menu, setMenu] = useState<{ address: string; x: number; y: number } | null>(null);
+  const [presence, setPresence] = useState<Record<string, number | null>>({});
+  useEffect(() => {
+    const poll = presencePoll({
+      read: async () => Object.fromEntries(await Promise.all(bookmarks.map(async item => {
+        try { return [item.address, await window.desktop?.roomPresence?.(item.address) ?? null] as const; }
+        catch { return [item.address, null] as const; }
+      }))),
+      publish: (values: Record<string, number | null>) => setPresence(values),
+    });
+    let changed = false;
+    const receive = (active: boolean) => { changed = true; poll.setActive(active); };
+    const off = window.desktop?.onWindowActive?.(receive);
+    const fallback = () => receive(document.visibilityState === 'visible' && document.hasFocus());
+    if (window.desktop?.windowActive) void window.desktop.windowActive().then(active => { if (!changed) poll.setActive(active); }).catch(() => {});
+    else { fallback(); window.addEventListener('focus', fallback); window.addEventListener('blur', fallback); document.addEventListener('visibilitychange', fallback); }
+    return () => { poll.stop(); off?.(); window.removeEventListener('focus', fallback); window.removeEventListener('blur', fallback); document.removeEventListener('visibilitychange', fallback); };
+  }, [bookmarks]);
   useEffect(() => { localStorage.setItem('voicecord.bookmarks', JSON.stringify(bookmarks)); }, [bookmarks]);
   useEffect(() => {
     const close = () => setMenu(null);
@@ -79,20 +100,34 @@ export function App() {
     window.addEventListener('pointerdown', close); window.addEventListener('keydown', key); window.addEventListener('resize', close);
     return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', key); window.removeEventListener('resize', close); };
   }, []);
-  async function addBookmark() {
+  function savedNames(): Record<string, string> {
+    try { const value = JSON.parse(stored('voicecord.roomNames') || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; }
+  }
+  function renameRoom(address: string, name: string) {
+    const clean = name.trim();
+    if (!clean) return;
+    setBookmarks(prev => prev.map(item => item.address === address ? { ...item, name: clean } : item));
+    localStorage.setItem('voicecord.roomNames', JSON.stringify({ ...savedNames(), [address]: clean }));
+    if (currentTarget.current?.address.split('#')[0] === address) setRoomName(clean);
+    setRenaming(null);
+  }
+  const isBookmarked = bookmarks.some(item => item.address === currentTarget.current?.address.split('#')[0]);
+  async function toggleBookmark() {
     const target = currentTarget.current;
     if (!target || !window.desktop || bookmarkBusy) return;
     setBookmarkBusy(true);
     try {
       const clean = target.address.split('#')[0];
+      if (isBookmarked) { await window.desktop.savePassword({ address: clean, password: null }); setBookmarks(prev => prev.filter(item => item.address !== clean)); return; }
       let secret = target.password;
       if (target.address.startsWith('voicecord://')) secret = new URLSearchParams(new URL(target.address).hash.slice(1)).get('password') ?? secret;
       await window.desktop.savePassword({ address: clean, password: secret, e2eeKey: target.e2eeKey ?? null });
       setBookmarks(prev => [...prev.filter(v => v.address !== clean), { address: clean, name: roomName || t("Комната") }]);
-    } catch { setError(t("Не удалось сохранить закладку в защищённом хранилище.")); }
+    } catch { setError(t("Не удалось изменить закладку в защищённом хранилище.")); }
     finally { setBookmarkBusy(false); }
   }
   async function openBookmark(item: Bookmark) {
+    if (active && item.address === currentTarget.current?.address.split('#')[0]) { setPage('room'); setModal(null); setMenu(null); return; }
     if (!window.desktop || busy || hostBusy || bookmarkBusy) return;
     setMenu(null); setBookmarkBusy(true); setError('');
     try {
@@ -103,9 +138,11 @@ export function App() {
     finally { setBookmarkBusy(false); }
   }
   async function removeBookmark(item: string) {
-    setMenu(null);
+    if (bookmarkBusy) return;
+    setMenu(null); setBookmarkBusy(true);
     try { await window.desktop?.savePassword({ address: item, password: null }); setBookmarks(prev => prev.filter(v => v.address !== item)); }
     catch { setError(t("Не удалось удалить закладку.")); }
+    finally { setBookmarkBusy(false); }
   }
   const stopTest = () => { testMic.current?.stopMonitor(); setTesting(false); };
   useEffect(() => {
@@ -167,6 +204,7 @@ export function App() {
     if (mic) void mic.configure(settings).catch(error => { if (testMic.current === mic) setError(t("Не удалось применить настройки микрофона: {0}", error.message)); });
   }, [settings]);
   async function connect(target: JoinTarget, hosting = false, displayName?: string) {
+    if (active && target.address.split('#')[0] === currentTarget.current?.address.split('#')[0]) { setPage('room'); setModal(null); return; }
     if (!window.desktop) { setError(t("Подключение доступно в десктопном приложении. Эта страница — предпросмотр интерфейса.")); return; }
     if (settings.inputMode === 'ptt' && !native) { setError(t("Для Push-to-Talk нужно собрать нативный модуль Windows.")); return; }
     const id = ++attempt.current; setBusy(true); setError(''); stopPreview();
@@ -180,13 +218,14 @@ export function App() {
       if (id !== attempt.current) return;
       await controller.current!.connect(result.url, result.token, { required: result.e2eeRequired, key: result.e2eeKey });
       if (id !== attempt.current) return;
-      joinedOwnHost.current = hosting;
+      joinedOwnHost.current = result.ownHost ?? hosting;
       currentTarget.current = { ...target, e2eeKey: result.e2eeKey };
-      setPersonPrefs({}); setModal(null); setModal(hosting ? 'share' : null); if (!hosting) { try { setRoomName(displayName || new URLSearchParams(new URL(target.address.includes('://') ? target.address : `https://${target.address}`).hash.slice(1)).get('name') || new URL(target.address.includes('://') ? target.address : `https://${target.address}`).host); } catch { setRoomName(t("Комната")); } } void refreshDevices();
+      if (hosting && savedNames()[target.address.split('#')[0]]) setRoomName(savedNames()[target.address.split('#')[0]]);
+      setPage('room'); setPersonPrefs({}); setModal(null); setModal(hosting ? 'host-share' : null); if (!hosting) { try { setRoomName(savedNames()[target.address.split('#')[0]] || displayName || new URLSearchParams(new URL(target.address.includes('://') ? target.address : `https://${target.address}`).hash.slice(1)).get('name') || new URL(target.address.includes('://') ? target.address : `https://${target.address}`).host); } catch { setRoomName(t("Комната")); } } void refreshDevices();
     } catch (error) { if (id === attempt.current) setError(error instanceof Error ? error.message : String(error)); }
     finally { if (id === attempt.current) setBusy(false); }
   }
-  async function disconnect() { currentTarget.current = null; joinedOwnHost.current = false; ++attempt.current; setBusy(false); setPtt(false); await controller.current?.disconnect(); }
+  async function disconnect() { setPage('home'); currentTarget.current = null; joinedOwnHost.current = false; ++attempt.current; setBusy(false); setPtt(false); await controller.current?.disconnect(); }
   async function toggleTest() {
     if (testing) { stopTest(); return; }
     setTestBusy(true); setError('');
@@ -204,31 +243,32 @@ export function App() {
     setPersonPrefs(prev => ({ ...prev, [id]: { volume, muted: localMute } })); controller.current?.setPerson(id, volume, localMute);
   };
   return <div className="app">
-    <aside className="rail"><button className={`server-orb home-orb ${!inRoom || !bookmarks.some(b => b.address === currentTarget.current?.address.split('#')[0]) ? 'selected' : ''}`} title={t("Главная")} onClick={() => setModal(null)}><img src="./voicecord.svg" width="44" height="44" alt="Voicecord"/></button><div className="rail-line"/><div className="bookmark-list">{bookmarks.map(item => <button key={item.address} className={`server-orb bookmark-orb ${inRoom && item.address === currentTarget.current?.address.split('#')[0] ? 'selected' : ''}`} title={item.name} aria-label={item.name} disabled={busy || hostBusy || bookmarkBusy} onClick={() => void openBookmark(item)} onContextMenu={e => { e.preventDefault(); setMenu({ address: item.address, x: Math.max(8, Math.min(e.clientX, window.innerWidth - 210)), y: Math.max(8, Math.min(e.clientY, window.innerHeight - 70)) }); }}>{item.name.slice(0, 1).toUpperCase()}</button>)}</div></aside>
-    {menu && <div className="bookmark-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={e => e.stopPropagation()}><button autoFocus role="menuitem" onClick={() => void removeBookmark(menu.address)}>{t("Удалить закладку")}</button></div>}
+    <aside className="rail"><button className={`server-orb home-orb ${!showRoom ? 'selected' : ''}`} title={t("Главная")} onClick={() => { setPage('home'); setModal(null); }}><img src="./voicecord.svg" width="44" height="44" alt="Voicecord"/></button><div className="rail-line"/><BookmarkRail bookmarks={bookmarks} activeAddress={inRoom ? currentTarget.current?.address.split('#')[0] : undefined} selected={showRoom} people={snapshot.people.length} presence={presence} disabled={busy || hostBusy || bookmarkBusy} onOpen={item => void openBookmark(item)} onReorder={setBookmarks} onMenu={(address, x, y) => setMenu({ address, x: Math.max(8, Math.min(x, window.innerWidth - 210)), y: Math.max(8, Math.min(y, window.innerHeight - 120)) })}/></aside>
+    {menu && <div className="bookmark-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={e => e.stopPropagation()}><button autoFocus role="menuitem" onClick={() => { const item = bookmarks.find(b => b.address === menu.address); if (item) setRenaming(item); setMenu(null); }}>{t("Переименовать")}</button><button role="menuitem" onClick={() => void removeBookmark(menu.address)}>{t("Удалить закладку")}</button></div>}
     <aside className="user-dock" aria-label={t("Профиль и управление звуком")}>
 
       <div className="profile"><div className={`avatar small ${snapshot.speaking ? 'speaking' : ''}`}>{(nickname || t("Вы")).slice(0, 1).toUpperCase()}</div><span>{nickname || t("Ваш профиль")}</span><ConnectionStatus compact state={snapshot.state} label={states[snapshot.state] || snapshot.state} delay={snapshot.rtt} loss={snapshot.packetLoss}/><AudioQuickMenu kind="input" settings={settings} update={update} devices={devices} onOpen={refreshDevices}><button className={`icon-button ${muted || deafened ? 'off' : ''}`} aria-pressed={muted || deafened} title={t("Микрофон")} onClick={() => setMuted(v => !v)}><Icon name={muted || deafened ? 'mic-off' : 'mic'}/></button></AudioQuickMenu><AudioQuickMenu kind="output" settings={settings} update={update} devices={devices} onOpen={refreshDevices}><button className={`icon-button ${deafened ? 'off' : ''}`} aria-pressed={deafened} title={t("Входящий звук")} onClick={() => setDeafened(v => !v)}><Icon name={deafened ? 'headphones-off' : 'headphones'}/></button></AudioQuickMenu><button className="icon-button" title={t("Настройки")} onClick={() => setModal('settings')}><Icon name="settings"/></button>{(active || busy) && <button className="icon-button off" title={t("Отключиться")} onClick={() => void disconnect()}><Icon name="exit"/></button>}</div>
     </aside>
-    <UpdateNotice blocked={modal !== null} active={active || busy} hosting={hostRunning}/>
+    <UpdateNotice blocked={modal !== null || renaming !== null} active={active || busy} hosting={hostRunning}/>
     <main>
     <div className="content">
       {error && <div role="alert" className="notice error">{error}<button aria-label={t("Закрыть сообщение")} onClick={() => setError('')}>×</button></div>}
       {!native && <div className="notice warning">{window.desktop ? t("Нативный модуль не загружен. Глобальный PTT и приглушение других приложений недоступны.") : t("Предпросмотр интерфейса. Для голосового подключения запустите Electron.")}</div>}
       <>
         <div className="eyebrow">{t("ВАШЕ МЕСТО ДЛЯ РАЗГОВОРА")}</div>
-        <div className="page-title"><div><div className="room-title"><h1>{inRoom ? roomName || t("Вы в хорошей компании.") : t("Разговор начинается здесь.")}</h1>{inRoom && <button className="icon-button bookmark-add" title={bookmarks.some(v => v.address === currentTarget.current?.address.split('#')[0]) ? t("В закладках") : t("Добавить в закладки")} disabled={bookmarkBusy || bookmarks.some(v => v.address === currentTarget.current?.address.split('#')[0])} onClick={() => void addBookmark()}><Icon name="bookmark"/></button>}</div><p>{inRoom ? t("Одна комната. Знакомые голоса. Ничего лишнего.") : t("Voicecord — личная голосовая комната для вас и друзей. Подключитесь к серверу или создайте свой прямо на этом компьютере.")}</p></div>{!inRoom && <span className="badge">{t("● Голосовая связь")}</span>}</div>
-        {!active && <div className="home-actions"><button className="home-action" disabled={busy || hostBusy} onClick={() => setModal('join')}><Icon name="signal" size={30}/><strong>{t("Присоединиться к комнате")}</strong><span>{t("По адресу сервера или приглашению")}</span></button><button className="home-action" disabled={busy || hostBusy} onClick={() => setModal(hostRunning ? 'share' : 'create')}><Icon name="invite" size={30}/><strong>{t("Создать комнату")}</strong><span>{t("Пригласите друзей на свой сервер")}</span></button></div>}
-        {!active && <div className="server-setup"><span>{t("Настраиваете сервер?")}</span><button className="e2ee-generate" onClick={() => setModal('server-key')}>{t("Сгенерировать ключ шифрования")}</button></div>}
+        <div className="page-title"><div><div className="room-title"><h1>{showRoom ? roomName || t("Вы в хорошей компании.") : t("Разговор начинается здесь.")}</h1>{showRoom && <button className={`icon-button bookmark-add ${isBookmarked ? 'bookmarked' : ''}`} aria-pressed={isBookmarked} title={isBookmarked ? t("Удалить закладку") : t("Добавить в закладки")} disabled={bookmarkBusy} onClick={() => void toggleBookmark()}><Icon name="star"/></button>}</div><p>{showRoom ? t("Одна комната. Знакомые голоса. Ничего лишнего.") : t("Voicecord — личная голосовая комната для вас и друзей. Подключитесь к серверу или создайте свой прямо на этом компьютере.")}</p></div>{!showRoom && <span className="badge">{t("● Голосовая связь")}</span>}</div>
+        {!showRoom && <>{inRoom && <button className="return-room" onClick={() => setPage('room')}>{t("Вернуться в комнату: {0}", roomName)}</button>}<div className="home-actions"><button className="home-action" disabled={busy || hostBusy} onClick={() => setModal('join')}><Icon name="signal" size={30}/><strong>{t("Присоединиться к комнате")}</strong><span>{t("По адресу сервера или приглашению")}</span></button><button className="home-action" disabled={busy || hostBusy} onClick={() => setModal(hostRunning ? 'host-share' : 'create')}><Icon name="invite" size={30}/><strong>{t("Создать комнату")}</strong><span>{t("Пригласите друзей на свой сервер")}</span></button></div></>}
+        {!showRoom && <div className="server-setup"><span>{t("Настраиваете сервер?")}</span><button className="e2ee-generate" onClick={() => setModal('server-key')}>{t("Сгенерировать ключ шифрования")}</button></div>}
         {modal === 'server-key' && <ServerKey onClose={() => setModal(null)}/>}
         {modal === 'join' && <JoinRoom address={address} setAddress={value => { setAddress(value); setError(''); }} nickname={nickname} busy={busy || hostBusy} error={error} onConnect={input => connect(input)} onClose={() => setModal(null)}/>}
-        {inRoom && <>
-          <div className="participants-heading"><h2>{t("Участники ")}<span>{snapshot.people.length}</span></h2><div className="room-presence">{snapshot.e2ee && <span className="e2ee-badge" title={t("Голос зашифрован между участниками. Экспериментальный режим.")}>E2EE</span>}<span>{states[snapshot.state]}</span>{<button className="icon-button" title={t("Пригласить пользователя")} onClick={() => setModal('share')}><Icon name="invite"/></button>}</div></div>
+        {showRoom && <>
+          <div className="participants-heading"><h2>{t("Участники ")}<span>{snapshot.people.length}</span></h2><div className="room-presence">{snapshot.e2ee && <span className="e2ee-badge" title={t("Голос зашифрован между участниками. Экспериментальный режим.")}>E2EE</span>}<span>{states[snapshot.state]}</span>{<button className="icon-button" title={t("Пригласить пользователя")} onClick={() => setModal(joinedOwnHost.current ? 'host-share' : 'share')}><Icon name="invite"/></button>}</div></div>
           <Participants people={snapshot.people} prefs={personPrefs} onChange={person}/>
         </>}
       </>
-      {modal === 'share' && !hostRunning && currentTarget.current && <GuestShare target={currentTarget.current} name={roomName} onClose={() => setModal(null)}/>}
-      <HostPanel nickname={nickname} active={active || busy} modal={modal} onClose={() => setModal(null)} onCreated={name => { setRoomName(name); setModal('share'); }} onStatus={setHostRunning} onJoin={input => connect(input, true)} onStop={disconnect} onError={setError} onBusy={setHostBusy}/>
+      {modal === 'share' && currentTarget.current && <GuestShare target={currentTarget.current} name={roomName} onClose={() => setModal(null)}/>}
+      <HostPanel nickname={nickname} active={active || busy} modal={modal} onClose={() => setModal(null)} onCreated={name => { setRoomName(name); setModal('host-share'); }} onStatus={setHostRunning} onJoin={input => connect(input, true)} onStop={disconnect} onError={setError} onBusy={setHostBusy}/>
+      {renaming && <Modal title={t("Переименовать сервер")} onClose={() => setRenaming(null)}><form onSubmit={event => { event.preventDefault(); renameRoom(renaming.address, renaming.name); }}><div className="form-fields"><label>{t("Название сервера")}<input autoFocus required maxLength={64} value={renaming.name} onChange={event => setRenaming({ ...renaming, name: event.target.value })}/></label></div><p className="host-hint">{t("Название изменится только у вас.")}</p><div className="modal-actions"><button type="button" className="quiet" onClick={() => setRenaming(null)}>{t("Отмена")}</button><button className="primary" disabled={!renaming.name.trim()}>{t("Сохранить")}</button></div></form></Modal>}
       {modal === 'settings' && <Modal title={t("Настройки")} className="settings-modal" onClose={() => setModal(null)}>{error && <p role="alert" className="text-error">{error}</p>}<section className="settings-page"><div className="settings-card profile-settings"><h1>{t("Обо мне")}</h1><div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label><label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div><p>{t("Используется при следующем подключении к комнате.")}</p>{autoStart !== null && <Toggle label={t("Запускать Voicecord при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</div></section>
       <VoiceSettings settings={settings} update={update} devices={devices} keys={keys} db={db} threshold={threshold} speaking={active && !testing ? snapshot.speaking : testSpeaking} active={active} busy={busy} testing={testing} testBusy={testBusy} ready={previewReady} native={native} keyError={keyError} onTest={() => void toggleTest()} onReset={() => setSettings({ ...defaults })}/></Modal>}
     </div>

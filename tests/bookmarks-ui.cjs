@@ -1,0 +1,63 @@
+const { app, BrowserWindow, session } = require('electron');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+app.setPath('userData', path.join(require('node:os').tmpdir(), 'voicecord-bookmarks-' + process.pid));
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+app.commandLine.appendSwitch('use-fake-device-for-media-stream');
+app.whenReady().then(async () => {
+ session.defaultSession.setPermissionRequestHandler((_w,_p,done) => done(true));
+ session.defaultSession.setPermissionCheckHandler(() => true);
+ const win = new BrowserWindow({ show: false, width: 1100, height: 760, webPreferences: { preload: path.join(__dirname, 'ui-flow-preload.cjs'), contextIsolation: true, sandbox: true, offscreen: true } });
+ const js = code => win.webContents.executeJavaScript(code, true);
+ const wait = () => new Promise(resolve => setTimeout(resolve, 150));
+ try {
+  await win.loadFile(path.resolve('dist/index.html')); await wait();
+  await js(`localStorage.setItem('voicecord.bookmarks', JSON.stringify(['A','B','C'].map(name=>({name,address:'https://'+name.toLowerCase()+'.example.com'}))))`);
+  await win.reload(); await wait();
+  assert.deepEqual(await js(`[...document.querySelectorAll('.participant-pin')].map(el=>el.textContent)`), ['3','3','3'], 'counts load while disconnected');
+  await js('window.testWindowActive(false)');
+  const before = await js('window.testPresenceReads()');
+  assert.equal(await js(`getComputedStyle(document.querySelector('.bookmark-orb')).cursor`), 'pointer');
+  await js(`window.dragBookmark = (from, to) => {
+    const buttons = document.querySelectorAll('.bookmark-orb');
+    const source = buttons[from], target = buttons[to], rect = target.getBoundingClientRect();
+    const options = { bubbles: true, cancelable: true, dataTransfer: new DataTransfer(), clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+    const send = (element, type) => element.dispatchEvent(new DragEvent(type, options));
+    send(source, 'dragstart'); send(target, 'dragover');
+    window.finishBookmarkDrag = drop => {
+      if (drop) send(document.querySelector('.bookmark-list'), 'drop');
+      send(source, 'dragend');
+    };
+  }; window.dragBookmark(0, 2);`);
+  assert.equal(await js(`getComputedStyle(document.querySelector('.bookmark-placeholder')).borderTopStyle`), 'dashed');
+  assert.ok(await js(`[...document.querySelectorAll('.bookmark-orb:not(.bookmark-placeholder)')].some(button => button.getAnimations().some(animation => animation.transitionProperty === 'transform'))`), 'neighbors animate before drop');
+  await new Promise(resolve => setTimeout(resolve, 230));
+  const visualOrder = `[...document.querySelectorAll('.bookmark-orb')].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top).map(el=>el.title)`;
+  assert.deepEqual(await js(visualOrder), ['B','C','A'], 'placeholder occupies the destination before drop');
+  assert.deepEqual(await js(`JSON.parse(localStorage.getItem('voicecord.bookmarks')).map(item=>item.name)`), ['A','B','C'], 'preview is not persisted');
+  await js('window.finishBookmarkDrag(false)'); await wait();
+  assert.equal(await js(`document.querySelector('.bookmark-placeholder')`), null);
+  assert.deepEqual(await js(visualOrder), ['A','B','C'], 'cancelling restores the original layout');
+  await js('window.dragBookmark(0, 2)'); await wait();
+  await js('window.finishBookmarkDrag(true)'); await wait();
+  assert.deepEqual(await js(`[...document.querySelectorAll('.bookmark-orb')].map(el=>el.title)`), ['B','C','A']);
+  assert.equal(await js('window.testPresenceReads()'), before, 'reordering while inactive does not start polling');
+  assert.equal(await js('window.testCalls().filter(call=>call[0]==="connect").length'),0,'drag never connects');
+  await js('window.testWindowActive(true)'); await wait();
+  assert.equal(await js('window.testPresenceReads()'), before + 3, 'activation refreshes all bookmarks immediately');
+  await win.reload(); await wait();
+  assert.deepEqual(await js(`[...document.querySelectorAll('.bookmark-orb')].map(el=>el.title)`), ['B','C','A'], 'order persists');
+  await js(`document.querySelector('[title="Настройки"]').click()`); await wait();
+  const row = text => `Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.querySelector('strong').textContent===${JSON.stringify(text)}).querySelector('input')`;
+  assert.equal(await js(`${row('Запускать свёрнутым в трее')}.disabled`),true);
+  await js(`${row('Запускать Voicecord при входе в Windows')}.click()`); await wait();
+  assert.equal(await js(`${row('Запускать свёрнутым в трее')}.disabled`),false);
+  await js(`${row('Запускать свёрнутым в трее')}.click()`); await wait();
+  assert.equal(await js(`${row('Запускать свёрнутым в трее')}.checked`),true);
+  const fs=require('node:fs/promises');await fs.mkdir(path.resolve('release/qa'),{recursive:true});
+  await fs.writeFile(path.resolve('release/qa/startup-tray-ru.png'),(await win.webContents.capturePage()).toPNG());
+  console.log('PASS disconnected counts, focus pause/resume, bookmark drag persistence, startup tray controls');
+  win.destroy();app.exit(0);
+ } catch(error) { console.error(error);win.destroy();app.exit(1); }
+});

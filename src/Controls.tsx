@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
     download: <><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></>,
+    star: <path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8l-6.2 3.2L7 14.2l-5-4.9 6.9-1z"/>,
+    edit: <path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14z"/>,
     chevron: <path d="m6 14 6-6 6 6"/>,
     'chevron-right': <path d="m9 6 6 6-6 6"/>,
     bookmark: <><path d="M6 3h12v19l-6-4-6 4z"/><path d="M12 7v6M9 10h6"/></>,
