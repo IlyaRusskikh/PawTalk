@@ -12,6 +12,9 @@ import { Modal } from './Modal';
 import { JoinRoom } from './JoinRoom';
 import { GuestShare } from './GuestShare';
 import { Participants } from './Participants';
+import { Avatar } from './Avatar';
+import { AvatarEditor } from './AvatarEditor';
+import { avatarFormats, avatarStorageKey, validAvatar } from './avatarImage';
 import { RoomChat, type ChatRoom } from './RoomChat';
 import { RoomSplit } from './RoomSplit';
 import { HostPanel } from './HostPanel';
@@ -54,6 +57,12 @@ export function App() {
   const [hostRunning, setHostRunning] = useState(false);
   const [address, setAddress] = useState('');
   const [nickname, setNickname] = useState(() => stored('voicecord.nickname') || t("Гость"));
+  const [avatar, setAvatar] = useState(() => {
+    const saved = stored(avatarStorageKey);
+    return validAvatar(saved) ? saved : undefined;
+  });
+  const [avatarFile, setAvatarFile] = useState<File>();
+  const avatarPicker = useRef<HTMLInputElement>(null);
   const [hostBusy, setHostBusy] = useState(false);
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   const [snapshot, setSnapshot] = useState(initial);
@@ -185,10 +194,12 @@ export function App() {
     return () => { ++attempt.current; offPtt?.(); offAction?.(); offSleep?.(); offHost?.(); navigator.mediaDevices?.removeEventListener('devicechange', change); testMic.current?.stop(); void c.disconnect(); };
   }, []);
   useEffect(() => { remember(settings); controller.current?.updateSettings(settings); }, [settings]);
+  useEffect(() => { controller.current?.setAvatar(avatar); }, [avatar]);
   useEffect(() => {
     const timer = setTimeout(() => controller.current?.setNickname(nickname), 300);
     return () => clearTimeout(timer);
   }, [nickname]);
+  useEffect(() => { if (modal !== 'settings') setAvatarFile(undefined); }, [modal]);
   useEffect(() => { controller.current?.setMute(muted, deafened); }, [muted, deafened]);
   useEffect(() => {
     void window.desktop?.configureKeys({ ptt: settings.pttKey, mute: settings.muteKey, deafen: settings.deafenKey }).then(result => {
@@ -260,6 +271,14 @@ export function App() {
   const person = (id: string, volume: number, localMute: boolean) => {
     setPersonPrefs(prev => ({ ...prev, [id]: { volume, muted: localMute } })); controller.current?.setPerson(id, volume, localMute);
   };
+  function saveAvatar(value?: string) {
+    try {
+      if (value) localStorage.setItem(avatarStorageKey, value);
+      else localStorage.removeItem(avatarStorageKey);
+      setAvatar(value);
+      return true;
+    } catch { return false; }
+  }
   const callControls = <div className={`call-controls${showRoom ? '' : ' call-controls-floating'}`} role="group" aria-label={t("Управление звонком")}>
     <AudioQuickMenu kind="input" settings={settings} update={update} devices={devices} onOpen={refreshDevices}>
       <button className={`icon-button ${muted || deafened ? 'off' : ''}`} aria-pressed={muted || deafened} title={t("Микрофон")} onClick={() => setMuted(v => !v)}><Icon name={muted || deafened ? 'mic-off' : 'mic'}/></button>
@@ -298,14 +317,29 @@ export function App() {
         {inRoom && <RoomSplit visible={showRoom} participants={<>
           <Participants people={snapshot.people} prefs={personPrefs} onChange={person}/>
           {showRoom && callControls}
-        </>} chat={chatRoom && controller.current && <RoomChat key={chatRoom.identity} room={chatRoom} session={controller.current} people={snapshot.people} profile={{ nickname }} visible={showRoom} connected={snapshot.state === 'connected'} covered={modal !== null || renaming !== null}/>}/>}
+        </>} chat={chatRoom && controller.current && <RoomChat key={chatRoom.identity} room={chatRoom} session={controller.current} people={snapshot.people} profile={{ nickname, avatar }} visible={showRoom} connected={snapshot.state === 'connected'} covered={modal !== null || renaming !== null}/>}/>}
       </>
       {modal === 'share' && currentTarget.current && <GuestShare target={currentTarget.current} name={roomName} onClose={() => setModal(null)}/>}
       <HostPanel nickname={nickname} active={active || busy} modal={modal} onClose={() => setModal(null)} onCreated={setRoomName} onStatus={setHostRunning} onJoin={input => connect(input, true)} onStop={disconnect} onError={setError} onBusy={setHostBusy}/>
       {renaming && <Modal title={t("Переименовать сервер")} onClose={() => setRenaming(null)}><form onSubmit={event => { event.preventDefault(); renameRoom(renaming.address, renaming.name); }}><div className="form-fields"><label>{t("Название сервера")}<input autoFocus required maxLength={64} value={renaming.name} onChange={event => setRenaming({ ...renaming, name: event.target.value })}/></label></div><p className="host-hint">{t("Название изменится только у вас.")}</p><div className="modal-actions"><button type="button" className="quiet" onClick={() => setRenaming(null)}>{t("Отмена")}</button><button className="primary" disabled={!renaming.name.trim()}>{t("Сохранить")}</button></div></form></Modal>}
       {modal === 'settings' && <Modal title={t("Настройки")} className="settings-modal" onClose={() => setModal(null)}>{error && <p role="alert" className="text-error">{error}</p>}<section className="settings-page"><div className="settings-card profile-settings"><h1>{t("Обо мне")}</h1>
+        <div className="profile-avatar">
+          <Avatar name={nickname} image={avatar}/>
+          <div className="profile-avatar-actions">
+            <input ref={avatarPicker} type="file" hidden accept={avatarFormats.join(',')} onChange={event => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = '';
+              if (file) setAvatarFile(file);
+            }}/>
+            <button type="button" className="secondary" onClick={() => avatarPicker.current?.click()}>{t("Выбрать изображение")}</button>
+            {avatar && <button type="button" className="quiet" onClick={() => {
+              if (!saveAvatar()) setError(t("Не удалось сохранить аватар."));
+            }}>{t("Удалить аватар")}</button>}
+          </div>
+        </div>
         <div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label><label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div><p>{t("Никнейм обновляется и в открытой комнате.")}</p>{autoStart !== null && <Toggle label={t("Запускать Voicecord при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</div></section>
       <VoiceSettings settings={settings} update={update} devices={devices} keys={keys} db={db} threshold={threshold} speaking={active && !testing ? snapshot.speaking : testSpeaking} active={active} busy={busy} testing={testing} testBusy={testBusy} ready={previewReady} native={native} keyError={keyError} onTest={() => void toggleTest()} onReset={() => setSettings({ ...defaults })}/></Modal>}
+      {modal === 'settings' && avatarFile && <AvatarEditor file={avatarFile} onClose={() => setAvatarFile(undefined)} onSave={saveAvatar}/>}
     </div>
     </main>
   </div>;

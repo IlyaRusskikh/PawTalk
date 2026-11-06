@@ -6,8 +6,10 @@ import { Microphone, playCue } from './audio';
 import type { Settings } from './settings';
 import { RttMeter } from '../shared/rtt.mjs';
 import { PacketLossMeter } from '../shared/packet-loss.mjs';
+import { avatarPayloadLimit, validAvatar } from './avatarImage';
 
 const chatTopic = 'voicecord.chat.v1';
+const avatarTopic = 'voicecord.avatar.v1';
 const nicknameTopic = 'voicecord.nickname.v1';
 
 export interface Person { id: string; name: string; avatar?: string; speaking: boolean; muted: boolean; deafened?: boolean; local: boolean; rtt?: number; packetLoss?: number; }
@@ -30,7 +32,9 @@ export class VoiceSession {
   private lastDuck = false; private rtt?: number; private packetLoss?: number;
   private rttMeter = new RttMeter();
   private peerNetwork = new Map<string, { rtt?: number; packetLoss?: number; received: number }>();
+  private peerAvatars = new Map<string, string>();
   private peerNicknames = new Map<string, string>();
+  private avatar?: string;
   private nickname?: string;
   private collecting = false;
   private lossMeter = new PacketLossMeter();
@@ -49,6 +53,7 @@ export class VoiceSession {
       const fresh = peer && now - peer.received <= 15000 ? peer : undefined;
       return {
         id: p.identity, name: (local ? this.nickname : this.peerNicknames.get(p.identity)) || p.name || t("Участник"), local,
+        avatar: local ? this.avatar : this.peerAvatars.get(p.identity),
         speaking: local ? this.speaking : this.speakers.has(p.identity),
         muted: local ? this.muted || this.deafened : p.getTrackPublication(Track.Source.Microphone)?.isMuted ?? true,
         deafened: local ? this.deafened : this.peerDeafened.get(p.identity) === true,
@@ -113,9 +118,9 @@ export class VoiceSession {
       track.detach().forEach(el => el.remove()); this.elements.delete(id);
     });
     room.on(RoomEvent.ActiveSpeakersChanged, speakers => { this.speakers = new Set(speakers.map(p => p.identity)); this.emit(); });
-    room.on(RoomEvent.ParticipantConnected, p => { this.publishAudioState(); this.publishNickname(p.identity); if (this.settings.sounds) playCue(true); this.emit(); });
+    room.on(RoomEvent.ParticipantConnected, p => { this.publishAudioState(); if (this.avatar) this.publishAvatar(p.identity); this.publishNickname(p.identity); if (this.settings.sounds) playCue(true); this.emit(); });
     room.on(RoomEvent.ParticipantDisconnected, p => {
-      this.peerNetwork.delete(p.identity); this.peerDeafened.delete(p.identity); this.peerNicknames.delete(p.identity);
+      this.peerNetwork.delete(p.identity); this.peerDeafened.delete(p.identity); this.peerAvatars.delete(p.identity); this.peerNicknames.delete(p.identity);
     });
     room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
       if (topic === chatTopic && participant && payload.length <= 6144) {
@@ -130,6 +135,14 @@ export class VoiceSession {
           this.peerNicknames.set(participant.identity, name);
           this.emit();
         } catch { /* Ignore malformed nicknames. */ }
+        return;
+      }
+      if (topic === avatarTopic && participant && payload.length <= avatarPayloadLimit) {
+        const avatar = new TextDecoder().decode(payload);
+        if (avatar === '-') this.peerAvatars.delete(participant.identity);
+        else if (validAvatar(avatar)) this.peerAvatars.set(participant.identity, avatar);
+        else return;
+        this.emit();
         return;
       }
       if (topic === 'voicecord.audio-state.v1' && participant && payload.length <= 100) {
@@ -147,7 +160,7 @@ export class VoiceSession {
     room.on(RoomEvent.ParticipantDisconnected, () => { if (this.settings.sounds) playCue(false); this.emit(); });
     room.on(RoomEvent.TrackMuted, () => this.emit()); room.on(RoomEvent.TrackUnmuted, () => this.emit());
     room.on(RoomEvent.AudioPlaybackStatusChanged, () => { if (!room.canPlaybackAudio) this.onError(t("Не удалось включить воспроизведение. Переподключитесь к комнате.")); });
-    room.on(RoomEvent.ConnectionStateChanged, state => { this.state = state; if (state === 'connected') { this.publishAudioState(); this.publishNickname(); } else { this.rttMeter.reset(); this.lossMeter.reset(); this.packetLoss = undefined; this.peerNetwork.clear(); this.peerDeafened.clear(); } this.syncGate(); this.emit(); });
+    room.on(RoomEvent.ConnectionStateChanged, state => { this.state = state; if (state === 'connected') { this.publishAudioState(); this.publishAvatar(); this.publishNickname(); } else { this.rttMeter.reset(); this.lossMeter.reset(); this.packetLoss = undefined; this.peerNetwork.clear(); this.peerDeafened.clear(); } this.syncGate(); this.emit(); });
     room.on(RoomEvent.Disconnected, () => { if (!this.stopped) { this.onError(t("Соединение прервано. Подключитесь снова.")); void this.disconnect(); } });
     room.on(RoomEvent.MediaDevicesError, error => this.onError(t("Ошибка аудиоустройства: {0}", error.message)));
     try {
@@ -213,6 +226,18 @@ export class VoiceSession {
   }
   private publishAudioState() {
     if (this.room?.state === ConnectionState.Connected) void this.room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ deafened: this.deafened })), { reliable: true, topic: 'voicecord.audio-state.v1' }).catch(() => {});
+  }
+  private publishAvatar(identity?: string) {
+    const room = this.room;
+    if (room?.state !== ConnectionState.Connected) return;
+    const payload = new TextEncoder().encode(this.avatar ?? '-');
+    void room.localParticipant.publishData(payload, { reliable: true, topic: avatarTopic, destinationIdentities: identity ? [identity] : undefined }).catch(() => {});
+  }
+  setAvatar(avatar?: string) {
+    if (avatar === this.avatar || (avatar && !validAvatar(avatar))) return;
+    this.avatar = avatar;
+    this.publishAvatar();
+    this.emit();
   }
   private publishNickname(identity?: string) {
     const room = this.room;
@@ -283,7 +308,7 @@ export class VoiceSession {
     const worker = this.encryptionWorker; this.encryptionWorker = undefined; this.encrypted = false;
     this.peopleVolume.clear(); this.speakers.clear(); this.speaking = false; this.db = -100; this.ptt = false; this.state = 'disconnected';
     void window.desktop?.duck({ active: false, factor: 1 }).catch(() => {});
-    this.rtt = undefined; this.packetLoss = undefined; this.lossMeter.reset(); this.rttMeter.reset(); this.peerNetwork.clear(); this.peerDeafened.clear(); this.peerNicknames.clear();
+    this.rtt = undefined; this.packetLoss = undefined; this.lossMeter.reset(); this.rttMeter.reset(); this.peerNetwork.clear(); this.peerDeafened.clear(); this.peerAvatars.clear(); this.peerNicknames.clear();
     if (wasConnected && this.settings.sounds) playCue(false);
     this.emit();
     await Promise.allSettled([room?.disconnect(), playback?.close()]);
