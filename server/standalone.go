@@ -174,6 +174,7 @@ func standaloneHandler(state serverState) http.Handler {
 	a := &app{cfg: config{APIKey: state.APIKey, APISecret: state.APISecret, PasswordHash: state.PasswordHash, LivekitURL: "wss://" + net.JoinHostPort(state.IP, fmt.Sprint(standalonePort)) + "/rtc", RequireE2EE: required, E2EEKeyID: keyID}, attempts: make(map[string]attempt), hashSlots: make(chan struct{}, 4), now: time.Now}
 	target, _ := url.Parse(mediaAddress)
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	a.cfg.PresenceURL = mediaAddress
 	api := a.handler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// This listener is public; forwarding headers from callers are never trusted.

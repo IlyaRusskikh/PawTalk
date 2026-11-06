@@ -132,6 +132,7 @@ func selfhost() error {
 	}
 	cfg := config{APIKey: c.Key, APISecret: c.Secret, PasswordHash: "pbkdf2-sha256$600000$" + b64.EncodeToString(salt) + "$" + b64.EncodeToString(digest), RequireE2EE: c.RequireE2EE, E2EEKeyID: c.E2EEKeyID}
 	a := &app{cfg: cfg, attempts: make(map[string]attempt), hashSlots: make(chan struct{}, 4), now: time.Now}
+	a.cfg.PresenceURL = fmt.Sprintf("http://127.0.0.1:%d", c.MediaPort)
 	apiHandler := a.handler()
 	target, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", c.MediaPort))
 	proxy := httputil.NewSingleHostReverseProxy(target)

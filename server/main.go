@@ -32,6 +32,7 @@ const roomName = "common"
 var b64 = base64.RawURLEncoding
 
 type config struct {
+	PresenceURL                                         string
 	APIKey, APISecret, LivekitURL, PasswordHash, Listen string
 	RequireE2EE                                         bool
 	E2EEKeyID                                           string
@@ -199,6 +200,7 @@ func (a *app) connect(w http.ResponseWriter, r *http.Request) {
 }
 func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/presence", a.presenceHandler())
 	mux.HandleFunc("POST /api/connect", a.connect)
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
 		respond(w, 200, map[string]any{"e2eeRequired": a.cfg.RequireE2EE})
