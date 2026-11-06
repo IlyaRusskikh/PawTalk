@@ -247,7 +247,7 @@ export function App() {
       setChatRoom({ identity: result.identity, nickname: target.nickname.trim(), access: result.chat, key: result.e2eeKey });
       unusedChat = undefined;
       if (hosting && savedNames()[target.address.split('#')[0]]) setRoomName(savedNames()[target.address.split('#')[0]]);
-      setPage('room'); setPersonPrefs({}); setModal(null); if (!hosting) { try { setRoomName(savedNames()[target.address.split('#')[0]] || displayName || new URLSearchParams(new URL(target.address.includes('://') ? target.address : `https://${target.address}`).hash.slice(1)).get('name') || new URL(target.address.includes('://') ? target.address : `https://${target.address}`).host); } catch { setRoomName(t("Комната")); } } void refreshDevices();
+      setPage('room'); setPersonPrefs({}); setModal(joinedOwnHost.current ? 'host-share' : null); if (!hosting) { try { setRoomName(savedNames()[target.address.split('#')[0]] || displayName || new URLSearchParams(new URL(target.address.includes('://') ? target.address : `https://${target.address}`).hash.slice(1)).get('name') || new URL(target.address.includes('://') ? target.address : `https://${target.address}`).host); } catch { setRoomName(t("Комната")); } } void refreshDevices();
     } catch (error) { if (id === attempt.current) setError(error instanceof Error ? error.message : String(error)); }
     finally {
       if (unusedChat) void window.desktop.chatClose(unusedChat).catch(() => {});
