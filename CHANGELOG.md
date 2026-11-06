@@ -2,6 +2,14 @@
 
 ## Unreleased / Не выпущено
 
+## 0.4.0 — 2026-11-07 — Room chat and profiles / Чат комнаты и профили
+
+- Added text chat, typing indicators and a limit of three messages per second per participant. / Добавлены текстовый чат, индикатор набора и лимит в три сообщения в секунду на участника.
+- Standalone servers with E2EE keep up to 500 encrypted messages for seven days in SQLite. Restarting with the same key fingerprint preserves the feed. Built-in E2EE rooms keep history in memory until the host stops, and rooms without E2EE show live messages. / Отдельный сервер с E2EE хранит до 500 зашифрованных сообщений в SQLite до семи дней. Перезапуск с прежним отпечатком ключа сохраняет ленту. Встроенные комнаты с E2EE хранят историю в памяти до остановки, комнаты без E2EE показывают сообщения во время подключения.
+- Added device profiles with current names and avatars in retained chat. The avatar editor previews a circular crop and supports zoom and repositioning. / Добавлены профили устройств с актуальными именами и аватарами в истории чата. Редактор аватара показывает круглый предпросмотр и поддерживает масштабирование и сдвиг.
+- Redesigned the room with a resizable chat, adaptive participant avatars, call controls, and per-participant latency and packet loss. Chat restores the scroll position on rejoin and jumps to unread messages. / Обновлена комната с изменяемой высотой чата, адаптивными аватарами, кнопками звонка и пингом и потерями пакетов для каждого участника. При повторном входе чат восстанавливает прокрутку и позволяет перейти к непрочитанному.
+- Fixed focus after opening a hosted room and updated the UI smoke test to check call controls in a connected room. / Исправлен фокус после входа в свою комнату. Проверка кнопок звонка перенесена в тест с активным подключением.
+
 ## 0.3.0 — 2026-11-06 — Bookmarks and quick audio / Закладки и быстрый выбор звука
 
 - Added persistent local server names editable from the bookmark context menu. / Добавлено переименование через ПКМ по закладке; имя сохраняется и отображается в комнате и закладке.
