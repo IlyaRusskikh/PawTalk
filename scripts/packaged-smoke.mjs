@@ -53,11 +53,14 @@ try {
   await evaluate(`document.querySelector('button[title="Настройки"]').click()`);
   await new Promise(resolve => setTimeout(resolve, 150));
   assert.equal(await evaluate('document.querySelector("dialog h2")?.textContent'), 'Настройки');
+  await evaluate(`document.querySelector('#settings-tab-voice').click()`);
   for(let i=0;i<100;i++) {
     if(await evaluate(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Проверка микрофона'&&!b.disabled)`)) break;
     await new Promise(resolve=>setTimeout(resolve,100));
   }
   assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Проверка микрофона'&&!b.disabled)`),true,'packaged RNNoise model loads and microphone starts');
+  await evaluate(`document.querySelector('#settings-tab-processing').click()`);
+  await new Promise(resolve=>setTimeout(resolve,100));
   assert.equal(await evaluate(`document.querySelector('[aria-label="Режим шумоподавления"]').value`),'rnnoise');
   await assert.rejects(evaluate(`window.desktop.connect({address:'http://127.0.0.1:8080',nickname:'test',password:'test'})`));
   await evaluate(`window.selfhostPassword=crypto.randomUUID(); window.desktop.startHost({port:32443,password:window.selfhostPassword})`);
