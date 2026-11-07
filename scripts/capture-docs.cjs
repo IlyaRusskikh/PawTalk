@@ -206,7 +206,7 @@ app.on('browser-window-created', (_event, win) => {
           await until(() => run('!!document.querySelector(".image-viewer")'), 'actual image viewer');
           const { dialog, clipboard, ClipboardItem, nativeImage } = require('electron');
           const saveDialog = dialog.showSaveDialog;
-          const clipboardBefore = await Promise.all((await clipboard.read()).map(async item => new ClipboardItem(Object.fromEntries(await Promise.all(item.types.map(async type => [type, await item.getType(type)]))))));
+          const clipboardBefore = await require('./clipboard-snapshot.cjs').snapshotClipboard(clipboard, ClipboardItem);
           const savedImage = path.join(output, `saved-attachment${suffix}.${language === 'en' ? 'webp' : 'png'}`);
           await fs.unlink(savedImage).catch(() => {});
           for (const mime of ['image/jpeg', 'image/webp']) {

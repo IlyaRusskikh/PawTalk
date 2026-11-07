@@ -1,5 +1,10 @@
 # Changelog / История изменений
 
+## 0.5.2 — 2026-11-07 — Empty Windows clipboard / Пустой буфер Windows
+
+- Skip clipboard entries without MIME types when saving/restoring clipboard contents for chat acceptance tests. Added regressions for empty, populated and unreadable clipboards. / При сохранении буфера обмена для тестов пропускаются элементы без MIME-типов. Добавлены проверки пустого, заполненного и недоступного буфера.
+- Includes all 0.5.0 features and the 0.5.1 motion-policy fix. The v0.5.1 CI passed chat animations but failed on the empty clipboard setup; use this release. / Включает функции 0.5.0 и исправление анимаций 0.5.1. В CI 0.5.1 анимации прошли, подготовка пустого буфера — нет; используйте этот выпуск.
+
 ## 0.5.1 — 2026-11-07 — Windows CI animation policy / Анимации в Windows CI
 
 - Explicitly test both normal and reduced-motion sending in the chat UI smoke, instead of depending on runner accessibility preferences. Application behavior is unchanged. / Тест чата явно проверяет обычную отправку и уменьшение движения, не полагаясь на настройки доступности раннера. Поведение приложения не меняется.
