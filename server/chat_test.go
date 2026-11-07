@@ -210,10 +210,10 @@ func TestChatHistorySurvivesRestartAndRotatesOnKeyChange(t *testing.T) {
 	if messages := history(join("Bob"), 0); len(messages) != 0 {
 		t.Fatal("new key exposed history from an older feed")
 	}
-	now = now.Add(chatRetention)
+	now = now.Add(30 * 24 * time.Hour)
 	restart(a.cfg.E2EEKeyID)
 	var rows int
-	if err := a.chat.db.QueryRow("SELECT COUNT(*) FROM chat_messages").Scan(&rows); err != nil || rows != 0 {
+	if err := a.chat.db.QueryRow("SELECT COUNT(*) FROM chat_messages").Scan(&rows); err != nil || rows != 1 {
 		t.Fatalf("retention after restart: rows=%d err=%v", rows, err)
 	}
 }
@@ -232,7 +232,7 @@ func TestChatCapacityAndConflictingRetry(t *testing.T) {
 		}
 	}
 	var rows, first int
-	if err := store.db.QueryRow("SELECT COUNT(*), MIN(id) FROM chat_messages").Scan(&rows, &first); err != nil || rows != 500 || first != 3 {
+	if err := store.db.QueryRow("SELECT COUNT(*), MIN(id) FROM chat_messages").Scan(&rows, &first); err != nil || rows != 502 || first != 1 {
 		t.Fatalf("chat cap: rows=%d first=%d err=%v", rows, first, err)
 	}
 	conflicting := chatPacket{RequestID: fmt.Sprintf("%032x", 501), Nonce: make([]byte, 12), Ciphertext: bytes.Repeat([]byte{1}, 32)}

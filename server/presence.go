@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +20,14 @@ func (a *app) presenceHandler() http.HandlerFunc {
 	var expires time.Time
 	var count int
 	var available bool
+	var members []previewPerson
 	return func(w http.ResponseWriter, r *http.Request) {
+		private := r.URL.Path == "/api/preview"
+		if private {
+			if _, ok := a.authorizeChat(w, r); !ok {
+				return
+			}
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		if time.Now().After(expires) {
@@ -42,10 +50,11 @@ func (a *app) presenceHandler() http.HandlerFunc {
 				if err == nil {
 					defer res.Body.Close()
 					var body struct {
-						Participants []json.RawMessage `json:"participants"`
+						Participants []previewPerson `json:"participants"`
 					}
 					if res.StatusCode == http.StatusOK && json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&body) == nil {
 						count = len(body.Participants)
+						members = body.Participants
 						available = true
 					}
 					// LiveKit returns NotFound when the room has no participants yet.
@@ -55,6 +64,7 @@ func (a *app) presenceHandler() http.HandlerFunc {
 						}
 						if json.NewDecoder(io.LimitReader(res.Body, 1024)).Decode(&failure) == nil && failure.Code == "not_found" {
 							count = 0
+							members = nil
 							available = true
 						}
 					}
@@ -65,6 +75,55 @@ func (a *app) presenceHandler() http.HandlerFunc {
 			respond(w, 503, map[string]string{"error": "presence unavailable"})
 			return
 		}
-		respond(w, 200, map[string]int{"participants": count})
+		if private {
+			a.respondPreview(w, r, count, members)
+		} else {
+			respond(w, 200, map[string]int{"participants": count})
+		}
 	}
+}
+
+type previewPerson struct {
+	Name       string            `json:"name"`
+	Attributes map[string]string `json:"attributes,omitempty"`
+}
+
+func (a *app) respondPreview(w http.ResponseWriter, r *http.Request, count int, members []previewPerson) {
+	after, err := strconv.ParseInt(r.URL.Query().Get("readAfter"), 10, 64)
+	if err != nil || after < 0 {
+		fail(w, 400, "Invalid read cursor")
+		return
+	}
+	if r.URL.Query().Get("readFeed") != a.chat.feed {
+		after = 0
+	}
+	tx, err := a.chat.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		fail(w, 503, "Preview unavailable")
+		return
+	}
+	defer tx.Rollback()
+	var unread int
+	if err := tx.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM chat_messages WHERE feed=? AND id>?", a.chat.feed, after).Scan(&unread); err != nil {
+		fail(w, 503, "Preview unavailable")
+		return
+	}
+	people := []map[string]any{}
+	for _, person := range members[:min(3, len(members))] {
+		item := map[string]any{"name": person.Name}
+		id := person.Attributes["voicecord.profile"]
+		if id != "" {
+			var profile chatProfileRecord
+			if err := tx.QueryRowContext(r.Context(), "SELECT profile_id,revision,nickname,nonce,ciphertext FROM chat_profiles WHERE feed=? AND profile_id=?", a.chat.feed, id).Scan(&profile.ID, &profile.Revision, &profile.Nickname, &profile.Nonce, &profile.Ciphertext); err == nil {
+				item["name"] = profile.Nickname
+				item["profile"] = profile
+			}
+		}
+		people = append(people, item)
+	}
+	if tx.Commit() != nil {
+		fail(w, 503, "Preview unavailable")
+		return
+	}
+	respond(w, 200, map[string]any{"participants": count, "people": people, "feed": a.chat.feed, "unread": unread, "encrypted": a.cfg.RequireE2EE})
 }

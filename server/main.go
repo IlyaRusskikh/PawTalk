@@ -95,7 +95,7 @@ func (a *app) allow(ip string) bool {
 	a.attempts[ip] = v
 	return true
 }
-func (a *app) token(identity, nickname string) (string, error) {
+func (a *app) token(identity, nickname string, profileIDs ...string) (string, error) {
 	now := a.now().Unix()
 	claims := map[string]any{
 		"iss": a.cfg.APIKey, "sub": identity, "name": nickname, "nbf": now - 5, "exp": now + 300,
@@ -103,6 +103,14 @@ func (a *app) token(identity, nickname string) (string, error) {
 	}
 	if a.cfg.RequireE2EE {
 		claims["attributes"] = map[string]string{"voicecord.e2ee": "required"}
+	}
+	if len(profileIDs) > 0 && profileIDs[0] != "" {
+		attributes, _ := claims["attributes"].(map[string]string)
+		if attributes == nil {
+			attributes = map[string]string{}
+		}
+		attributes["voicecord.profile"] = profileIDs[0]
+		claims["attributes"] = attributes
 	}
 	payload, e := json.Marshal(claims)
 	if e != nil {
@@ -197,7 +205,7 @@ func (a *app) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := b64.EncodeToString(identity)
-	token, e := a.token(id, body.Nickname)
+	token, e := a.token(id, body.Nickname, profileID)
 	if e != nil {
 		fail(w, 500, "Ошибка создания сессии")
 		return
@@ -211,6 +219,7 @@ func (a *app) connect(w http.ResponseWriter, r *http.Request) {
 		result["chatFeed"] = a.chat.feed
 		result["chatToken"] = a.chatToken(body.Nickname, profileID)
 		result["chatEphemeral"] = a.chat.ephemeral
+		result["chatProtocol"] = 2
 		if profileID != "" {
 			result["profileId"] = profileID
 		}
@@ -219,12 +228,18 @@ func (a *app) connect(w http.ResponseWriter, r *http.Request) {
 }
 func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/presence", a.presenceHandler())
+	presence := a.presenceHandler()
+	mux.HandleFunc("GET /api/presence", presence)
+	if a.chat != nil {
+		mux.HandleFunc("GET /api/preview", presence)
+	}
 	mux.HandleFunc("POST /api/connect", a.connect)
 	if a.chat != nil {
 		mux.HandleFunc("GET /api/chat", a.chatHistory)
 		mux.HandleFunc("POST /api/chat", a.chatPost)
 		mux.HandleFunc("POST /api/chat/profile", a.chatProfile)
+		mux.HandleFunc("GET /api/chat/attachments/{id}", a.chatAttachment)
+		mux.HandleFunc("POST /api/chat/attachments/{id}", a.chatAttachment)
 	}
 	mux.HandleFunc("GET /api/config", a.roomConfig)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]string{"status": "ok"}) })

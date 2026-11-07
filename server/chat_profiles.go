@@ -40,7 +40,7 @@ func (a *app) chatProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	update.Nickname = strings.TrimSpace(update.Nickname)
 	noAvatar := len(update.Nonce) == 0 && len(update.Ciphertext) == 0
-	validAvatar := len(update.Nonce) == 12 && len(update.Ciphertext) > 16 && len(update.Ciphertext) <= 12016
+	validAvatar := (len(update.Nonce) == 12 && len(update.Ciphertext) > 16 && len(update.Ciphertext) <= 12016) || (!a.cfg.RequireE2EE && len(update.Nonce) == 0 && len(update.Ciphertext) > 0 && len(update.Ciphertext) <= 12000)
 	if !validNickname(update.Nickname) || (!noAvatar && !validAvatar) {
 		fail(w, 400, "Invalid profile")
 		return
@@ -65,6 +65,9 @@ func (s *chatStore) saveProfile(ctx context.Context, id string, update profileUp
 	if err := pruneProfiles(ctx, tx, now); err != nil {
 		return err
 	}
+	if err := s.enforceStorage(ctx, tx, 0, id); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -80,13 +83,13 @@ func pruneProfiles(ctx context.Context, tx *sql.Tx, now time.Time) error {
 					SELECT 1 FROM chat_messages m WHERE m.feed = idle.feed AND m.author_id = idle.profile_id
 				) ORDER BY revision DESC LIMIT -1 OFFSET 64
 			))
-		)`, now.Add(-chatRetention).UnixMilli())
+		)`, now.Add(-profileIdleRetention).UnixMilli())
 	return err
 }
 
 func readProfiles(ctx context.Context, tx *sql.Tx, feed string, after int64) ([]chatProfileRecord, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT profile_id, revision, nickname, nonce, ciphertext
-		FROM chat_profiles WHERE feed = ? AND revision > ? ORDER BY revision`, feed, after)
+		FROM chat_profiles WHERE feed = ? AND revision > ? ORDER BY revision LIMIT 500`, feed, after)
 	if err != nil {
 		return nil, err
 	}

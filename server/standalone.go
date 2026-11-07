@@ -214,6 +214,9 @@ func standalone(args []string) error {
 	if err != nil {
 		return err
 	}
+	if _, err := chatStorageLimit(); err != nil {
+		return err
+	}
 	if raw := os.Getenv("VOICECORD_PORT"); raw != "" {
 		port, err := strconv.Atoi(raw)
 		if err != nil || port < 1024 || port > 65532 {
