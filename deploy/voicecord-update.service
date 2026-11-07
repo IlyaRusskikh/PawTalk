@@ -1,0 +1,12 @@
+[Unit]
+Description=Check and update Voicecord Swarm service when enabled
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/voicecord
+ExecStart=/usr/bin/python3 /opt/voicecord/scripts/server-update.py update --config /opt/voicecord/.env --stack voicecord
+TimeoutStartSec=15min
+UMask=0077

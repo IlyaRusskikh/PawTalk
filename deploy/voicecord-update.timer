@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for Voicecord server updates every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+RandomizedDelaySec=3min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
