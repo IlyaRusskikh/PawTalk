@@ -11,6 +11,13 @@ export const chatTextLimit = 4096;
 export const chatMessageLimit = 500;
 export const chatSendsPerSecond = 3;
 
+export function continuesMessageGroup(previous: ChatMessage | undefined, message: ChatMessage) {
+  if (!previous || message.sent < previous.sent || message.sent - previous.sent > 5 * 60 * 1000
+    || new Date(previous.sent).toDateString() !== new Date(message.sent).toDateString()) return false;
+  if (previous.authorId || message.authorId) return !!message.authorId && previous.authorId === message.authorId;
+  return !!message.authorIdentity && previous.authorIdentity === message.authorIdentity;
+}
+
 export const base64 = (data: Uint8Array) => btoa(String.fromCharCode(...data));
 export const unbase64 = (data: string) => Uint8Array.from(atob(data), c => c.charCodeAt(0));
 

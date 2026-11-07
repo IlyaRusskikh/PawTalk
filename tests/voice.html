@@ -3,6 +3,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Participants } from '/src/Participants.tsx';
 import { GuestShare } from '/src/GuestShare.tsx';
+import { RoomChat } from '/src/RoomChat.tsx';
 import '/src/style.css';
 import { VoiceSession } from '/src/session.ts';
 import { defaults } from '/src/settings.ts';
@@ -19,6 +20,7 @@ window.renderParticipants = () => {
  root().render(React.createElement(Demo));
 };
 window.renderGuestShare = target => root().render(React.createElement(GuestShare,{target,name:'Guest room',onClose:()=>root().render(null)}));
+window.renderChat = room => root().render(React.createElement(RoomChat, {room, session:c, people:window.snapshot.people, profile:{nickname:'QA B'}, visible:true, connected:true, covered:false}));
 window.snapshot = {};
 c.onUpdate = value => { window.snapshot = value; };
 c.onError = message => { window.lastError = message; };

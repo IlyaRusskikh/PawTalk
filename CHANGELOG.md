@@ -2,6 +2,13 @@
 
 ## Unreleased / Не выпущено
 
+## 0.4.1 — 2026-11-07 — Rejoin and chat fixes / Повторный вход и чат
+
+- Resynchronize avatars and nicknames once a connection is ready and request existing participants' profiles after joining or reconnecting. / Аватары и никнеймы повторно отправляются после готовности соединения; при входе и восстановлении связи клиент запрашивает профили остальных участников.
+- Notify peers over LiveKit's reliable data channel after saving a chat message or profile, triggering an immediate history refresh. Keep the 2.5-second poll for recovery and older clients; queue notifications received during an active fetch. All participants should update for immediate delivery. / После сохранения сообщения или профиля участники получают уведомление по надёжному каналу LiveKit и сразу обновляют историю. Опрос раз в 2,5 секунды остаётся для восстановления и старых клиентов; уведомления во время запроса не теряются. Для быстрой доставки нужно обновить клиенты всех участников.
+- Group consecutive messages from the same identity within five minutes, separating dates and the unread boundary. Highlight individual rows on hover and show continuation timestamps on hover or keyboard focus. / Последовательные сообщения одного участника за пять минут объединяются с учётом даты и границы непрочитанного. При наведении подсвечивается строка, у продолжений появляется время, доступное также с клавиатуры.
+- Separate Settings errors from connection notices so a failed join does not appear in the profile dialog. / Ошибки настроек отделены от уведомлений подключения: неудачный вход больше не отображается в окне профиля.
+
 ## 0.4.0 — 2026-11-07 — Room chat and profiles / Чат комнаты и профили
 
 - Added text chat, typing indicators and a limit of three messages per second per participant. / Добавлены текстовый чат, индикатор набора и лимит в три сообщения в секунду на участника.

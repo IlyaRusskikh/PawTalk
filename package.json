@@ -1,6 +1,6 @@
 {
   "name": "voicecord",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "Private, self-hosted voice room for Windows",
   "author": "Voicecord contributors",

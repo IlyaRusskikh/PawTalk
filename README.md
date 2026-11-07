@@ -4,7 +4,7 @@
 
 Voicecord is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
 
-**[Download Voicecord 0.4.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.4.0/Voicecord.Setup.0.4.0.exe)** · [Get started](#get-started) · [Self-hosting guide (Russian)](docs/SERVER.md)
+**[Download Voicecord 0.4.1 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.4.1/Voicecord.Setup.0.4.1.exe)** · [Get started](#get-started) · [Self-hosting guide (Russian)](docs/SERVER.md)
 
 ![Voicecord room with three participants, call controls and encrypted text chat](website/assets/room-chat-en.png)
 
@@ -37,7 +37,7 @@ Voicecord takes inspiration from **Discord** for easy-to-join voice rooms and in
 
 ## Get started
 
-1. **Install Voicecord.** [Download the installer](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.4.0/Voicecord.Setup.0.4.0.exe) on each Windows PC. Choose English or Russian.
+1. **Install Voicecord.** [Download the installer](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.4.1/Voicecord.Setup.0.4.1.exe) on each Windows PC. Choose English or Russian.
 2. **Pick a nickname.** Open **Settings → About me** and enter a nickname. You can test your microphone under **Voice**.
 3. **Get your friends together.** Select **Create a room**, give the room a name, and choose a password of at least 8 characters. Share the full invitation privately. Your friend opens **Join a room** and pastes the link.
 
@@ -100,4 +100,4 @@ Voicecord is licensed under [GNU AGPL-3.0-only](LICENSE). Third-party components
 
 ## Project status
 
-**0.4.0 is a public pre-release.** It adds room chat, avatars, and a resizable call layout. Encrypted chat history on a VPS requires server 0.4.0 with E2EE and a configured key fingerprint. See the [v0.4.0 release](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.4.0) for the corresponding source and SHA-256. [Changelog](CHANGELOG.md).
+**0.4.1 is a public pre-release.** It fixes avatar synchronization after rejoining, speeds up chat updates, groups consecutive messages from the same author with a hover highlight, and keeps connection errors out of Settings. For immediate chat updates, all participants should update their clients. Encrypted chat history on a VPS requires server 0.4.0 or later with E2EE and a configured key fingerprint. See the [v0.4.1 release](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.4.1) for the corresponding source and SHA-256. [Changelog](CHANGELOG.md).

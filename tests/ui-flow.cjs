@@ -65,6 +65,8 @@ app.whenReady().then(async () => {
   assert.equal(await run(`!!document.querySelector('.call-controls')`), false, 'failed connection leaves call controls hidden');
   await run(`document.querySelector('[title="Настройки"]').click()`); await wait();
   assert.equal(await run(`document.querySelector('dialog h2').textContent`), 'Настройки');
+  assert.equal(await run(`document.querySelector('dialog').textContent.includes('Test connection stopped before media')`), false, 'connection errors do not appear inside settings');
+  assert.ok(await run(`document.querySelector('.notice.error')?.textContent.includes('Test connection stopped before media')`), 'connection notice stays in the main screen');
   assert.equal(await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).querySelector('input').checked`),false);
   assert.equal(await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.querySelector('strong').textContent==='Эхоподавление').querySelector('input').checked`),true);
   await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).querySelector('input').click()`);await wait();

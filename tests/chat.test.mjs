@@ -1,6 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chatKey, decodeHistory, decryptChat, encryptChat, readChatCursor, readChatPosition, writeChatCursor, writeChatPosition } from '../src/chat.ts';
+import { chatKey, continuesMessageGroup, decodeHistory, decryptChat, encryptChat, readChatCursor, readChatPosition, writeChatCursor, writeChatPosition } from '../src/chat.ts';
+
+test('message groups follow identity, a five minute window and the date boundary', () => {
+  const first = { id: 1, key: 'one', author: 'Alice', authorIdentity: 'alice', text: 'hello', sent: new Date(2026, 10, 7, 12).getTime() };
+  const next = { ...first, id: 2, key: 'two', text: 'again', sent: first.sent + 1000 };
+  assert.equal(continuesMessageGroup(first, next), true);
+  assert.equal(continuesMessageGroup(first, { ...next, author: 'New nickname' }), true);
+  assert.equal(continuesMessageGroup(first, { ...next, authorIdentity: 'different-alice' }), false);
+  assert.equal(continuesMessageGroup(first, { ...next, sent: first.sent + 300001 }), false);
+  assert.equal(continuesMessageGroup(first, { ...next, sent: first.sent - 1 }), false);
+  assert.equal(continuesMessageGroup(undefined, next), false);
+  assert.equal(continuesMessageGroup({ ...first, authorIdentity: undefined }, { ...next, authorIdentity: undefined }), false);
+  assert.equal(continuesMessageGroup({ ...first, authorId: 'persistent' }, { ...next, authorId: 'persistent', authorIdentity: 'rejoined' }), true);
+  assert.equal(continuesMessageGroup({ ...first, authorId: 'persistent' }, { ...next, authorId: 'another' }), false);
+  const midnight = new Date(2026, 10, 8).getTime();
+  assert.equal(continuesMessageGroup({ ...first, sent: midnight - 1 }, { ...next, sent: midnight }), false);
+});
 
 test('chat ciphertext is bound to the key, feed and request ID', async () => {
   const secret = 'a'.repeat(64), feed = 'b'.repeat(32), text = 'Привет 👋';

@@ -38,20 +38,20 @@ export function App() {
   const [autoStartBusy, setAutoStartBusy] = useState(false);
   const [autoStartAvailable, setAutoStartAvailable] = useState(false);
   const [startInTray, setStartInTray] = useState(false);
-  useEffect(() => { void window.desktop?.getStartInTray?.().then(setStartInTray).catch(() => setError(t("Не удалось прочитать настройки автозапуска."))); }, []);
-  useEffect(() => { void window.desktop?.getAutoStart?.().then(setAutoStart).catch(() => setError(t("Не удалось прочитать настройки автозапуска."))); }, []);
+  useEffect(() => { void window.desktop?.getStartInTray?.().then(setStartInTray).catch(() => setSettingsError(t("Не удалось прочитать настройки автозапуска."))); }, []);
+  useEffect(() => { void window.desktop?.getAutoStart?.().then(setAutoStart).catch(() => setSettingsError(t("Не удалось прочитать настройки автозапуска."))); }, []);
   async function changeAutoStart(value: boolean) {
     if (!window.desktop?.setAutoStart) return;
     setAutoStartBusy(true);
     try { setAutoStart(await window.desktop.setAutoStart(value)); }
-    catch { setError(t("Не удалось изменить автозапуск.")); }
+    catch { setSettingsError(t("Не удалось изменить автозапуск.")); }
     finally { setAutoStartBusy(false); }
   }
   async function changeStartInTray(value: boolean) {
     if (!window.desktop?.setStartInTray) return;
     setAutoStartBusy(true);
     try { setStartInTray(await window.desktop.setStartInTray(value)); }
-    catch { setError(t("Не удалось изменить автозапуск.")); }
+    catch { setSettingsError(t("Не удалось изменить автозапуск.")); }
     finally { setAutoStartBusy(false); }
   }
   const [hostRunning, setHostRunning] = useState(false);
@@ -64,6 +64,7 @@ export function App() {
   const [avatarFile, setAvatarFile] = useState<File>();
   const avatarPicker = useRef<HTMLInputElement>(null);
   const [hostBusy, setHostBusy] = useState(false);
+  const [settingsError, setSettingsError] = useState('');
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   const [snapshot, setSnapshot] = useState(initial);
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
@@ -322,7 +323,7 @@ export function App() {
       {modal === 'share' && currentTarget.current && <GuestShare target={currentTarget.current} name={roomName} onClose={() => setModal(null)}/>}
       <HostPanel nickname={nickname} active={active || busy} modal={modal} onClose={() => setModal(null)} onCreated={setRoomName} onStatus={setHostRunning} onJoin={input => connect(input, true)} onStop={disconnect} onError={setError} onBusy={setHostBusy}/>
       {renaming && <Modal title={t("Переименовать сервер")} onClose={() => setRenaming(null)}><form onSubmit={event => { event.preventDefault(); renameRoom(renaming.address, renaming.name); }}><div className="form-fields"><label>{t("Название сервера")}<input autoFocus required maxLength={64} value={renaming.name} onChange={event => setRenaming({ ...renaming, name: event.target.value })}/></label></div><p className="host-hint">{t("Название изменится только у вас.")}</p><div className="modal-actions"><button type="button" className="quiet" onClick={() => setRenaming(null)}>{t("Отмена")}</button><button className="primary" disabled={!renaming.name.trim()}>{t("Сохранить")}</button></div></form></Modal>}
-      {modal === 'settings' && <Modal title={t("Настройки")} className="settings-modal" onClose={() => setModal(null)}>{error && <p role="alert" className="text-error">{error}</p>}<section className="settings-page"><div className="settings-card profile-settings"><h1>{t("Обо мне")}</h1>
+      {modal === 'settings' && <Modal title={t("Настройки")} className="settings-modal" onClose={() => setModal(null)}>{settingsError && <p role="alert" className="text-error">{settingsError}</p>}<section className="settings-page"><div className="settings-card profile-settings"><h1>{t("Обо мне")}</h1>
         <div className="profile-avatar">
           <Avatar name={nickname} image={avatar}/>
           <div className="profile-avatar-actions">
@@ -333,11 +334,11 @@ export function App() {
             }}/>
             <button type="button" className="secondary" onClick={() => avatarPicker.current?.click()}>{t("Выбрать изображение")}</button>
             {avatar && <button type="button" className="quiet" onClick={() => {
-              if (!saveAvatar()) setError(t("Не удалось сохранить аватар."));
+              if (!saveAvatar()) setSettingsError(t("Не удалось сохранить аватар."));
             }}>{t("Удалить аватар")}</button>}
           </div>
         </div>
-        <div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label><label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div><p>{t("Никнейм обновляется и в открытой комнате.")}</p>{autoStart !== null && <Toggle label={t("Запускать Voicecord при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</div></section>
+        <div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setSettingsError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label><label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div><p>{t("Никнейм обновляется и в открытой комнате.")}</p>{autoStart !== null && <Toggle label={t("Запускать Voicecord при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</div></section>
       <VoiceSettings settings={settings} update={update} devices={devices} keys={keys} db={db} threshold={threshold} speaking={active && !testing ? snapshot.speaking : testSpeaking} active={active} busy={busy} testing={testing} testBusy={testBusy} ready={previewReady} native={native} keyError={keyError} onTest={() => void toggleTest()} onReset={() => setSettings({ ...defaults })}/></Modal>}
       {modal === 'settings' && avatarFile && <AvatarEditor file={avatarFile} onClose={() => setAvatarFile(undefined)} onSave={saveAvatar}/>}
     </div>

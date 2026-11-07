@@ -45,6 +45,57 @@ app.whenReady().then(async()=>{
   assert.equal(await b('window.liveMessages'),3,'receiving client drops excess live chat packets');
   await until(()=>b('window.snapshot.people.some(p=>!p.local && p.avatar?.startsWith("data:image/webp;base64,"))'),'late join receives the current avatar');
   assert.equal(await b('window.snapshot.people.find(p=>!p.local).avatar'),await a('window.testAvatar'));
+  await b(`window.expectedAvatar=${JSON.stringify(await a('window.testAvatar'))}`);
+  await b('window.voice.setAvatar(window.expectedAvatar)');
+  await a('window.voice.disconnect()');
+  await until(()=>b('window.snapshot.people.length===1'),'peer leaves');
+  await a(`window.start(${JSON.stringify(await credentials('QA A'))})`);
+  await until(()=>b('window.snapshot.people.length===2'),'peer rejoins');
+  await until(()=>b('window.snapshot.people.find(p=>!p.local)?.avatar===window.expectedAvatar'),'avatar after rejoin');
+  await until(()=>a('window.snapshot.people.find(p=>!p.local)?.avatar===window.testAvatar'),'rejoining peer receives existing avatar');
+  await a('void (window.voice.onChatRefresh=()=>{window.refreshCount=(window.refreshCount||0)+1})');
+  await b('window.voice.publishChatRefresh()');
+  await until(()=>a('window.refreshCount===1'),'history refresh notification reaches peer');
+
+  // Real data-channel notification drives RoomChat; history is synthetic here.
+  await b(`(async()=>{
+    const {chatKey,encryptChat}=await import('/src/chat.ts');
+    const secret='a'.repeat(64), feed='b'.repeat(32);
+    const key=await chatKey(secret,feed);
+    window.historyFixture=[];window.historyReads=0;
+    window.makeMessage=async(id,text)=>({...await encryptChat(key,text),id,author:'QA A',authorId:'c'.repeat(64),sent:Date.now()});
+    window.desktop={duck:async()=>{},chatRequest:async(_handle,input)=>{
+      window.historyReads++;
+      const page={first:window.historyFixture[0]?.id||0,messages:window.historyFixture.filter(m=>m.id>input.after)};
+      if(window.holdHistory){window.holdHistory=false;await new Promise(resolve=>{window.releaseHistory=resolve});}
+      return page;
+    }};
+    window.renderChat({identity:window.voice.room.localParticipant.identity,nickname:'QA B',key:secret,access:{handle:'test',feed,ephemeral:true}});
+  })()`);
+  await until(()=>b('window.historyReads>=1 && !!document.querySelector(".chat-empty")'),'initial chat history read');
+  await b(`(async()=>{window.historyFixture=[await window.makeMessage(1,'Immediate message'),await window.makeMessage(2,'Grouped message')];})()`);
+  const notifiedAt=Date.now();
+  await a('window.voice.publishChatRefresh()');
+  await until(()=>b('document.querySelectorAll(".chat-message").length===2'),'chat refresh without polling delay');
+  assert.ok(Date.now()-notifiedAt<1500,'notification renders history before the 2.5 second fallback');
+  console.log(`Chat notification to rendered messages: ${Date.now()-notifiedAt} ms (local synthetic history).`);
+  assert.equal(await b('document.querySelectorAll(".chat-message .chat-avatar").length'),1,'consecutive author has one avatar');
+  assert.equal(await b('document.querySelectorAll(".chat-message .chat-meta").length'),1,'consecutive author has one header');
+  await b(`document.querySelector('.chat-message-continuation time').focus()`);
+  assert.equal(await b(`getComputedStyle(document.querySelector('.chat-continuation-time')).opacity`),'1','continuation time is visible on keyboard focus');
+  await require('node:fs/promises').mkdir('release/qa',{recursive:true});
+  await require('node:fs/promises').writeFile('release/qa/chat-grouping.png',(await windows[1].webContents.capturePage()).toPNG());
+  await b('window.holdHistory=true');
+  await a('window.voice.publishChatRefresh()');
+  await until(()=>b('!!window.releaseHistory'),'history request is held in flight');
+  await b(`(async()=>{window.historyFixture.push(await window.makeMessage(3,'Arrived during history fetch'));})()`);
+  await a('window.voice.publishChatRefresh()');
+  await delay(150);
+  const releasedAt=Date.now();
+  await b('window.releaseHistory()');
+  await until(()=>b('document.querySelectorAll(".chat-message").length===3'),'notification during fetch triggers another read');
+  assert.ok(Date.now()-releasedAt<1500,'queued notification does not wait for fallback polling');
+  await b('window.renderParticipants()');
   await a('window.voice.setAvatar(undefined)');
   await until(()=>b('window.snapshot.people.every(p=>p.local || p.avatar===undefined)'),'avatar removal reaches the other client');
   await until(()=>b('window.snapshot.people.some(p=>!p.local && p.rtt!==undefined)'),'peer RTT delivered over actual data channel');

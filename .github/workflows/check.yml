@@ -56,6 +56,7 @@ jobs:
       - run: node scripts/updates-ui-smoke.mjs
       - run: node scripts/fixes-main-smoke.mjs
       - run: npm run package
+      - run: node scripts/realtime-smoke.mjs
       - name: Prepare release files
         shell: pwsh
         run: |

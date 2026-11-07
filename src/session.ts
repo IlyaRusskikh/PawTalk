@@ -13,6 +13,8 @@ const chatTopic = 'voicecord.chat.v1';
 const typingTopic = 'voicecord.typing.v1';
 const avatarTopic = 'voicecord.avatar.v1';
 const nicknameTopic = 'voicecord.nickname.v1';
+const profileRequestTopic = 'voicecord.profile-request.v1';
+const chatRefreshTopic = 'voicecord.chat-refresh.v1';
 
 export interface Person { id: string; name: string; avatar?: string; speaking: boolean; muted: boolean; deafened?: boolean; local: boolean; rtt?: number; packetLoss?: number; }
 export interface Snapshot { state: string; people: Person[]; db: number; speaking: boolean; threshold?: number; rtt?: number; packetLoss?: number; e2ee?: boolean; }
@@ -44,6 +46,7 @@ export class VoiceSession {
   onError: (message: string) => void = () => {};
   onChat?: (payload: Uint8Array, author: string, authorIdentity: string) => void;
   onTyping?: (identity: string, typing: boolean) => void;
+  onChatRefresh?: () => void;
   constructor(public settings: Settings, private transport: { sharedAudioContext?: boolean } = {}) {}
   private syncGate() { this.mic?.update(this.settings, this.muted || this.deafened || this.state !== 'connected', this.ptt); }
   private emit() {
@@ -123,11 +126,21 @@ export class VoiceSession {
     room.on(RoomEvent.ActiveSpeakersChanged, speakers => { this.speakers = new Set(speakers.map(p => p.identity)); this.emit(); });
     room.on(RoomEvent.ParticipantConnected, p => { this.publishAudioState(); if (this.avatar) this.publishAvatar(p.identity); this.publishNickname(p.identity); if (this.settings.sounds) playCue(true); this.emit(); });
     const peerChatTimes = new Map<string, number[]>();
+    const peerProfileRequests = new Map<string, number>();
     room.on(RoomEvent.ParticipantDisconnected, p => {
       this.peerNetwork.delete(p.identity); this.peerDeafened.delete(p.identity); this.peerAvatars.delete(p.identity); this.peerNicknames.delete(p.identity);
       peerChatTimes.delete(p.identity);
+      peerProfileRequests.delete(p.identity);
     });
     room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+      if (participant && payload.length === 0 && (topic === profileRequestTopic || topic === chatRefreshTopic)) {
+        if (topic === chatRefreshTopic) { this.onChatRefresh?.(); return; }
+        const now = performance.now();
+        if (now - (peerProfileRequests.get(participant.identity) ?? -Infinity) < 1000) return;
+        peerProfileRequests.set(participant.identity, now);
+        this.publishAvatar(participant.identity); this.publishNickname(participant.identity);
+        return;
+      }
       if (topic === typingTopic && participant && payload.length === 1 && (payload[0] === 0 || payload[0] === 1)) {
         this.onTyping?.(participant.identity, payload[0] === 1);
         return;
@@ -173,7 +186,7 @@ export class VoiceSession {
     room.on(RoomEvent.ParticipantDisconnected, () => { if (this.settings.sounds) playCue(false); this.emit(); });
     room.on(RoomEvent.TrackMuted, () => this.emit()); room.on(RoomEvent.TrackUnmuted, () => this.emit());
     room.on(RoomEvent.AudioPlaybackStatusChanged, () => { if (!room.canPlaybackAudio) this.onError(t("Не удалось включить воспроизведение. Переподключитесь к комнате.")); });
-    room.on(RoomEvent.ConnectionStateChanged, state => { this.state = state; if (state === 'connected') { this.publishAudioState(); this.publishAvatar(); this.publishNickname(); } else { this.rttMeter.reset(); this.lossMeter.reset(); this.packetLoss = undefined; this.peerNetwork.clear(); this.peerDeafened.clear(); } this.syncGate(); this.emit(); });
+    room.on(RoomEvent.ConnectionStateChanged, state => { this.state = state; if (state === 'connected') { this.publishAudioState(); this.syncProfile(); } else { this.rttMeter.reset(); this.lossMeter.reset(); this.packetLoss = undefined; this.peerNetwork.clear(); this.peerDeafened.clear(); } this.syncGate(); this.emit(); });
     room.on(RoomEvent.Disconnected, () => { if (!this.stopped) { this.onError(t("Соединение прервано. Подключитесь снова.")); void this.disconnect(); } });
     room.on(RoomEvent.MediaDevicesError, error => this.onError(t("Ошибка аудиоустройства: {0}", error.message)));
     try {
@@ -191,6 +204,8 @@ export class VoiceSession {
       await this.replaceMicrophone(generation);
       if (generation !== this.generation) return;
       await room.startAudio();
+      if (generation !== this.generation) return;
+      this.syncProfile();
       if (this.settings.sounds) playCue(true);
       let tick = 0;
       this.timer = setInterval(() => {
@@ -245,6 +260,15 @@ export class VoiceSession {
     if (room?.state !== ConnectionState.Connected) return;
     const payload = new TextEncoder().encode(this.avatar ?? '-');
     void room.localParticipant.publishData(payload, { reliable: true, topic: avatarTopic, destinationIdentities: identity ? [identity] : undefined }).catch(() => {});
+  }
+  private syncProfile() {
+    this.publishAvatar(); this.publishNickname();
+    const room = this.room;
+    if (room?.state === ConnectionState.Connected) void room.localParticipant.publishData(new Uint8Array(), { reliable: true, topic: profileRequestTopic }).catch(() => {});
+  }
+  publishChatRefresh() {
+    const room = this.room;
+    if (room?.state === ConnectionState.Connected) void room.localParticipant.publishData(new Uint8Array(), { reliable: true, topic: chatRefreshTopic }).catch(() => {});
   }
   setAvatar(avatar?: string) {
     if (avatar === this.avatar || (avatar && !validAvatar(avatar))) return;

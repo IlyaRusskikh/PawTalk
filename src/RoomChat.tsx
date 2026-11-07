@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { chatDecoder, chatEncoder, chatKey, chatMessageLimit, chatSendsPerSecond, chatTextLimit, decodeHistory, decryptChat, encryptChat, readChatCursor, readChatPosition, writeChatCursor, writeChatPosition, type ChatAccess, type ChatMessage, type ChatPacket, type ChatProfile } from './chat';
+import { chatDecoder, chatEncoder, chatKey, chatMessageLimit, chatSendsPerSecond, chatTextLimit, continuesMessageGroup, decodeHistory, decryptChat, encryptChat, readChatCursor, readChatPosition, writeChatCursor, writeChatPosition, type ChatAccess, type ChatMessage, type ChatPacket, type ChatProfile } from './chat';
 import { decodeChatProfiles, encodeChatProfile } from './chatProfiles';
 import { Icon } from './Controls';
 import { Avatar } from './Avatar';
@@ -152,9 +152,11 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
     if (!access || !connected) return;
     const { handle } = access;
     const profileId = access.profileId;
-    let active = true, running = false;
+    let active = true, running = false, requested = false;
     const poll = async () => {
-      if (!active || running) return;
+      if (!active) return;
+      if (running) { requested = true; return; }
+      requested = false;
       running = true;
       try {
         if (profileId && key) {
@@ -169,6 +171,7 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
               if (active) {
                 await window.desktop!.chatRequest(handle, { profile: update });
                 sentProfile.current = current;
+                session.publishChatRefresh();
               }
             } catch { /* Retry profile sync on the next poll without blocking history. */ }
             finally { publishingProfile.current = false; }
@@ -210,13 +213,22 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
         setReady(true);
         setHistoryError(false);
       } catch { if (active) setHistoryError(true); }
-      finally { running = false; }
+      finally {
+        running = false;
+        if (active && requested) void poll();
+      }
     };
     refresh.current = () => { void poll(); };
+    let notification: ReturnType<typeof setTimeout> | undefined;
+    session.onChatRefresh = () => {
+      notification ??= setTimeout(() => { notification = undefined; void poll(); }, 100);
+    };
     void poll();
     const timer = setInterval(poll, 2500);
-    return () => { active = false; refresh.current = undefined; clearInterval(timer); };
-  }, [access, connected, key]);
+    return () => { active = false; refresh.current = undefined; session.onChatRefresh = undefined; clearTimeout(notification); clearInterval(timer); };
+  }, [access, connected, key, session]);
+
+  useEffect(() => { refresh.current?.(); }, [profile.nickname, profile.avatar]);
 
   useLayoutEffect(() => {
     if (!visible) {
@@ -325,6 +337,7 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
         id = result.id;
         const confirmed = { id, key: packet.requestId, author, authorId: access.profileId, text, sent: Date.now() };
         setMessages(previous => previous.some(message => message.id === id) ? [...previous] : [...previous, confirmed].sort((a, b) => a.id - b.id));
+        session.publishChatRefresh();
         refresh.current?.();
       } else if (!access) {
         await session.sendChat(chatEncoder.encode(packet ? JSON.stringify(packet) : text), identity);
@@ -380,12 +393,13 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
           const saved = message.authorId ? profiles.get(message.authorId) : undefined;
           const live = message.authorIdentity ? peopleById.get(message.authorIdentity) : undefined;
           const name = saved?.nickname ?? live?.name ?? message.author;
-          return <article className="chat-message" key={message.id}>
+          const continuation = index !== firstNew && continuesMessageGroup(messages[index - 1], message);
+          return <article className={`chat-message${continuation ? ' chat-message-continuation' : ''}`} key={message.id}>
           {index === firstNew && <div className="chat-divider" ref={marker}>{t("Новые сообщения")}</div>}
           <div className="chat-message-row" data-message-row={message.id}>
-            <Avatar name={name} image={saved?.avatar ?? live?.avatar} className="chat-avatar"/>
+            {continuation ? <span className="chat-continuation-time"><MessageTime sent={message.sent}/></span> : <Avatar name={name} image={saved?.avatar ?? live?.avatar} className="chat-avatar"/>}
             <div className="chat-message-body">
-              <div className="chat-meta"><strong>{name}</strong><MessageTime sent={message.sent}/></div>
+              {!continuation && <div className="chat-meta"><strong>{name}</strong><MessageTime sent={message.sent}/></div>}
               <p>{message.text}</p>
             </div>
           </div>
