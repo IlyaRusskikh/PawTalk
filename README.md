@@ -4,7 +4,7 @@
 
 Voicecord is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
 
-**[Download Voicecord 0.4.1 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.4.1/Voicecord.Setup.0.4.1.exe)** · [Get started](#get-started) · [Self-hosting guide (Russian)](docs/SERVER.md)
+**[Download Voicecord 0.5.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.5.0/Voicecord.Setup.0.5.0.exe)** · [Get started](#get-started) · [Self-hosting guide (Russian)](docs/SERVER.md)
 
 ![Voicecord room with three participants, call controls and encrypted text chat](website/assets/room-chat-en.png)
 
@@ -24,7 +24,7 @@ Voicecord takes inspiration from **Discord** for easy-to-join voice rooms and in
 - **Set a profile picture.** Under **Settings → About me**, choose a PNG, JPEG, or WebP. Zoom and position the image in the circular preview. Participants see your current nickname and avatar in the room and in retained chat history.
 - **Make speech easier to hear.** RNNoise reduces background noise on your PC, echo cancellation reduces echo, and automatic gain control evens out the level of your voice.
 - **Return to your favorite rooms.** Bookmark a server so you can find it again quickly.
-- **Send messages during a call.** The room opens with chat below the participant cards. Press Enter to send or Shift+Enter for a new line. You can send up to three messages per second and see when someone else is typing. Drag the divider to resize either section. Built-in E2EE rooms keep history in memory until the server stops. Published 0.4.1 servers keep encrypted history for up to seven days; the local next version uses a configurable storage budget (see Project status).
+- **Send messages during a call.** The room opens with chat below the participant cards. Press Enter to send or Shift+Enter for a new line. You can send up to three messages per second and see when someone else is typing. Drag the divider to resize either section. Built-in E2EE rooms keep history in memory until the server stops. VPS history uses a configurable storage budget with no age limit (see Project status).
 
 <details>
 <summary>See audio settings and room creation</summary>
@@ -37,7 +37,7 @@ Voicecord takes inspiration from **Discord** for easy-to-join voice rooms and in
 
 ## Get started
 
-1. **Install Voicecord.** [Download the installer](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.4.1/Voicecord.Setup.0.4.1.exe) on each Windows PC. Choose English or Russian.
+1. **Install Voicecord.** [Download the installer](https://github.com/IlyaRusskikh/voicecord/releases/download/v0.5.0/Voicecord.Setup.0.5.0.exe) on each Windows PC. Choose English or Russian.
 2. **Pick a nickname.** Open **Settings → About me** and enter a nickname. You can test your microphone under **Voice**.
 3. **Get your friends together.** Select **Create a room**, give the room a name, and choose a password of at least 8 characters. Share the full invitation privately. Your friend opens **Join a room** and pastes the link.
 
@@ -100,13 +100,13 @@ Voicecord is licensed under [GNU AGPL-3.0-only](LICENSE). Third-party components
 
 ## Project status
 
-Local work after 0.4.1 is under review: a redesigned home screen, settings navigation,
+Version 0.5.0 includes: a redesigned home screen, settings navigation,
 a detailed color palette with a light preset, configurable chat windows (25–500 messages; default 100), replies,
 and static PNG/JPEG/WebP attachments up to 2 MiB. Updated servers provide paged
 history and password-protected room previews with participants and unread counts.
 Images load on demand and are released outside the viewport. E2EE rooms encrypt
 messages and images; without E2EE the server can read retained content. These
-changes are **not published**. Run `review.cmd` for an isolated local profile.
+changes are included in **0.5.0**. Run `review.cmd` for an isolated local profile.
 VPS Swarm deployment and opt-in server updates: [SWARM.md](docs/SWARM.md).
 Client startup update checks can be disabled under Settings → Updates. App language
 is under Settings → Application. The voice/chat room retains its original layout.
@@ -124,7 +124,7 @@ when messages enter or leave the window.
 Message menus include **Copy text**. The room rail hides its scrollbar and shows
 `+N` for rooms below the visible area. VPS history uses `VOICECORD_CHAT_MAX_MB`
 (128 MiB by default, `0` unlimited), including messages, images, profiles and SQLite
-indexes. Oldest messages are evicted and disk pages reclaimed; this local version
+indexes. Oldest messages are evicted and disk pages reclaimed; 0.5.0
 has no seven-day or 500-message VPS retention cap. Embedded rooms keep 500 messages.
 
-**0.4.1 is a public pre-release.** It fixes avatar synchronization after rejoining, speeds up chat updates, groups consecutive messages from the same author with a hover highlight, and keeps connection errors out of Settings. For immediate chat updates, all participants should update their clients. Encrypted chat history on a VPS requires server 0.4.0 or later with E2EE and a configured key fingerprint. See the [v0.4.1 release](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.4.1) for the corresponding source and SHA-256. [Changelog](CHANGELOG.md).
+**0.5.0 is a public pre-release.** It adds image attachments, message replies, customizable themes and settings navigation, room previews, stable history paging and configurable VPS storage. [Release notes and source](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.5.0). [Changelog](CHANGELOG.md).

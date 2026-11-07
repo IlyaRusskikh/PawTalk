@@ -101,10 +101,11 @@ app.whenReady().then(async()=>{
   await until(()=>b('window.snapshot.people.some(p=>!p.local && p.rtt!==undefined)'),'peer RTT delivered over actual data channel');
   await until(()=>b('window.snapshot.people.some(p=>!p.local && Number.isFinite(p.packetLoss))'),'peer packet loss delivered over actual data channel');
   assert.ok(await b('window.snapshot.people.find(p=>!p.local).rtt>=0'));
-  for (const [rtt, level, color] of [[80,'good','rgb(126, 212, 172)'],[180,'warning','rgb(229, 189, 100)'],[450,'bad','rgb(238, 130, 149)'],[null,'unknown','rgb(133, 143, 163)']]) {
+  for (const [rtt, level, token] of [[80,'good','success'],[180,'warning','warning'],[450,'bad','danger'],[null,'unknown','muted']]) {
    await b('window.snapshot.people.find(p=>!p.local).rtt='+rtt+';window.renderParticipants()');await delay(80);
    assert.ok(await b("document.querySelectorAll('.person-network')[1].classList.contains('ping-"+level+"')"),'card RTT color '+level);
-   assert.equal(await b("getComputedStyle(document.querySelectorAll('.person-network')[1]).color"),color);
+   const expected=await b("(()=>{const el=document.createElement('span');el.style.color='var(--"+token+")';document.body.append(el);const color=getComputedStyle(el).color;el.remove();return color})()");
+   assert.equal(await b("getComputedStyle(document.querySelectorAll('.person-network')[1]).color"),expected);
   }
   for(const [language,expected] of [['ru','2,5 %'],['en','2.5 %']]) {
    await b('window.changeLanguage('+JSON.stringify(language)+')');

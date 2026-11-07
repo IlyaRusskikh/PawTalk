@@ -1,6 +1,6 @@
 # Changelog / История изменений
 
-## Unreleased / Не выпущено
+## 0.5.0 — 2026-11-07 — Chat, customization and server storage / Чат, оформление и хранение
 
 - Remove the chat information tooltip and header so the feed fade starts directly below the divider. / Удалены подсказка и шапка чата: fade ленты начинается сразу под разделителем.
 

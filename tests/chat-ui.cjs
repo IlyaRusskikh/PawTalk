@@ -14,6 +14,7 @@ app.whenReady().then(async () => {
   const capture = async name => { await delay(150); await fs.writeFile(path.join(output, name + '.png'), (await win.webContents.capturePage()).toPNG()); };
   try {
     await win.loadURL(process.env.VOICECORD_UI_TEST_URL + '/tests/chat-ui.html');
+    await run(`window.sentAnimations=[];const originalAnimate=Element.prototype.animate;Element.prototype.animate=function(frames,options){if(this.matches('.chat-message-body p'))window.sentAnimations.push(options?.duration);return originalAnimate.call(this,frames,options)};undefined`);
     await until('window.ready && document.querySelectorAll(".chat-message").length===100', 'initial 100 messages');
     assert.equal(await run('document.querySelector("[data-message-row]").dataset.messageRow'), '151');
     assert.ok(await run('window.chatRequests.filter(r=>r.limit).every(r=>r.limit<=101)'), 'bounded initial fetch plus one grouping predecessor');
@@ -56,7 +57,7 @@ app.whenReady().then(async () => {
     assert.equal(await run('!!window.lastSent'), false, 'Shift+Enter does not send');
     await run(`document.querySelector('.chat-compose textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}))`);
     await until('window.lastSent?.reply && !document.querySelector(".chat-reply-draft")', 'reply saved');
-    assert.ok(await run(`document.querySelector('[data-message-row="251"] p').getAnimations().some(animation=>animation.effect.getTiming().duration===260)`), 'sent text animates from the composer');
+    assert.ok(await run(`window.sentAnimations.includes(260)`), 'sent text animates from the composer');
     assert.equal(await run('window.lastSent.reply.id'), id);
     await until('!!document.querySelector(".chat-reply-quote")', 'reply quote rendered');
     await run(`document.querySelector('.chat-reply-quote').click()`);

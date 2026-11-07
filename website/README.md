@@ -46,7 +46,7 @@ Do not advertise unreleased behavior as available in the installer.
 ## Screenshots
 
 `assets/voicecord.svg` is copied from the project's existing `assets/voicecord.svg`.
-PNG screenshots show the Voicecord 0.4.0 desktop interface in both languages.
+PNG screenshots show the Voicecord 0.5.0 desktop interface in both languages.
 The capture uses an isolated profile, synthetic microphones and a temporary E2EE
 room populated with demo participants and messages. The invitation dialog is
 closed before capture. Audio settings show fake Chromium audio devices.
