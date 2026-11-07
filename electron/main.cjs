@@ -1,5 +1,5 @@
 const { t } = require('../shared/i18n.cjs');
-const { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage, powerMonitor, globalShortcut, net, safeStorage, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage, powerMonitor, globalShortcut, net, safeStorage, clipboard, dialog } = require('electron');
 const path = require('node:path');
 const { localInvitation, verifyInvitation, connectionError } = require('./connection.cjs');
 const { X509Certificate, createHash, randomUUID } = require('node:crypto');
@@ -11,16 +11,33 @@ const { SelfHost } = require('./selfhost.cjs');
 const { HostCheck } = require('./host-check.cjs');
 const { CredentialStore } = require('./credentials.cjs');
 const { Updater } = require('./updater.cjs');
+const { UpdatePreferences } = require('./update-settings.cjs');
+const { RoomPreviews } = require('./room-preview.cjs');
 const { confirmUpdateStarted } = require('./update-progress.cjs');
 const { StartupSettings } = require('./startup.cjs');
 const fs = require('node:fs');
 const { setLanguage } = require('../shared/i18n.cjs');
 let updater;
+let updatePreferences;
 let startup;
 let language = 'ru';
 let credentials;
 let signProfile;
 let chatAccess;
+const previews = new RoomPreviews({ fetcher: (...args) => net.fetch(...args), login: async (address, base) => {
+  try {
+    if (chatAccess?.base === base) return { token: chatAccess.token, key: chatAccess.key, ephemeral: chatAccess.ephemeral };
+    const scope = credentialKey(address);
+    const password = await credentials.load(scope); if (password === null) return;
+    const key = await credentials.load('e2ee:' + scope);
+    const response = await net.fetch(base + '/api/connect', { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(6000),
+      body: JSON.stringify({ nickname: 'Preview', password, ...(key ? { e2ee: true, e2eeKeyId: createHash('sha256').update(Buffer.from(key, 'hex')).digest('hex') } : {}) }) });
+    if (!response.ok) { await response.body?.cancel(); return; }
+    const raw = await response.text(); if (raw.length > 16384) return;
+    const body = JSON.parse(raw); if (!validChatAccess(body)) return;
+    return { token: body.chatToken, key, ephemeral: body.chatEphemeral === true };
+  } catch { return undefined; }
+} });
 let pendingInvitation = '';
 function acceptInvitation(args) {
   for (const address of args) {
@@ -58,6 +75,21 @@ function authorized(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Unauthorized IPC');
 }
 function registerIPC() {
+  ipcMain.handle('chat-text-copy', (event, text) => {
+    authorized(event);
+    if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > 12000) throw new Error('Invalid chat text');
+    return clipboard.writeText(text);
+  });
+  require('./image-actions.cjs').registerImageActions({ ipcMain, authorized, nativeImage, clipboard, ClipboardItem: require('electron').ClipboardItem, dialog, getWindow: () => win, t });
+  ipcMain.handle('room-preview', async (event, address, cursor) => {
+    authorized(event);
+    try {
+      const effective = invitation(address) ? localInvitation(address, hosting.status()) : address;
+      const base = serverURL(effective, !app.isPackaged);
+      await verifyInvitation(effective); trustInvitation(effective);
+      return await previews.read(address, base, cursor);
+    } catch { return { status: 'offline' }; }
+  });
   ipcMain.handle('window-active', event => { authorized(event); return win.isVisible() && !win.isMinimized() && win.isFocused(); });
   ipcMain.handle('room-presence', async (event, address) => {
     authorized(event);
@@ -101,10 +133,13 @@ function registerIPC() {
     fs.writeFileSync(path.join(app.getPath('userData'), 'language.json'), JSON.stringify({ language: value }));
     language = value; setLanguage(value); refreshTray();
   });
-  ipcMain.handle('update-state', event => { authorized(event); return updater?.state ?? { status: 'idle' }; });
+  ipcMain.handle('update-state', event => { authorized(event); return { ...(updater?.state ?? { status: 'idle' }), installable: app.isPackaged }; });
+  ipcMain.handle('update-preference-get', event => { authorized(event); return updatePreferences.enabled; });
+  ipcMain.handle('update-preference-set', (event, value) => { authorized(event); return updatePreferences.setEnabled(value); });
+  ipcMain.handle('update-check', async event => { authorized(event); if (!updater) throw new Error('Updates require Windows'); return { ...await updater.check(), installable: app.isPackaged }; });
   ipcMain.handle('update-install', async event => {
     authorized(event);
-    if (!updater) throw new Error('Updates require an installed Windows app');
+    if (!updater || !app.isPackaged) throw new Error('Installing updates requires an installed Windows app');
     const state = await updater.install();
     if (state.status === 'installing') { quitting = true; app.quit(); }
     return state;
@@ -165,6 +200,7 @@ function registerIPC() {
     if (!input || (input.password !== null && (typeof input.password !== 'string' || input.password.length > 1024))) throw new Error(t("Неверный пароль"));
     if (input.e2eeKey != null && (typeof input.e2eeKey !== 'string' || !/^[a-f0-9]{64}$/.test(input.e2eeKey))) throw new Error(t("Неверный ключ E2EE"));
     await credentials.save(credentialKey(input.address), input.password);
+    previews.forget(input.address);
     if ('e2eeKey' in input || input.password === null) await credentials.save('e2ee:' + credentialKey(input.address), input.password === null ? null : input.e2eeKey ?? null);
   });
   ipcMain.handle('connect', async (event, input) => {
@@ -181,11 +217,14 @@ function registerIPC() {
       const scope = invitation(address)?.fingerprint ?? base;
       const join = async () => {
         let profile;
-        if (e2eeKey) {
+        {
           const policy = await net.fetch(`${base}/api/config`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
           if (policy.ok) {
             const config = await policy.text();
-            if (config.length <= 1024) profile = await signProfile(scope, JSON.parse(config).profileChallenge, input.nickname);
+            if (config.length <= 1024) {
+              const challenge = JSON.parse(config).profileChallenge;
+              if (typeof challenge === 'string') profile = await signProfile(scope, challenge, input.nickname);
+            }
           } else await policy.body?.cancel();
         }
         const response = await net.fetch(`${base}/api/connect`, {
@@ -219,11 +258,11 @@ function registerIPC() {
       const local = hosting.status();
       const ownHost = local.running && !!invitation(address) && invitation(address).fingerprint === invitation(local.localAddress)?.fingerprint;
       const profileId = typeof body.profileId === 'string' && /^[a-f0-9]{64}$/.test(body.profileId) ? body.profileId : undefined;
-      chatAccess = e2eeKey && validChatAccess(body)
-        ? { handle: randomUUID(), feed: body.chatFeed, token: body.chatToken, profileId, base, join, renewAfter: 0 }
+      chatAccess = validChatAccess(body) && (!body.e2eeRequired || e2eeKey)
+        ? { handle: randomUUID(), feed: body.chatFeed, token: body.chatToken, profileId, base, join, renewAfter: 0, protocol: body.chatProtocol, encrypted: body.e2eeRequired === true, key: e2eeKey, ephemeral: body.chatEphemeral === true }
         : undefined;
       return { url: body.url, token: body.token, identity: body.identity, ownHost, e2eeRequired: body.e2eeRequired === true, ...(e2eeKey ? { e2eeKey } : {}),
-        ...(chatAccess ? { chat: { handle: chatAccess.handle, feed: chatAccess.feed, ephemeral: body.chatEphemeral === true, profileId } } : {}) };
+        ...(chatAccess ? { chat: { handle: chatAccess.handle, feed: chatAccess.feed, ephemeral: body.chatEphemeral === true, profileId, protocol: body.chatProtocol, encrypted: body.e2eeRequired === true } } : {}) };
     } catch (error) {
       return { error: connectionError(error) };
     }
@@ -274,11 +313,12 @@ else {
     }
     fs.mkdirSync(app.getPath('userData'), { recursive: true });
     startup = new StartupSettings(app, path.join(app.getPath('userData'), 'startup.json'));
+    updatePreferences = new UpdatePreferences(path.join(app.getPath('userData'), 'update-settings.json'));
     fs.writeFileSync(path.join(app.getPath('userData'), 'language.json'), JSON.stringify({ language }));
     setLanguage(language);
-    if (app.isPackaged && process.platform === 'win32') updater = new Updater({ current: app.getVersion(),
-      directory: path.join(app.getPath('userData'), 'updates'), script: path.join(process.resourcesPath, 'updates/install-update.ps1'),
-      installDirectory: path.dirname(app.getPath('exe')), executable: app.getPath('exe'), language: () => language, onState: state => send('update-changed', state) });
+    if (process.platform === 'win32') updater = new Updater({ current: app.getVersion(),
+      directory: path.join(app.getPath('userData'), 'updates'), script: app.isPackaged ? path.join(process.resourcesPath, 'updates/install-update.ps1') : path.join(__dirname, '../scripts/install-update.ps1'),
+      installDirectory: path.dirname(app.getPath('exe')), executable: app.getPath('exe'), language: () => language, onState: state => send('update-changed', { ...state, installable: app.isPackaged }) });
     acceptInvitation(process.argv);
     hosting = new SelfHost(app.isPackaged ? path.join(process.resourcesPath, 'server') : path.join(__dirname, '../resources/server'), value => send('host-changed', value));
     session.defaultSession.setCertificateVerifyProc((request, callback) => {
@@ -325,7 +365,7 @@ else {
     powerMonitor.on('lock-screen', () => { restoreAudio(); send('ptt', false); });
     if (devURL) await win.loadURL(devURL); else await win.loadFile(path.join(__dirname, '../dist/index.html'));
     await confirmUpdateStarted(path.join(app.getPath('userData'), 'updates'), app.getVersion(), app.getPath('exe'));
-    void updater?.check();
+    if (updatePreferences.enabled && app.isPackaged) void updater?.check();
   });
   let hostShutdown = false;
   app.on('before-quit', event => {

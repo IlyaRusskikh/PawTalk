@@ -1,0 +1,34 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { hkdfSync, createCipheriv } from 'node:crypto';
+const { RoomPreviews, avatar } = createRequire(import.meta.url)('../electron/room-preview.cjs');
+
+test('preview keeps credentials in main, caches logins and falls back for older servers', async () => {
+  let logins = 0, token;
+  const previews = new RoomPreviews({ login: async () => { logins++; return { token: 'private-token' }; }, fetcher: async (url, options) => {
+    if (url.includes('/api/preview')) { token = options.headers.Authorization; return new Response(JSON.stringify({ participants: 4, unread: 7, people: [{ name: 'Alice' }], feed: 'a'.repeat(32), encrypted: false })); }
+    return new Response(JSON.stringify({ participants: 4 }));
+  } });
+  const first = await previews.read('bookmark', 'https://example.invalid', { after: 3, feed: 'a'.repeat(32) });
+  assert.equal(first.unread, 7); assert.equal(first.people[0].name, 'Alice'); assert.equal(token, 'Bearer private-token');
+  assert.equal(JSON.stringify(first).includes('private-token'), false);
+  await previews.read('bookmark', 'https://example.invalid'); assert.equal(logins, 1);
+  const older = new RoomPreviews({ login: async () => undefined, fetcher: async () => new Response('{"participants":0}') });
+  assert.deepEqual(await older.read('old', 'https://example.invalid'), { status: 'online', participants: 0, unread: 0, people: [], details: false });
+  const offline = new RoomPreviews({ login: async () => undefined, fetcher: async () => { throw Error('offline'); } });
+  assert.deepEqual(await offline.read('offline', 'https://example.invalid'), { status: 'offline' });
+});
+
+test('preview avatars authenticate the profile/feed and are absent without an E2EE key', () => {
+  const key = 'a'.repeat(64), feed = 'b'.repeat(32), id = 'c'.repeat(64);
+  const clear = 'data:image/png;base64,aGVsbG8=';
+  const secret = hkdfSync('sha256', Buffer.from(key, 'hex'), Buffer.from(feed), Buffer.from('Voicecord chat profile v1'), 32);
+  const iv = Buffer.alloc(12, 7), cipher = createCipheriv('aes-256-gcm', secret, iv); cipher.setAAD(Buffer.from(id));
+  const bytes = Buffer.concat([cipher.update(clear), cipher.final(), cipher.getAuthTag()]);
+  const profile = { id, nonce: iv.toString('base64'), ciphertext: bytes.toString('base64') };
+  assert.equal(avatar(profile, key, feed, true), clear);
+  assert.equal(avatar(profile, undefined, feed, true), undefined);
+  assert.equal(avatar(profile, key, 'd'.repeat(32), true), undefined);
+  assert.equal(avatar({ ...profile, id: 'e'.repeat(64) }, key, feed, true), undefined);
+});

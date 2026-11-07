@@ -10,6 +10,15 @@ export const defaults: Settings = {
   echoCancellation: true, nearbyVoiceSuppression: false, noiseMode: 'rnnoise', autoGainControl: true,
   muteKey: 'Control+Shift+M', deafenKey: 'Control+Shift+D', duckOwn: false, duckOthers: false, duckAmount: 50, sounds: true,
 };
+export const settingsTabs = {
+  voice: ['inputDevice', 'outputDevice', 'inputGain', 'outputVolume'],
+  input: ['inputMode', 'autoSensitivity', 'threshold', 'pttKey', 'pttReleaseMs'],
+  processing: ['noiseMode', 'echoCancellation', 'autoGainControl', 'nearbyVoiceSuppression'],
+  shortcuts: ['duckOwn', 'duckOthers', 'duckAmount', 'muteKey', 'deafenKey', 'sounds'],
+} as const satisfies Record<string, readonly (keyof Settings)[]>;
+export function resetSettingsTab(settings: Settings, tab: keyof typeof settingsTabs): Settings {
+  return { ...settings, ...Object.fromEntries(settingsTabs[tab].map(key => [key, defaults[key]])) };
+}
 export function loadSettings(): Settings {
   const result = { ...defaults };
   try {

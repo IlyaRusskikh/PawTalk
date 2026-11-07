@@ -2,11 +2,19 @@ import { t } from './i18n';
 import { useEffect, useRef, useState } from 'react';
 import { Microphone } from './audio';
 import { VoiceSession, type Snapshot } from './session';
-import { defaults, loadSettings, remember, type Settings } from './settings';
+import { resetSettingsTab, loadSettings, remember, type Settings } from './settings';
 import { Icon, Toggle } from './Controls';
 import { AudioQuickMenu } from './AudioQuickMenu';
-import { BookmarkRail, type Bookmark } from './BookmarkRail';
+import { BookmarkRail, type Bookmark, type RoomPreview } from './BookmarkRail';
 import { presencePoll } from '../shared/presence-poll.mjs';
+import { HomeScreen } from './HomeScreen';
+import { SettingsShell, type SettingsSection } from './SettingsShell';
+import { AppearanceSettings } from './AppearanceSettings';
+import { ChatSettings, loadChatWindow } from './ChatSettings';
+import { UpdateSettings } from './UpdateSettings';
+import { ConnectionFailure } from './ConnectionFailure';
+import { Toast } from './Toast';
+import { applyTheme, loadTheme } from './theme';
 import { VoiceSettings } from './VoiceSettings';
 import { Modal } from './Modal';
 import { JoinRoom } from './JoinRoom';
@@ -15,6 +23,7 @@ import { Participants } from './Participants';
 import { Avatar } from './Avatar';
 import { AvatarEditor } from './AvatarEditor';
 import { avatarFormats, avatarStorageKey, validAvatar } from './avatarImage';
+import { readChatCursor } from './chat';
 import { RoomChat, type ChatRoom } from './RoomChat';
 import { RoomSplit } from './RoomSplit';
 import { HostPanel } from './HostPanel';
@@ -30,6 +39,13 @@ export function App() {
   const language = useLanguage();
   const keys: [number, string][] = [[5, t("Боковая кнопка мыши 4")], [6, t("Боковая кнопка мыши 5")], [32, t("Пробел")], [162, t("Левый Ctrl")], [163, t("Правый Ctrl")], [164, t("Левый Alt")], [165, t("Правый Alt")], [160, t("Левый Shift")], [161, t("Правый Shift")], [20, 'Caps Lock'], ...Array.from({ length: 26 }, (_, i) => [65 + i, String.fromCharCode(65 + i)] as [number, string]), ...Array.from({ length: 12 }, (_, i) => [112 + i, `F${i + 1}`] as [number, string])];
   const [settings, setSettings] = useState(loadSettings);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('profile');
+  const [theme, setTheme] = useState(loadTheme);
+  const [chatWindow, setChatWindow] = useState(loadChatWindow);
+  const [activeUnread, setActiveUnread] = useState(0);
+  const [nativeNoticeDismissed, setNativeNoticeDismissed] = useState(false);
+  useEffect(() => { try { localStorage.setItem('voicecord.chat.window', String(chatWindow)); } catch {} }, [chatWindow]);
+  useEffect(() => { applyTheme(theme); try { localStorage.setItem('voicecord.theme', JSON.stringify(theme)); } catch {} }, [theme]);
   const [modal, setModal] = useState<'join' | 'create' | 'share' | 'host-share' | 'settings' | 'server-key' | null>(null);
   const [roomName, setRoomName] = useState('');
   const [page, setPage] = useState<'home' | 'room'>('home');
@@ -65,6 +81,7 @@ export function App() {
   const avatarPicker = useRef<HTMLInputElement>(null);
   const [hostBusy, setHostBusy] = useState(false);
   const [settingsError, setSettingsError] = useState('');
+  const [connectionError, setConnectionError] = useState('');
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   const [snapshot, setSnapshot] = useState(initial);
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
@@ -92,14 +109,29 @@ export function App() {
     try { const data = JSON.parse(stored('voicecord.bookmarks') || '[]'); return Array.isArray(data) ? data.filter(v => v && typeof v.address === 'string' && typeof v.name === 'string' && !v.address.includes('#')).slice(0, 50) : []; } catch { return []; }
   });
   const [menu, setMenu] = useState<{ address: string; x: number; y: number } | null>(null);
-  const [presence, setPresence] = useState<Record<string, number | null>>({});
+  const [presence, setPresence] = useState<Record<string, RoomPreview>>({});
   useEffect(() => {
     const poll = presencePoll({
-      read: async () => Object.fromEntries(await Promise.all(bookmarks.map(async item => {
-        try { return [item.address, await window.desktop?.roomPresence?.(item.address) ?? null] as const; }
-        catch { return [item.address, null] as const; }
-      }))),
-      publish: (values: Record<string, number | null>) => setPresence(values),
+      read: async () => {
+        const result: Record<string, RoomPreview> = {};
+        let index = 0;
+        await Promise.all(Array.from({ length: Math.min(4, bookmarks.length) }, async () => {
+          while (index < bookmarks.length) {
+            const item = bookmarks[index++];
+            try {
+              let saved: { feed?: string; ephemeral?: boolean } = {};
+              try { saved = JSON.parse(localStorage.getItem('voicecord.chat.feed.' + item.address) ?? '{}'); } catch {}
+              const after = saved.feed ? readChatCursor({ handle: '', feed: saved.feed, ephemeral: !!saved.ephemeral }) : 0;
+              const preview = window.desktop?.roomPreview ? await window.desktop.roomPreview(item.address, { feed: saved.feed, after }) : undefined;
+              const count = preview ? undefined : await window.desktop?.roomPresence?.(item.address);
+              result[item.address] = preview ?? (typeof count === 'number' ? { status: 'online', participants: count, unread: 0, details: false } : { status: 'offline' });
+              if (preview?.feed) try { localStorage.setItem('voicecord.chat.feed.' + item.address, JSON.stringify({ feed: preview.feed, ephemeral: preview.ephemeral })); } catch {}
+            } catch { result[item.address] = { status: 'offline' }; }
+          }
+        }));
+        return result;
+      },
+      publish: (values: Record<string, RoomPreview>) => setPresence(values),
     });
     let changed = false;
     const receive = (active: boolean) => { changed = true; poll.setActive(active); };
@@ -172,7 +204,7 @@ export function App() {
   async function refreshDevices() { try { setDevices(await navigator.mediaDevices.enumerateDevices()); } catch { setError(t("Не удалось получить список аудиоустройств")); } }
   useEffect(() => {
     const c = new VoiceSession(currentSettings.current); controller.current = c;
-    c.onUpdate = setSnapshot; c.onError = setError;
+    c.onUpdate = setSnapshot; c.onError = message => { if (c.room?.state !== 'connected') setConnectionError(message); else setError(message); };
     void refreshDevices();
     void window.desktop?.capabilities().then(info => { setNative(info.native); setAutoStartAvailable(info.platform === 'win32' && info.packaged); });
     const offPtt = window.desktop?.onPtt(down => { setPtt(down); c.setPtt(down); const mic = testMic.current; mic?.update(currentSettings.current, false, down); });
@@ -208,28 +240,28 @@ export function App() {
     }).catch(() => setKeyError(t("Не удалось настроить горячие клавиши")));
   }, [settings.pttKey, settings.muteKey, settings.deafenKey]);
   useEffect(() => {
-    if (modal !== 'settings' || busy) return;
+    if (modal !== 'settings' || !['voice', 'input', 'processing'].includes(settingsSection) || busy) return;
     let cancelled = false;
     const mic = new Microphone(currentSettings.current); mic.muted = false; testMic.current = mic;
     mic.onMeter = (db, speaking, threshold) => { if (!cancelled) { setTestDb(db); setTestSpeaking(speaking); setTestThreshold(threshold); } };
-    mic.onError = message => { if (!cancelled) setError(message); };
-    mic.onEnded = () => { if (!cancelled) { stopPreview(); setError(t("Микрофон отключён. Выберите доступное устройство.")); } };
+    mic.onError = message => { if (!cancelled) setSettingsError(message); };
+    mic.onEnded = () => { if (!cancelled) { stopPreview(); setSettingsError(t("Микрофон отключён. Выберите доступное устройство.")); } };
     void mic.start().then(async () => {
       if (cancelled) { mic.stop(); return; }
       await mic.configure(currentSettings.current);
       if (!cancelled) { setPreviewReady(true); void refreshDevices(); }
-    }).catch(error => { if (!cancelled) { mic.stop(); setError(t("Не удалось запустить микрофон: {0}", error.message)); } });
+    }).catch(error => { if (!cancelled) { mic.stop(); setSettingsError(t("Не удалось запустить микрофон: {0}", error.message)); } });
     return () => { cancelled = true; mic.stop(); if (testMic.current === mic) testMic.current = undefined; setTesting(false); setPreviewReady(false); setTestDb(-100); setTestSpeaking(false); };
-  }, [modal, active, busy]);
+  }, [modal, settingsSection, active, busy]);
   useEffect(() => {
     const mic = testMic.current;
-    if (mic) void mic.configure(settings).catch(error => { if (testMic.current === mic) setError(t("Не удалось применить настройки микрофона: {0}", error.message)); });
+    if (mic) void mic.configure(settings).catch(error => { if (testMic.current === mic) setSettingsError(t("Не удалось применить настройки микрофона: {0}", error.message)); });
   }, [settings]);
   async function connect(target: JoinTarget, hosting = false, displayName?: string) {
     if (active && target.address.split('#')[0] === currentTarget.current?.address.split('#')[0]) { setPage('room'); setModal(null); return; }
     if (!window.desktop) { setError(t("Подключение доступно в десктопном приложении. Эта страница — предпросмотр интерфейса.")); return; }
     if (settings.inputMode === 'ptt' && !native) { setError(t("Для Push-to-Talk нужно собрать нативный модуль Windows.")); return; }
-    const id = ++attempt.current; setBusy(true); setError(''); stopPreview();
+    const id = ++attempt.current; setBusy(true); setError(''); setConnectionError(''); stopPreview();
     let unusedChat: string | undefined;
     try {
       const result = await window.desktop.connect(target);
@@ -245,11 +277,13 @@ export function App() {
       if (id !== attempt.current) return;
       joinedOwnHost.current = result.ownHost ?? hosting;
       currentTarget.current = { ...target, e2eeKey: result.e2eeKey };
+      setActiveUnread(0);
+      if (result.chat) try { localStorage.setItem('voicecord.chat.feed.' + target.address.split('#')[0], JSON.stringify({ feed: result.chat.feed, ephemeral: result.chat.ephemeral })); } catch {}
       setChatRoom({ identity: result.identity, nickname: target.nickname.trim(), access: result.chat, key: result.e2eeKey });
       unusedChat = undefined;
       if (hosting && savedNames()[target.address.split('#')[0]]) setRoomName(savedNames()[target.address.split('#')[0]]);
       setPage('room'); setPersonPrefs({}); setModal(joinedOwnHost.current ? 'host-share' : null); if (!hosting) { try { setRoomName(savedNames()[target.address.split('#')[0]] || displayName || new URLSearchParams(new URL(target.address.includes('://') ? target.address : `https://${target.address}`).hash.slice(1)).get('name') || new URL(target.address.includes('://') ? target.address : `https://${target.address}`).host); } catch { setRoomName(t("Комната")); } } void refreshDevices();
-    } catch (error) { if (id === attempt.current) setError(error instanceof Error ? error.message : String(error)); }
+    } catch (error) { if (id === attempt.current) setConnectionError(error instanceof Error ? error.message : String(error)); }
     finally {
       if (unusedChat) void window.desktop.chatClose(unusedChat).catch(() => {});
       if (id === attempt.current) setBusy(false);
@@ -280,7 +314,7 @@ export function App() {
       return true;
     } catch { return false; }
   }
-  const callControls = <div className={`call-controls${showRoom ? '' : ' call-controls-floating'}`} role="group" aria-label={t("Управление звонком")}>
+  const callControls = <div className="call-controls" role="group" aria-label={t("Управление звонком")}>
     <AudioQuickMenu kind="input" settings={settings} update={update} devices={devices} onOpen={refreshDevices}>
       <button className={`icon-button ${muted || deafened ? 'off' : ''}`} aria-pressed={muted || deafened} title={t("Микрофон")} onClick={() => setMuted(v => !v)}><Icon name={muted || deafened ? 'mic-off' : 'mic'}/></button>
     </AudioQuickMenu>
@@ -290,17 +324,18 @@ export function App() {
     <button className="icon-button call-leave" title={t("Отключиться")} onClick={() => void disconnect()}><Icon name="exit"/></button>
   </div>;
   return <div className="app">
-    <aside className="rail"><button className={`server-orb home-orb ${!showRoom ? 'selected' : ''}`} title={t("Главная")} onClick={() => { setPage('home'); setModal(null); }}><img src="./voicecord.svg" width="44" height="44" alt="Voicecord"/></button><div className="rail-line"/><BookmarkRail bookmarks={bookmarks} activeAddress={inRoom ? currentTarget.current?.address.split('#')[0] : undefined} selected={showRoom} people={snapshot.people.length} presence={presence} disabled={busy || hostBusy || bookmarkBusy} onOpen={item => void openBookmark(item)} onReorder={setBookmarks} onMenu={(address, x, y) => setMenu({ address, x: Math.max(8, Math.min(x, window.innerWidth - 210)), y: Math.max(8, Math.min(y, window.innerHeight - 120)) })}/><button className="icon-button rail-settings" title={t("Настройки")} onClick={() => setModal('settings')}><Icon name="settings"/></button></aside>
+    <aside className="rail"><button className={`server-orb home-orb ${!showRoom ? 'selected' : ''}`} title={t("Главная")} onClick={() => { setPage('home'); setModal(null); }}><img src="./voicecord.svg" width="44" height="44" alt="Voicecord"/></button><div className="rail-line"/><BookmarkRail bookmarks={bookmarks} activeAddress={inRoom ? currentTarget.current?.address.split('#')[0] : undefined} selected={showRoom} people={snapshot.people.length} livePeople={snapshot.people} unread={activeUnread} presence={presence} disabled={busy || hostBusy || bookmarkBusy} onOpen={item => void openBookmark(item)} onReorder={setBookmarks} onMenu={(address, x, y) => setMenu({ address, x: Math.max(8, Math.min(x, window.innerWidth - 210)), y: Math.max(8, Math.min(y, window.innerHeight - 120)) })}/><button className="icon-button rail-settings" title={t("Настройки")} onClick={() => setModal('settings')}><Icon name="settings"/></button></aside>
     {menu && <div className="bookmark-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={e => e.stopPropagation()}><button autoFocus role="menuitem" onClick={() => { const item = bookmarks.find(b => b.address === menu.address); if (item) setRenaming(item); setMenu(null); }}>{t("Переименовать")}</button><button role="menuitem" onClick={() => void removeBookmark(menu.address)}>{t("Удалить закладку")}</button></div>}
-    {!showRoom && (active || busy) && callControls}
     <UpdateNotice blocked={modal !== null || renaming !== null} active={active || busy} hosting={hostRunning}/>
     <main>
     <div className={`content${showRoom ? ' room-content' : ''}`}>
-      {error && <div role="alert" className="notice error">{error}<button aria-label={t("Закрыть сообщение")} onClick={() => setError('')}>×</button></div>}
-      {!native && <div className="notice warning">{window.desktop ? t("Нативный модуль не загружен. Глобальный PTT и приглушение других приложений недоступны.") : t("Предпросмотр интерфейса. Для голосового подключения запустите Electron.")}</div>}
+      <div className="toast-stack" aria-live="polite">
+        {connectionError && modal !== 'join' && <Toast key={connectionError} onDismiss={() => setConnectionError('')}><ConnectionFailure detail={connectionError} onClose={() => setConnectionError('')}/></Toast>}
+        {error && <Toast key={error} onDismiss={() => setError('')}><div role="alert" className="notice error">{error}<button aria-label={t("Закрыть сообщение")} onClick={() => setError('')}>×</button></div></Toast>}
+        {!native && !nativeNoticeDismissed && <Toast onDismiss={() => setNativeNoticeDismissed(true)}><div className="notice warning">{window.desktop ? t("Нативный модуль не загружен. Глобальный PTT и приглушение других приложений недоступны.") : t("Предпросмотр интерфейса. Для голосового подключения запустите Electron.")}<button aria-label={t("Закрыть сообщение")} onClick={() => setNativeNoticeDismissed(true)}>×</button></div></Toast>}
+      </div>
       <>
-        {!showRoom && <div className="eyebrow">{t("ВАШЕ МЕСТО ДЛЯ РАЗГОВОРА")}</div>}
-        <div className="page-title">
+        {showRoom && <div className="page-title">
           <div>
             <div className="room-title"><h1>{showRoom ? roomName || t("Вы в хорошей компании.") : t("Разговор начинается здесь.")}</h1>{showRoom && <button className={`icon-button bookmark-add ${isBookmarked ? 'bookmarked' : ''}`} aria-pressed={isBookmarked} title={isBookmarked ? t("Удалить закладку") : t("Добавить в закладки")} disabled={bookmarkBusy} onClick={() => void toggleBookmark()}><Icon name="star"/></button>}</div>
             {!showRoom && <p>{t("Voicecord — личная голосовая комната для вас и друзей. Подключитесь к серверу или создайте свой прямо на этом компьютере.")}</p>}
@@ -310,20 +345,19 @@ export function App() {
             {snapshot.state !== 'connected' && <span>{t("Восстанавливаем связь…")}</span>}
             <button className="icon-button" title={t("Пригласить пользователя")} onClick={() => setModal(joinedOwnHost.current ? 'host-share' : 'share')}><Icon name="invite"/></button>
           </div> : <span className="badge">{t("● Голосовая связь")}</span>}
-        </div>
-        {!showRoom && <>{inRoom && <button className="return-room" onClick={() => setPage('room')}>{t("Вернуться в комнату: {0}", roomName)}</button>}<div className="home-actions"><button className="home-action" disabled={busy || hostBusy} onClick={() => setModal('join')}><Icon name="signal" size={30}/><strong>{t("Присоединиться к комнате")}</strong><span>{t("По адресу сервера или приглашению")}</span></button><button className="home-action" disabled={busy || hostBusy} onClick={() => setModal(hostRunning ? 'host-share' : 'create')}><Icon name="invite" size={30}/><strong>{hostRunning ? t("Моя комната") : t("Создать комнату")}</strong><span>{t("Пригласите друзей на свой сервер")}</span></button></div></>}
-        {!showRoom && <div className="server-setup"><span>{t("Настраиваете сервер?")}</span><button className="e2ee-generate" onClick={() => setModal('server-key')}>{t("Сгенерировать ключ шифрования")}</button></div>}
+        </div>}
+        {!showRoom && <HomeScreen hosting={hostRunning} disabled={busy || hostBusy} bookmarks={bookmarks} roomName={roomName} inRoom={inRoom} onJoin={() => setModal('join')} onHost={() => setModal(hostRunning ? 'host-share' : 'create')} onOpen={item => void openBookmark(item)} onReturn={() => setPage('room')} onServerKey={() => setModal('server-key')}/>}
         {modal === 'server-key' && <ServerKey onClose={() => setModal(null)}/>}
-        {modal === 'join' && <JoinRoom address={address} setAddress={value => { setAddress(value); setError(''); }} nickname={nickname} busy={busy || hostBusy} error={error} onConnect={input => connect(input)} onClose={() => setModal(null)}/>}
+        {modal === 'join' && <JoinRoom address={address} setAddress={value => { setAddress(value); setError(''); setConnectionError(''); }} nickname={nickname} busy={busy || hostBusy} error={connectionError} onConnect={input => connect(input)} onClose={() => setModal(null)}/>}
         {inRoom && <RoomSplit visible={showRoom} participants={<>
           <Participants people={snapshot.people} prefs={personPrefs} onChange={person}/>
           {showRoom && callControls}
-        </>} chat={chatRoom && controller.current && <RoomChat key={chatRoom.identity} room={chatRoom} session={controller.current} people={snapshot.people} profile={{ nickname, avatar }} visible={showRoom} connected={snapshot.state === 'connected'} covered={modal !== null || renaming !== null}/>}/>}
+        </>} chat={chatRoom && controller.current && <RoomChat key={chatRoom.identity} room={chatRoom} session={controller.current} people={snapshot.people} profile={{ nickname, avatar }} visible={showRoom} connected={snapshot.state === 'connected'} covered={modal !== null || renaming !== null} windowSize={chatWindow} onUnread={setActiveUnread}/>}/>}
       </>
       {modal === 'share' && currentTarget.current && <GuestShare target={currentTarget.current} name={roomName} onClose={() => setModal(null)}/>}
       <HostPanel nickname={nickname} active={active || busy} modal={modal} onClose={() => setModal(null)} onCreated={setRoomName} onStatus={setHostRunning} onJoin={input => connect(input, true)} onStop={disconnect} onError={setError} onBusy={setHostBusy}/>
       {renaming && <Modal title={t("Переименовать сервер")} onClose={() => setRenaming(null)}><form onSubmit={event => { event.preventDefault(); renameRoom(renaming.address, renaming.name); }}><div className="form-fields"><label>{t("Название сервера")}<input autoFocus required maxLength={64} value={renaming.name} onChange={event => setRenaming({ ...renaming, name: event.target.value })}/></label></div><p className="host-hint">{t("Название изменится только у вас.")}</p><div className="modal-actions"><button type="button" className="quiet" onClick={() => setRenaming(null)}>{t("Отмена")}</button><button className="primary" disabled={!renaming.name.trim()}>{t("Сохранить")}</button></div></form></Modal>}
-      {modal === 'settings' && <Modal title={t("Настройки")} className="settings-modal" onClose={() => setModal(null)}>{settingsError && <p role="alert" className="text-error">{settingsError}</p>}<section className="settings-page"><div className="settings-card profile-settings"><h1>{t("Обо мне")}</h1>
+      {modal === 'settings' && <Modal title={t("Настройки")} className="settings-modal" onClose={() => setModal(null)}>{settingsError && <p role="alert" className="text-error">{settingsError}</p>}<SettingsShell section={settingsSection} onChange={setSettingsSection}>{settingsSection === 'profile' && <section className="settings-page"><div className="settings-card profile-settings"><h1>{t("Обо мне")}</h1>
         <div className="profile-avatar">
           <Avatar name={nickname} image={avatar}/>
           <div className="profile-avatar-actions">
@@ -338,8 +372,12 @@ export function App() {
             }}>{t("Удалить аватар")}</button>}
           </div>
         </div>
-        <div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setSettingsError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label><label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div><p>{t("Никнейм обновляется и в открытой комнате.")}</p>{autoStart !== null && <Toggle label={t("Запускать Voicecord при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</div></section>
-      <VoiceSettings settings={settings} update={update} devices={devices} keys={keys} db={db} threshold={threshold} speaking={active && !testing ? snapshot.speaking : testSpeaking} active={active} busy={busy} testing={testing} testBusy={testBusy} ready={previewReady} native={native} keyError={keyError} onTest={() => void toggleTest()} onReset={() => setSettings({ ...defaults })}/></Modal>}
+        <div className="form-fields"><label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div><p>{t("Никнейм обновляется и в открытой комнате.")}</p></div></section>}
+      {settingsSection === 'general' && <section className="settings-card"><h1>{t("Приложение")}</h1><div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setSettingsError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label></div>{autoStart !== null && <Toggle label={t("Запускать Voicecord при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</section>}
+      {settingsSection === 'appearance' && <AppearanceSettings theme={theme} onChange={setTheme}/>}
+      {settingsSection === 'chat' && <ChatSettings value={chatWindow} onChange={setChatWindow}/>}
+      {settingsSection === 'updates' && <UpdateSettings/>}
+      {['voice', 'input', 'processing', 'shortcuts'].includes(settingsSection) && <VoiceSettings section={settingsSection as 'voice' | 'input' | 'processing' | 'shortcuts'} settings={settings} update={update} devices={devices} keys={keys} db={db} threshold={threshold} speaking={active && !testing ? snapshot.speaking : testSpeaking} active={active} busy={busy} testing={testing} testBusy={testBusy} ready={previewReady} native={native} keyError={keyError} onTest={() => void toggleTest()} onReset={() => setSettings(current => resetSettingsTab(current, settingsSection as 'voice' | 'input' | 'processing' | 'shortcuts'))}/>}</SettingsShell></Modal>}
       {modal === 'settings' && avatarFile && <AvatarEditor file={avatarFile} onClose={() => setAvatarFile(undefined)} onSave={saveAvatar}/>}
     </div>
     </main>

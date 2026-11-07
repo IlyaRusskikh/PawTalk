@@ -35,7 +35,8 @@ export function UpdateNotice({ blocked, active, hosting }: { blocked: boolean; a
       {hosting ? <p className="text-error">{t("Установка закроет вашу комнату и отключит всех участников.")}</p> : active ? <p className="text-error">{t("Установка прервёт текущий звонок.")}</p> : null}
       {downloading && <><p role="status">{state.status === 'installing' ? t("Запускаем установку…") : t("Загружаем обновление…")}</p><progress max={100} value={state.progress ?? 0}/></>}
       {state.status === 'failed' && <p role="alert" className="text-error">{t("Не удалось загрузить, проверить или запустить обновление. Попробуйте снова. Текущая версия сохранена.")}</p>}
-      <div className="update-actions"><button className="quiet" disabled={downloading} onClick={() => setOpen(false)}>{t("Отложить")}</button><button className="primary" disabled={downloading} onClick={() => void install()}>{t("Загрузить и установить")}</button></div>
+      {state.installable === false && <p className="host-hint">{t("Установка обновлений доступна в установленном приложении Windows.")}</p>}
+      <div className="update-actions"><button className="quiet" disabled={downloading} onClick={() => setOpen(false)}>{t("Отложить")}</button><button className="primary" disabled={downloading || state.installable === false} onClick={() => void install()}>{t("Загрузить и установить")}</button></div>
     </Modal>}
   </>;
 }

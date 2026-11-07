@@ -23,16 +23,20 @@ app.on('browser-window-created', (_event, win) => {
       await js(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Browser clipboard unavailable'); } } })`);
       await js(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Сгенерировать ключ шифрования').click()`);
       await until(`!!document.querySelector('#server-key-env')`);
-      for (const name of ['secret', 'hash', 'env']) {
+      for (const name of ['secret', 'env']) {
         const value = await js(`document.querySelector('#server-key-${name}').value`);
         await js(`document.querySelector('#server-key-${name}').parentElement.querySelector('button').click()`);
         await until(`document.querySelector('#server-key-${name}').parentElement.querySelector('button').textContent==='Скопировано'`);
         assert.equal(copied, value, name + ' reaches Electron clipboard');
       }
       assert.equal(await js(`window.desktop.copyServerKey('not a key').then(()=>false,()=>true)`), true);
+      const chatText = 'Сообщение\nSecond line';
+      await js(`window.desktop.copyChatText(${JSON.stringify(chatText)})`);
+      assert.equal(copied,chatText,'chat text reaches the current Electron clipboard API unchanged');
+      assert.equal(await js(`window.desktop.copyChatText('x'.repeat(12001)).then(()=>false,()=>true)`),true,'oversized clipboard IPC is rejected');
       await js(`document.querySelector('dialog [aria-label="Закрыть"]').click();document.querySelector('[title="Настройки"]').click()`);
       await until(`!!document.querySelector('.settings-modal')`);
-      const gap = await js(`(()=>{const [a,b]=document.querySelectorAll('.profile-settings .form-fields>label');return b.getBoundingClientRect().top-a.getBoundingClientRect().bottom})()`);
+      const gap = await js(`(()=>{const a=document.querySelector('.profile-avatar'),b=document.querySelector('.profile-settings .form-fields');return b.getBoundingClientRect().top-a.getBoundingClientRect().bottom})()`);
       assert.ok(gap >= 20, 'profile fields have a 20px gap');
       await wait(200);
       await fs.mkdir('release/qa', { recursive: true });
@@ -42,7 +46,7 @@ app.on('browser-window-created', (_event, win) => {
         console.log('Real Electron IPC network result: ' + JSON.stringify(result));
         assert.equal(result.state, 'internet', 'current external network reachability');
       }
-      console.log('PASS real main/preload clipboard IPC for key/hash/env with browser API denied; invalid payload rejection; profile field spacing.');
+      console.log('PASS real main/preload clipboard IPC for participant key and server settings with browser API denied; invalid payload rejection; profile field spacing.');
       app.quit();
     } catch (error) { console.error(error); app.exit(1); }
     finally { clipboard.writeText = originalWrite; }

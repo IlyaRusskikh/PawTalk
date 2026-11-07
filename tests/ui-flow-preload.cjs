@@ -3,6 +3,7 @@ const calls = [];
 const noop = () => () => {};
 let cancelCheck;
 let active = true, activeListener, presenceReads = 0, autoStart = false, inTray = false;
+let autoUpdate = true;
 contextBridge.exposeInMainWorld('desktop', {
  windowActive: async () => active,
  onWindowActive: fn => { activeListener = fn; return () => { activeListener = null; }; },
@@ -11,6 +12,9 @@ contextBridge.exposeInMainWorld('desktop', {
  setAutoStart: async value => { autoStart = value; return value; },
  getStartInTray: async () => inTray,
  setStartInTray: async value => { inTray = value; return value; },
+ getAutoUpdate: async () => autoUpdate,
+ setAutoUpdate: async value => { autoUpdate = value; calls.push(['auto-update', value]); return value; },
+ checkUpdate: async () => { calls.push(['check-update', autoUpdate]); return { status: 'idle' }; },
  copyServerKey: async value => { calls.push(['copy-server-key', value]); },
  duck: async () => {},
  capabilities: async () => ({ native: true, secureStorage: true, platform: 'win32', packaged: true }), configureKeys: async () => ({ failed: [] }),

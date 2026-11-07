@@ -107,10 +107,8 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
       <label className="encryption-toggle"><input type="checkbox" checked={e2ee} disabled={busy} onChange={e => setE2EE(e.target.checked)}/>{t("Сквозное шифрование E2EE")}</label>
     </div>
       <div className="host-chat-hints" aria-live="polite">
-        {e2ee ? <>
-          <p className="host-chat-kept">{t("Сообщения не пропадут при перезаходе в комнату")}</p>
-          <p className="host-chat-ends">{t("Сообщения пропадут, как только вы закроете комнату")}</p>
-        </> : <p className="host-chat-warning">{t("Сообщения пропадут, как только вы покинете комнату")}</p>}
+        <p className="host-chat-kept">{t("Сообщения не пропадут при перезаходе в комнату")}</p>
+        <p className="host-chat-ends">{t("Сообщения пропадут, как только вы закроете комнату")}</p>
       </div>
       <section className="host-check" aria-label={t("Проверка хостинга в интернете")}>
         <div className="host-check-heading"><strong>{t("Могу ли я хостить в интернет?")}</strong><button type="button" className="e2ee-generate" disabled={busy || checking || active || !window.desktop || !Number.isInteger(port) || port < 1024 || port > 65532} onClick={() => void check()}>{checking ? t("Проверяем…") : t("Проверить")}</button></div>

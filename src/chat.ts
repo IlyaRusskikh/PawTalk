@@ -1,14 +1,21 @@
 import { mediaKeyBytes } from '../shared/encryption.mjs';
 
-export type ChatAccess = { handle: string; feed: string; ephemeral: boolean; profileId?: string };
-export type ChatPacket = { requestId: string; nonce: string; ciphertext: string };
+export type ChatAccess = { handle: string; feed: string; ephemeral: boolean; profileId?: string; protocol?: number; encrypted?: boolean };
+export type ChatHistoryRequest = { after?: number; before?: number; around?: number; limit?: number; profilesAfter?: number; readAfter?: number };
+export type ChatImage = { id: string; name: string; mime: 'image/png' | 'image/jpeg' | 'image/webp'; size: number; width: number; height: number };
+export type ChatReply = { key: string; id?: number; author: string; text: string };
+export type ChatContent = { text: string; image?: ChatImage; reply?: ChatReply };
+export type ChatPacket = { requestId: string; nonce: string; ciphertext: string; attachmentId?: string };
 export type ChatProfilePacket = { nickname: string; nonce?: string; ciphertext?: string };
 export type ChatProfile = { id: string; revision: number; nickname: string; avatar?: string };
-export type ChatMessage = { key: string; id: number; author: string; authorIdentity?: string; authorId?: string; sent: number; text: string };
+export type ChatMessage = ChatContent & { key: string; id: number; author: string; authorIdentity?: string; authorId?: string; sent: number };
 export const chatEncoder = new TextEncoder();
 export const chatDecoder = new TextDecoder('utf-8', { fatal: true });
 export const chatTextLimit = 4096;
 export const chatMessageLimit = 500;
+export const chatWindowLimit = 100;
+export const chatContentLimit = 12288;
+export const chatImageLimit = 2 * 1024 * 1024;
 export const chatSendsPerSecond = 3;
 
 export function continuesMessageGroup(previous: ChatMessage | undefined, message: ChatMessage) {
@@ -18,7 +25,11 @@ export function continuesMessageGroup(previous: ChatMessage | undefined, message
   return !!message.authorIdentity && previous.authorIdentity === message.authorIdentity;
 }
 
-export const base64 = (data: Uint8Array) => btoa(String.fromCharCode(...data));
+export const base64 = (data: Uint8Array) => {
+  let binary = '';
+  for (let i = 0; i < data.length; i += 8192) binary += String.fromCharCode(...data.subarray(i, i + 8192));
+  return btoa(binary);
+};
 export const unbase64 = (data: string) => Uint8Array.from(atob(data), c => c.charCodeAt(0));
 
 export async function chatKey(mediaKey: string, feed: string, purpose = 'Voicecord chat v1') {
@@ -28,33 +39,61 @@ export async function chatKey(mediaKey: string, feed: string, purpose = 'Voiceco
   }, root, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 
-export async function encryptChat(key: CryptoKey, text: string): Promise<ChatPacket> {
+const contentPrefix = '\u001eVOICECORD:2\n';
+export function validChatImage(image: unknown): image is ChatImage {
+  const value = image as Partial<ChatImage> | null;
+  return !!value && typeof value.id === 'string' && /^[a-f0-9]{32}$/.test(value.id)
+    && typeof value.name === 'string' && value.name.length <= 128
+    && ['image/png', 'image/jpeg', 'image/webp'].includes(value.mime ?? '')
+    && Number.isSafeInteger(value.size) && value.size! > 0 && value.size! <= chatImageLimit
+    && Number.isSafeInteger(value.width) && Number.isSafeInteger(value.height)
+    && value.width! > 0 && value.height! > 0 && value.width! <= 8192 && value.height! <= 8192 && value.width! * value.height! <= 16000000;
+}
+function parseContent(raw: string): ChatContent | undefined {
+  if (!raw.startsWith(contentPrefix)) {
+    const text = raw.trim();
+    return text && chatEncoder.encode(text).length <= chatTextLimit ? { text } : undefined;
+  }
+  const value = JSON.parse(raw.slice(contentPrefix.length));
+  if (!value || typeof value.text !== 'string' || chatEncoder.encode(value.text).length > chatTextLimit
+    || (!value.text.trim() && !value.image) || (value.image && !validChatImage(value.image))) return;
+  const reply = value.reply;
+  if (reply && (typeof reply.key !== 'string' || !/^[a-f0-9-]{32,36}$/.test(reply.key)
+    || (reply.id !== undefined && (!Number.isSafeInteger(reply.id) || reply.id <= 0))
+    || typeof reply.author !== 'string' || reply.author.length > 64 || typeof reply.text !== 'string' || reply.text.length > 240)) return;
+  return { text: value.text.trim(), ...(value.image ? { image: value.image as ChatImage } : {}), ...(reply ? { reply: reply as ChatReply } : {}) };
+}
+export async function encryptChat(key: CryptoKey | undefined, text: string, extra?: Pick<ChatContent, 'image' | 'reply'>): Promise<ChatPacket> {
   const requestId = crypto.randomUUID().replaceAll('-', '');
+  const clear = chatEncoder.encode(extra?.image || extra?.reply ? contentPrefix + JSON.stringify({ text, ...extra }) : text);
+  if (clear.length > chatContentLimit || !parseContent(chatDecoder.decode(clear))) throw new Error('Invalid chat content');
+  const attachment = extra?.image ? { attachmentId: extra.image.id } : {};
+  if (!key) return { requestId, nonce: '', ciphertext: base64(clear), ...attachment };
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt({
     name: 'AES-GCM', iv: nonce, additionalData: chatEncoder.encode(requestId),
-  }, key, chatEncoder.encode(text));
-  return { requestId, nonce: base64(nonce), ciphertext: base64(new Uint8Array(ciphertext)) };
+  }, key, clear);
+  return { requestId, nonce: base64(nonce), ciphertext: base64(new Uint8Array(ciphertext)), ...attachment };
 }
 
-export async function decryptChat(key: CryptoKey, input: unknown) {
+export async function decryptChat(key: CryptoKey | undefined, input: unknown) {
   const packet = input as Partial<ChatPacket> | null;
   if (typeof packet?.requestId !== 'string' || !/^[a-f0-9]{32}$/.test(packet.requestId)
-    || typeof packet.nonce !== 'string' || packet.nonce.length !== 16
-    || typeof packet.ciphertext !== 'string' || packet.ciphertext.length > 5484) return;
+    || typeof packet.nonce !== 'string' || packet.nonce.length !== (key ? 16 : 0)
+    || typeof packet.ciphertext !== 'string' || packet.ciphertext.length > 16408) return;
   try {
     const iv = unbase64(packet.nonce);
     const ciphertext = unbase64(packet.ciphertext);
-    if (iv.length !== 12 || ciphertext.length <= 16 || ciphertext.length > chatTextLimit + 16) return;
-    const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: chatEncoder.encode(packet.requestId) }, key, ciphertext);
-    const text = chatDecoder.decode(raw).trim();
-    if (text) return { key: packet.requestId, text };
+    if (iv.length !== (key ? 12 : 0) || ciphertext.length <= (key ? 16 : 0) || ciphertext.length > chatContentLimit + (key ? 16 : 0)) return;
+    const raw = key ? await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: chatEncoder.encode(packet.requestId) }, key, ciphertext) : ciphertext;
+    const content = parseContent(chatDecoder.decode(raw));
+    if (content && (content.image?.id ?? undefined) === packet.attachmentId) return { key: packet.requestId, ...content };
   } catch {
     // Invalid ciphertext and plaintext packets are ignored.
   }
 }
 
-export async function decodeHistory(input: unknown, after: number, key: CryptoKey) {
+export async function decodeHistory(input: unknown, after: number, key: CryptoKey | undefined) {
   type Record = ChatPacket & { id: number; author: string; authorId?: string; sent: number };
   const page = input as { first: number; messages: Record[] } | null;
   if (!page || !Number.isSafeInteger(page.first) || page.first < 0 || !Array.isArray(page.messages) || page.messages.length > chatMessageLimit) {

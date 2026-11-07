@@ -23,7 +23,6 @@ app.whenReady().then(async () => {
   const serverKey = await run(`document.querySelector('#server-key-secret').value`);
   const serverHash = require('node:crypto').createHash('sha256').update(Buffer.from(serverKey, 'hex')).digest('hex');
   assert.match(serverKey, /^[a-f0-9]{64}$/);
-  assert.equal(await run(`document.querySelector('#server-key-hash').value`), serverHash);
   assert.equal(await run(`document.querySelector('#server-key-env').value`), `VOICECORD_E2EE=true\nVOICECORD_E2EE_KEY_ID=${serverHash}`);
   assert.equal(await run(`window.testCalls().length`), 0, 'key generation needs no server');
   assert.equal(await run(`JSON.stringify(localStorage).includes(${JSON.stringify(serverKey)})`), false);
@@ -66,7 +65,8 @@ app.whenReady().then(async () => {
   await run(`document.querySelector('[title="Настройки"]').click()`); await wait();
   assert.equal(await run(`document.querySelector('dialog h2').textContent`), 'Настройки');
   assert.equal(await run(`document.querySelector('dialog').textContent.includes('Test connection stopped before media')`), false, 'connection errors do not appear inside settings');
-  assert.ok(await run(`document.querySelector('.notice.error')?.textContent.includes('Test connection stopped before media')`), 'connection notice stays in the main screen');
+  assert.equal(await run(`document.querySelector('.connection-failure strong').textContent`), 'Подключение не удалось');
+  await run(`document.querySelector('#settings-tab-processing').click()`); await wait();
   assert.equal(await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).querySelector('input').checked`),false);
   assert.equal(await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.querySelector('strong').textContent==='Эхоподавление').querySelector('input').checked`),true);
   await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).querySelector('input').click()`);await wait();
@@ -75,6 +75,12 @@ app.whenReady().then(async () => {
   assert.equal(await run(`JSON.parse(localStorage.getItem('voicecord.settings')).nearbyVoiceSuppression`),false);
   await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).scrollIntoView({block:'center'})`);await wait();
   await require('node:fs/promises').writeFile(path.resolve('release/qa/latency-settings.png'),(await win.webContents.capturePage()).toPNG());
+  await run(`document.querySelector('#settings-tab-updates').click()`); await wait();
+  await run(`document.querySelector('.update-settings input[role=switch]').click()`); await wait();
+  assert.deepEqual(await run(`window.testCalls().findLast(call=>call[0]==='auto-update')`), ['auto-update',false]);
+  await click('Проверить обновления'); await wait();
+  assert.deepEqual(await run(`window.testCalls().findLast(call=>call[0]==='check-update')`), ['check-update',false], 'manual check works while auto updates are off');
+  assert.ok(await run(`document.querySelector('.update-settings').textContent.includes('У вас последняя версия.')`));
   await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`); await wait();
   assert.equal(await run(`document.querySelectorAll('dialog[open]').length`), 0);
   const rect = await run(`(()=>{const r=document.querySelector('[title="Настройки"]').getBoundingClientRect();return {x:Math.floor(r.x)-8,y:Math.floor(r.y)-8,width:Math.ceil(r.width)+16,height:Math.ceil(r.height)+16}})()`);

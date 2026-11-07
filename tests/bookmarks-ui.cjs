@@ -33,7 +33,7 @@ app.whenReady().then(async () => {
   assert.equal(await js(`getComputedStyle(document.querySelector('.bookmark-placeholder')).borderTopStyle`), 'dashed');
   assert.ok(await js(`[...document.querySelectorAll('.bookmark-orb:not(.bookmark-placeholder)')].some(button => button.getAnimations().some(animation => animation.transitionProperty === 'transform'))`), 'neighbors animate before drop');
   await new Promise(resolve => setTimeout(resolve, 230));
-  const visualOrder = `[...document.querySelectorAll('.bookmark-orb')].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top).map(el=>el.title)`;
+  const visualOrder = `[...document.querySelectorAll('.bookmark-orb')].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top).map(el=>el.getAttribute('aria-label'))`;
   assert.deepEqual(await js(visualOrder), ['B','C','A'], 'placeholder occupies the destination before drop');
   assert.deepEqual(await js(`JSON.parse(localStorage.getItem('voicecord.bookmarks')).map(item=>item.name)`), ['A','B','C'], 'preview is not persisted');
   await js('window.finishBookmarkDrag(false)'); await wait();
@@ -41,14 +41,15 @@ app.whenReady().then(async () => {
   assert.deepEqual(await js(visualOrder), ['A','B','C'], 'cancelling restores the original layout');
   await js('window.dragBookmark(0, 2)'); await wait();
   await js('window.finishBookmarkDrag(true)'); await wait();
-  assert.deepEqual(await js(`[...document.querySelectorAll('.bookmark-orb')].map(el=>el.title)`), ['B','C','A']);
+  assert.deepEqual(await js(`[...document.querySelectorAll('.bookmark-orb')].map(el=>el.getAttribute('aria-label'))`), ['B','C','A']);
   assert.equal(await js('window.testPresenceReads()'), before, 'reordering while inactive does not start polling');
   assert.equal(await js('window.testCalls().filter(call=>call[0]==="connect").length'),0,'drag never connects');
   await js('window.testWindowActive(true)'); await wait();
   assert.equal(await js('window.testPresenceReads()'), before + 3, 'activation refreshes all bookmarks immediately');
   await win.reload(); await wait();
-  assert.deepEqual(await js(`[...document.querySelectorAll('.bookmark-orb')].map(el=>el.title)`), ['B','C','A'], 'order persists');
+  assert.deepEqual(await js(`[...document.querySelectorAll('.bookmark-orb')].map(el=>el.getAttribute('aria-label'))`), ['B','C','A'], 'order persists');
   await js(`document.querySelector('[title="Настройки"]').click()`); await wait();
+  await js(`document.querySelector('#settings-tab-general').click()`); await wait();
   const row = text => `Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.querySelector('strong').textContent===${JSON.stringify(text)}).querySelector('input')`;
   assert.equal(await js(`${row('Запускать свёрнутым в трее')}.disabled`),true);
   await js(`${row('Запускать Voicecord при входе в Windows')}.click()`); await wait();
@@ -57,6 +58,18 @@ app.whenReady().then(async () => {
   assert.equal(await js(`${row('Запускать свёрнутым в трее')}.checked`),true);
   const fs=require('node:fs/promises');await fs.mkdir(path.resolve('release/qa'),{recursive:true});
   await fs.writeFile(path.resolve('release/qa/startup-tray-ru.png'),(await win.webContents.capturePage()).toPNG());
+  await js(`document.querySelector('dialog [aria-label="Закрыть"]').click();localStorage.setItem('voicecord.bookmarks',JSON.stringify(Array.from({length:30},(_,i)=>({name:'Room '+i,address:'https://room'+i+'.example.com'}))))`);
+  await win.reload(); await wait(); await wait();
+  const railWidth = await js(`document.querySelector('.rail').getBoundingClientRect().width`);
+  assert.equal(railWidth,84,'overflow does not widen the rail');
+  assert.equal(await js(`getComputedStyle(document.querySelector('.bookmark-list')).scrollbarWidth`),'none');
+  const hidden=await js(`(()=>{const list=document.querySelector('.bookmark-list'),bottom=list.getBoundingClientRect().bottom;return [...list.querySelectorAll('.bookmark-orb')].filter(button=>button.getBoundingClientRect().bottom>bottom+1).length})()`);
+  assert.ok(hidden>0);
+  assert.equal(await js(`document.querySelector('.bookmark-overflow').textContent`),'+'+hidden,'footer counts bookmarks below the viewport');
+  await fs.writeFile(path.resolve('release/qa/bookmark-overflow-review.png'),(await win.webContents.capturePage()).toPNG());
+  await js(`document.querySelector('.bookmark-list').scrollTop=99999`); await wait();
+  assert.equal(await js(`document.querySelector('.bookmark-overflow').textContent`),'','counter disappears at the end');
+  assert.equal(await js(`document.querySelector('.rail').getBoundingClientRect().width`),railWidth);
   console.log('PASS disconnected counts, focus pause/resume, bookmark drag persistence, startup tray controls');
   win.destroy();app.exit(0);
  } catch(error) { console.error(error);win.destroy();app.exit(1); }

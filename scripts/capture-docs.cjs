@@ -62,7 +62,7 @@ app.on('browser-window-created', (_event, win) => {
     let vite, exitCode = 0;
     const guests = [];
     try {
-      const output = path.resolve(__dirname, '../website/assets');
+      const output = process.env.VOICECORD_CAPTURE_DIR ? path.resolve(process.env.VOICECORD_CAPTURE_DIR) : path.resolve(__dirname, '../website/assets');
       await fs.mkdir(output, { recursive: true });
       for (let i = 0; i < 80 && !await run(`!!document.querySelector('.home-actions')`); i++) await wait(100);
       await wait(400);
@@ -93,11 +93,14 @@ app.on('browser-window-created', (_event, win) => {
         await capture(`create-room${suffix}.png`);
         await run(`document.querySelector('dialog [aria-label=${JSON.stringify(close)}]').click()`);
         await run(`document.querySelector('[title=${JSON.stringify(settings)}]').click()`);
+        await run(`document.querySelector('#settings-tab-general').click()`);
         await capture(`language-settings${suffix}.png`);
+        await run(`document.querySelector('#settings-tab-voice').click()`);
         for (let i = 0; i < 80 && !await run(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent===${JSON.stringify(test)}&&!b.disabled)`); i++) await wait(100);
         assert.equal(await run(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent===${JSON.stringify(test)}&&!b.disabled)`), true);
         await run(`document.querySelector('.voice-settings').scrollIntoView({block:'start'})`);
         await capture(`audio-settings${suffix}.png`);
+        await run(`document.querySelector('#settings-tab-profile').click()`);
         const avatarFile = path.join(app.getPath('userData'), 'demo-avatar.png');
         const png = await run(`(() => {
           const canvas = document.createElement('canvas');
@@ -148,7 +151,7 @@ app.on('browser-window-created', (_event, win) => {
             const field = form.querySelectorAll('input')[index];
             set.call(field, value); field.dispatchEvent(new Event('input', { bubbles: true }));
           }
-          document.querySelector('.encryption-toggle input').click();
+          if (!${process.env.VOICECORD_CHAT_ACCEPTANCE === '1' && language === 'en'}) document.querySelector('.encryption-toggle input').click();
         })()`);
         await run(`document.querySelector('dialog[open] form').requestSubmit()`);
         await until(() => run('!!document.querySelector(".room-content dialog[open] .host-stop") && !!document.querySelector(".chat-compose")'), 'demo room and invitation');
@@ -167,23 +170,73 @@ app.on('browser-window-created', (_event, win) => {
           callback(new X509Certificate(request.certificate.data).fingerprint256.replaceAll(':', '').toLowerCase() === status.fingerprint ? 0 : -3);
         });
         const { chatKey, encryptChat } = await import('../src/chat.ts');
-        const e2eeKeyId = createHash('sha256').update(Buffer.from(e2eeKey, 'hex')).digest('hex');
+        const e2eeKeyId = e2eeKey ? createHash('sha256').update(Buffer.from(e2eeKey, 'hex')).digest('hex') : undefined;
         for (const [index, nickname] of demo.names.entries()) {
-          const credentials = await demoRequest(origin, status.fingerprint, '/api/connect', { nickname, password, e2ee: true, e2eeKeyId });
+          const credentials = await demoRequest(origin, status.fingerprint, '/api/connect', { nickname, password, e2ee: !!e2eeKey, e2eeKeyId });
           const guest = new BrowserWindow({ show: false, webPreferences: { session: guestSession, sandbox: true, offscreen: true, backgroundThrottling: false } });
           guests.push(guest);
           await guest.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/tests/voice.html`);
           await until(() => guest.webContents.executeJavaScript('window.ready === true'), 'demo guest');
           await guest.webContents.executeJavaScript(`window.start(${JSON.stringify({ ...credentials, e2eeKey })})`);
           await guest.webContents.executeJavaScript('window.voice.setMute(true, false)');
-          const packet = await encryptChat(await chatKey(e2eeKey, credentials.chatFeed), demo.messages[index]);
+          const packet = await encryptChat(e2eeKey ? await chatKey(e2eeKey, credentials.chatFeed) : undefined, demo.messages[index]);
           await demoRequest(origin, status.fingerprint, '/api/chat', packet, credentials.chatToken);
         }
         await win.webContents.insertText(demo.messages[2]);
-        await run(`document.querySelector('.chat-compose').requestSubmit()`);
+        await run(`document.querySelector('.chat-composer').requestSubmit()`);
         await until(() => run('document.querySelectorAll(".person-card").length === 3 && document.querySelectorAll(".chat-message").length === 3'), 'demo chat');
         assert.equal(await run('document.querySelectorAll("dialog[open]").length'), 0, 'no invitation is visible in the capture');
         await capture(`room-chat${suffix}.png`);
+        if (process.env.VOICECORD_CHAT_ACCEPTANCE === '1') {
+          await run(`(async()=>{
+            const canvas=document.createElement('canvas');canvas.width=420;canvas.height=220;
+            const context=canvas.getContext('2d');context.fillStyle='#486b85';context.fillRect(0,0,420,220);
+            context.fillStyle='#dfba8f';context.beginPath();context.arc(300,70,30,0,Math.PI*2);context.fill();
+            const mime=${JSON.stringify(language === 'en' ? 'image/webp' : 'image/png')};
+            const blob=await new Promise(resolve=>canvas.toBlob(resolve,mime));
+            const transfer=new DataTransfer();transfer.items.add(new File([blob],'local-acceptance.'+(mime==='image/webp'?'webp':'png'),{type:mime}));
+            document.querySelector('.chat-composer').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}));
+          })()`);
+          await until(() => run('!!document.querySelector(".chat-attachment-draft")'), 'image draft through actual app');
+          await run(`document.querySelector('.chat-composer').requestSubmit()`);
+          await until(() => run('document.querySelector(".chat-image img")?.naturalWidth===420'), 'image upload and authenticated download through actual IPC and server');
+          assert.ok(await run('document.querySelector(".chat-image img").src.startsWith("blob:")'));
+          await capture(`room-image${suffix}.png`);
+          await run(`document.querySelector('.chat-image-open').click()`);
+          await until(() => run('!!document.querySelector(".image-viewer")'), 'actual image viewer');
+          const { dialog, clipboard, ClipboardItem, nativeImage } = require('electron');
+          const saveDialog = dialog.showSaveDialog;
+          const clipboardBefore = await Promise.all((await clipboard.read()).map(async item => new ClipboardItem(Object.fromEntries(await Promise.all(item.types.map(async type => [type, await item.getType(type)]))))));
+          const savedImage = path.join(output, `saved-attachment${suffix}.${language === 'en' ? 'webp' : 'png'}`);
+          await fs.unlink(savedImage).catch(() => {});
+          for (const mime of ['image/jpeg', 'image/webp']) {
+            const bytes = await run(`(async()=>{const img=document.querySelector('.image-stage img');const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;canvas.getContext('2d').drawImage(img,0,0);const blob=await new Promise(resolve=>canvas.toBlob(resolve,${JSON.stringify(mime)}));return [...new Uint8Array(await blob.arrayBuffer())]})()`);
+            const decoded = await require('../electron/image-actions.cjs').readImage({ bytes: Buffer.from(bytes), name: 'image' });
+            assert.equal(decoded.extension, mime === 'image/jpeg' ? 'jpg' : 'webp', mime + ' original format is preserved');
+          }
+          try {
+            dialog.showSaveDialog = async () => ({ canceled: false, filePath: savedImage });
+            await run(`document.querySelectorAll('.image-toolbar button')[3].click()`);
+            await until(async () => { try { return (await fs.stat(savedImage)).size > 0; } catch { return false; } }, 'native save image IPC');
+            const savedMetadata = (await import('../shared/image.mjs')).inspectImage(await fs.readFile(savedImage));
+            assert.equal(savedMetadata.width, 420); assert.equal(savedMetadata.height, 220);
+            await until(() => run(`!document.querySelectorAll('.image-toolbar button')[4].disabled`), 'save finished');
+            await run(`document.querySelectorAll('.image-toolbar button')[4].click()`);
+            await until(() => run(`document.querySelector('.image-action-status').textContent===${JSON.stringify(language === 'en' ? 'Image copied' : 'Изображение скопировано')}`), 'actual system clipboard write');
+            const items = await clipboard.read();
+            const item = items.find(item => item.types.includes('image/png'));
+            assert.ok(item, 'system clipboard contains an image');
+            const blob = await item.getType('image/png');
+            assert.deepEqual(nativeImage.createFromBuffer(Buffer.from(await blob.arrayBuffer())).getSize(), { width: 420, height: 220 });
+          } finally { dialog.showSaveDialog = saveDialog; if (clipboardBefore.length) await clipboard.write(clipboardBefore); else clipboard.clear(); }
+          await run(`document.querySelector('.image-viewer [aria-label=${JSON.stringify(close)}]').click()`);
+          await run(`document.querySelectorAll('.chat-message-more')[0].click()`);
+          await until(() => run('!!document.querySelector(".chat-message-menu")'), 'actual reply menu');
+          await run(`document.querySelector('.chat-message-menu button').click()`);
+          await win.webContents.insertText(language === 'en' ? 'Reply from the real app.' : 'Ответ из настоящего приложения.');
+          await run(`document.querySelector('.chat-composer').requestSubmit()`);
+          await until(() => run('!!document.querySelector(".chat-reply-quote")'), 'reply saved through actual IPC and server');
+        }
         while (guests.length) guests.pop().destroy();
         await run('window.desktop.stopHost()');
         await until(() => run('!!document.querySelector(".home-actions")'), 'return to lobby');

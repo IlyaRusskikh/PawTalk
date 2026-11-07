@@ -63,6 +63,7 @@ class Updater {
   async check() {
     if (this.busy || this.release) return this.state;
     this.busy = true;
+    this.set({ status: 'checking' });
     try {
       const releases = [];
       for (let page = 1; page <= 10; page++) {

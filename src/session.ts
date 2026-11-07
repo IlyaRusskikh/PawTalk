@@ -145,7 +145,7 @@ export class VoiceSession {
         this.onTyping?.(participant.identity, payload[0] === 1);
         return;
       }
-      if (topic === chatTopic && participant && payload.length <= 6144) {
+      if (topic === chatTopic && participant && payload.length <= 18432) {
         const { identity } = participant;
         const now = performance.now();
         const recent = (peerChatTimes.get(identity) ?? []).filter(time => now - time < 1000);

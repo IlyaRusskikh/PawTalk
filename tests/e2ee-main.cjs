@@ -88,7 +88,7 @@ app.on('browser-window-created',(_e,win)=>{
    await js(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent.startsWith('Создать комнату')).click()`);
    await until(()=>js('!!document.querySelector(".encryption-toggle")'),'host form');
    assert.equal(await js('document.querySelector(".encryption-toggle").textContent'),'Сквозное шифрование E2EE');
-   assert.match(await js('document.querySelector(".host-chat-warning").textContent'), /покинете комнату/);
+   assert.equal(await js('document.querySelector(".host-chat-warning")'),null);
    const password=randomBytes(18).toString('hex');
    await js(`(()=>{const inputs=document.querySelector('dialog form').querySelectorAll('input');const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;for(const [i,value] of ${JSON.stringify([[0,'E2EE QA'],[1,password],[2,'34443']])}){set.call(inputs[i],value);inputs[i].dispatchEvent(new Event('input',{bubbles:true}));}document.querySelector('.encryption-toggle input').click();})()`);
    assert.match(await js('document.querySelector(".host-chat-kept").textContent'), /перезаходе/);
@@ -124,11 +124,11 @@ app.on('browser-window-created',(_e,win)=>{
      const invite=document.querySelector('.page-title .room-presence').getBoundingClientRect();
      const pane=document.querySelector('.room-participants').getBoundingClientRect();
      const chat=document.querySelector('.room-chat');
-     return buttons.length===3 && pane.bottom-buttons[0].bottom<8
+     return buttons.length===3 && pane.bottom-buttons[0].bottom<28
        && Math.abs((buttons[0].left+buttons[2].right-pane.left-pane.right)/2)<1
-       && Math.abs(settings.bottom-composer.bottom)<1
+       && settings.bottom<=innerHeight && settings.bottom>innerHeight-40
        && Math.abs(title.top+title.height/2-invite.top-invite.height/2)<1
-       && !document.querySelector('.participants-heading,.chat-heading h2,.chat-compose button')
+       && !document.querySelector('.participants-heading,.chat-heading h2')
        && Math.abs(chat.getBoundingClientRect().bottom-innerHeight)<1 && getComputedStyle(chat).borderTopWidth==='0px';
    })()`),'call controls are centered above the divider and settings sit at the bottom of the sidebar');
    assert.equal(await js(`document.querySelector('.room-presence').textContent.includes('На связи')`),false);
@@ -144,10 +144,6 @@ app.on('browser-window-created',(_e,win)=>{
    await until(()=>js(`!!document.querySelector('.connection-popover')`),'participant connection tooltip opens');
    assert.match(await js(`document.querySelector('.connection-popover').textContent`), /Пинг до сервера.*Потеря входящих аудиопакетов/);
    await js(`document.querySelector('.person-network').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
-   assert.equal(await js(`getComputedStyle(document.querySelector('.chat-feature-tip')).visibility`),'hidden');
-   await js(`document.querySelector('.chat-features button').focus()`);
-   assert.equal(await js(`getComputedStyle(document.querySelector('.chat-feature-tip')).visibility`),'visible');
-   assert.match(await js(`document.querySelector('.chat-feature-tip').textContent`), /500.*остановки комнаты/);
    const dividerStyle = () => js(`(()=>{
      const divider=document.querySelector('.room-divider');
      return [getComputedStyle(divider,'::before').backgroundColor,parseFloat(getComputedStyle(divider,'::after').width)];
@@ -195,13 +191,11 @@ app.on('browser-window-created',(_e,win)=>{
    await checkMessage();
    assert.equal(await composerHeight(),emptyHeight,'composer shrinks after send');
    assert.equal(await js(`document.querySelector('.chat-avatar img')?.src`),savedAvatar);
-   assert.equal(await js(`document.querySelector('.composer-avatar img')?.src`),savedAvatar);
    assert.match(await js(`document.querySelector('.chat-meta time').textContent`), /^\d{2}:\d{2}$/);
    await js(`document.querySelector('.chat-meta time').focus({preventScroll:true})`);
    assert.match(await js(`document.querySelector('.chat-date-tip')?.textContent`), /\d{4}.*\d{2}:\d{2}/);
    assert.equal(await js(`document.querySelector('.person-card .avatar img')?.src`),savedAvatar);
-   await until(()=>js(`document.querySelector('.chat-stream').hasAttribute('data-more-above')`),'overflowing messages fade below the chat header');
-   assert.match(await js(`getComputedStyle(document.querySelector('.chat-stream')).maskImage`), /linear-gradient/);
+   assert.ok(await js(`document.querySelector('.chat-stream').scrollHeight>document.querySelector('.chat-stream').clientHeight`),'long messages scroll inside the chat');
    await js(`document.querySelector('.rail-settings').click()`);
    await js(`(()=>{
      const field=document.querySelector('.profile-settings input[maxlength="32"]');
@@ -239,7 +233,7 @@ app.on('browser-window-created',(_e,win)=>{
    assert.equal(await js('document.querySelector(".chat-divider")?.textContent'),'Новые сообщения');
    const restoredOffset=await anchorOffset();
    assert.ok(Math.abs(restoredOffset-savedOffset)<=1,`rejoining restores the exact message offset (${savedOffset} → ${restoredOffset})`);
-   assert.equal(await js('document.querySelector(".chat-jump").textContent'),'Перейти к новым');
+   assert.equal(await js('document.querySelector(".chat-jump").textContent'),'К новым сообщениям');
    assert.ok(await js(`(()=>{
      const button=document.querySelector('.chat-jump').getBoundingClientRect(), composer=document.querySelector('.chat-compose').getBoundingClientRect();
      return Math.abs(button.left+button.width/2-composer.left-composer.width/2)<1 && button.bottom<composer.top;
@@ -252,7 +246,7 @@ app.on('browser-window-created',(_e,win)=>{
      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'Первое сообщение после входа');
      input.dispatchEvent(new Event('input',{bubbles:true}));
    })()`);
-   await js(`document.querySelector('.chat-compose').requestSubmit()`);
+   await js(`document.querySelector('.chat-composer').requestSubmit()`);
    await until(()=>js(`document.querySelector('.chat-message:last-child p')?.textContent==='Первое сообщение после входа'
      && !document.querySelector('.chat-divider,.chat-jump')`),'own message clears the entry marker without creating a new jump');
    assert.ok(await js(`(()=>{const list=document.querySelector('.chat-stream');return list.scrollHeight-list.scrollTop-list.clientHeight<2;})()`),'own message scrolls to the bottom');
@@ -286,10 +280,11 @@ app.on('browser-window-created',(_e,win)=>{
    await js(`(()=>{const el=document.querySelector('dialog input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'Renamed room');el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
    await delay(100);await js(`document.querySelector('dialog form').requestSubmit()`);await delay(100);
    assert.equal(await js('document.querySelector("h1").textContent'),'Renamed room');
-   assert.equal(await js('document.querySelector(".bookmark-orb").title'),'Renamed room');
+   assert.equal(await js('document.querySelector(".bookmark-orb").getAttribute("aria-label")'),'Renamed room');
    await js(`document.querySelector('.home-orb').click()`);await delay(100);
    assert.ok(await js('!!document.querySelector(".home-actions")'));
-   assert.ok(await js(`!!document.querySelector('[title="Отключиться"]')`),'voice stays connected in lobby');
+   assert.equal(await js(`!!document.querySelector('.call-controls')`),false,'lobby has no call controls');
+   assert.ok(await js(`!!document.querySelector('.return-room')`),'voice stays connected and lobby offers return to call');
    // Deleting saved credentials makes any unintended reconnect fail visibly.
    const address=await js('JSON.parse(localStorage.getItem("voicecord.bookmarks"))[0].address');
    await js(`window.desktop.savePassword(${JSON.stringify({address,password:null})})`);
@@ -350,8 +345,9 @@ app.on('browser-window-created',(_e,win)=>{
    await js('window.desktop.stopHost()');await delay(200);
    assert.equal(await js('document.querySelector("h1").textContent'),'VPS QA','stopping own host keeps remote voice session');
    await js(`document.querySelector('.rail-settings').click()`);
+   await js(`document.querySelector('#settings-tab-general').click()`);await delay(100);
    await js(`(()=>{
-     const select=document.querySelector('.profile-settings select');
+     const select=document.querySelector('#settings-panel select');
      select.value='en'; select.dispatchEvent(new Event('change',{bubbles:true}));
    })()`);
    await until(()=>js(`document.documentElement.lang==='en'`),'English call controls');
@@ -363,13 +359,15 @@ app.on('browser-window-created',(_e,win)=>{
    await fs.writeFile(path.resolve('release/qa/quick-audio-en.png'),(await win.webContents.capturePage()).toPNG());
    await js(`document.querySelector('.audio-quick-menu:popover-open').hidePopover()`);
    await js(`document.querySelector('[title="Disconnect"]').click()`);await delay(100);
-   assert.equal(await js(`window.desktop.roomPresence(${JSON.stringify(remote.localAddress)})`),0,'presence is available without a voice connection');
+   await until(()=>js(`window.desktop.roomPresence(${JSON.stringify(remote.localAddress)}).then(count=>count===0)`),'presence eventually updates after leaving');
    await remoteHost.stop();remoteHost=null;
    await win.reload();
    await until(()=>js(`!!document.querySelector('h1') && document.documentElement.lang==='en'`),'English home');
-   assert.equal(await js('document.querySelector(".bookmark-orb").title'),'Renamed room','alias persists after reload');
+   assert.equal(await js('document.querySelector(".bookmark-orb").getAttribute(\"aria-label\")'),'Renamed room','alias persists after reload');
    await js(`document.querySelector('[title="Settings"]').click()`);await delay(200);
+   await js(`document.querySelector('#settings-tab-general').click()`);await delay(100);
    assert.ok(await js('document.querySelector("dialog").textContent.includes("Start Voicecord when signing in to Windows")'));
+   await js(`document.querySelector('#settings-tab-profile').click()`);await delay(100);
    assert.equal(await js(`document.querySelector('.profile-avatar img')?.src`),savedAvatar,'avatar survives renderer restart');
    await js(`Array.from(document.querySelectorAll('.profile-avatar button')).find(b=>b.textContent==='Remove avatar').click()`);
    await until(()=>js('!document.querySelector(".profile-avatar img") && localStorage.getItem("voicecord.avatar")===null'),'remove restores initials');
