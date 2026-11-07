@@ -98,6 +98,8 @@ Use `npm run build`, `npm test`, `npm run smoke`, and `npm run check:public` whe
 
 Voicecord is licensed under [GNU AGPL-3.0-only](LICENSE). Third-party components retain their own licenses. [Third-party notices](THIRD_PARTY_NOTICES.md).
 
+A [field-by-field server .env guide](docs/SERVER.md#разбор-env-что-и-как-заполнять) covers allowed values, storage budgets, Swarm updates and applying changes.
+
 ## Project status
 
 Version 0.5.2 includes: a redesigned home screen, settings navigation,
