@@ -24,7 +24,7 @@ Voicecord takes inspiration from **Discord** for easy-to-join voice rooms and in
 - **Set a profile picture.** Under **Settings → About me**, choose a PNG, JPEG, or WebP. Zoom and position the image in the circular preview. Participants see your current nickname and avatar in the room and in retained chat history.
 - **Make speech easier to hear.** RNNoise reduces background noise on your PC, echo cancellation reduces echo, and automatic gain control evens out the level of your voice.
 - **Return to your favorite rooms.** Bookmark a server so you can find it again quickly.
-- **Send messages during a call.** The room opens with chat below the participant cards. Press Enter to send or Shift+Enter for a new line. You can send up to three messages per second and see when someone else is typing. Drag the divider to resize either section. Hover over **Features** to see how the room handles encryption and history. Built-in E2EE rooms keep history in memory until the server stops. Standalone servers configured with E2EE and a key fingerprint keep encrypted history for up to seven days.
+- **Send messages during a call.** The room opens with chat below the participant cards. Press Enter to send or Shift+Enter for a new line. You can send up to three messages per second and see when someone else is typing. Drag the divider to resize either section. Built-in E2EE rooms keep history in memory until the server stops. Published 0.4.1 servers keep encrypted history for up to seven days; the local next version uses a configurable storage budget (see Project status).
 
 <details>
 <summary>See audio settings and room creation</summary>
@@ -99,5 +99,32 @@ Use `npm run build`, `npm test`, `npm run smoke`, and `npm run check:public` whe
 Voicecord is licensed under [GNU AGPL-3.0-only](LICENSE). Third-party components retain their own licenses. [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Project status
+
+Local work after 0.4.1 is under review: a redesigned home screen, settings navigation,
+a detailed color palette with a light preset, configurable chat windows (25–500 messages; default 100), replies,
+and static PNG/JPEG/WebP attachments up to 2 MiB. Updated servers provide paged
+history and password-protected room previews with participants and unread counts.
+Images load on demand and are released outside the viewport. E2EE rooms encrypt
+messages and images; without E2EE the server can read retained content. These
+changes are **not published**. Run `review.cmd` for an isolated local profile.
+VPS Swarm deployment and opt-in server updates: [SWARM.md](docs/SWARM.md).
+Client startup update checks can be disabled under Settings → Updates. App language
+is under Settings → Application. The voice/chat room retains its original layout.
+The chat field has a “+ → Send file” menu; Enter sends and Shift+Enter adds a line.
+Settings → Updates also shows the current application version.
+Reachable rooms stay above offline rooms without changing the saved order.
+Images have a fitted viewer with zoom and pan, plus Save/Copy actions on right-click.
+All interface colors, status colors, shadows and corner sizes follow Appearance.
+Notifications float above the page, and call controls appear only inside a room.
+Toasts fade after five seconds of inactivity; hover or keyboard focus pauses the timer.
+Reset affects only the current settings tab. Chat paging preserves the viewport even
+with a 25-message window, and image copying uses Electron's asynchronous clipboard API.
+Paging anchors visible text and keeps predecessor metadata so grouping stays stable
+when messages enter or leave the window.
+Message menus include **Copy text**. The room rail hides its scrollbar and shows
+`+N` for rooms below the visible area. VPS history uses `VOICECORD_CHAT_MAX_MB`
+(128 MiB by default, `0` unlimited), including messages, images, profiles and SQLite
+indexes. Oldest messages are evicted and disk pages reclaimed; this local version
+has no seven-day or 500-message VPS retention cap. Embedded rooms keep 500 messages.
 
 **0.4.1 is a public pre-release.** It fixes avatar synchronization after rejoining, speeds up chat updates, groups consecutive messages from the same author with a hover highlight, and keeps connection errors out of Settings. For immediate chat updates, all participants should update their clients. Encrypted chat history on a VPS requires server 0.4.0 or later with E2EE and a configured key fingerprint. See the [v0.4.1 release](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.4.1) for the corresponding source and SHA-256. [Changelog](CHANGELOG.md).

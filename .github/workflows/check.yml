@@ -51,12 +51,15 @@ jobs:
       - run: node scripts/native-smoke.cjs
       - run: npm run build
       - run: npm test
+      - run: python -m unittest discover -s tests -p server_update_test.py
       - run: npm run smoke
       - run: node scripts/ui-flow-smoke.mjs --built
       - run: node scripts/updates-ui-smoke.mjs
       - run: node scripts/fixes-main-smoke.mjs
       - run: npm run package
       - run: node scripts/realtime-smoke.mjs
+      - run: node scripts/chat-ui-smoke.mjs
+      - run: node scripts/chat-main-smoke.mjs
       - name: Prepare release files
         shell: pwsh
         run: |

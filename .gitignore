@@ -10,6 +10,8 @@ node_modules/
 *.test
 *.tsbuildinfo
 coverage/
+__pycache__/
+*.pyc
 
 # Server secrets, local configuration and certificates
 .env
