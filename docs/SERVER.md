@@ -1,10 +1,10 @@
 # Установка сервера Voicecord на Linux — пошагово
 
 Новый вариант с Docker Swarm, healthcheck/rollback и автообновлением по флагу
-включён в 0.5.0: [SWARM.md](SWARM.md). Он не применялся к VPS. Ниже сохранена
+включён в 0.5.1: [SWARM.md](SWARM.md). Он не применялся к VPS. Ниже сохранена
 инструкция для установки Compose.
 
-В версии 0.5.0 добавлен параметр `.env` `VOICECORD_CHAT_MAX_MB=128`:
+В версии 0.5.1 добавлен параметр `.env` `VOICECORD_CHAT_MAX_MB=128`:
 бюджет SQLite-базы чата в МиБ, включая текст, картинки, профили и индексы.
 `0` отключает лимит. История не удаляется по возрасту; при заполнении удаляются
 самые старые сообщения. После изменения параметра пересоздайте контейнер или
@@ -17,7 +17,7 @@
 извне постоянный IP. Исходники, Node.js, Go, Windows-клиент и компилятор на VPS
 не нужны. Домен и публичный TLS-сертификат также не требуются.
 
-Образ: `ghcr.io/ilyarusskikh/voicecord-server:0.5.0`.
+Образ: `ghcr.io/ilyarusskikh/voicecord-server:0.5.1`.
 Для установки используется готовый публичный образ: публиковать его самостоятельно
 или настраивать GitHub Actions не требуется.
 
@@ -135,7 +135,7 @@ apt-get install -y ca-certificates curl nano
 ```sh
 install -d -m 755 /opt/voicecord
 cd /opt/voicecord
-VOICECORD_RELEASE=0.5.0
+VOICECORD_RELEASE=0.5.1
 curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/compose.server.ghcr.yaml" -o compose.server.ghcr.yaml
 curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/.env.server.example" -o .env.server.example
 if [ ! -e .env ]; then cp .env.server.example .env; fi
@@ -147,7 +147,7 @@ nano .env
 Замените пример IP на публичный IP VPS и выберите режим E2EE по пояснениям ниже:
 
 ```dotenv
-VOICECORD_IMAGE=ghcr.io/ilyarusskikh/voicecord-server:0.5.0
+VOICECORD_IMAGE=ghcr.io/ilyarusskikh/voicecord-server:0.5.1
 VOICECORD_PUBLIC_IP=203.0.113.10
 VOICECORD_PORT=18443
 VOICECORD_E2EE=false

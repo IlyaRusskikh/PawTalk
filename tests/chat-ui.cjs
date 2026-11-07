@@ -53,6 +53,10 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('.chat-message-menu button').click()`);
     assert.ok(await run('!!document.querySelector(".chat-reply-draft")'));
     await run(`(()=>{const el=document.querySelector('.chat-compose textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'Ответ на сообщение');el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    console.log('System reduced motion:',await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`));
+    win.webContents.debugger.attach('1.3');
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
+    assert.equal(await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`),false);
     await run(`document.querySelector('.chat-compose textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',shiftKey:true,bubbles:true,cancelable:true}))`);
     assert.equal(await run('!!window.lastSent'), false, 'Shift+Enter does not send');
     await run(`document.querySelector('.chat-compose textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}))`);
@@ -64,6 +68,14 @@ app.whenReady().then(async () => {
     await until(`!!document.querySelector('[data-message-row="${id}"]')`, 'original fetched by reply');
     await run(`document.querySelector('.chat-jump').click()`);
     await until(`!!document.querySelector('[data-message-row="251"]')`, 'return to latest');
+    const animatedCount=await run('window.sentAnimations.length');
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+    assert.equal(await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`),true);
+    await run(`(()=>{const el=document.querySelector('.chat-compose textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'Reduced motion test');el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await run(`document.querySelector('.chat-composer').requestSubmit()`);
+    await until(`window.lastSent?.text==='Reduced motion test' && !document.querySelector('.chat-compose textarea').value`,'send with reduced motion');
+    assert.equal(await run('window.sentAnimations.length'),animatedCount,'reduced motion suppresses the send animation');
+    win.webContents.debugger.detach();
     await run(`(async()=>{const file=await window.makeImage();const transfer=new DataTransfer();transfer.items.add(file);document.querySelector('.chat-composer').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}));})()`);
     await until('!!document.querySelector(".chat-attachment-draft")', 'image draft');
     await run(`document.querySelector('.chat-composer').requestSubmit()`);

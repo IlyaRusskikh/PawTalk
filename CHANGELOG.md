@@ -1,5 +1,10 @@
 # Changelog / История изменений
 
+## 0.5.1 — 2026-11-07 — Windows CI animation policy / Анимации в Windows CI
+
+- Explicitly test both normal and reduced-motion sending in the chat UI smoke, instead of depending on runner accessibility preferences. Application behavior is unchanged. / Тест чата явно проверяет обычную отправку и уменьшение движения, не полагаясь на настройки доступности раннера. Поведение приложения не меняется.
+- Includes all 0.5.0 features; v0.5.0 CI did not complete, so use this release. / Включает все функции 0.5.0; CI тега v0.5.0 не прошёл, используйте этот выпуск.
+
 ## 0.5.0 — 2026-11-07 — Chat, customization and server storage / Чат, оформление и хранение
 
 - Remove the chat information tooltip and header so the feed fade starts directly below the divider. / Удалены подсказка и шапка чата: fade ленты начинается сразу под разделителем.
