@@ -68,6 +68,13 @@ jobs:
       - run: node scripts/ui-flow-smoke.mjs --built
       - run: node scripts/updates-ui-smoke.mjs
       - run: node scripts/fixes-main-smoke.mjs
+      - name: Cache LiveKit server
+        uses: actions/cache@v4
+        with:
+          path: |
+            resources/server/livekit-server.exe
+            resources/server/LIVEKIT-LICENSE
+          key: livekit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/prepare-server.mjs') }}
       - run: npm run package
       - run: node scripts/realtime-smoke.mjs
       - run: node scripts/chat-ui-smoke.mjs
