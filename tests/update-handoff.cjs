@@ -4,10 +4,11 @@ const path = require('node:path');
 const { waitForHelper, helperLaunch } = require('../electron/update-progress.cjs');
 app.whenReady().then(async () => {
   const directory = process.env.PAWTALK_HANDOFF_DIRECTORY;
+  const childPid = path.join(directory, 'child-pid');
   const ready = path.join(directory, 'ready');
   const done = path.join(directory, 'done');
   const quote = value => "'" + value.replaceAll("'", "''") + "'";
-  const script = `[IO.File]::WriteAllText(${quote(ready)},'test-token'); while(Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue){Start-Sleep -Milliseconds 100}; [IO.File]::WriteAllText(${quote(done)},'survived')`;
+  const script = `[IO.File]::WriteAllText(${quote(childPid)},[string]$PID); [IO.File]::WriteAllText(${quote(ready)},'test-token'); while(Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue){Start-Sleep -Milliseconds 100}; [IO.File]::WriteAllText(${quote(done)},'survived')`;
   const powershell = path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe');
   const child = spawn(powershell, helperLaunch(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], directory),
     { detached: false, windowsHide: true, stdio: 'ignore' });
