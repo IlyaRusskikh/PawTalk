@@ -228,6 +228,7 @@ func (a *app) connect(w http.ResponseWriter, r *http.Request) {
 }
 func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle("GET /api/updates/", newUpdateRelay())
 	presence := a.presenceHandler()
 	mux.HandleFunc("GET /api/presence", presence)
 	if a.chat != nil {

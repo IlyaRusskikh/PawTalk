@@ -21,4 +21,6 @@ contextBridge.exposeInMainWorld('updateTest', {
   offer: () => update?.({ status: 'available', version: '0.2.0-beta.1', prerelease: true }),
   host: () => hosts.forEach(fn => fn({ running: true, name: 'Synthetic room' })),
   calls: () => calls,
+  unsafe: () => update?.({ status: 'security-failed', source: 'Synthetic relay', version: '0.2.0-beta.1' }),
+  unsafeCheck: () => update?.({ status: 'security-failed', source: 'Synthetic relay' }),
 });

@@ -141,7 +141,10 @@ export function App() {
     else { fallback(); window.addEventListener('focus', fallback); window.addEventListener('blur', fallback); document.addEventListener('visibilitychange', fallback); }
     return () => { poll.stop(); off?.(); window.removeEventListener('focus', fallback); window.removeEventListener('blur', fallback); document.removeEventListener('visibilitychange', fallback); };
   }, [bookmarks]);
-  useEffect(() => { localStorage.setItem('voicecord.bookmarks', JSON.stringify(bookmarks)); }, [bookmarks]);
+  useEffect(() => {
+    localStorage.setItem('voicecord.bookmarks', JSON.stringify(bookmarks));
+    void window.desktop?.setUpdateRooms?.(bookmarks.map(({ address, name }) => ({ address, name }))).catch(() => {});
+  }, [bookmarks]);
   useEffect(() => {
     const close = () => setMenu(null);
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };

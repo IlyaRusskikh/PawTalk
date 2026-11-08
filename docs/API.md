@@ -94,3 +94,11 @@ HTTP 200: `{"status":"ok"}`. Проверяет процесс API; не про�
 ## GET /api/presence
 
 Публичный агрегированный счётчик: `{"participants":2}`. Имена и идентификаторы не передаются. Сервер кэширует результат LiveKit на 10 секунд; клиент опрашивает закладки каждые 10 секунд, пока окно видно и активно. HTTP 503 означает, что количество неизвестно. Старые серверы без этого маршрута отображаются с `?`.
+
+## Client update relay / Прокси обновлений клиента
+
+- `GET /api/updates/releases?per_page=100&page=1` forwards the fixed Voicecord GitHub releases endpoint (pages 1–10).
+- `GET /api/updates/assets/vX.Y.Z/update-manifest.json` forwards the signed manifest.
+- `GET /api/updates/assets/vX.Y.Z/Voicecord.Setup.X.Y.Z.exe` streams that installer without disk storage.
+
+Public, read-only, no room password/E2EE key. Arbitrary destinations and caller credentials are rejected/not forwarded. Metadata is cached in memory for 60 seconds; installers are not cached. Two upstream requests at once, 1 MiB/s per installer, 20 requests/minute/IP; 429/503 indicate throttling/busy/disabled. Set `VOICECORD_UPDATE_PROXY=false` to disable. The client must independently authenticate manifests and verify installer bytes. See [UPDATES.md](UPDATES.md) and [UPDATE-SIGNING.md](UPDATE-SIGNING.md).

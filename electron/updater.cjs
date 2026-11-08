@@ -1,4 +1,4 @@
-const { createHash, randomUUID } = require('node:crypto');
+const { randomUUID } = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -6,6 +6,8 @@ const { labels, helperLaunch, waitForHelper } = require('./update-progress.cjs')
 
 const REPOSITORY = 'IlyaRusskikh/voicecord';
 const API = `https://api.github.com/repos/${REPOSITORY}/releases`;
+const { verifyManifest, UpdateSecurityError } = require('./update-manifest.cjs');
+const { metadata, download } = require('./update-transport.cjs');
 const MAX_SIZE = 1024 * 1024 * 1024;
 function version(value) {
   const m = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value);
@@ -45,60 +47,96 @@ function validAssetURL(value, tag) {
       && u.pathname.startsWith(`/${REPOSITORY}/releases/download/${encodeURIComponent(tag)}/`);
   } catch { return false; }
 }
-async function responseJSON(url, fetcher) {
-  const response = await fetcher(url, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Voicecord' }, signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(`GitHub HTTP ${response.status}`);
-  const raw = await response.text();
-  if (raw.length > 8 * 1024 * 1024) throw new Error('GitHub response too large');
-  const data = JSON.parse(raw);
-  if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
-  return data;
-}
 class Updater {
-  constructor({ current, directory, script, installDirectory, executable = path.join(installDirectory || '', 'Voicecord.exe'), language = () => 'ru', fetcher = fetch, launch = spawn, onState = () => {} }) {
-    Object.assign(this, { current, directory, script, installDirectory, executable, language, fetcher, launch, onState });
+  constructor({ current, directory, script, installDirectory, executable = path.join(installDirectory || '', 'Voicecord.exe'), language = () => 'ru', fetcher = fetch, launch = spawn, onState = () => {}, rooms = () => [], roomFetcher = fetcher, keys, downloadPolicy }) {
+    Object.assign(this, { current, directory, script, installDirectory, executable, language, fetcher, launch, onState, rooms, roomFetcher, keys, downloadPolicy });
     this.state = { status: 'idle' }; this.release = null; this.busy = false;
   }
   set(value) { this.state = value; this.onState(value); return value; }
+  async *sources() {
+    yield null;
+    const seen = new Set();
+    for (const room of this.rooms().slice(0, 50)) {
+      try {
+        const source = await room.prepare();
+        if (!source || seen.has(source.base)) continue;
+        seen.add(source.base); yield { ...source, name: room.name };
+      } catch { /* Offline rooms and old invitations are skipped. */ }
+    }
+  }
+  fetchFor(source) { return source ? this.roomFetcher : this.fetcher; }
+  async checkSource(source) {
+    const releases = [];
+    for (let page = 1; page <= 10; page++) {
+      const batch = JSON.parse(await metadata(this.fetchFor(source), source, 'releases?per_page=100&page=' + page));
+      if (!Array.isArray(batch)) throw Error('Invalid releases');
+      releases.push(...batch); if (batch.length < 100) break;
+    }
+    const release = selectRelease(releases, this.current);
+    if (!release) return null;
+    const raw = await metadata(this.fetchFor(source), source, 'assets/v' + release.version + '/update-manifest.json', 16384);
+    let manifest;
+    try {
+      manifest = verifyManifest(raw, this.keys);
+      if (manifest.version !== release.version || manifest.name !== release.asset.name || manifest.size !== release.asset.size
+        || 'sha256:' + manifest.sha256 !== release.asset.digest.toLowerCase() || manifest.prerelease !== release.prerelease) throw Error();
+    } catch { throw new UpdateSecurityError(source?.name || 'GitHub'); }
+    if (this.directory) {
+      const trustFile = path.join(this.directory, 'trusted-manifest.json');
+      let previous;
+      try { previous = await fs.readFile(trustFile, 'utf8'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      if (previous) {
+        // Authenticate saved metadata even after its freshness deadline.
+        const envelope = JSON.parse(previous);
+        const saved = JSON.parse(Buffer.from(envelope.payload, 'base64').toString('utf8'));
+        const trusted = verifyManifest(previous, this.keys, saved.publishedAt);
+        if (compare(manifest.version, trusted.version) < 0) throw new UpdateSecurityError(source?.name || 'GitHub');
+      }
+      await fs.mkdir(this.directory, { recursive: true });
+      await fs.writeFile(trustFile + '.tmp', raw, { mode: 0o600 });
+      await fs.rename(trustFile + '.tmp', trustFile);
+    }
+    return { ...release, manifest, signedManifest: raw, metadataSource: source?.name || 'GitHub' };
+  }
   async check() {
     if (this.busy || this.release) return this.state;
-    this.busy = true;
-    this.set({ status: 'checking' });
+    this.busy = true; this.set({ status: 'checking' });
     try {
-      const releases = [];
-      for (let page = 1; page <= 10; page++) {
-        const batch = await responseJSON(`${API}?per_page=100&page=${page}`, this.fetcher);
-        releases.push(...batch);
-        if (batch.length < 100) break;
+      for await (const source of this.sources()) {
+        try {
+          this.release = await this.checkSource(source);
+          return this.release ? this.set({ status: 'available', version: this.release.version, prerelease: this.release.prerelease }) : this.set({ status: 'idle' });
+        } catch (error) {
+          if (error.code === 'UPDATE_SECURITY') return this.set({ status: 'security-failed', source: error.source });
+        }
       }
-      this.release = selectRelease(releases, this.current);
-      return this.release ? this.set({ status: 'available', version: this.release.version, prerelease: this.release.prerelease }) : this.set({ status: 'idle' });
-    } catch { return this.set({ status: 'check-failed' }); }
-    finally { this.busy = false; }
+      return this.set({ status: 'check-failed' });
+    } finally { this.busy = false; }
   }
   async install() {
     if (this.busy || !this.release) throw new Error('Update unavailable');
     this.busy = true;
-    const { asset, version: next, prerelease } = this.release;
+    const { manifest, version: next, prerelease } = this.release;
     const partial = path.join(this.directory, 'installer.part');
     const installer = path.join(this.directory, `Voicecord-${next}.exe`);
     try {
+      try { verifyManifest(this.release.signedManifest, this.keys); }
+      catch { throw new UpdateSecurityError(this.release.metadataSource); }
       this.set({ status: 'downloading', version: next, prerelease, progress: 0 });
       await fs.mkdir(this.directory, { recursive: true });
-      const response = await this.fetcher(asset.browser_download_url, { signal: AbortSignal.timeout(15 * 60 * 1000) });
-      if (!response.ok || !response.body) throw new Error('Download failed');
-      const hash = createHash('sha256'); let size = 0, progress = -1;
-      const file = await fs.open(partial, 'w', 0o600);
-      try {
-        for await (const chunk of response.body) {
-          size += chunk.length;
-          if (size > asset.size || size > MAX_SIZE) throw new Error('Invalid download size');
-          hash.update(chunk); await file.writeFile(chunk);
-          const percent = Math.floor(size / asset.size * 100);
-          if (percent !== progress) { progress = percent; this.set({ status: 'downloading', version: next, prerelease, progress }); }
+      let downloaded = false;
+      for await (const source of this.sources()) {
+        try {
+          this.set({ status: 'downloading', version: next, prerelease, progress: 0, source: source?.name || 'GitHub' });
+          await download({ fetcher: this.fetchFor(source), source, manifest, partial, policy: this.downloadPolicy,
+            onProgress: progress => this.set({ status: 'downloading', version: next, prerelease, progress, source: source?.name || 'GitHub' }) });
+          downloaded = true; break;
+        } catch (error) {
+          await fs.rm(partial, { force: true });
+          if (error.code === 'UPDATE_SECURITY' || ['ENOSPC', 'EACCES', 'EPERM'].includes(error.code)) throw error;
         }
-      } finally { await file.close(); }
-      if (size !== asset.size || `sha256:${hash.digest('hex')}` !== asset.digest.toLowerCase()) throw new Error('Invalid checksum');
+      }
+      if (!downloaded) throw Error('No update source available');
       await fs.rename(partial, installer);
       const helper = path.join(this.directory, 'install-update.ps1');
       await fs.copyFile(this.script, helper);
@@ -129,7 +167,7 @@ class Updater {
     } catch (error) {
       await fs.appendFile(path.join(this.directory, 'update-launch.log'), `${new Date().toISOString()} ${error.message}\n`).catch(() => {});
       await fs.rm(partial, { force: true }).catch(() => {});
-      return this.set({ status: 'failed', version: next, prerelease });
+      return this.set({ status: error.code === 'UPDATE_SECURITY' ? 'security-failed' : 'failed', source: error.source, version: next, prerelease });
     } finally { this.busy = false; }
   }
 }

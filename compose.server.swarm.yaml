@@ -10,6 +10,7 @@ services:
       VOICECORD_E2EE: ${VOICECORD_E2EE:-false}
       VOICECORD_E2EE_KEY_ID: ${VOICECORD_E2EE_KEY_ID:-}
       VOICECORD_CHAT_MAX_MB: ${VOICECORD_CHAT_MAX_MB:-128}
+      VOICECORD_UPDATE_PROXY: ${VOICECORD_UPDATE_PROXY:-true}
     volumes:
       - server_data:/data
       - type: tmpfs

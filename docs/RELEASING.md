@@ -42,7 +42,7 @@
    При первом выпуске сделайте пакет публичным по разделу
    [«Первая публикация образа»](#первая-публикация-образа-для-владельца-репозитория).
    Скачайте artifact
-   `voicecord-windows`: в нём установщик, его SHA-256 и один архив лицензий.
+   `voicecord-windows`: в нём установщик, его SHA-256, подписанный манифест и один архив лицензий. До tag push настройте signing secret по [UPDATE-SIGNING.md](UPDATE-SIGNING.md).
    Откройте **Releases → Draft a new release**, выберите существующий тег,
    перенесите описание из CHANGELOG и приложите файлы из artifact. Укажите команду
    `docker pull ghcr.io/ilyarusskikh/voicecord-server:X.Y.Z`, ссылку на исходный
@@ -68,9 +68,10 @@ SSH нужен для Git push, а не для сборки. GitHub Desktop та
 
 ### Шаблон ассетов
 
-В каждом релизе прикрепляйте только три основных файла:
+В каждом новом релизе прикрепляйте четыре основных файла:
 
 - `Voicecord.Setup.X.Y.Z.exe` — установщик Windows x64;
+- `update-manifest.json` — подписанный Ed25519 манифест этой сборки; [настройка ключа и подписи](UPDATE-SIGNING.md);
 - `SHA256SUMS.txt` — SHA-256 именно загруженного EXE (можно также указать ZIP);
 - `Voicecord.Licenses.X.Y.Z.zip` — `LICENSE`, `THIRD_PARTY_NOTICES.md` и
   папка `licenses/` из той же версии/сборки.
@@ -144,7 +145,7 @@ Also update both `website/` pages and `docs/FIRST-CALL.ru.md`, and run
 Review and publish. Never replace a released tag or binary; issue a new version.
 Do not upload local QA reports, recordings or an entire `release/` directory.
 
-Use exactly three primary assets: `Voicecord.Setup.X.Y.Z.exe`,
+Use exactly four primary assets: signed `update-manifest.json` ([key setup](UPDATE-SIGNING.md)), `Voicecord.Setup.X.Y.Z.exe`,
 `SHA256SUMS.txt` for the exact uploaded installer, and
 `Voicecord.Licenses.X.Y.Z.zip` containing `LICENSE`, `THIRD_PARTY_NOTICES.md`
 and `licenses/` from the same release/build. Do not attach licenses separately

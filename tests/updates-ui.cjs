@@ -14,7 +14,7 @@ app.whenReady().then(async () => {
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const until = async expression => { for (let i = 0; i < 100; i++) { if (await run(expression)) return; await wait(50); } throw new Error('Timed out: ' + expression); };
   const click = text => run(`Array.from((document.querySelector('dialog[open]') || document).querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(text)}).click()`);
-  const screenshot = async name => { await fs.mkdir('release/qa', { recursive: true }); await fs.writeFile(`release/qa/${name}.png`, (await win.webContents.capturePage()).toPNG()); };
+  const screenshot = async name => { win.webContents.invalidate(); await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }); await wait(200); await fs.mkdir('release/qa', { recursive: true }); await fs.writeFile(`release/qa/${name}.png`, (await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG()); };
   try {
     await win.loadURL(process.env.VOICECORD_UI_TEST_URL);
     await until(`!!document.querySelector('.home-actions')`);
@@ -58,12 +58,30 @@ app.whenReady().then(async () => {
     assert.equal(await run('window.updateTest.calls()'), 1);
     await click('Download and install');
     await until(`window.updateTest.calls() === 2`);
+    await wait(400);
     await until(`!!document.querySelector('.update-modal [role=alert]')`);
+    await run(`window.updateTest.unsafe()`);
+    await until(`document.querySelector('.update-modal [role=alert]')?.textContent.includes('Synthetic relay')`);
+    assert.ok(await run(`document.querySelector('.update-modal [role=alert]').textContent.includes('VPN')`));
+    assert.equal(await run(`document.querySelector('.update-actions .primary').disabled`), true, 'unsafe installer cannot be retried');
+    await screenshot('update-security-en');
     await click('Later');
     await win.reload();
     await until(`!!document.querySelector('.home-actions')`);
     assert.equal(await run(`document.querySelector('h1').textContent`), 'The conversation starts here.');
-    console.log('PASS: dock geometry, update deferral/reopen/modal exclusion, host warning, progress/retry, Russian/English settings and language persistence.');
+    await run(`window.updateTest.unsafeCheck()`);
+    await until(`!!document.querySelector('.update-modal [role=alert]')`);
+    assert.equal(await run(`document.querySelector('.update-actions .primary').disabled`), true);
+    await click('Later');
+    await run(`document.querySelector('[title="Settings"]').click()`); await wait(80);
+    await run(`document.querySelector('#settings-tab-general').click()`); await wait(80);
+    await run(`(()=>{const select=document.querySelector('select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'ru');select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await until(`document.documentElement.lang === 'ru'`);
+    await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`); await wait(80);
+    await run(`document.querySelector('.update-indicator').click()`); await wait(80);
+    assert.ok(await run(`document.querySelector('.update-modal [role=alert]').textContent.includes('Установка отменена')`));
+    await screenshot('update-security-ru');
+    console.log('PASS: dock geometry, update deferral/retry, unsafe installer blocking/source/VPN guidance, Russian/English dialogs and settings.');
   } catch (error) { console.error(error); app.exit(1); }
   finally { win.destroy(); app.quit(); }
 });

@@ -71,6 +71,8 @@ You can enable experimental E2EE when creating a room. With E2EE off, voice is e
 
 Starting with 0.2.0, Voicecord offers new releases at startup. The installer download is verified and your profile is preserved. If you're on 0.1.0, update manually once. [How updates work](docs/UPDATES.md).
 
+Upcoming client builds can check/download updates through favorite rooms if GitHub is blocked or slow. Rooms stream installers without disk storage; clients verify signed manifests and installer hashes. For a manual upgrade, exit Voicecord and run the new EXE using the same directory and installation scope; no manual uninstall is needed. [Update details](docs/UPDATES.md).
+
 For setup or connection issues, see the [troubleshooting guide (Russian)](docs/GUIDE.ru.md). Ask questions or suggest changes in [GitHub Issues](https://github.com/IlyaRusskikh/voicecord/issues/new/choose). Include your version and steps to reproduce the issue. Remove live invitations, passwords, keys, and personal network details.
 
 </details>

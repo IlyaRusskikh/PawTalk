@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('desktop', {
   getLanguage: () => ipcRenderer.invoke('language-get'),
   setLanguage: (value) => ipcRenderer.invoke('language-set', value),
   updateState: () => ipcRenderer.invoke('update-state'),
+  setUpdateRooms: rooms => ipcRenderer.invoke('update-rooms-set', rooms),
   getAutoUpdate: () => ipcRenderer.invoke('update-preference-get'),
   setAutoUpdate: value => ipcRenderer.invoke('update-preference-set', value),
   checkUpdate: () => ipcRenderer.invoke('update-check'),

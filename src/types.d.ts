@@ -1,4 +1,4 @@
-interface UpdateState { status: 'idle' | 'checking' | 'check-failed' | 'available' | 'downloading' | 'installing' | 'failed'; version?: string; prerelease?: boolean; progress?: number; installable?: boolean; }
+interface UpdateState { status: 'idle' | 'checking' | 'check-failed' | 'available' | 'downloading' | 'installing' | 'failed' | 'security-failed'; version?: string; prerelease?: boolean; progress?: number; installable?: boolean; source?: string; }
 // Chromium supports AudioContext.setSinkId; TypeScript's DOM declarations lag it.
 interface AudioContext { setSinkId(sinkId: string): Promise<void>; }
 interface HostStatus { running: boolean; e2ee?: boolean; name?: string; port?: number; mapped?: boolean; internet?: boolean; localAddress?: string; invitations?: string[]; message?: string; }
@@ -20,6 +20,7 @@ interface Window {
     getLanguage?(): Promise<'ru' | 'en'>;
     setLanguage?(value: 'ru' | 'en'): Promise<void>;
     updateState?(): Promise<UpdateState>;
+    setUpdateRooms?(rooms: { address: string; name: string }[]): Promise<void>;
     getAutoUpdate?(): Promise<boolean>;
     setAutoUpdate?(value: boolean): Promise<boolean>;
     checkUpdate?(): Promise<UpdateState>;

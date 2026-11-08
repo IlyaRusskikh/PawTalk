@@ -6,7 +6,8 @@ RUN go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/v
 FROM livekit/livekit-server:v1.13.11 AS media
 
 FROM alpine:3.23
-RUN addgroup -g 65532 voicecord && adduser -D -H -u 65532 -G voicecord voicecord \
+RUN apk add --no-cache ca-certificates \
+    && addgroup -g 65532 voicecord && adduser -D -H -u 65532 -G voicecord voicecord \
     && mkdir /data && chown voicecord:voicecord /data
 COPY --from=build /out/voicecord /voicecord
 COPY --from=media /livekit-server /livekit-server

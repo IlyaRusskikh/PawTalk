@@ -1,5 +1,9 @@
 # Changelog / История изменений
 
+## Unreleased
+
+- Add favorite-room streaming proxies for client update checks/downloads, fallback on blocked or slow GitHub access, and Ed25519-signed release manifests with independent installer verification. Unsafe updates stop with the source name and manual VPN download advice. Document manual installation over the existing version. / Добавлены потоковые прокси через избранные комнаты для проверки и загрузки обновлений, переключение при недоступном или медленном GitHub, подписанные Ed25519 манифесты и независимая проверка установщика. Небезопасное обновление останавливается с указанием источника и советом загрузить вручную через VPN. Описана ручная установка поверх прежней версии.
+
 ## 0.5.2 — 2026-11-07 — Empty Windows clipboard / Пустой буфер Windows
 
 - Skip clipboard entries without MIME types when saving/restoring clipboard contents for chat acceptance tests. Added regressions for empty, populated and unreadable clipboards. / При сохранении буфера обмена для тестов пропускаются элементы без MIME-типов. Добавлены проверки пустого, заполненного и недоступного буфера.

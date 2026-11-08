@@ -12,6 +12,7 @@ const { HostCheck } = require('./host-check.cjs');
 const { CredentialStore } = require('./credentials.cjs');
 const { Updater } = require('./updater.cjs');
 const { UpdatePreferences } = require('./update-settings.cjs');
+const { UpdateRooms } = require('./update-rooms.cjs');
 const { RoomPreviews } = require('./room-preview.cjs');
 const { confirmUpdateStarted } = require('./update-progress.cjs');
 const { StartupSettings } = require('./startup.cjs');
@@ -19,6 +20,7 @@ const fs = require('node:fs');
 const { setLanguage } = require('../shared/i18n.cjs');
 let updater;
 let updatePreferences;
+let updateRooms;
 let startup;
 let language = 'ru';
 let credentials;
@@ -134,6 +136,7 @@ function registerIPC() {
     language = value; setLanguage(value); refreshTray();
   });
   ipcMain.handle('update-state', event => { authorized(event); return { ...(updater?.state ?? { status: 'idle' }), installable: app.isPackaged }; });
+  ipcMain.handle('update-rooms-set', (event, rooms) => { authorized(event); updateRooms.set(rooms); });
   ipcMain.handle('update-preference-get', event => { authorized(event); return updatePreferences.enabled; });
   ipcMain.handle('update-preference-set', (event, value) => { authorized(event); return updatePreferences.setEnabled(value); });
   ipcMain.handle('update-check', async event => { authorized(event); if (!updater) throw new Error('Updates require Windows'); return { ...await updater.check(), installable: app.isPackaged }; });
@@ -314,11 +317,15 @@ else {
     fs.mkdirSync(app.getPath('userData'), { recursive: true });
     startup = new StartupSettings(app, path.join(app.getPath('userData'), 'startup.json'));
     updatePreferences = new UpdatePreferences(path.join(app.getPath('userData'), 'update-settings.json'));
+    updateRooms = new UpdateRooms(path.join(app.getPath('userData'), 'update-rooms.json'), {
+      effective: address => localInvitation(address, hosting?.status()), verify: verifyInvitation, trust: trustInvitation });
     fs.writeFileSync(path.join(app.getPath('userData'), 'language.json'), JSON.stringify({ language }));
     setLanguage(language);
     if (process.platform === 'win32') updater = new Updater({ current: app.getVersion(),
       directory: path.join(app.getPath('userData'), 'updates'), script: app.isPackaged ? path.join(process.resourcesPath, 'updates/install-update.ps1') : path.join(__dirname, '../scripts/install-update.ps1'),
-      installDirectory: path.dirname(app.getPath('exe')), executable: app.getPath('exe'), language: () => language, onState: state => send('update-changed', { ...state, installable: app.isPackaged }) });
+      installDirectory: path.dirname(app.getPath('exe')), executable: app.getPath('exe'), language: () => language,
+      rooms: () => updateRooms.sources(), roomFetcher: (...args) => net.fetch(...args),
+      onState: state => send('update-changed', { ...state, installable: app.isPackaged }) });
     acceptInvitation(process.argv);
     hosting = new SelfHost(app.isPackaged ? path.join(process.resourcesPath, 'server') : path.join(__dirname, '../resources/server'), value => send('host-changed', value));
     session.defaultSession.setCertificateVerifyProc((request, callback) => {

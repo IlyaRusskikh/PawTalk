@@ -23,8 +23,12 @@ Windows x64 установщика и SHA-256 пропускаются. Пров
 
 При установке:
 
-1. Установщик загружается в `userData/updates`, размер и SHA-256 сверяются с
-   метаданными GitHub. До успешной проверки текущая версия не затрагивается.
+1. Сведения о релизе и подписанный `update-manifest.json` запрашиваются сначала
+   у GitHub, при сетевой ошибке — через комнаты из избранного в сохранённом порядке.
+   Клиент проверяет Ed25519-подпись встроенным публичным ключом, срок действия,
+   версию, имя, размер и SHA-256. Затем установщик загружается в `userData/updates`
+   сначала с GitHub, при ошибке или низкой скорости — через комнаты. До успешной
+   проверки всех байтов текущая версия не затрагивается.
 2. Запускается скрытый PowerShell-помощник из этой же папки. Приложение завершает
    звонок, останавливает встроенный сервер и закрывается. В модалке заранее
    показано предупреждение о прерывании звонка или отключении гостей.
@@ -40,10 +44,36 @@ Windows x64 установщика и SHA-256 пропускаются. Пров
    для ручного повторного запуска. При установке для всех пользователей Windows
    может запросить повышение прав.
 
-Установщики пока не подписаны. SHA-256 подтверждает соответствие файлу в
-GitHub Release, а не независимую подпись автора. Автоматический откат после
-ошибки установки не реализован. Уже опубликованную 0.1.0 нужно один раз обновить
-вручную до версии с этим механизмом.
+Манифест подписан отдельно от EXE; подписи Windows Authenticode у установщика
+пока нет. Клиент не принимает неподписанные обновления. Старые клиенты сохраняют
+прежний механизм проверки до обновления самого клиента. Автоматический откат
+после ошибки установки не реализован.
+
+Комнаты передают установщик потоком без записи на диск. Маленькие метаданные
+кешируются в памяти на минуту. Лимиты сервера: две передачи одновременно,
+до 1 МиБ/с на установщик, 20 запросов в минуту с IP. `VOICECORD_UPDATE_PROXY=false`
+отключает прокси; для Docker передайте переменную в окружение контейнера.
+Прокси работает только с релизами Voicecord и проверяет перенаправления GitHub.
+Пароль комнаты и ключ E2EE для публичной раздачи обновления не передаются.
+
+Клиент переключает источник при отсутствии данных 20 секунд или скорости ниже
+64 КиБ/с за 30 секунд. Каждый источник скачивается заново; докачки пока нет.
+Общий таймаут одной попытки — 15 минут. Недоступные комнаты и старые серверы
+пропускаются. Несовпадение подписи или хеша останавливает установку: сообщение
+указывает источник и предлагает ручную загрузку через VPN. Сетевой обрыв сам по
+себе не называется подменой. Сохраняется наибольшая проверенная предложенная
+версия, манифест действует 365 дней. Это ограничивает откат, но посредник всё ещё
+может скрыть наличие обновления; свежесть требует доступного честного источника.
+
+### Ручное обновление Windows
+
+1. Скачайте `Voicecord.Setup.X.Y.Z.exe` из нужного GitHub Release; при необходимости включите VPN.
+2. Полностью завершите Voicecord через «Выйти» в трее. Звонок и ваша комната остановятся.
+3. Запустите скачанный EXE. Оставьте прежнюю папку и тот же вариант установки
+   (для текущего пользователя либо для всех пользователей).
+4. Завершите установку и откройте Voicecord. **Удалять старую версию вручную не нужно:**
+   установщик сам выполняет замену, сохраняя настройки, закладки и пароли профиля
+   того же пользователя Windows. Не удаляйте папку пользовательских данных.
 
 ## English
 
@@ -62,7 +92,13 @@ launch and leaves an icon at the top right of the main screens. It is hidden
 while dialogs are open. Click it to reopen the offer. Nothing is downloaded
 until **Download and install** is selected.
 
-The complete installer is downloaded into `userData/updates` and its size and
+Release metadata and the signed `update-manifest.json` are fetched directly from
+GitHub first, then through favorite rooms on network failure. The client verifies
+Ed25519 using its embedded public key, freshness and artifact bindings. Installer
+downloads independently try GitHub first, then favorite rooms on errors, 20 seconds
+without data, or less than 64 KiB/s over a 30-second window. Each source restarts
+the download; resume is not implemented. Each attempt has a 15-minute limit.
+The complete installer is downloaded into `userData/updates` and its signed size and
 SHA-256 are verified before exiting. A hidden PowerShell helper waits for the
 app and hosted room to shut down, then starts NSIS with `/S --updated --force-run`
 in the existing install directory. NSIS invokes the old uninstaller, installs
@@ -78,19 +114,39 @@ new app has loaded, and retries launching it if the installer did not start it.
 On installation failure the window and `userData/updates/update-helper.log`
 report the error (`update-launch.log` records helper launch failures); the downloaded installer remains for a manual retry. Successful
 installation removes the cached EXE. There is no automatic rollback after an
-installation failure. Installers remain unsigned; the digest verifies the
-GitHub asset, not an independent author signature. Published 0.1.0 needs one
-manual upgrade to a version containing this updater.
+installation failure. The manifest has an independent signature; Windows
+Authenticode signing is not enabled. New clients require signed manifests;
+older clients keep their previous updater until upgraded.
+
+Rooms stream installer bytes without writing them to disk. Metadata is cached in
+memory for one minute. Limits: two upstream requests at once, 1 MiB/s per installer,
+20 requests per minute per IP. Set `VOICECORD_UPDATE_PROXY=false` in the server
+process/container environment to disable the relay. Only Voicecord release
+resources and approved GitHub redirects are accepted. Room passwords and E2EE
+keys are never sent to the update relay. Broken connections try another source;
+invalid signatures or checksums stop installation with the source name and advice
+to download manually using a VPN. Signed manifests expire after 365 days and the
+highest authenticated offered version is remembered to restrict rollback. Relays
+can still hide updates; availability requires an accessible honest source.
+
+### Manual Windows upgrade
+
+Download the release EXE (use a VPN if needed), completely exit Voicecord from its
+tray menu, then run the new installer using the existing directory and installation
+scope (current user or all users). Finish installation and reopen Voicecord.
+**Do not uninstall the old version manually.** NSIS replaces it and preserves the
+same Windows user's profile, settings, bookmarks and saved passwords. Calls and
+hosted rooms stop during the upgrade. Do not delete the user-data directory.
 
 ## Maintainers
 
-Attach `Voicecord.Setup.X.Y.Z.exe` (GitHub-normalized name) or
-`Voicecord Setup X.Y.Z.exe` to the matching `vX.Y.Z` release. Keep its SHA-256
+Attach `Voicecord.Setup.X.Y.Z.exe` and `update-manifest.json`
+to the matching `vX.Y.Z` release. Keep its SHA-256
 digest exposed by GitHub and attach `SHA256SUMS.txt` as documented in
 [RELEASING.md](RELEASING.md). Never replace published assets. The updater uses
 the repository pinned in `electron/updater.cjs`; forks must change that constant.
 Only package an x64 build under this asset name. No release is published by a
-local build.
+local build. See [UPDATE-SIGNING.md](UPDATE-SIGNING.md) for key setup and signing.
 
 Checks: `npm run build`, `npm test`, `node scripts/updates-ui-smoke.mjs`,
 `node scripts/ui-flow-smoke.mjs --built`, and an NSIS build. UI/update tests use

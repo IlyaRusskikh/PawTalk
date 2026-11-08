@@ -497,5 +497,6 @@
   "Скопировать текст": "Copy text",
   "Не удалось скопировать текст.": "Could not copy the text.",
   "Ещё серверов ниже: {0}": "More servers below: {0}",
-  "История хранится на сервере. Объём хранения задаёт владелец. Вложения — до 2 МБ.": "History is stored on the server. The owner sets its storage budget. Attachments up to 2 MiB."
+  "История хранится на сервере. Объём хранения задаёт владелец. Вложения — до 2 МБ.": "History is stored on the server. The owner sets its storage budget. Attachments up to 2 MiB.",
+  "Источник «{0}» не смог предоставить безопасный установщик: подпись обновления или контрольная сумма не прошла проверку. Установка отменена. Попробуйте вручную установить новую версию с GitHub, используя VPN для загрузки.": "Source “{0}” could not provide a safe installer: the update signature or checksum did not pass verification. Installation was cancelled. Try installing the new version manually from GitHub, using a VPN to download it."
 }
