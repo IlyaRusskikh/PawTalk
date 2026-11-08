@@ -75,7 +75,18 @@ jobs:
             resources/server/livekit-server.exe
             resources/server/LIVEKIT-LICENSE
           key: livekit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/prepare-server.mjs') }}
-      - run: npm run package
+      - name: Cache electron-builder tools
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\electron-builder-cache
+          key: electron-builder-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            electron-builder-${{ runner.os }}-${{ runner.arch }}-
+      - name: Package PawTalk
+        env:
+          ELECTRON_BUILDER_CACHE: ${{ runner.temp }}\electron-builder-cache
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
+        run: npm run package
       - run: node scripts/realtime-smoke.mjs
       - run: node scripts/chat-ui-smoke.mjs
       - run: node scripts/chat-main-smoke.mjs
