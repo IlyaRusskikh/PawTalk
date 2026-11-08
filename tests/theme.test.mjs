@@ -1,7 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { defaultTheme, normalizeTheme, themePresets, luminance } from '../src/theme.ts';
+import { applyColorPreset, colorFields, defaultTheme, normalizeTheme, themePresets, luminance } from '../src/theme.ts';
+
+test('color presets and default colors preserve custom sizes and spacing', () => {
+  const custom = { ...defaultTheme, radius: 24, fontSize: 18, messageSpacing: 12 };
+  for (const preset of [...themePresets, defaultTheme]) {
+    const next = applyColorPreset(custom, preset);
+    for (const key of colorFields) assert.equal(next[key], preset[key]);
+    for (const key of ['radius', 'fontSize', 'messageSpacing']) assert.equal(next[key], custom[key]);
+    assert.notEqual(next, custom);
+  }
+});
 
 test('theme migrates two-color preferences and constrains custom sizing',()=>{
   const theme=normalizeTheme({accent:'#abcdef',background:'#111111',fontSize:100,radius:-10,messageSpacing:NaN,text:'url(bad)'});

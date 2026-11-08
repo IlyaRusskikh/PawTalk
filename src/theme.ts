@@ -14,6 +14,11 @@ export const themePresets = [
 ] satisfies (Theme & { name: string })[];
 export const validColor = (value: unknown): value is string => typeof value === 'string' && /^#[a-f0-9]{6}$/i.test(value);
 export const colorFields = ['accent', 'background', 'surface', 'sidebar', 'chat', 'text', 'muted', 'border', 'success', 'warning', 'danger', 'onAccent', 'shadow'] as const;
+export function applyColorPreset(theme: Theme, preset: Theme): Theme {
+  const next = { ...theme };
+  for (const key of colorFields) next[key] = preset[key];
+  return next;
+}
 export function normalizeTheme(saved: unknown): Theme {
   const result = { ...defaultTheme };
   if (!saved || typeof saved !== 'object') return result;

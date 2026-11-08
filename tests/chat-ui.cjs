@@ -28,6 +28,27 @@ app.whenReady().then(async () => {
     await run(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
     assert.equal(await run('!!document.querySelector(".chat-attachment-menu")'), false);
     await capture('room-redesign-review');
+    await run('window.setRadius(24)');
+    const logoBackground = await run(`getComputedStyle(document.querySelector('.home-orb')).backgroundColor`);
+    await run(`document.querySelector('.home-orb').classList.add('selected')`);
+    assert.equal(await run(`getComputedStyle(document.querySelector('.home-orb')).backgroundColor`), logoBackground, 'selected logo keeps a single solid background');
+    await capture('sidebar-full-radius-review');
+    await run(`document.querySelector('.home-orb').classList.remove('selected')`);
+    await run('window.setRadius(12)');
+    await run(`document.querySelector('.chat-stream').scrollTop -= 350`);
+    await delay(150);
+    const bottomAnchor = await run(`(()=>{const list=document.querySelector('.chat-stream'),box=list.getBoundingClientRect();const row=[...list.querySelectorAll('[data-message-row]')].reverse().find(row=>{const r=row.getBoundingClientRect();return r.top<box.bottom&&r.bottom>box.top});return {id:row.dataset.messageRow,offset:row.getBoundingClientRect().bottom-box.bottom}})()`);
+    for (const key of ['ArrowDown', 'ArrowDown', 'ArrowUp', 'ArrowUp']) {
+      await run(`document.querySelector('.room-divider').dispatchEvent(new KeyboardEvent('keydown',{key:'${key}',bubbles:true}))`);
+      await delay(120);
+      const shift = await run(`(()=>{const list=document.querySelector('.chat-stream'),row=list.querySelector('[data-message-row="${bottomAnchor.id}"]');return Math.abs(row.getBoundingClientRect().bottom-list.getBoundingClientRect().bottom-${bottomAnchor.offset})})()`);
+      assert.ok(shift <= 1.1, 'split resizing anchors the lower visible message: ' + shift);
+    }
+    assert.ok(await run(`(()=>{const row=document.querySelector('[data-message-row="${bottomAnchor.id}"]'),button=row.querySelector('.chat-message-more');return getComputedStyle(row).paddingRight==='0px'&&button.getBoundingClientRect().top<row.getBoundingClientRect().top})()`), 'message actions sit above the row without reserving text width');
+    await run(`document.querySelector('[data-message-row="${bottomAnchor.id}"] .chat-message-more').focus({preventScroll:true})`);
+    await capture('chat-message-actions-review');
+    await run(`document.activeElement.blur();document.querySelector('.chat-stream').scrollTop=document.querySelector('.chat-stream').scrollHeight`);
+
     await run(`document.querySelectorAll('.bookmark-orb')[0].dispatchEvent(new MouseEvent('mouseover',{bubbles:true}))`);
     await until('!!document.querySelector(".server-preview")', 'server preview');
     assert.equal(await run('document.querySelectorAll(".server-preview-people .avatar").length'), 3);

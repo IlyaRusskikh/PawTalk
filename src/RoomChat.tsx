@@ -69,6 +69,7 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
   const scrollTop = useRef(0);
   const [away, setAway] = useState(false);
   const anchor = useRef<Anchor | undefined>(undefined);
+  const resizeAnchor = useRef<{ id: number; offset: number; width: number; height: number } | undefined>(undefined);
   const targetKey = useRef<string | undefined>(undefined);
   const initialPosition = useRef(readChatPosition(access));
   const restore = useRef(true);
@@ -113,6 +114,15 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
   function rememberViewport() {
     const list = stream.current;
     if (list) { list.toggleAttribute('data-more-above', list.scrollTop > 1); list.toggleAttribute('data-more-below', list.scrollHeight - list.scrollTop - list.clientHeight > 1); }
+    // Keep the last geometry until ResizeObserver has restored it. A browser
+    // scroll clamp during shrinking must not replace the pre-resize anchor.
+    if (list && (!resizeAnchor.current || (resizeAnchor.current.width === list.clientWidth && resizeAnchor.current.height === list.clientHeight))) {
+      const box = list.getBoundingClientRect();
+      const row = Array.from(list.querySelectorAll<HTMLElement>('[data-message-row]')).reverse().find(row => {
+        const rect = row.getBoundingClientRect(); return rect.top < box.bottom && rect.bottom > box.top;
+      });
+      resizeAnchor.current = row ? { id: Number(row.dataset.messageRow), offset: row.getBoundingClientRect().bottom - box.bottom, width: list.clientWidth, height: list.clientHeight } : undefined;
+    }
     const position = viewportAnchor(); if (position && access) writeChatPosition(access, position);
   }
   function atLatest() { return !rows.current.length || rows.current.at(-1)!.id >= boundsRef.current.last; }
@@ -333,6 +343,25 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
     scrollTop.current = list.scrollTop;
     rememberViewport();
   }, [messages, visible, ready]);
+  useLayoutEffect(() => {
+    const list = stream.current; if (!list || !visible || !ready) return;
+    const observer = new ResizeObserver(() => {
+      const saved = resizeAnchor.current;
+      if (saved && (saved.width !== list.clientWidth || saved.height !== list.clientHeight)) {
+        if (follow.current) list.scrollTop = list.scrollHeight;
+        else {
+          const row = list.querySelector<HTMLElement>(`[data-message-row="${saved.id}"]`);
+          if (row) list.scrollTop += row.getBoundingClientRect().bottom - list.getBoundingClientRect().bottom - saved.offset;
+        }
+        // Programmatic restoration must not trigger pagination in onScroll.
+        scrollTop.current = list.scrollTop;
+      }
+      resizeAnchor.current = undefined;
+      rememberViewport();
+    });
+    observer.observe(list);
+    return () => { observer.disconnect(); resizeAnchor.current = undefined; };
+  }, [visible, ready]);
   useEffect(() => {
     const list = stream.current; if (!list || !visible || covered) return;
     const observer = new IntersectionObserver(entries => {

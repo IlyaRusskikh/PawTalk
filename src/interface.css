@@ -87,7 +87,7 @@ main:has(.room-content) { background: radial-gradient(ellipse at 90% 15%, color-
 .chat-feature-tip { background:var(--panel); border-color:var(--line); color:var(--text); }
 .chat-message { padding:var(--message-spacing,6px) 0; font-size:var(--ui-font-size,13px); }
 .chat-message-continuation { padding:1px 0; }
-.chat-message-row { position:relative; padding-right:32px; }
+.chat-message-row { position:relative; }
 .chat-message-body { flex:1; }
 .chat-message p { color:var(--text); }
 .chat-meta time,.chat-empty,.chat-continuation-time { color:var(--muted); }
@@ -137,8 +137,8 @@ button:hover:not(:disabled) { filter:none; }
 .avatar.color-3 { background:color-mix(in srgb,var(--accent) 15%,var(--surface)); color:var(--text); }
 .room-participants .person-card.speaking .avatar { box-shadow:0 0 0 2px var(--success); }
 .chat-message-row:hover,.chat-message-row:focus-within { background:var(--hover); }
-.chat-message-row { padding:4px 34px 4px 0; }
-.chat-message-more { top:4px; right:4px; width:24px; height:22px; }
+.chat-message-row { padding:4px 0; }
+.chat-message-more { top:-12px; right:4px; width:28px; height:24px; z-index:1; border:1px solid var(--line); }
 .room-chat { gap:3px; padding-top:0; }
 .chat-heading { height:18px; }
 .chat-stream { padding-top:0; overflow-anchor:none; }
@@ -179,3 +179,5 @@ button:hover:not(:disabled) { filter:none; }
 
 .room-chat { padding-top:0; }
 .room-chat > .chat-feed { margin-top:0; }
+
+.rail .server-orb.home-orb { background:var(--accent); }
