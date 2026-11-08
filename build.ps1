@@ -2,9 +2,9 @@
 param(
     [switch]$InstallDependencies,
     [ValidateSet('auto', 'msvc', 'llvm')][string]$NativeToolchain = 'auto',
-    [string]$CompilerRoot = $env:VOICECORD_LLVM_ROOT,
-    [string]$NodeHeaders = $env:VOICECORD_NODE_HEADERS,
-    [string]$NodeImportLibrary = $env:VOICECORD_NODE_LIB
+    [string]$CompilerRoot = $env:PAWTALK_LLVM_ROOT,
+    [string]$NodeHeaders = $env:PAWTALK_NODE_HEADERS,
+    [string]$NodeImportLibrary = $env:PAWTALK_NODE_LIB
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,7 +43,7 @@ try {
         throw 'Install Node.js 24.22.1 or newer (x64), then run the build again.'
     }
 
-    $tools = Join-Path $env:TEMP 'voicecord-tools'
+    $tools = Join-Path $env:TEMP 'pawtalk-tools'
     # npm can be installed alongside Node even when neither is in the user's PATH.
     $env:Path = "$(Split-Path -Parent $node);$savedPath"
     $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
@@ -74,7 +74,7 @@ try {
     if ($NativeToolchain -eq 'llvm' -or ($NativeToolchain -eq 'auto' -and $CompilerRoot)) {
         if (!$NodeHeaders) { $NodeHeaders = Join-Path $tools "node-v$($runtime.version)/include/node" }
         if (!$NodeImportLibrary) { $NodeImportLibrary = Join-Path $tools 'node.lib' }
-        if (!$CompilerRoot) { throw 'LLVM requires -CompilerRoot (or VOICECORD_LLVM_ROOT).' }
+        if (!$CompilerRoot) { throw 'LLVM requires -CompilerRoot (or PAWTALK_LLVM_ROOT).' }
         foreach ($required in @((Join-Path $CompilerRoot 'bin/clang++.exe'), (Join-Path $NodeHeaders 'node_api.h'), $NodeImportLibrary)) {
             if (!(Test-Path -LiteralPath $required)) { throw "Missing native build input: $required" }
         }
@@ -93,7 +93,7 @@ try {
     Invoke-BuildStep $node @('node_modules/electron-builder/cli.js', '--win', 'nsis', '--x64', '--publish', 'never')
 
     $package = Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json
-    $installer = Join-Path $PSScriptRoot "release/Voicecord Setup $($package.version).exe"
+    $installer = Join-Path $PSScriptRoot "release/PawTalk Setup $($package.version).exe"
     if (!(Test-Path -LiteralPath $installer)) { throw "Installer not found: $installer" }
     Write-Host "`nInstaller ready: $installer" -ForegroundColor Green
 } finally {

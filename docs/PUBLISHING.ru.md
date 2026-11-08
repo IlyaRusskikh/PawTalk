@@ -1,10 +1,10 @@
-# Первая публикация Voicecord на GitHub
+# Первая публикация PawTalk на GitHub
 
 **Историческая инструкция первоначальной настройки.** Репозиторий и preview
 0.1.0 уже опубликованы. Следующие выпуски: [RELEASING.md](RELEASING.md);
 оформление и обнаружение проекта: [DISCOVERABILITY.ru.md](DISCOVERABILITY.ru.md).
 
-Исходники находятся в корне проекта `voicecord`. Соседние проекты не входят
+Исходники находятся в корне проекта `pawtalk`. Соседние проекты не входят
 в репозиторий. Git уже инициализирован локально, основная ветка — `main`.
 
 ## Перед загрузкой
@@ -27,12 +27,12 @@ npm run check:public
 
 ## GitHub Desktop
 
-1. **File → Add local repository**: выберите папку `voicecord`.
+1. **File → Add local repository**: выберите папку `pawtalk`.
 2. Проверьте **Changes**. Если первого коммита ещё нет, создайте
    `Initial public release 0.1.0` после проверок.
 3. Если репозиторий на GitHub ещё не создан, выберите **Publish repository**,
-   имя `voicecord`, снимите **Keep this code private** и опубликуйте.
-4. Если на GitHub уже есть пустой `voicecord`, настройте его URL как `origin`
+   имя `pawtalk`, снимите **Keep this code private** и опубликуйте.
+4. Если на GitHub уже есть пустой `pawtalk`, настройте его URL как `origin`
    через **Repository → Repository settings → Remote**, затем **Push origin**.
 
 GitHub Desktop использует авторизацию своего аккаунта; отдельный SSH-ключ для
@@ -40,7 +40,7 @@ GitHub Desktop использует авторизацию своего акка
 
 ## Командный Git через SSH
 
-Создайте на GitHub **пустой** публичный `voicecord` без автоматически добавленных
+Создайте на GitHub **пустой** публичный `pawtalk` без автоматически добавленных
 README, `.gitignore` и LICENSE. Локальные версии этих файлов уже подготовлены.
 После добавления своего **публичного** SSH-ключа на GitHub проверьте
 `ssh -T git@github.com`. Приватный ключ остаётся на компьютере.
@@ -61,7 +61,7 @@ git commit -m "Initial public release 0.1.0"
 Подставьте свой GitHub-логин вместо `YOUR_GITHUB_LOGIN`:
 
 ```sh
-git remote add origin git@github.com:YOUR_GITHUB_LOGIN/voicecord.git
+git remote add origin git@github.com:YOUR_GITHUB_LOGIN/pawtalk.git
 git push -u origin main
 ```
 

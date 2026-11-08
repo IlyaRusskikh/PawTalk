@@ -1,12 +1,12 @@
-# Проверка селфхоста до установки Voicecord
+# Проверка селфхоста до установки PawTalk
 
-Нужны Windows 10/11 и встроенный Windows PowerShell 5.1. Voicecord, Node.js,
+Нужны Windows 10/11 и встроенный Windows PowerShell 5.1. PawTalk, Node.js,
 установщик и дополнительные утилиты не нужны. Запускайте в обычной консоли
 PowerShell: права администратора не требуются.
 
 ## Запуск
 
-Если Voicecord уже установлен, откройте **«Создать комнату»** и нажмите
+Если PawTalk уже установлен, откройте **«Создать комнату»** и нажмите
 **«Проверить»** рядом с «Могу ли я хостить в интернет?». Приложение запускает
 эту же проверку для выбранного базового порта в скрытом процессе Windows
 PowerShell. Результат появляется после завершения и очистки пробросов.
@@ -18,12 +18,12 @@ PowerShell. Результат появляется после завершен�
 и UDP. Временные ошибки запросов check-host.net повторяются до двух раз
 в пределах общего тайм-аута; ошибка сервиса не означает невозможность хостинга.
 Скрипт проверяет сеть из PowerShell: разрешение брандмауэра для него не заменяет
-разрешение для самого Voicecord после создания комнаты.
+разрешение для самого PawTalk после создания комнаты.
 
 Скопируйте команду в **Windows PowerShell**:
 
 ```powershell
-$code = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/IlyaRusskikh/voicecord/main/scripts/check-selfhost.ps1').Content; & ([ScriptBlock]::Create($code))
+$code = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/main/scripts/check-selfhost.ps1').Content; & ([ScriptBlock]::Create($code))
 ```
 
 Команда загружает текст скрипта из репозитория и выполняет в памяти, не сохраняя
@@ -43,7 +43,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-selfhost
 Для другого базового порта:
 
 ```powershell
-$code = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/IlyaRusskikh/voicecord/main/scripts/check-selfhost.ps1').Content; & ([ScriptBlock]::Create($code)) -Port 19443
+$code = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/main/scripts/check-selfhost.ps1').Content; & ([ScriptBlock]::Create($code)) -Port 19443
 ```
 
 Если позднее создаёте комнату с другим базовым портом, проверьте его заново.
@@ -88,7 +88,7 @@ $code = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/I
 Существующие UPnP-пробросы скрипт не заменяет. Если порт уже проброшен,
 используйте другой базовый порт, чтобы проверить именно автоматический проброс.
 NAT-PMP этим скриптом не проверяется; приложение также поддерживает этот способ,
-поэтому неудача UPnP сама по себе не исключает автоматический проброс в Voicecord.
+поэтому неудача UPnP сама по себе не исключает автоматический проброс в PawTalk.
 
 ## Как читать результат
 
@@ -121,7 +121,7 @@ TCP-успеха нужны подключения на обоих портах 
 увеличения размера. До отправки проверки загружается список адресов узлов,
 чтобы ответить на пакет, даже если HTTP-подтверждение запуска ещё не пришло.
 Скрипт не отправляет UDP первым: пакет должен прийти извне через проброс.
-Качество связи и реальная работа голоса **не подтверждаются**. После установки у Voicecord будут свои разрешения
+Качество связи и реальная работа голоса **не подтверждаются**. После установки у PawTalk будут свои разрешения
 брандмауэра; разрешение, выданное PowerShell, не распространяется на приложение.
 
 При завершении скрипт закрывает слушатели и удаляет только свои UPnP-пробросы,

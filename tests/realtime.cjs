@@ -1,7 +1,7 @@
 const { app, BrowserWindow, session }=require('electron');
 const assert=require('node:assert/strict');const path=require('node:path');const os=require('node:os');const https=require('node:https');const {randomBytes}=require('node:crypto');
 const {SelfHost}=require('../electron/selfhost.cjs');
-app.setPath('userData',path.join(os.tmpdir(),'voicecord-realtime-'+process.pid));
+app.setPath('userData',path.join(os.tmpdir(),'pawtalk-realtime-'+process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');app.commandLine.appendSwitch('use-fake-device-for-media-stream');app.disableHardwareAcceleration();
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 app.whenReady().then(async()=>{
@@ -15,7 +15,7 @@ app.whenReady().then(async()=>{
   const until=async(fn,label)=>{for(let i=0;i<250;i++){if(await fn())return;await delay(100);}throw Error('Timeout: '+label);};
   for(const name of ['QA A','QA B']){
    const win=new BrowserWindow({show:false,webPreferences:{session:partition,sandbox:true,contextIsolation:true,offscreen:true,backgroundThrottling:false}});windows.push(win);
-   await win.loadURL(process.env.VOICECORD_UI_TEST_URL+'/tests/voice.html');
+   await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/voice.html');
    const js=source=>win.webContents.executeJavaScript(source,true);
    await until(()=>js('window.ready===true'),'voice fixture ready');
    const result=await credentials(name);assert.ok(result.token,'API token');await js(`window.start(${JSON.stringify(result)})`);
@@ -39,7 +39,7 @@ app.whenReady().then(async()=>{
   await until(()=>b('window.lastTyping?.active===false'),'typing stop reaches the other client');
   await b('void (window.voice.onChat=()=>{window.liveMessages=(window.liveMessages||0)+1})');
   await a(`Promise.all(Array.from({length:4},()=>window.voice.room.localParticipant.publishData(
-    new Uint8Array([65]),{reliable:true,topic:'voicecord.chat.v1'})))`);
+    new Uint8Array([65]),{reliable:true,topic:'pawtalk.chat.v1'})))`);
   await until(()=>b('window.liveMessages>=3'),'live chat delivers the allowed burst');
   await delay(250);
   assert.equal(await b('window.liveMessages'),3,'receiving client drops excess live chat packets');

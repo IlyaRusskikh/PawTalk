@@ -17,7 +17,7 @@ jobs:
           cache: false
       - run: go test -race ./... && go vet ./...
         working-directory: server
-      - run: docker build -f server/Dockerfile -t voicecord-api:test .
+      - run: docker build -f server/Dockerfile -t pawtalk-api:test .
       - name: Validate legacy Compose without local secrets
         run: |
           mkdir -p deploy/generated
@@ -46,10 +46,13 @@ jobs:
           go-version: '1.27.3'
           cache: false
       - run: npm ci
+      - name: Install Electron with retries
+        run: node scripts/install-electron.mjs
       - run: npm run check:public
       - run: npm run native:build
       - run: node scripts/native-smoke.cjs
       - run: npm run build
+      - run: npm run test:sounds
       - run: npm test
       - run: python -m unittest discover -s tests -p server_update_test.py
       - run: npm run smoke
@@ -64,30 +67,30 @@ jobs:
         shell: pwsh
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $installer = "release/Voicecord Setup $version.exe"
-          $publishedInstaller = "release/Voicecord.Setup.$version.exe"
+          $installer = "release/PawTalk Setup $version.exe"
+          $publishedInstaller = "release/PawTalk.Setup.$version.exe"
           Move-Item -LiteralPath $installer -Destination $publishedInstaller
           $hash = (Get-FileHash -LiteralPath $publishedInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  Voicecord.Setup.$version.exe" | Set-Content -Encoding utf8NoBOM release/SHA256SUMS.txt
+          "$hash  PawTalk.Setup.$version.exe" | Set-Content -Encoding utf8NoBOM release/SHA256SUMS.txt
           Copy-Item LICENSE,THIRD_PARTY_NOTICES.md -Destination release
           Copy-Item licenses -Destination release -Recurse -Force
           $licenseFiles = @((Resolve-Path release/LICENSE).Path, (Resolve-Path release/THIRD_PARTY_NOTICES.md).Path, (Resolve-Path release/licenses).Path)
-          Compress-Archive -LiteralPath $licenseFiles -DestinationPath "release/Voicecord.Licenses.$version.zip" -CompressionLevel Optimal
+          Compress-Archive -LiteralPath $licenseFiles -DestinationPath "release/PawTalk.Licenses.$version.zip" -CompressionLevel Optimal
       - name: Sign release update manifest
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
-          VOICECORD_UPDATE_PRIVATE_KEY: ${{ secrets.VOICECORD_UPDATE_PRIVATE_KEY }}
+          PAWTALK_UPDATE_PRIVATE_KEY: ${{ secrets.PAWTALK_UPDATE_PRIVATE_KEY }}
           # Releases are currently published as previews; keep this in sync with GitHub Release metadata.
-          VOICECORD_PRERELEASE: 'true'
+          PAWTALK_PRERELEASE: 'true'
         run: node scripts/sign-update.mjs
       - uses: actions/upload-artifact@v4
         with:
-          name: voicecord-windows
+          name: pawtalk-windows
           if-no-files-found: error
           path: |
-            release/Voicecord.Setup.*.exe
+            release/PawTalk.Setup.*.exe
             release/SHA256SUMS.txt
-            release/Voicecord.Licenses.*.zip
+            release/PawTalk.Licenses.*.zip
             release/update-manifest.json
   publish-server:
     name: Publish server image to GHCR
@@ -146,7 +149,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.image.outputs.version }}
             org.opencontainers.image.licenses=AGPL-3.0-only
-            org.opencontainers.image.description=Self-hosted Voicecord voice room server
+            org.opencontainers.image.description=Self-hosted PawTalk voice room server
       - name: Record image and digest
         env:
           IMAGE_NAME: ${{ steps.image.outputs.name }}

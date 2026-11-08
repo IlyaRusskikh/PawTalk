@@ -32,14 +32,14 @@ export const base64 = (data: Uint8Array) => {
 };
 export const unbase64 = (data: string) => Uint8Array.from(atob(data), c => c.charCodeAt(0));
 
-export async function chatKey(mediaKey: string, feed: string, purpose = 'Voicecord chat v1') {
+export async function chatKey(mediaKey: string, feed: string, purpose = 'PawTalk chat v1') {
   const root = await crypto.subtle.importKey('raw', mediaKeyBytes(mediaKey).buffer as ArrayBuffer, 'HKDF', false, ['deriveKey']);
   return crypto.subtle.deriveKey({
     name: 'HKDF', hash: 'SHA-256', salt: chatEncoder.encode(feed), info: chatEncoder.encode(purpose),
   }, root, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 
-const contentPrefix = '\u001eVOICECORD:2\n';
+const contentPrefix = '\u001ePAWTALK:2\n';
 export function validChatImage(image: unknown): image is ChatImage {
   const value = image as Partial<ChatImage> | null;
   return !!value && typeof value.id === 'string' && /^[a-f0-9]{32}$/.test(value.id)
@@ -138,7 +138,7 @@ export function readChatPosition(access?: ChatAccess): ChatScrollPosition | unde
   const recent = sessionPositions.get(access.feed);
   if (recent || access.ephemeral) return recent;
   try {
-    const saved = JSON.parse(localStorage.getItem('voicecord.chat.scroll.' + access.feed) ?? 'null');
+    const saved = JSON.parse(localStorage.getItem('pawtalk.chat.scroll.' + access.feed) ?? 'null');
     if (saved && Number.isSafeInteger(saved.id) && saved.id > 0 && Number.isFinite(saved.offset)) {
       return { id: saved.id, offset: saved.offset };
     }
@@ -148,14 +148,14 @@ export function readChatPosition(access?: ChatAccess): ChatScrollPosition | unde
 export function writeChatPosition(access: ChatAccess, position: ChatScrollPosition) {
   rememberForFeed(sessionPositions, access.feed, position);
   if (access.ephemeral) return;
-  try { localStorage.setItem('voicecord.chat.scroll.' + access.feed, JSON.stringify(position)); } catch { /* Keep it for this session. */ }
+  try { localStorage.setItem('pawtalk.chat.scroll.' + access.feed, JSON.stringify(position)); } catch { /* Keep it for this session. */ }
 }
 
 export function readChatCursor(access?: ChatAccess) {
   if (!access) return 0;
   if (access.ephemeral) return sessionCursors.get(access.feed) ?? 0;
   try {
-    const saved = Number(localStorage.getItem('voicecord.chat.read.' + access.feed));
+    const saved = Number(localStorage.getItem('pawtalk.chat.read.' + access.feed));
     if (Number.isSafeInteger(saved) && saved > 0) return saved;
   } catch { /* Storage is unavailable. */ }
   return 0;
@@ -166,5 +166,5 @@ export function writeChatCursor(access: ChatAccess, id: number) {
     rememberForFeed(sessionCursors, access.feed, id);
     return;
   }
-  try { localStorage.setItem('voicecord.chat.read.' + access.feed, String(id)); } catch { /* Keep the cursor for this session. */ }
+  try { localStorage.setItem('pawtalk.chat.read.' + access.feed, String(id)); } catch { /* Keep the cursor for this session. */ }
 }

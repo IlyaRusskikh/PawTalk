@@ -111,7 +111,7 @@ func (a *app) respondPreview(w http.ResponseWriter, r *http.Request, count int, 
 	people := []map[string]any{}
 	for _, person := range members[:min(3, len(members))] {
 		item := map[string]any{"name": person.Name}
-		id := person.Attributes["voicecord.profile"]
+		id := person.Attributes["pawtalk.profile"]
 		if id != "" {
 			var profile chatProfileRecord
 			if err := tx.QueryRowContext(r.Context(), "SELECT profile_id,revision,nickname,nonce,ciphertext FROM chat_profiles WHERE feed=? AND profile_id=?", a.chat.feed, id).Scan(&profile.ID, &profile.Revision, &profile.Nickname, &profile.Nonce, &profile.Ciphertext); err == nil {

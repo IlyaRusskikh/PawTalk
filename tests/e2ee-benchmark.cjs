@@ -8,20 +8,20 @@ const os=require('node:os');
 const fs=require('node:fs/promises');
 const {SelfHost}=require('../electron/selfhost.cjs');
 const {invitation}=require('../electron/address.cjs');
-app.setPath('userData',path.join(os.tmpdir(),'voicecord-e2ee-electron-'+process.pid));
+app.setPath('userData',path.join(os.tmpdir(),'pawtalk-e2ee-electron-'+process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
-app.commandLine.appendSwitch('use-file-for-fake-audio-capture',process.env.VOICECORD_BENCH_WAV);
+app.commandLine.appendSwitch('use-file-for-fake-audio-capture',process.env.PAWTALK_BENCH_WAV);
 app.disableHardwareAcceleration();
 app.on('window-all-closed',()=>{}); // Trials intentionally destroy and recreate all windows.
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
-const name='voicecord-e2ee-bench-'+process.pid, volume=name+'-data';
+const name='pawtalk-e2ee-bench-'+process.pid, volume=name+'-data';
 const password=randomBytes(18).toString('hex'), key=randomBytes(32).toString('hex');
 const keyID=createHash('sha256').update(Buffer.from(key,'hex')).digest('hex');
 const seconds=Number(process.argv.find(a=>a.startsWith('--seconds='))?.split('=')[1]||24);
 const securityOnly=process.argv.includes('--security-only');
 const latencyTest=process.argv.includes('--latency');
-const noiseModes=process.argv.includes('--quick')||process.env.VOICECORD_BENCH_SOURCE==='synthetic tones'?['off']:['rnnoise','off'];
+const noiseModes=process.argv.includes('--quick')||process.env.PAWTALK_BENCH_SOURCE==='synthetic tones'?['off']:['rnnoise','off'];
 const docker=(args,input)=>execFileSync('docker',args,{encoding:'utf8',input,windowsHide:true,stdio:['pipe','pipe','pipe']}).trim();
 let host,windows=[],currentPin,currentPort;
 const js=(win,source)=>win.webContents.executeJavaScript(source,true);
@@ -49,9 +49,9 @@ async function server(encrypted,transport='container') {
   return invite.e2eeKey;
  }
  currentPort=32443;
- docker(['run','-d','--name',name,'--read-only','--cap-drop=ALL','--security-opt=no-new-privileges:true','--tmpfs','/tmp:uid=65532,gid=65532,mode=0700','-v',volume+':/data','-e','VOICECORD_PUBLIC_IP=127.0.0.1','-e','VOICECORD_PORT=32443','-e','VOICECORD_E2EE='+encrypted,'-e','VOICECORD_E2EE_KEY_ID='+(encrypted?keyID:''),'-p','127.0.0.1:32443:32443','-p','127.0.0.1:32444:32444','-p','127.0.0.1:32445:32445/udp','voicecord-server:local']);
- await until(()=>{try{currentPin=docker(['exec',name,'/voicecord','serve','info']).split('/').at(-1);return !!currentPin;}catch{return false;}},'container state');
- docker(['exec','-i',name,'/voicecord','serve','reset-password'],password);
+ docker(['run','-d','--name',name,'--read-only','--cap-drop=ALL','--security-opt=no-new-privileges:true','--tmpfs','/tmp:uid=65532,gid=65532,mode=0700','-v',volume+':/data','-e','PAWTALK_PUBLIC_IP=127.0.0.1','-e','PAWTALK_PORT=32443','-e','PAWTALK_E2EE='+encrypted,'-e','PAWTALK_E2EE_KEY_ID='+(encrypted?keyID:''),'-p','127.0.0.1:32443:32443','-p','127.0.0.1:32444:32444','-p','127.0.0.1:32445:32445/udp','pawtalk-server:local']);
+ await until(()=>{try{currentPin=docker(['exec',name,'/pawtalk','serve','info']).split('/').at(-1);return !!currentPin;}catch{return false;}},'container state');
+ docker(['exec','-i',name,'/pawtalk','serve','reset-password'],password);
  docker(['restart',name]);
  await until(async()=>{try{return(await request(null,'/healthz')).status===200;}catch{return false;}},'container readiness');
  return encrypted?key:null;
@@ -171,7 +171,7 @@ async function trial(encrypted,noise,index,jitter,shared) {
  await closeWindows();return result;
 }
 app.whenReady().then(async()=>{
- const report={date:new Date().toISOString(),platform:process.platform,cpus:os.cpus().length,cpuModel:os.cpus()[0].model,versions:process.versions,source:process.env.VOICECORD_BENCH_SOURCE,secondsPerTrial:seconds,notes:['Two simultaneous clients on one Windows computer; Linux LiveKit in Docker Desktop.','CPU 100% = one logical core. Renderer CPU includes its E2EE worker; total includes main/audio/GPU utility processes for both clients.','Latency: fake microphone speech capture tap to remote decoded playback gain tap, AudioContext output timestamp calibration. Excludes physical microphone/speaker and internet propagation.','Envelope cross-correlation in non-overlapping two-second windows, lag search 0..501 ms; minimum Pearson correlation 0.5. Resolution 128/48000 seconds (~2.67 ms). Small differences within jitter/resolution are inconclusive.','ABBA order per noise mode; six-second warmup plus 1.5-second meter clock warmup; no gaming load.','LiveKit disables audio RED for E2EE; the comparison measures the complete negotiated modes, not an isolated AES microbenchmark.'],security:[],trials:[]};
+ const report={date:new Date().toISOString(),platform:process.platform,cpus:os.cpus().length,cpuModel:os.cpus()[0].model,versions:process.versions,source:process.env.PAWTALK_BENCH_SOURCE,secondsPerTrial:seconds,notes:['Two simultaneous clients on one Windows computer; Linux LiveKit in Docker Desktop.','CPU 100% = one logical core. Renderer CPU includes its E2EE worker; total includes main/audio/GPU utility processes for both clients.','Latency: fake microphone speech capture tap to remote decoded playback gain tap, AudioContext output timestamp calibration. Excludes physical microphone/speaker and internet propagation.','Envelope cross-correlation in non-overlapping two-second windows, lag search 0..501 ms; minimum Pearson correlation 0.5. Resolution 128/48000 seconds (~2.67 ms). Small differences within jitter/resolution are inconclusive.','ABBA order per noise mode; six-second warmup plus 1.5-second meter clock warmup; no gaming load.','LiveKit disables audio RED for E2EE; the comparison measures the complete negotiated modes, not an isolated AES microbenchmark.'],security:[],trials:[]};
  try {
   if(!process.argv.includes('--skip-security')) {
    await security('container');report.security.push('container passed');

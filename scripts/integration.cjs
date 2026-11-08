@@ -4,9 +4,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const serverAddress = process.env.VOICECORD_TEST_SERVER || 'http://127.0.0.1:8080';
+const serverAddress = process.env.PAWTALK_TEST_SERVER || 'http://127.0.0.1:8080';
 // Container integration uses the same certificate pin as a normal invitation.
-const testInvitation = process.env.VOICECORD_TEST_INVITATION && require('../electron/address.cjs').invitation(process.env.VOICECORD_TEST_INVITATION);
+const testInvitation = process.env.PAWTALK_TEST_INVITATION && require('../electron/address.cjs').invitation(process.env.PAWTALK_TEST_INVITATION);
 function pinTestServer(partition) {
  if (!testInvitation) return;
  partition.setCertificateVerifyProc((request, callback) => {
@@ -14,10 +14,10 @@ function pinTestServer(partition) {
   callback(request.hostname === testInvitation.hostname ? (actual === testInvitation.fingerprint ? 0 : -2) : -3);
  });
 }
-app.setPath('userData',path.join(os.tmpdir(),'voicecord-integration-'+process.pid));
+app.setPath('userData',path.join(os.tmpdir(),'pawtalk-integration-'+process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
-if (process.env.VOICECORD_TEST_AUDIO_FILE) app.commandLine.appendSwitch('use-file-for-fake-audio-capture',path.resolve(process.env.VOICECORD_TEST_AUDIO_FILE));
+if (process.env.PAWTALK_TEST_AUDIO_FILE) app.commandLine.appendSwitch('use-file-for-fake-audio-capture',path.resolve(process.env.PAWTALK_TEST_AUDIO_FILE));
 app.disableHardwareAcceleration();
 const wait = ms => new Promise(resolve => setTimeout(resolve,ms));
 async function until(fn, label, timeout = 20000) {
@@ -38,9 +38,9 @@ app.whenReady().then(async () => {
    partition.setPermissionRequestHandler((_wc,_permission,cb)=>cb(true)); partition.setPermissionCheckHandler(()=>true);
    const win=new BrowserWindow({show:false,webPreferences:{offscreen:true,session:partition,backgroundThrottling:false,sandbox:true}});windows.push(win);
    win.webContents.on('console-message',event=>{ if(event.level === 'error') console.error('renderer:',event.message); });
-   await win.loadURL('http://127.0.0.1:5173/tests/voice.html?noise='+(process.env.VOICECORD_TEST_NOISE_MODE === 'rnnoise' ? 'rnnoise' : 'off'));
+   await win.loadURL('http://127.0.0.1:5173/tests/voice.html?noise='+(process.env.PAWTALK_TEST_NOISE_MODE === 'rnnoise' ? 'rnnoise' : 'off'));
    await until(()=>win.webContents.executeJavaScript('window.ready === true'),'renderer ready');
-   const response=await net.fetch(`${serverAddress}/api/connect`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:'same-name',password:process.env.VOICECORD_TEST_PASSWORD})});
+   const response=await net.fetch(`${serverAddress}/api/connect`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:'same-name',password:process.env.PAWTALK_TEST_PASSWORD})});
    assert.equal(response.status,200);const data=await response.json();credentials.push(data);
    await win.webContents.executeJavaScript(`window.start(${JSON.stringify(data)})`,true);
   }
@@ -49,7 +49,7 @@ app.whenReady().then(async () => {
   record('PASS two clients, duplicate nicknames, actual Go token and LiveKit SFU');
   await until(async()=>(await b.executeJavaScript('window.energy()')).energy>0 && (await a.executeJavaScript('window.energy()')).energy>0,'bidirectional Opus audio');
   record('PASS real bidirectional RTP with nonzero decoded audio energy');
-  if (process.env.VOICECORD_TEST_NOISE_MODE === 'rnnoise') {
+  if (process.env.PAWTALK_TEST_NOISE_MODE === 'rnnoise') {
    assert.equal(await a.executeJavaScript('window.voice.mic.stream.getAudioTracks()[0].getSettings().noiseSuppression'),false);
    const before=(await b.executeJavaScript('window.energy()')).energy;
    await a.executeJavaScript(`window.voice.updateSettings({...window.voice.settings,inputMode:'voice',autoSensitivity:true})`);
@@ -116,7 +116,7 @@ app.whenReady().then(async () => {
   await until(()=>b.executeJavaScript('window.snapshot.people?.length === 1'),'participant cleanup after rejoin');
   await b.executeJavaScript('window.voice.disconnect()');
   record('PASS disconnect releases tracks and updates participant list');
-  const report=process.env.VOICECORD_TEST_SERVER ? 'integration-lan.txt' : process.env.VOICECORD_TEST_NOISE_MODE === 'rnnoise' ? 'integration-rnnoise.txt' : 'integration.txt';
+  const report=process.env.PAWTALK_TEST_SERVER ? 'integration-lan.txt' : process.env.PAWTALK_TEST_NOISE_MODE === 'rnnoise' ? 'integration-rnnoise.txt' : 'integration.txt';
   await fs.mkdir(path.resolve('release/qa'),{recursive:true});await fs.writeFile(path.resolve('release/qa',report),lines.join('\n')+'\n');
   app.exit(0);
  } catch(error) {

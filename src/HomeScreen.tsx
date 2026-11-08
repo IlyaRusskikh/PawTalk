@@ -8,7 +8,7 @@ export function HomeScreen({ hosting, disabled, bookmarks, roomName, inRoom, onJ
   onJoin(): void; onHost(): void; onOpen(item: Bookmark): void; onReturn(): void; onServerKey(): void;
 }) {
   return <section className="home-screen" aria-labelledby="home-title">
-    <div className="home-masthead"><span><img src="./voicecord.svg" alt="" width="21" height="21"/>Voicecord</span><span className="home-masthead-note">{t("Ваше пространство для общения")}</span></div>
+    <div className="home-masthead"><span><img src="./pawtalk.svg" alt="" width="21" height="21"/>PawTalk</span><span className="home-masthead-note">{t("Ваше пространство для общения")}</span></div>
     <div className="home-hero"><div className="home-intro"><div className="eyebrow">{t("СОБИРАЙТЕСЬ БЛИЖЕ")}</div><h1 id="home-title">{t("Разговор начинается здесь.")}</h1><p>{t("Для вечеров с друзьями, общих планов и разговоров без спешки. Выберите комнату — и вы уже рядом.")}</p></div>
       <div className="home-art" aria-hidden="true"><div className="home-orbit home-orbit-one"/><div className="home-orbit home-orbit-two"/><div className="home-art-avatar"><Icon name="headphones" size={37}/></div><div className="home-art-wave">{[12, 22, 35, 18, 44, 29, 16, 34, 23, 11].map((height, index) => <i key={index} style={{ height }}/>)}</div><span className="home-art-dot home-art-dot-one"/><span className="home-art-dot home-art-dot-two"/></div>
     </div>

@@ -264,7 +264,7 @@ function Update-PortProbe($Probe) {
 function Update-UdpProbe($Probe) { Update-PortProbe $Probe }
 
 function Get-PreflightVerdict([bool]$TCPConfirmed, [bool]$UDPReceived, [bool]$UDPConfirmed) {
-    if ($TCPConfirmed -and $UDPConfirmed) { return 'SUCCESS: both TCP ports and UDP round trip confirmed. Ready for a real Voicecord voice test.' }
+    if ($TCPConfirmed -and $UDPConfirmed) { return 'SUCCESS: both TCP ports and UDP round trip confirmed. Ready for a real PawTalk voice test.' }
     if ($TCPConfirmed -and $UDPReceived) { return 'PARTIAL SUCCESS: both TCP ports and inbound UDP confirmed; UDP return path NOT CONFIRMED.' }
     if ($TCPConfirmed) { return 'PARTIAL SUCCESS: both TCP ports confirmed; UDP round trip NOT CONFIRMED.' }
     if ($UDPConfirmed) { return 'PARTIAL SUCCESS: UDP round trip confirmed; both TCP ports NOT CONFIRMED.' }
@@ -291,9 +291,9 @@ function Start-SelfHostCheck {
         $cancelBuffer = New-Object byte[] 1
         $cancelRead = [Console]::OpenStandardInput().ReadAsync($cancelBuffer, 0, 1)
     }
-    $tag = 'Voicecord check ' + [Guid]::NewGuid().ToString('N')
+    $tag = 'PawTalk check ' + [Guid]::NewGuid().ToString('N')
     try {
-        Write-Host 'Voicecord self-host preflight (IPv4 / Windows)'
+        Write-Host 'PawTalk self-host preflight (IPv4 / Windows)'
         Write-Host 'No firewall rules are changed. Allow the Windows firewall prompt if shown.'
         $configurations = @(Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address })
         if ($configurations.Count -gt 1) { Write-Warning 'Multiple IPv4 gateways detected (possibly VPN). Reply traffic may take a different route. Disable VPN for a conclusive test.' }
@@ -398,7 +398,7 @@ function Start-SelfHostCheck {
         Write-Host ''
         Write-Host '=== RESULT ===' -ForegroundColor Cyan
         Write-Host (Get-PreflightVerdict $tcpConfirmed ([bool]($probe -and $probe.Received)) ([bool]($probe -and $probe.Confirmed))) -ForegroundColor Cyan
-        Write-Host 'This checks port reachability, not actual Voicecord audio quality or application firewall permissions.'
+        Write-Host 'This checks port reachability, not actual PawTalk audio quality or application firewall permissions.'
         if ($probe) { $probe.Client.Dispose() }
         foreach ($tcpProbe in $tcpProbes) { $tcpProbe.Client.Dispose() }
         foreach ($listener in $listeners) { $listener.Stop() }
@@ -425,7 +425,7 @@ function Start-SelfHostCheck {
             }
             $result = @{ state = $state; tcp = @($tcpResults); udp = $udpConfirmed }
             if ($reason -and $state -notin @('internet', 'cancelled')) { $result.reason = $reason }
-            Write-Output ('VOICECORD_PREFLIGHT_RESULT:' + ($result | ConvertTo-Json -Compress))
+            Write-Output ('PAWTALK_PREFLIGHT_RESULT:' + ($result | ConvertTo-Json -Compress))
         }
     }
 }

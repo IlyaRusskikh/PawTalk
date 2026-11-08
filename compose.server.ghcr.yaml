@@ -1,17 +1,17 @@
 # Legacy Compose configuration; VPS deployment is supported only via Swarm.
 # For installation and migration, see docs/SERVER.md and docs/SWARM.md.
-name: voicecord-server
+name: pawtalk-server
 services:
   server:
-    image: ${VOICECORD_IMAGE:?Set VOICECORD_IMAGE in .env to a published image version}
+    image: ${PAWTALK_IMAGE:?Set PAWTALK_IMAGE in .env to a published image version}
     network_mode: host
     environment:
-      VOICECORD_PUBLIC_IP: ${VOICECORD_PUBLIC_IP:-}
-      VOICECORD_PORT: ${VOICECORD_PORT:-18443}
-      VOICECORD_E2EE: ${VOICECORD_E2EE:-false}
-      VOICECORD_E2EE_KEY_ID: ${VOICECORD_E2EE_KEY_ID:-}
-      VOICECORD_CHAT_MAX_MB: ${VOICECORD_CHAT_MAX_MB:-128}
-      VOICECORD_UPDATE_PROXY: ${VOICECORD_UPDATE_PROXY:-true}
+      PAWTALK_PUBLIC_IP: ${PAWTALK_PUBLIC_IP:-}
+      PAWTALK_PORT: ${PAWTALK_PORT:-18443}
+      PAWTALK_E2EE: ${PAWTALK_E2EE:-false}
+      PAWTALK_E2EE_KEY_ID: ${PAWTALK_E2EE_KEY_ID:-}
+      PAWTALK_CHAT_MAX_MB: ${PAWTALK_CHAT_MAX_MB:-128}
+      PAWTALK_UPDATE_PROXY: ${PAWTALK_UPDATE_PROXY:-true}
     volumes:
       - server_data:/data
     tmpfs:

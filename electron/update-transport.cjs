@@ -1,7 +1,7 @@
 const fs = require('node:fs/promises');
 const { createHash } = require('node:crypto');
 const { UpdateSecurityError } = require('./update-manifest.cjs');
-const REPOSITORY = 'IlyaRusskikh/voicecord';
+const REPOSITORY = 'IlyaRusskikh/pawtalk';
 function endpoint(source, pathname) {
   return source ? source.base + '/api/updates/' + pathname : pathname.startsWith('releases?')
     ? `https://api.github.com/repos/${REPOSITORY}/${pathname}`
@@ -19,7 +19,7 @@ async function readBounded(response, max) {
   } finally { await reader.cancel().catch(() => {}); }
 }
 async function metadata(fetcher, source, pathname, max = 8 * 1024 * 1024) {
-  return readBounded(await fetcher(endpoint(source, pathname), { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Voicecord' },
+  return readBounded(await fetcher(endpoint(source, pathname), { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'PawTalk' },
     redirect: source ? 'error' : 'follow', signal: AbortSignal.timeout(15000) }), max);
 }
 async function download({ fetcher, source, manifest, partial, onProgress, policy = {} }) {

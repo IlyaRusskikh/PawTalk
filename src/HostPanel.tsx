@@ -79,7 +79,7 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
     } finally { setBusy(false); }
   }
   if ((modal !== 'create' && modal !== 'host-share') || (modal === 'host-share' && !status.running)) return null;
-  const lan = (status.invitations || []).slice(status.internet ? 1 : 0).sort((a, b) => Number(!a.startsWith('voicecord://192.168.')) - Number(!b.startsWith('voicecord://192.168.')));
+  const lan = (status.invitations || []).slice(status.internet ? 1 : 0).sort((a, b) => Number(!a.startsWith('pawtalk://192.168.')) - Number(!b.startsWith('pawtalk://192.168.')));
   const selected = level === 'global' ? status.internet ? status.invitations?.[0] || '' : '' : lan.includes(local) ? local : lan[0] || '';
   const checkReasons: Record<string, string> = {
     'ports-in-use': t('Порты проверки заняты. Закройте другую комнату или выберите другой порт.'),
@@ -93,7 +93,7 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
       <div className="form-fields"><label className="host-invite">{t("Уровень сети")}<select value={level} onChange={e => setLevel(e.target.value)}><option value="global">{t("Глобальный")}</option><option value="local">{t("Локальный")}</option></select></label>
       {level === 'local' && lan.length > 1 && <label>{t("Адрес в локальной сети")}<select value={selected} onChange={e => setLocal(e.target.value)}>{lan.map(value => <option key={value} value={value}>{value.split('/')[2]}</option>)}</select></label>}
       {selected ? <label className="host-invite">{t("Ссылка приглашения")}<div><input readOnly value={selected} onFocus={e => e.target.select()}/><button className="primary" onClick={() => void (window.desktop ? window.desktop.copyInvitation(selected) : navigator.clipboard.writeText(selected)).then(() => setCopied(selected)).catch(() => onError(t("Не удалось скопировать приглашение.")))}>{copied === selected ? t("Скопировано") : t("Копировать")}</button></div></label> : <p role="status" className="host-hint">{level === 'global' ? t("Глобальная ссылка недоступна: порты не открыты или у провайдера дополнительный NAT. Выберите локальный уровень сети.") : t("Локальный адрес недоступен.")}</p>}
-      </div><p className="host-hint">{t("Другу нужен Voicecord. Пароль уже включён в ссылку. Комната работает, пока приложение запущено, в том числе в трее.")}</p>
+      </div><p className="host-hint">{t("Другу нужен PawTalk. Пароль уже включён в ссылку. Комната работает, пока приложение запущено, в том числе в трее.")}</p>
       <div className="diagnostic-row"><span>{t("Не уверены, что друг сможет зайти? Отправьте ему скрипт для проверки")}</span><button className="diagnostic-copy" disabled={!selected} onClick={() => void window.desktop?.copyDiagnosticCommand(selected).then(() => setCopiedScript(selected)).catch(() => setFailure(t("Не удалось скопировать скрипт проверки подключения.")))}>{copiedScript === selected ? t("Скрипт скопирован") : t("Копировать")}</button></div>
       <div className="modal-actions">
         {!active && <button className="primary" disabled={busy || !nickname.trim()} onClick={() => void rejoin()}>{t("Войти в комнату")}</button>}

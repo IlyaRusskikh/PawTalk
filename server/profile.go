@@ -21,7 +21,7 @@ type profileProof struct {
 
 func (a *app) signChallenge(value string) string {
 	mac := hmac.New(sha256.New, []byte(a.cfg.APISecret))
-	mac.Write([]byte("voicecord-profile-v1:" + value))
+	mac.Write([]byte("pawtalk-profile-v1:" + value))
 	return b64.EncodeToString(mac.Sum(nil))
 }
 
@@ -52,7 +52,7 @@ func (a *app) verifyProfile(p profileProof, nickname string) (string, bool) {
 	key, errKey := b64.DecodeString(p.Key)
 	signature, errSignature := b64.DecodeString(p.Signature)
 	if errKey != nil || errSignature != nil || len(key) != ed25519.PublicKeySize ||
-		!ed25519.Verify(key, []byte("voicecord-profile-v1\n"+p.Challenge+"\n"+nickname), signature) {
+		!ed25519.Verify(key, []byte("pawtalk-profile-v1\n"+p.Challenge+"\n"+nickname), signature) {
 		return "", false
 	}
 	a.mu.Lock()

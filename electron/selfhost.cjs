@@ -59,7 +59,7 @@ class SelfHost {
     this.cancelled = false;
     try {
       await checkPorts(port);
-      this.directory = await mkdtemp(path.join(tmpdir(), 'voicecord-room-'));
+      this.directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-room-'));
       this.mapper = fork(path.join(__dirname, 'port-mapper.cjs'), [], { windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore','ignore','ignore','ipc'] });
       const mappedResult = bounded(new Promise(resolve => {
         this.mapper.once('message', resolve);
@@ -85,8 +85,8 @@ class SelfHost {
       const mediaKeyID = mediaKey ? createHash('sha256').update(Buffer.from(mediaKey, 'hex')).digest('hex') : '';
       const config = path.join(this.directory, 'livekit.yaml');
       await writeFile(config, `port: ${port+3}\nbind_addresses: [127.0.0.1]\nrtc:\n  tcp_port: ${port+1}\n  udp_port: ${port+2}\n  use_external_ip: false\n  advertise_internal_ip: true\n  node_ip: ${nodeIP}\n  enable_loopback_candidate: true\n  stun_servers: []\nkeys:\n  ${key}: ${secret}\nroom:\n  auto_create: true\n  max_participants: 30\nlogging:\n  level: error\n`, { mode: 0o600 });
-      const api = spawn(path.join(this.resources, 'voicecord-api.exe'), ['selfhost'], { windowsHide: true, stdio: ['pipe','pipe','pipe'] });
-      if (process.env.VOICECORD_SELFHOST_DEBUG === '1') api.stderr.on('data', data => console.error('selfhost:', data.toString()));
+      const api = spawn(path.join(this.resources, 'pawtalk-api.exe'), ['selfhost'], { windowsHide: true, stdio: ['pipe','pipe','pipe'] });
+      if (process.env.PAWTALK_SELFHOST_DEBUG === '1') api.stderr.on('data', data => console.error('selfhost:', data.toString()));
       else api.stderr.resume();
       api.stdin.on('error', () => {});
       this.children.push(api);
@@ -95,7 +95,7 @@ class SelfHost {
       const { fingerprint } = await ready;
       if (this.cancelled) throw new Error(t("Создание комнаты отменено: компьютер перешёл в сон"));
       api.once('exit', () => { if (this.state.running) void this.stop(t("Сервер комнаты остановился")); });
-      const invite = ip => `voicecord://${ip}:${port}/${fingerprint}#password=${encodeURIComponent(input.password)}&name=${encodeURIComponent(input.name || t("Комната"))}${mediaKey ? '&e2ee=' + mediaKey : ''}`;
+      const invite = ip => `pawtalk://${ip}:${port}/${fingerprint}#password=${encodeURIComponent(input.password)}&name=${encodeURIComponent(input.name || t("Комната"))}${mediaKey ? '&e2ee=' + mediaKey : ''}`;
       const internet = mapped && publicIPv4(externalIP);
       this.state = { running: true, e2ee: !!mediaKey, name: input.name || t("Комната"), port, mapped, internet, localAddress: invite('127.0.0.1'), invitations: [...(internet ? [invite(externalIP)] : []), ...lan.map(invite)], message: internet ? t("Порты открыты на роутере. Доступность из интернета не проверена.") : t("Комната работает в локальной сети. Автопроброс недоступен или у провайдера дополнительный NAT."), fingerprint };
       this.onChange(this.state); return this.state;
@@ -111,7 +111,7 @@ class SelfHost {
     if (this.mapper) { const mapper = this.mapper; this.mapper = undefined; try { const exited = new Promise(resolve => { mapper.once('exit', resolve); if (mapper.exitCode !== null) resolve(); }); if (mapper.connected) mapper.send({ stop: true }); await bounded(exited, 8000, 'cleanup timeout'); } catch { mapper.kill(); } }
     if (this.directory) {
       const directory = path.resolve(this.directory);
-      if (path.dirname(directory) !== path.resolve(tmpdir()) || !path.basename(directory).startsWith('voicecord-room-')) throw new Error('Invalid temporary room directory');
+      if (path.dirname(directory) !== path.resolve(tmpdir()) || !path.basename(directory).startsWith('pawtalk-room-')) throw new Error('Invalid temporary room directory');
       await rm(directory, { recursive: true, force: true, maxRetries: 4, retryDelay: 150 }); this.directory = undefined;
     }
   }

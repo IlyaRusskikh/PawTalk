@@ -1,7 +1,7 @@
 const { t } = require('../shared/i18n.cjs');
 const { isIP } = require('node:net');
 function invitation(address) {
-  if (typeof address !== 'string' || !address.trim().startsWith('voicecord://')) return null;
+  if (typeof address !== 'string' || !address.trim().startsWith('pawtalk://')) return null;
   const url = new URL(address.trim());
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   const params = new URLSearchParams(url.hash.slice(1));

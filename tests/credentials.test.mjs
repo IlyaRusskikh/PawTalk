@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 const {CredentialStore}=createRequire(import.meta.url)('../electron/credentials.cjs');
 test('credential storage isolates servers, delegates encryption and deletes on opt out',async()=>{
- const directory=await mkdtemp(path.join(tmpdir(),'voicecord-credential-test-'));
+ const directory=await mkdtemp(path.join(tmpdir(),'pawtalk-credential-test-'));
  const encryption={isEncryptionAvailable:()=>true,encryptString:()=>Buffer.from('opaque-encrypted-data'),decryptString:()=>'test-secret'};
  try{
   const store=new CredentialStore(directory,encryption);
@@ -19,5 +19,5 @@ test('credential storage isolates servers, delegates encryption and deletes on o
   encryption.isEncryptionAvailable=()=>false;
   await assert.rejects(store.save('https://127.0.0.1','test-secret'));
   assert.equal((await readdir(directory)).length,0);
- }finally{if(path.dirname(directory)===path.resolve(tmpdir())&&path.basename(directory).startsWith('voicecord-credential-test-'))await rm(directory,{recursive:true,force:true});}
+ }finally{if(path.dirname(directory)===path.resolve(tmpdir())&&path.basename(directory).startsWith('pawtalk-credential-test-'))await rm(directory,{recursive:true,force:true});}
 });

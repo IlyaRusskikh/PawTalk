@@ -1,4 +1,4 @@
-# Первый разговор в Voicecord
+# Первый разговор в PawTalk
 
 Эта инструкция — для готового Windows-приложения, без сборки исходников.
 Нужны два Windows-ПК и гарнитуры. Сначала проверьте разговор в одной локальной
@@ -7,7 +7,7 @@
 ## 1. Установите клиент
 
 На обоих ПК скачайте `Voicecord.Setup.0.5.2.exe` из
-[выпуска 0.5.2](https://github.com/IlyaRusskikh/voicecord/releases/tag/v0.5.2).
+[выпуска 0.5.2](https://github.com/IlyaRusskikh/pawtalk/releases/tag/v0.5.2).
 Архив Source code содержит исходники, а не готовое приложение. Для установки
 не нужны Node.js, Go, Docker или права администратора на роутере.
 
@@ -86,7 +86,7 @@ VPS с публичным IP: [пошаговая установка Linux-се�
 
 Инструкция соответствует 0.5.2. Формулировки зависят от выбранного языка. Подробности: [руководство](GUIDE.ru.md), [сервер](SERVER.md).
 
-Для обращения в [GitHub Issues](https://github.com/IlyaRusskikh/voicecord/issues/new/choose)
+Для обращения в [GitHub Issues](https://github.com/IlyaRusskikh/pawtalk/issues/new/choose)
 укажите версии клиента/сервера, Windows, LAN или разные сети, шаги и точный
 текст ошибки. Удалите приглашения, пароли, ключи E2EE, личные IP и записи разговоров.
 

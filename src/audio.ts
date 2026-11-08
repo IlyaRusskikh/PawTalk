@@ -47,7 +47,7 @@ export class Microphone {
       const module = await loadModel();
       if (this.stopped) { this.stop(); return; }
       this.source = this.context.createMediaStreamSource(this.stream);
-      this.node = new AudioWorkletNode(this.context, 'voicecord-gate', { numberOfInputs: 2, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 1, channelCountMode: 'explicit', processorOptions: { rnnoiseModule: module } });
+      this.node = new AudioWorkletNode(this.context, 'pawtalk-gate', { numberOfInputs: 2, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 1, channelCountMode: 'explicit', processorOptions: { rnnoiseModule: module } });
       this.destination = this.context.createMediaStreamDestination();
       this.source.connect(this.node).connect(this.destination);
       this.node.port.onmessage = event => {
@@ -150,13 +150,4 @@ export class Microphone {
     if (!this.sharedContext && this.context && this.context.state !== 'closed') void this.context.close();
     this.destination = undefined; this.stream = undefined;
   }
-}
-export function playCue(connected: boolean) {
-  const context = new AudioContext();
-  const gain = context.createGain(); gain.gain.value = 0.04; gain.connect(context.destination);
-  for (let i = 0; i < 2; i++) {
-    const osc = context.createOscillator(); osc.frequency.value = connected ? 540 + i * 180 : 720 - i * 180;
-    osc.connect(gain); osc.start(context.currentTime + i * 0.1); osc.stop(context.currentTime + i * 0.1 + 0.08);
-  }
-  setTimeout(() => { void context.close(); }, 400);
 }

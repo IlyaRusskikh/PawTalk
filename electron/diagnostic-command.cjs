@@ -34,7 +34,7 @@ try {
  $c=Open-Tcp ($port+1);$c.Dispose()
  Write-Host ('OK: voice TCP port '+($port+1)) -ForegroundColor Green
  Write-Host 'PASS: server, certificate, voice service and voice TCP port are reachable from this PC.' -ForegroundColor Green
- Write-Host 'Password, WebRTC/UDP and real audio still require a test call in Voicecord.'
+ Write-Host 'Password, WebRTC/UDP and real audio still require a test call in PawTalk.'
  exit 0
 } catch {
  Write-Host ('FAIL: '+$_.Exception.Message) -ForegroundColor Red

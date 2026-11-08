@@ -46,7 +46,7 @@ export function VoiceSettings(p: Props) {
       <Slider label={t("Сила приглушения")} value={s.duckAmount} min={0} max={100} format={`${s.duckAmount}%`} onChange={value => update('duckAmount',value)}/>
       <div className="form-grid"><label>{t("Включить / выключить микрофон")}<input value={s.muteKey} onChange={event => update('muteKey',event.target.value)} placeholder="Control+Shift+M"/></label><label>{t("Включить / выключить весь звук")}<input value={s.deafenKey} onChange={event => update('deafenKey',event.target.value)} placeholder="Control+Shift+D"/></label></div>
       {p.keyError && <p role="alert" className="text-error">{p.keyError}</p>}
-      <Toggle label={t("Звуки подключения")} checked={s.sounds} onChange={value => update('sounds',value)}/>
+      <Toggle label={t("Звуковые уведомления")} detail={t("Мяуканье при входе и выходе, мурлыканье для новых сообщений вне просмотра.")} checked={s.sounds} onChange={value => update('sounds',value)}/>
     </section>}
     <button className="quiet" onClick={p.onReset}>{t("Сбросить настройки вкладки")}</button>
   </div>;

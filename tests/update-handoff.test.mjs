@@ -8,8 +8,8 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 test('hidden PowerShell executes and survives a real Electron parent shutdown', { skip: process.platform !== 'win32', timeout: 15000 }, async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'voicecord handoff '));
-  const env = { ...process.env, VOICECORD_HANDOFF_DIRECTORY: directory };
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk handoff '));
+  const env = { ...process.env, PAWTALK_HANDOFF_DIRECTORY: directory };
   delete env.ELECTRON_RUN_AS_NODE;
   try {
     await promisify(execFile)(require('electron'), ['tests/update-handoff.cjs'], { env, windowsHide: true, timeout: 10000 });

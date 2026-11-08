@@ -6,7 +6,7 @@ const path=require('node:path');
 const os=require('node:os');
 const {createHash,randomBytes}=require('node:crypto');
 const https=require('node:https');
-app.setPath('userData',path.join(os.tmpdir(),'voicecord-e2ee-main-'+process.pid));
+app.setPath('userData',path.join(os.tmpdir(),'pawtalk-e2ee-main-'+process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 app.disableHardwareAcceleration();process.argv.push('--smoke','--offscreen-smoke');
@@ -80,7 +80,7 @@ app.on('browser-window-created',(_e,win)=>{
    assert.deepEqual(avatarButtons[0],avatarButtons[1]);
    await js(`document.querySelector('.avatar-editor .primary').click()`);
    await until(()=>js('!!document.querySelector(".profile-avatar img")'),'profile shows saved avatar');
-   const savedAvatar = await js('localStorage.getItem("voicecord.avatar")');
+   const savedAvatar = await js('localStorage.getItem("pawtalk.avatar")');
    assert.match(savedAvatar,/^data:image\/webp;base64,/);
    await until(()=>js('document.querySelector(".profile-avatar img").naturalWidth===128'),'saved crop renders at 128 pixels');
    pickerDebugger.detach();
@@ -286,7 +286,7 @@ app.on('browser-window-created',(_e,win)=>{
    assert.equal(await js(`!!document.querySelector('.call-controls')`),false,'lobby has no call controls');
    assert.ok(await js(`!!document.querySelector('.return-room')`),'voice stays connected and lobby offers return to call');
    // Deleting saved credentials makes any unintended reconnect fail visibly.
-   const address=await js('JSON.parse(localStorage.getItem("voicecord.bookmarks"))[0].address');
+   const address=await js('JSON.parse(localStorage.getItem("pawtalk.bookmarks"))[0].address');
    await js(`window.desktop.savePassword(${JSON.stringify({address,password:null})})`);
    await js(`document.querySelector('.bookmark-orb').click()`);await delay(300);
    assert.equal(await js('document.querySelector("h1").textContent'),'Renamed room');
@@ -302,11 +302,11 @@ app.on('browser-window-created',(_e,win)=>{
     assert.equal(await js('document.querySelectorAll(".audio-device-list:popover-open [aria-pressed=true]").length'),1);
     assert.ok(await js(`(()=>{const a=document.querySelector('.audio-quick-menu:popover-open').getBoundingClientRect();const b=document.querySelector('.audio-device-list:popover-open').getBoundingClientRect();return b.left>=a.right && b.right<=innerWidth && b.bottom<=innerHeight;})()`), 'device list opens beside the menu inside the viewport');
     await js(`document.querySelectorAll('.audio-device-list:popover-open .audio-device-option')[1].click()`);await delay(300);
-    assert.equal(await js(`JSON.parse(localStorage.getItem('voicecord.settings')).${deviceKey}`),device);
+    assert.equal(await js(`JSON.parse(localStorage.getItem('pawtalk.settings')).${deviceKey}`),device);
     assert.equal(await js('document.querySelectorAll(".audio-quick-menu:popover-open").length'),1,'device selection keeps volume controls open');
     assert.equal(await js('document.querySelectorAll(".audio-device-list:popover-open").length'),0);
     const key=label==='Устройство ввода'?'inputGain':'outputVolume';
-    assert.equal(await js(`JSON.parse(localStorage.getItem('voicecord.settings')).${key}`),0.5);
+    assert.equal(await js(`JSON.parse(localStorage.getItem('pawtalk.settings')).${key}`),0.5);
    }
    await fs.mkdir(path.resolve('release/qa'),{recursive:true});
    await js(`document.querySelector('.audio-quick-menu:popover-open .audio-device-trigger').click()`);await delay(100);
@@ -366,11 +366,11 @@ app.on('browser-window-created',(_e,win)=>{
    assert.equal(await js('document.querySelector(".bookmark-orb").getAttribute(\"aria-label\")'),'Renamed room','alias persists after reload');
    await js(`document.querySelector('[title="Settings"]').click()`);await delay(200);
    await js(`document.querySelector('#settings-tab-general').click()`);await delay(100);
-   assert.ok(await js('document.querySelector("dialog").textContent.includes("Start Voicecord when signing in to Windows")'));
+   assert.ok(await js('document.querySelector("dialog").textContent.includes("Start PawTalk when signing in to Windows")'));
    await js(`document.querySelector('#settings-tab-profile').click()`);await delay(100);
    assert.equal(await js(`document.querySelector('.profile-avatar img')?.src`),savedAvatar,'avatar survives renderer restart');
    await js(`Array.from(document.querySelectorAll('.profile-avatar button')).find(b=>b.textContent==='Remove avatar').click()`);
-   await until(()=>js('!document.querySelector(".profile-avatar img") && localStorage.getItem("voicecord.avatar")===null'),'remove restores initials');
+   await until(()=>js('!document.querySelector(".profile-avatar img") && localStorage.getItem("pawtalk.avatar")===null'),'remove restores initials');
    await js(`document.querySelector('dialog [aria-label="Close"]').click()`);await delay(100);
    await js(`document.querySelector('.bookmark-orb').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:30,clientY:120}))`);await delay(100);
    await js(`document.querySelector('.bookmark-menu button').click()`);await delay(100);

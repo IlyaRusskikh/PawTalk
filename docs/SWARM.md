@@ -11,9 +11,9 @@ Docker Swarm — единственный поддерживаемый спос�
 
 ## Как обновляется комната
 
-`compose.server.swarm.yaml` запускает одну комнату как сервис `voicecord_server`
-стека `voicecord`. TLS, пароль и SQLite находятся во внешнем Docker volume из
-`VOICECORD_DATA_VOLUME`. Сервис закреплён за узлом с меткой `voicecord.data=true`;
+`compose.server.swarm.yaml` запускает одну комнату как сервис `pawtalk_server`
+стека `pawtalk`. TLS, пароль и SQLite находятся во внешнем Docker volume из
+`PAWTALK_DATA_VOLUME`. Сервис закреплён за узлом с меткой `pawtalk.data=true`;
 назначайте её только узлу с данными комнаты. Локальный volume не реплицируется.
 Команды управления выполняются на manager-узле, операции с volume и `docker exec`
 — на узле с данными. В одноузловой установке это один VPS.
@@ -24,7 +24,7 @@ Docker Swarm — единственный поддерживаемый спос�
 См. [host networking](https://docs.docker.com/engine/network/drivers/host/)
 и [настройки update/rollback](https://docs.docker.com/reference/compose-file/deploy/).
 
-`VOICECORD_CHAT_MAX_MB=128` задаёт бюджет SQLite-базы чата в МиБ, `0` отключает
+`PAWTALK_CHAT_MAX_MB=128` задаёт бюджет SQLite-базы чата в МиБ, `0` отключает
 лимит. Учитываются сообщения, изображения, профили и индексы; удаляется старейшая
 история. Изменения `.env` применяются через `deploy`, а не простым перезапуском.
 
@@ -35,12 +35,12 @@ Docker Swarm — единственный поддерживаемый спос�
 
 1. Найдите контейнер старой комнаты и проверьте его подключение `/data` через
    `docker inspect`. Запишите точное имя volume: обычно это
-   `voicecord-server_server_data`. Сохраните прежний `.env` отдельно.
+   `pawtalk-server_server_data`. Сохраните прежний `.env` отдельно.
 2. Остановите старый контейнер через использованный ранее Compose-файл. Например,
    для установки из GHCR:
 
    ```sh
-   cd /opt/voicecord
+   cd /opt/pawtalk
    docker compose -f compose.server.ghcr.yaml stop server
    docker compose -f compose.server.ghcr.yaml ps -a
    ```
@@ -53,18 +53,18 @@ Docker Swarm — единственный поддерживаемый спос�
    Не запускайте `swarm init`, если узел уже состоит в Swarm. Для одного VPS
    управляющие порты Swarm в интернет не открываются.
 4. Подготовьте `.env` по `.env.server.swarm.example`: перенесите прежние IP, порт,
-   настройки E2EE, лимит истории и прокси обновлений. В `VOICECORD_DATA_VOLUME`
+   настройки E2EE, лимит истории и прокси обновлений. В `PAWTALK_DATA_VOLUME`
    укажите **точное имя прежнего volume**. Не создавайте пустой volume взамен.
-   Укажите согласованные `VOICECORD_IMAGE` и `VOICECORD_RELEASE`, оставьте
-   `VOICECORD_AUTO_UPDATE=false`. Сначала мигрируйте на той же версии образа;
+   Укажите согласованные `PAWTALK_IMAGE` и `PAWTALK_RELEASE`, оставьте
+   `PAWTALK_AUTO_UPDATE=false`. Сначала мигрируйте на той же версии образа;
    обновление версии выполняйте отдельно после проверки комнаты.
 5. Разверните стек:
 
    ```sh
-   python3 scripts/server-update.py deploy --config .env --stack voicecord
-   docker stack services voicecord
-   docker service ps voicecord_server --no-trunc
-   docker service logs --tail 30 voicecord_server
+   python3 scripts/server-update.py deploy --config .env --stack pawtalk
+   docker stack services pawtalk
+   docker service ps pawtalk_server --no-trunc
+   docker service logs --tail 30 pawtalk_server
    ```
 
 Дождитесь `1/1`, задачи `Running` и статуса контейнера `healthy` по
@@ -75,22 +75,22 @@ Docker Swarm — единственный поддерживаемый спос�
 
 ## Ручное обновление и откат
 
-Все команды ниже выполняются из `/opt/voicecord`. Сначала сделайте
+Все команды ниже выполняются из `/opt/pawtalk`. Сначала сделайте
 [резервную копию](SERVER.md#где-данные-и-как-сохранить-комнату).
 Прочитайте release notes, проверьте совместимость данных и существование
 публичного образа новой версии. Не используйте `latest`.
 
 Для ручного обновления измените в `.env` **обе строки**:
-`VOICECORD_IMAGE=ghcr.io/ilyarusskikh/voicecord-server:X.Y.Z` и
-`VOICECORD_RELEASE=X.Y.Z`, подставив опубликованную версию без `v`.
+`PAWTALK_IMAGE=ghcr.io/ilyarusskikh/pawtalk-server:X.Y.Z` и
+`PAWTALK_RELEASE=X.Y.Z`, подставив опубликованную версию без `v`.
 При необходимости скачайте обновлённые стек и скрипт той же версии по схеме
 из `SERVER.md`; сохраните рабочий `.env`. Примените конфигурацию:
 
 ```sh
-python3 scripts/server-update.py deploy --config .env --stack voicecord
-docker service ps voicecord_server --no-trunc
-docker service inspect --format '{{json .UpdateStatus}}' voicecord_server
-docker service logs --tail 30 voicecord_server
+python3 scripts/server-update.py deploy --config .env --stack pawtalk
+docker service ps pawtalk_server --no-trunc
+docker service inspect --format '{{json .UpdateStatus}}' pawtalk_server
+docker service logs --tail 30 pawtalk_server
 ```
 
 `deploy` возвращает управление до завершения rollout. Дождитесь `1/1`, `healthy`
@@ -101,7 +101,7 @@ docker service logs --tail 30 voicecord_server
 Ручной откат к предыдущей спецификации сервиса:
 
 ```sh
-python3 scripts/server-update.py rollback --config .env --stack voicecord
+python3 scripts/server-update.py rollback --config .env --stack pawtalk
 ```
 
 Откат возвращает предыдущую спецификацию, включая образ и настройки, но
@@ -111,11 +111,11 @@ python3 scripts/server-update.py rollback --config .env --stack voicecord
 После отката или автоматического обновления проверьте фактические образ и версию:
 
 ```sh
-docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' voicecord_server
-docker service inspect --format '{{index .Spec.Labels "io.voicecord.version"}}' voicecord_server
+docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' pawtalk_server
+docker service inspect --format '{{index .Spec.Labels "io.pawtalk.version"}}' pawtalk_server
 ```
 
-Перенесите эти значения в `VOICECORD_IMAGE` и `VOICECORD_RELEASE` файла `.env`
+Перенесите эти значения в `PAWTALK_IMAGE` и `PAWTALK_RELEASE` файла `.env`
 перед следующим `deploy`. Скрипт обновляет сервис, но не переписывает `.env`;
 старые значения при повторном развёртывании вернут старую версию.
 
@@ -124,9 +124,9 @@ docker service inspect --format '{{index .Spec.Labels "io.voicecord.version"}}' 
 В `.env` по умолчанию:
 
 ```dotenv
-VOICECORD_AUTO_UPDATE=false
-VOICECORD_UPDATE_CHANNEL=preview
-VOICECORD_UPDATE_REPOSITORY=IlyaRusskikh/voicecord
+PAWTALK_AUTO_UPDATE=false
+PAWTALK_UPDATE_CHANNEL=preview
+PAWTALK_UPDATE_REPOSITORY=IlyaRusskikh/pawtalk
 ```
 
 `false` отключает сетевую проверку и обновление таймером. `stable` учитывает только
@@ -138,25 +138,25 @@ VOICECORD_UPDATE_REPOSITORY=IlyaRusskikh/voicecord
 Ручная проверка без установки работает независимо от переключателя:
 
 ```sh
-python3 scripts/server-update.py check --config .env --stack voicecord
+python3 scripts/server-update.py check --config .env --stack pawtalk
 ```
 
 На VPS с systemd скачайте unit-файлы той же версии, что скрипт (ниже `0.5.2`),
-и установите их. Они рассчитаны на `/opt/voicecord`, `/usr/bin/python3`
-и стек `voicecord`:
+и установите их. Они рассчитаны на `/opt/pawtalk`, `/usr/bin/python3`
+и стек `pawtalk`:
 
 ```sh
-cd /opt/voicecord
-VOICECORD_RELEASE=0.5.2
-curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/deploy/voicecord-update.service" -o deploy/voicecord-update.service
-curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/deploy/voicecord-update.timer" -o deploy/voicecord-update.timer
-install -m 644 deploy/voicecord-update.service /etc/systemd/system/
-install -m 644 deploy/voicecord-update.timer /etc/systemd/system/
+cd /opt/pawtalk
+PAWTALK_RELEASE=0.5.2
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/deploy/pawtalk-update.service" -o deploy/pawtalk-update.service
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/deploy/pawtalk-update.timer" -o deploy/pawtalk-update.timer
+install -m 644 deploy/pawtalk-update.service /etc/systemd/system/
+install -m 644 deploy/pawtalk-update.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now voicecord-update.timer
+systemctl enable --now pawtalk-update.timer
 ```
 
-Затем явно поставьте в `.env` `VOICECORD_AUTO_UPDATE=true`. Таймер перечитывает
+Затем явно поставьте в `.env` `PAWTALK_AUTO_UPDATE=true`. Таймер перечитывает
 файл при каждом запуске; для этого флага `deploy` не нужен. На системах без systemd
 используйте ручные обновления; установка этого таймера к ним не применяется.
 
@@ -165,14 +165,14 @@ systemctl enable --now voicecord-update.timer
 выполняйте после остановки таймера и завершения уже работающего обновлятора.
 
 ```sh
-systemctl list-timers voicecord-update.timer
-journalctl -u voicecord-update.service -n 30
+systemctl list-timers pawtalk-update.timer
+journalctl -u pawtalk-update.service -n 30
 ```
 
 При неуспешном rollout Swarm возвращает предыдущую спецификацию. Скрипт считает
 это ошибкой. Для выключения автообновлений поставьте
-`VOICECORD_AUTO_UPDATE=false`; таймер можно также остановить через
-`systemctl disable --now voicecord-update.timer`.
+`PAWTALK_AUTO_UPDATE=false`; таймер можно также остановить через
+`systemctl disable --now pawtalk-update.timer`.
 
 Локально ранее проверены разбор stack-конфигурации Docker CLI и unit-тесты
 выключенного режима, выбора версий/каналов, несовпадения digest и последовательности

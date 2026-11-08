@@ -16,7 +16,7 @@ Never include invitations, passwords, keys, your public IP or full network repor
 
 ## Setup / Окружение
 
-- Voicecord version and Windows version / Версия Voicecord и Windows:
+- PawTalk version and Windows version / Версия PawTalk и Windows:
 - Room / Комната: built-in / встроенная, or / или Linux VPS
 - Same LAN or separate networks / Одна локальная сеть или разные сети:
 - For VPS: Linux, architecture and image tag / Для VPS: Linux, архитектура и тег образа:

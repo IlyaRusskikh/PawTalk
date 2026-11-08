@@ -14,7 +14,7 @@ if (!process.versions.electron) {
   let win;
   try {
    const root = path.join(__dirname, '..');
-   const svg = await fs.readFile(path.join(root, 'assets/voicecord.svg'), 'utf8');
+   const svg = await fs.readFile(path.join(root, 'assets/pawtalk.svg'), 'utf8');
    win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, offscreen: true } });
    await win.loadURL('data:text/html,<html><body></body></html>');
    const frames = [];
@@ -29,9 +29,9 @@ if (!process.versions.electron) {
     return Buffer.concat([header,...images.map(v=>v.data)]);
    }
    const asset = name => path.join(root,'assets',name);
-   await fs.writeFile(asset('voicecord.ico'),ico(frames.filter(v=>v.size<=256)));
+   await fs.writeFile(asset('pawtalk.ico'),ico(frames.filter(v=>v.size<=256)));
    await fs.writeFile(asset('tray.ico'),ico(frames.filter(v=>v.size<=64)));
-   await fs.writeFile(asset('voicecord.png'),frames.find(v=>v.size===512).data);
+   await fs.writeFile(asset('pawtalk.png'),frames.find(v=>v.size===512).data);
    await fs.writeFile(asset('tray.png'),frames.find(v=>v.size===32).data);
    await fs.writeFile(path.join(root,'public/favicon.ico'),ico(frames.filter(v=>[16,32,48].includes(v.size))));
    console.log('Generated application, installer, tray and favicon icons.');win.destroy();app.exit(0);

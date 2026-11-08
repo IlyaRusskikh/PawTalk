@@ -35,16 +35,16 @@ func TestEncryptionRequiredAndKeyCommitment(t *testing.T) {
 }
 
 func TestEncryptionEnvironment(t *testing.T) {
-	t.Setenv("VOICECORD_E2EE", "tru")
+	t.Setenv("PAWTALK_E2EE", "tru")
 	if _, _, err := encryptionPolicy(); err == nil {
 		t.Fatal("invalid boolean accepted")
 	}
-	t.Setenv("VOICECORD_E2EE", "true")
-	t.Setenv("VOICECORD_E2EE_KEY_ID", "short")
+	t.Setenv("PAWTALK_E2EE", "true")
+	t.Setenv("PAWTALK_E2EE_KEY_ID", "short")
 	if _, _, err := encryptionPolicy(); err == nil {
 		t.Fatal("invalid key id accepted")
 	}
-	t.Setenv("VOICECORD_E2EE_KEY_ID", strings.Repeat("a", 64))
+	t.Setenv("PAWTALK_E2EE_KEY_ID", strings.Repeat("a", 64))
 	if required, _, err := encryptionPolicy(); err != nil || !required {
 		t.Fatal("valid policy rejected")
 	}

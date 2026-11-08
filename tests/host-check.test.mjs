@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { createRequire } from 'node:module';
 const { HostCheck, parseResult } = createRequire(import.meta.url)('../electron/host-check.cjs');
-const prefix = 'VOICECORD_PREFLIGHT_RESULT:';
+const prefix = 'PAWTALK_PREFLIGHT_RESULT:';
 function child() {
   const process = new EventEmitter();
   process.stdin = new PassThrough(); process.stdout = new PassThrough(); process.stderr = new PassThrough();

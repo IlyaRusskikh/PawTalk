@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 const { labels } = createRequire(import.meta.url)('../electron/update-progress.cjs');
 const execute = promisify(execFile);
 test('real PowerShell helper reports phases, confirms startup and retains the installer on failure', { skip: process.platform !== 'win32', timeout: 30000 }, async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'voicecord helper '));
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk helper '));
   const status = path.join(directory, 'installation.json');
   const installer = path.join(directory, 'synthetic setup.exe');
   const labelsFile = path.join(directory, 'labels.json');

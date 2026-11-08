@@ -4,14 +4,14 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const os = require('node:os');
-app.setPath('userData', path.join(os.tmpdir(), 'voicecord-renderer-smoke-' + process.pid));
+app.setPath('userData', path.join(os.tmpdir(), 'pawtalk-renderer-smoke-' + process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 // Chromium's default fake microphone is an intermittent beep. Use a continuous,
 // speech-like PCM fixture so capture reopens cannot land in a silent interval.
-let audioFile = process.env.VOICECORD_TEST_AUDIO_FILE;
+let audioFile = process.env.PAWTALK_TEST_AUDIO_FILE;
 if (!audioFile) {
-  audioFile = path.join(os.tmpdir(), `voicecord-renderer-audio-${process.pid}.wav`);
+  audioFile = path.join(os.tmpdir(), `pawtalk-renderer-audio-${process.pid}.wav`);
   const rate = 48000, count = rate * 6, wav = Buffer.alloc(44 + count * 2);
   wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
   wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
@@ -78,10 +78,10 @@ app.whenReady().then(async () => {
     await tab('input'); assert.ok(await run(`!!document.querySelector('.sensitivity')`));
     await tab('processing');
     await run(`(()=>{const el=document.querySelector('[aria-label="Режим шумоподавления"]');el.value='standard';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-    assert.equal(await run(`JSON.parse(localStorage.getItem('voicecord.settings')).noiseMode`), 'standard');
+    assert.equal(await run(`JSON.parse(localStorage.getItem('pawtalk.settings')).noiseMode`), 'standard');
     await run(`Array.from(document.querySelectorAll('#settings-panel button')).find(button=>button.textContent==='Сбросить настройки вкладки').click()`); await wait(100);
-    assert.equal(await run(`JSON.parse(localStorage.getItem('voicecord.settings')).noiseMode`), 'rnnoise', 'reset applies current processing defaults');
-    assert.equal(await run(`JSON.parse(localStorage.getItem('voicecord.settings')).inputGain`), .5, 'reset preserves device tab volume');
+    assert.equal(await run(`JSON.parse(localStorage.getItem('pawtalk.settings')).noiseMode`), 'rnnoise', 'reset applies current processing defaults');
+    assert.equal(await run(`JSON.parse(localStorage.getItem('pawtalk.settings')).inputGain`), .5, 'reset preserves device tab volume');
     await tab('appearance');
     await run(`document.querySelectorAll('.theme-preset')[2].click()`); await wait(100);
     assert.equal(await run(`getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()`), '#7bcdb0');
@@ -109,7 +109,7 @@ app.whenReady().then(async () => {
     assert.ok(await run(`parseFloat(getComputedStyle(document.querySelector('.settings-modal')).borderTopLeftRadius)<${radiusBefore}`), 'corner preference updates actual modal geometry');
     await tab('chat');
     await run(`(()=>{const el=document.querySelector('#settings-panel select');el.value='50';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-    assert.equal(await run(`localStorage.getItem('voicecord.chat.window')`), '50');
+    assert.equal(await run(`localStorage.getItem('pawtalk.chat.window')`), '50');
     await capture('settings-chat-review');
     for (const name of ['shortcuts', 'general', 'updates']) { await tab(name); assert.ok(await run(`document.querySelector('[role=tabpanel]').scrollWidth<=document.querySelector('[role=tabpanel]').clientWidth+1`), name + ' does not overflow'); }
     assert.equal(await run(`document.querySelector('.current-version').textContent`), 'Текущая версия: ' + require('../package.json').version);
@@ -117,7 +117,7 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`); await wait(100);
     await win.reload();
     await until(() => run(`!!document.querySelector('.home-actions')`), 'reload');
-    assert.equal(await run(`localStorage.getItem('voicecord.chat.window')`), '50');
+    assert.equal(await run(`localStorage.getItem('pawtalk.chat.window')`), '50');
     assert.equal(await run(`getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()`), '#7bcdb0');
     assert.equal(await run(`getComputedStyle(document.documentElement).getPropertyValue('--sidebar-bg').trim()`),'#15202b');
     assert.equal(await run(`getComputedStyle(document.documentElement).getPropertyValue('--ui-font-size').trim()`),'16px');

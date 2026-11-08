@@ -1,5 +1,5 @@
 # Local prototype: run the API and Electron on the host; only LiveKit is containerized.
-name: voicecord-dev
+name: pawtalk-dev
 services:
   livekit:
     image: livekit/livekit-server:v1.13.11

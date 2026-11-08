@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createServer } from 'vite';
 const require = createRequire(import.meta.url);
-const folder = await mkdtemp(path.join(os.tmpdir(), 'voicecord-e2ee-'));
+const folder = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-e2ee-'));
 const wav = path.join(folder, 'markers.wav');
 // Continuous voiced synthetic signal with a raised marker every 1.13 seconds.
 // Continuous floor avoids measuring only Opus silence/DTX. No personal recording.
@@ -48,13 +48,13 @@ try {
     await run('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-OutputFile',wav]);
   }
   await run(process.execPath,['scripts/prepare-server.mjs']);
-  await run('docker',['build','-f','server/standalone.Dockerfile','-t','voicecord-server:local','.']);
+  await run('docker',['build','-f','server/standalone.Dockerfile','-t','pawtalk-server:local','.']);
   vite=await createServer({server:{host:'127.0.0.1',port:5194,strictPort:true}}); await vite.listen();
   const audioFile=process.argv.find(a=>a.startsWith('--audio-file='))?.slice('--audio-file='.length);
-  const env={...process.env,VOICECORD_BENCH_WAV:audioFile?path.resolve(audioFile):wav,VOICECORD_BENCH_SOURCE:audioFile?'provided WAV':process.platform==='win32'?'locally synthesized SAPI speech':'synthetic tones'}; delete env.ELECTRON_RUN_AS_NODE;
+  const env={...process.env,PAWTALK_BENCH_WAV:audioFile?path.resolve(audioFile):wav,PAWTALK_BENCH_SOURCE:audioFile?'provided WAV':process.platform==='win32'?'locally synthesized SAPI speech':'synthetic tones'}; delete env.ELECTRON_RUN_AS_NODE;
   await run(require('electron'),['tests/e2ee-benchmark.cjs',...process.argv.slice(2)],env);
   if (!process.argv.includes('--security-only') && !process.argv.includes('--latency')) await run(process.execPath,['scripts/summarize-e2ee.mjs']);
 } finally {
   await vite?.close();
-  if (path.dirname(folder)===os.tmpdir() && path.basename(folder).startsWith('voicecord-e2ee-')) await rm(folder,{recursive:true,force:true});
+  if (path.dirname(folder)===os.tmpdir() && path.basename(folder).startsWith('pawtalk-e2ee-')) await rm(folder,{recursive:true,force:true});
 }

@@ -7,7 +7,7 @@ export function validAddress(value: string) {
   try {
     const url = new URL(value.includes('://') ? value.trim() : `https://${value.trim()}`);
     if (url.username || url.password || url.search) return false;
-    if (url.protocol === 'voicecord:') {
+    if (url.protocol === 'pawtalk:') {
       const params = new URLSearchParams(url.hash.slice(1));
       return !!url.port && /^\/[a-f0-9]{64}$/.test(url.pathname) && [...params.keys()].every(key => ['password','name','e2ee'].includes(key) && params.getAll(key).length === 1) && (!params.has('e2ee') || validMediaKey(params.get('e2ee')));
     }
@@ -30,7 +30,7 @@ export function JoinRoom({ address, setAddress, nickname, busy, error, onConnect
     if (!validAddress(address) || checking || busy) return;
     const target = address.trim();
     setFailure('');
-    if (target.startsWith('voicecord://')) {
+    if (target.startsWith('pawtalk://')) {
       try {
         const embedded = new URLSearchParams(new URL(target).hash.slice(1)).get('password');
         if (embedded !== null) { await onConnect({ address: target, nickname, password: embedded }); return; }
@@ -42,18 +42,18 @@ export function JoinRoom({ address, setAddress, nickname, busy, error, onConnect
       const result = await window.desktop.diagnose(target);
       if (id !== revision.current) return;
       if (!result.ok) throw new Error(result.message);
-      setE2EERequired(result.e2eeRequired === true); setE2EEKey(target.startsWith('voicecord://') ? new URLSearchParams(new URL(target).hash.slice(1)).get('e2ee') ?? '' : '');
+      setE2EERequired(result.e2eeRequired === true); setE2EEKey(target.startsWith('pawtalk://') ? new URLSearchParams(new URL(target).hash.slice(1)).get('e2ee') ?? '' : '');
       setPassword(''); setAskPassword(true);
     } catch (e) { if (id === revision.current) setFailure(e instanceof Error ? e.message : String(e)); }
     finally { if (id === revision.current) setChecking(false); }
   }
   return <><Modal title={t("Присоединиться к комнате")} onClose={onClose}><form onSubmit={e => { e.preventDefault(); void submit(); }}>
     {(failure || error) && <ConnectionFailure detail={failure || error}/>}
-    <label>{t("Приглашение или адрес сервера")}<input autoFocus placeholder={t("voicecord://… или server.example.com")} value={address} disabled={busy || checking} aria-describedby="join-address-hint" aria-invalid={!!address.trim() && !validAddress(address)} onChange={e => { revision.current++; setAddress(e.target.value); setFailure(''); }} autoComplete="off" spellCheck={false}/></label>
-    <p id="join-address-hint" className="host-hint" aria-live="polite">{address.trim() && !validAddress(address) ? t("Адрес не распознан. Вставьте полное приглашение voicecord://… или HTTPS-адрес сервера без пути. Ссылка на GitHub или файл установщика не подходит.") : t("Попросите владельца прислать приглашение из работающей комнаты. В одной локальной сети используйте LAN-приглашение. Ссылка может содержать пароль — не публикуйте её.")}</p>
+    <label>{t("Приглашение или адрес сервера")}<input autoFocus placeholder={t("pawtalk://… или server.example.com")} value={address} disabled={busy || checking} aria-describedby="join-address-hint" aria-invalid={!!address.trim() && !validAddress(address)} onChange={e => { revision.current++; setAddress(e.target.value); setFailure(''); }} autoComplete="off" spellCheck={false}/></label>
+    <p id="join-address-hint" className="host-hint" aria-live="polite">{address.trim() && !validAddress(address) ? t("Адрес не распознан. Вставьте полное приглашение pawtalk://… или HTTPS-адрес сервера без пути. Ссылка на GitHub или файл установщика не подходит.") : t("Попросите владельца прислать приглашение из работающей комнаты. В одной локальной сети используйте LAN-приглашение. Ссылка может содержать пароль — не публикуйте её.")}</p>
     <button className="primary join-submit" disabled={!validAddress(address) || !nickname.trim() || busy || checking}>{checking ? t("Проверяем соединение…") : busy ? t("Подключение…") : t("Присоединиться")}</button>
   </form></Modal>
-  {askPassword && <Modal title={t("Пароль сервера")} onClose={() => { if (!busy) { setAskPassword(false); setPassword(''); setE2EEKey(''); } }}><form onSubmit={e => { e.preventDefault(); const target = address.trim(); const url = target.startsWith('voicecord://') ? new URL(target) : null; if (url && e2eeRequired) { const params = new URLSearchParams(url.hash.slice(1)); params.set('e2ee', e2eeKey); url.hash = params.toString(); } void onConnect({ address: url?.toString() ?? target, nickname, password, ...(e2eeRequired ? { e2eeKey } : {}) }); }}>
+  {askPassword && <Modal title={t("Пароль сервера")} onClose={() => { if (!busy) { setAskPassword(false); setPassword(''); setE2EEKey(''); } }}><form onSubmit={e => { e.preventDefault(); const target = address.trim(); const url = target.startsWith('pawtalk://') ? new URL(target) : null; if (url && e2eeRequired) { const params = new URLSearchParams(url.hash.slice(1)); params.set('e2ee', e2eeKey); url.hash = params.toString(); } void onConnect({ address: url?.toString() ?? target, nickname, password, ...(e2eeRequired ? { e2eeKey } : {}) }); }}>
     {error && <ConnectionFailure detail={error}/>}
     <div className="form-fields">
       <label>{t("Пароль")}<input autoFocus type="password" required maxLength={1024} autoComplete="off" value={password} disabled={busy} onChange={e => setPassword(e.target.value)}/></label>

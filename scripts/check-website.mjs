@@ -14,12 +14,13 @@ let links = 0;
 for (const file of files.filter(file => file.endsWith('.html'))) {
   const html = await readFile(file, 'utf8');
   const title = html.match(/<title>([^<]+)<\/title>/)?.[1];
-  assert.ok(title?.includes('Voicecord'), `${file}: descriptive title`);
+  assert.ok(title?.includes('PawTalk'), `${file}: descriptive title`);
   assert.match(html, /<meta name="description" content="[^"]+">/, `${file}: description`);
   assert.match(html, /<html lang="(?:en|ru)">/, `${file}: page language`);
-  assert.match(html, /rel="canonical" href="https:\/\/ilyarusskikh.github.io\/voicecord\/(?:ru\/)?"/, `${file}: expected Pages URL`);
+  assert.match(html, /rel="canonical" href="https:\/\/ilyarusskikh.github.io\/pawtalk\/(?:ru\/)?"/, `${file}: expected Pages URL`);
   for (const locale of ['en', 'ru', 'x-default']) assert.ok(html.includes(`hreflang="${locale}"`), `${file}: ${locale} alternate`);
-  assert.match(html, /releases\/download\/v\d+\.\d+\.\d+\/Voicecord\.Setup\.\d+\.\d+\.\d+\.exe/, `${file}: installer URL`);
+  // Historical binaries retain the name under which they were published.
+  assert.match(html, /releases\/download\/v(\d+\.\d+\.\d+)\/(?:PawTalk|Voicecord)\.Setup\.\1\.exe/, `${file}: installer URL`);
   for (const [, raw] of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
     if (/^(?:https?:|mailto:)/.test(raw)) continue;
     const [urlPath, anchor] = raw.split('#');

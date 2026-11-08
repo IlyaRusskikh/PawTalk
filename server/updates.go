@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const updateRepo = "/IlyaRusskikh/voicecord"
+const updateRepo = "/IlyaRusskikh/pawtalk"
 
 var updateTag = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$`)
 
@@ -72,7 +72,7 @@ func updateTarget(r *http.Request) (string, int64, bool) {
 	name := parts[1]
 	limit := int64(16384)
 	if name != "update-manifest.json" {
-		if name != "Voicecord.Setup."+strings.TrimPrefix(parts[0], "v")+".exe" {
+		if name != "PawTalk.Setup."+strings.TrimPrefix(parts[0], "v")+".exe" {
 			return "", 0, false
 		}
 		limit = 1024 * 1024 * 1024
@@ -105,7 +105,7 @@ func (p *updateRelay) allow(ip string) bool {
 }
 
 func (p *updateRelay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if os.Getenv("VOICECORD_UPDATE_PROXY") == "false" {
+	if os.Getenv("PAWTALK_UPDATE_PROXY") == "false" {
 		fail(w, 503, "Update relay disabled")
 		return
 	}
@@ -152,7 +152,7 @@ func (p *updateRelay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
 	defer cancel()
 	upstream, _ := http.NewRequestWithContext(ctx, "GET", target, nil)
-	upstream.Header.Set("User-Agent", "Voicecord-update-relay")
+	upstream.Header.Set("User-Agent", "PawTalk-update-relay")
 	upstream.Header.Set("Accept", "application/vnd.github+json")
 	res, err := p.client.Do(upstream)
 	if err != nil {

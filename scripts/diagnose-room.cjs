@@ -4,7 +4,7 @@ const { invitation } = require('../electron/address.cjs');
 (async () => {
   const address = process.argv[2];
   const room = invitation(address);
-  if (!room) throw new Error('Usage: node scripts/diagnose-room.cjs voicecord://IP:port/fingerprint');
+  if (!room) throw new Error('Usage: node scripts/diagnose-room.cjs pawtalk://IP:port/fingerprint');
   try {
     await verifyInvitation(address);
     console.log(JSON.stringify({ ok: true, server: new URL(room.origin).host, message: 'TCP, TLS и сертификат приглашения проверены из текущей сети. Пароль и передача голоса не проверялись.' }, null, 2));

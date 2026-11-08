@@ -21,7 +21,7 @@ func TestChatStorageConfiguration(t *testing.T) {
 	}{
 		{"", 128 * 1024 * 1024, false}, {"0", 0, false}, {"32", 32 * 1024 * 1024, false}, {"-1", 0, true}, {"1.5", 0, true}, {"oops", 0, true}, {"9223372036854775807", 0, true},
 	} {
-		t.Setenv("VOICECORD_CHAT_MAX_MB", item.raw)
+		t.Setenv("PAWTALK_CHAT_MAX_MB", item.raw)
 		got, err := chatStorageLimit()
 		if (err != nil) != item.bad || (!item.bad && got != item.expected) {
 			t.Fatalf("%q: %d %v", item.raw, got, err)

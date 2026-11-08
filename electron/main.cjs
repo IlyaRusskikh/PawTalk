@@ -65,12 +65,12 @@ function certificateFingerprint(certificate) {
 }
 let win, tray, native, quitting = false, duckTimer;
 let keyConfig = { ptt: 0x05, mute: '', deafen: '' };
-try { native = require(app.isPackaged ? path.join(process.resourcesPath, 'voicecord.node') : '../native/build/Release/voicecord.node'); } catch {}
-const devURL = process.env.VOICECORD_DEV_URL;
+try { native = require(app.isPackaged ? path.join(process.resourcesPath, 'pawtalk.node') : '../native/build/Release/pawtalk.node'); } catch {}
+const devURL = process.env.PAWTALK_DEV_URL;
 if (devURL && devURL !== 'http://127.0.0.1:5173') throw new Error('Invalid development URL');
 function send(name, value) { if (win && !win.isDestroyed()) win.webContents.send(name, value); }
 function refreshTray() {
-  tray?.setContextMenu(Menu.buildFromTemplate([{ label: language === 'en' ? 'Open Voicecord' : t("Открыть Voicecord"), click: () => win.show() }, { label: language === 'en' ? 'Mute microphone' : t("Выключить микрофон"), click: () => send('action', 'force-mute') }, { type: 'separator' }, { label: language === 'en' ? 'Quit' : t("Выйти"), click: () => { quitting = true; app.quit(); } }]));
+  tray?.setContextMenu(Menu.buildFromTemplate([{ label: language === 'en' ? 'Open PawTalk' : t("Открыть PawTalk"), click: () => win.show() }, { label: language === 'en' ? 'Mute microphone' : t("Выключить микрофон"), click: () => send('action', 'force-mute') }, { type: 'separator' }, { label: language === 'en' ? 'Quit' : t("Выйти"), click: () => { quitting = true; app.quit(); } }]));
 }
 function restoreAudio() { clearTimeout(duckTimer); try { native?.setDucking(1); } catch {} }
 function authorized(event) {
@@ -125,7 +125,7 @@ function registerIPC() {
   });
   ipcMain.handle('server-key-copy', (event, value) => {
     authorized(event);
-    if (typeof value !== 'string' || !/^(?:[a-f0-9]{64}|VOICECORD_E2EE=true\nVOICECORD_E2EE_KEY_ID=[a-f0-9]{64})$/.test(value)) throw new Error('Invalid encryption key field');
+    if (typeof value !== 'string' || !/^(?:[a-f0-9]{64}|PAWTALK_E2EE=true\nPAWTALK_E2EE_KEY_ID=[a-f0-9]{64})$/.test(value)) throw new Error('Invalid encryption key field');
     clipboard.writeText(value);
   });
   ipcMain.handle('language-get', event => { authorized(event); return language; });
@@ -310,7 +310,7 @@ else {
   app.on('second-instance', (_event, args) => { acceptInvitation(args); win?.restore(); win?.show(); win?.focus(); });
   app.on('open-url', (event, address) => { event.preventDefault(); acceptInvitation([address]); win?.show(); win?.focus(); });
   app.whenReady().then(async () => {
-    if (app.isPackaged && !process.argv.includes('--smoke')) app.setAsDefaultProtocolClient('voicecord');
+    if (app.isPackaged && !process.argv.includes('--smoke')) app.setAsDefaultProtocolClient('pawtalk');
     for (const location of [path.join(app.getPath('userData'), 'language.json'), path.join(path.dirname(app.getPath('exe')), 'language.json')]) {
       try { const saved = JSON.parse(fs.readFileSync(location, 'utf8')); if (['en', 'ru'].includes(saved.language)) { language = saved.language; break; } } catch {}
     }
@@ -348,7 +348,7 @@ else {
       callback(contents === win?.webContents && permission === 'media' && details.mediaTypes?.every(type => type === 'audio'));
     });
     session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) => contents === win?.webContents && permission === 'media' && details.mediaType === 'audio');
-    win = new BrowserWindow({ show: !process.argv.includes('--smoke') && !(process.argv.includes('--start-in-tray') && !pendingInvitation), width: 1240, height: 820, minWidth: 940, minHeight: 650, backgroundColor: '#191b22', title: 'Voicecord', icon: path.join(__dirname, '../assets/voicecord.ico'),
+    win = new BrowserWindow({ show: !process.argv.includes('--smoke') && !(process.argv.includes('--start-in-tray') && !pendingInvitation), width: 1240, height: 820, minWidth: 940, minHeight: 650, backgroundColor: '#191b22', title: 'PawTalk', icon: path.join(__dirname, '../assets/pawtalk.ico'),
       webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false, offscreen: process.argv.includes('--offscreen-smoke') },
     });
     win.removeMenu();
@@ -363,9 +363,9 @@ else {
       catch { native = undefined; console.error('Windows input hooks are unavailable'); }
     }
     const icon = nativeImage.createFromPath(path.join(__dirname, '../assets/tray.ico'));
-    if (icon.isEmpty()) throw new Error('Voicecord tray icon is missing');
+    if (icon.isEmpty()) throw new Error('PawTalk tray icon is missing');
     tray = new Tray(icon);
-    tray.setToolTip('Voicecord');
+    tray.setToolTip('PawTalk');
     refreshTray();
     tray.on('double-click', () => win.show());
     powerMonitor.on('suspend', () => { restoreAudio(); send('suspend', true); void hostCheck.cancel(); if (hosting.starting) hosting.cancelled = true; else void hosting.stop(t("Комната закрыта: компьютер перешёл в сон")); });

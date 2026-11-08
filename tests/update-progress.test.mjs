@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 const { waitForHelper, confirmUpdateStarted } = createRequire(import.meta.url)('../electron/update-progress.cjs');
 test('the app must receive the current helper token before exiting', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'voicecord-ready-'));
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-ready-'));
   const file = path.join(directory, 'ready');
   try {
     await writeFile(file, 'stale-token');
@@ -19,9 +19,9 @@ test('the app must receive the current helper token before exiting', async () =>
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 test('only the expected new executable/version can confirm startup', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'voicecord-started-'));
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-started-'));
   const file = path.join(directory, 'installation.json');
-  const state = { token: 'test', version: '0.1.1', executable: 'C:\\App\\Voicecord.exe', phase: 'installing' };
+  const state = { token: 'test', version: '0.1.1', executable: 'C:\\App\\PawTalk.exe', phase: 'installing' };
   try {
     await writeFile(file, '\uFEFF' + JSON.stringify(state));
     assert.equal(await confirmUpdateStarted(directory, '0.1.0', state.executable), false);

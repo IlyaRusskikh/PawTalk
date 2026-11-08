@@ -22,8 +22,8 @@ try {
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const save = (name, text) => writeFile(path.join(dir, name), text, { mode: 0o600, flag: 'wx' });
   // Quotes prevent Docker Compose from interpolating dollar signs in PBKDF2 hashes.
-  await save('api.env', `LISTEN_ADDR=127.0.0.1:8080\nLIVEKIT_URL=wss://${host}/rtc\nLIVEKIT_API_KEY=${key}\nLIVEKIT_API_SECRET=${secret}\nVOICECORD_PASSWORD_HASH='${hash}'\n`);
-  await save('api.dev.env', `LISTEN_ADDR=127.0.0.1:8080\nLIVEKIT_URL=ws://127.0.0.1:7880\nLIVEKIT_API_KEY=${key}\nLIVEKIT_API_SECRET=${secret}\nVOICECORD_PASSWORD_HASH='${hash}'\n`);
+  await save('api.env', `LISTEN_ADDR=127.0.0.1:8080\nLIVEKIT_URL=wss://${host}/rtc\nLIVEKIT_API_KEY=${key}\nLIVEKIT_API_SECRET=${secret}\nPAWTALK_PASSWORD_HASH='${hash}'\n`);
+  await save('api.dev.env', `LISTEN_ADDR=127.0.0.1:8080\nLIVEKIT_URL=ws://127.0.0.1:7880\nLIVEKIT_API_KEY=${key}\nLIVEKIT_API_SECRET=${secret}\nPAWTALK_PASSWORD_HASH='${hash}'\n`);
   await save('proxy.env', `SERVER_IP=${ip}\nSERVER_HOST=${host}\nACME_EMAIL=${email}\n`);
   const base = `port: 7880\nbind_addresses: [127.0.0.1]\nrtc:\n  tcp_port: 7881\n  udp_port: 7882\n  use_external_ip: false\n  node_ip: ${ip}\nkeys:\n  ${key}: ${secret}\nroom:\n  auto_create: true\n  empty_timeout: 300\n  max_participants: 30\nlogging:\n  level: info\n`;
   await save('livekit.yaml', base);

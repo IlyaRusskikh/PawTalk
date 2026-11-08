@@ -1,4 +1,4 @@
-# Working on Voicecord
+# Working on PawTalk
 
 - Keep the English `README.md` and Russian `README.ru.md` consistent when changing
   setup or user-visible features. Detailed existing documentation is in `docs/`.
@@ -33,8 +33,8 @@
   Start at 0.1.0. Do not bump versions for every work-in-progress edit.
 - Local builds must not automatically publish. Release tags are `vX.Y.Z` and
   must match package metadata. Never replace published tags or binaries.
-- Keep release assets compact: `Voicecord.Setup.X.Y.Z.exe`, `SHA256SUMS.txt`,
-  and one `Voicecord.Licenses.X.Y.Z.zip` containing `LICENSE`,
+- Keep release assets compact: `PawTalk.Setup.X.Y.Z.exe`, `SHA256SUMS.txt`,
+  and one `PawTalk.Licenses.X.Y.Z.zip` containing `LICENSE`,
   `THIRD_PARTY_NOTICES.md`, and `licenses/` from that release. Do not attach
   individual license files or a duplicate source archive; keep GitHub's automatic
   Source code ZIP/TAR downloads. Hash the exact uploaded EXE. Before removing

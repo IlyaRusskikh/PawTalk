@@ -1,0 +1,66 @@
+{
+  "assets": [
+    {
+      "name": "room-join.wav",
+      "sha256": "ed0586ce6b665882e2a25804b68642afff2b436ab31e0d195eec33038945171a",
+      "source": "Joseph SARDIN / BigSoundBank — Meow Cat #13",
+      "license": "CC0-1.0",
+      "url": "https://bigsoundbank.com/meow-cat-13-s1901.html",
+      "sourceSha256": "45450dd53536d37c1383cb0666302b6fd5d96380647e6ae1bd346473bb0f618f",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "approvedVariant": "B",
+      "edits": "Short mya-myau; 0.752 s; second syllable +3 semitones; 16.7 ms splice; tempo adjusted without raising base pitch"
+    },
+    {
+      "name": "room-leave.wav",
+      "sha256": "c41708dac25b063cfd268beb8d279dd826cdfec08fb5c2214531cb06fb9c0141",
+      "source": "Joseph SARDIN / BigSoundBank — Meow Cat #2",
+      "license": "CC0-1.0",
+      "url": "https://bigsoundbank.com/meow-cat-2-s1890.html",
+      "sourceSha256": "fe182a75fa840790197eb6570748c391efec690c335d804aeaa199842bf40f1d",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "approvedVariant": "A",
+      "edits": "Single meow; 0.750 s; pitch gently falls two semitones; 70 ms fade-out"
+    },
+    {
+      "name": "message-purr-01.wav",
+      "sha256": "2fb5d982ae02916b870ebe5701a6b1852c9e1de2f57d9ddf5e79af4a0aa6c3dd",
+      "source": "Joseph SARDIN / BigSoundBank — Cat Purr #0436",
+      "url": "https://bigsoundbank.com/cat-purr-s0436.html",
+      "license": "CC0-1.0",
+      "edits": "Different short excerpts; 120 ms fade-in and 240 ms fade-out"
+    },
+    {
+      "name": "message-purr-02.wav",
+      "sha256": "068b0d4cb4d2b5d357da156b49471f2d34113b475f05fe6265affe2212ca8775",
+      "source": "Joseph SARDIN / BigSoundBank — Cat Purr #0436",
+      "url": "https://bigsoundbank.com/cat-purr-s0436.html",
+      "license": "CC0-1.0",
+      "edits": "Different short excerpts; 120 ms fade-in and 240 ms fade-out"
+    },
+    {
+      "name": "message-purr-03.wav",
+      "sha256": "2cacb8e9d90739f340e0d1f8939f35e8858f213e28e9f430fa11db9d8c1f0b57",
+      "source": "Joseph SARDIN / BigSoundBank — Cat Purr #0436",
+      "url": "https://bigsoundbank.com/cat-purr-s0436.html",
+      "license": "CC0-1.0",
+      "edits": "Different short excerpts; 120 ms fade-in and 240 ms fade-out"
+    },
+    {
+      "name": "message-purr-04.wav",
+      "sha256": "fadb64d422f92f1fad7879ff236ef80be303da9e5a2676d92afe87c24e71310d",
+      "source": "Joseph SARDIN / BigSoundBank — Cat Purr #0436",
+      "url": "https://bigsoundbank.com/cat-purr-s0436.html",
+      "license": "CC0-1.0",
+      "edits": "Different short excerpts; 120 ms fade-in and 240 ms fade-out"
+    },
+    {
+      "name": "message-purr-05.wav",
+      "sha256": "ad0beb2911854785f210520734ef6ff10841886852c5846eee01110f7f34881d",
+      "source": "Joseph SARDIN / BigSoundBank — Cat Purr #0436",
+      "url": "https://bigsoundbank.com/cat-purr-s0436.html",
+      "license": "CC0-1.0",
+      "edits": "Different short excerpts; 120 ms fade-in and 240 ms fade-out"
+    }
+  ]
+}

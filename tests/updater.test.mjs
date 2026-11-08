@@ -12,13 +12,13 @@ const { download } = createRequire(import.meta.url)('../electron/update-transpor
 const pair = generateKeyPairSync('ed25519');
 const keys = { test: pair.publicKey.export({type:'spki',format:'pem'}).toString() };
 function manifest(v = '0.2.0', extra = {}) {
-  const payload = Buffer.from(JSON.stringify({schema:1,version:v,name:`Voicecord.Setup.${v}.exe`,size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),prerelease:v.includes('-'),publishedAt:Date.now()-1000,expiresAt:Date.now()+86400000,...extra}));
+  const payload = Buffer.from(JSON.stringify({schema:1,version:v,name:`PawTalk.Setup.${v}.exe`,size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),prerelease:v.includes('-'),publishedAt:Date.now()-1000,expiresAt:Date.now()+86400000,...extra}));
   return JSON.stringify({keyId:'test',payload:payload.toString('base64'),signature:sign(null,payload,pair.privateKey).toString('base64')});
 }
 const bytes = Buffer.from('synthetic installer, never executed');
 function release(v, extra = {}) {
-  return { tag_name: `v${v}`, prerelease: v.includes('-'), assets: [{ name: `Voicecord.Setup.${v}.exe`, state: 'uploaded', size: bytes.length,
-    digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}`, browser_download_url: `https://github.com/IlyaRusskikh/voicecord/releases/download/v${v}/Voicecord.Setup.${v}.exe` }], ...extra };
+  return { tag_name: `v${v}`, prerelease: v.includes('-'), assets: [{ name: `PawTalk.Setup.${v}.exe`, state: 'uploaded', size: bytes.length,
+    digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}`, browser_download_url: `https://github.com/IlyaRusskikh/pawtalk/releases/download/v${v}/PawTalk.Setup.${v}.exe` }], ...extra };
 }
 test('version ordering includes prereleases without downgrading stable versions', () => {
   for (const [a, b] of [['0.2.0', '0.1.9'], ['0.2.0-beta.10', '0.2.0-beta.2'], ['0.2.0', '0.2.0-rc.1'], ['0.2.0-alpha', '0.2.0-1']]) assert.ok(compare(a, b) > 0);
@@ -33,11 +33,11 @@ test('only complete, verifiable installers from this repository are offered', ()
   assert.equal(selectRelease([invalid, external, otherTag, release('0.5.0', { draft: true })], '0.1.0'), null);
 });
 test('download verifies all bytes before launching hidden NSIS helper', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'voicecord-update-'));
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-update-'));
   const script = path.join(directory, 'source-helper.ps1');
   await writeFile(script, '# synthetic helper');
   let launchArgs;
-  const updater = new Updater({ keys, current: '0.1.0', directory, script, installDirectory: 'C:\\Program Files\\Voicecord',
+  const updater = new Updater({ keys, current: '0.1.0', directory, script, installDirectory: 'C:\\Program Files\\PawTalk',
     fetcher: async url => url.includes('api.github.com') ? Response.json([release('0.2.0')]) : url.endsWith('update-manifest.json') ? new Response(manifest()) : new Response(bytes),
     launch: (...args) => {
       launchArgs = args; const child = new EventEmitter(); child.unref = () => {};
@@ -51,15 +51,15 @@ test('download verifies all bytes before launching hidden NSIS helper', async ()
   try {
     assert.equal((await updater.check()).status, 'available');
     assert.equal((await updater.install()).status, 'installing');
-    assert.deepEqual(await readFile(path.join(directory, 'Voicecord-0.2.0.exe')), bytes);
+    assert.deepEqual(await readFile(path.join(directory, 'PawTalk-0.2.0.exe')), bytes);
     assert.match(launchArgs[0], /powershell\.exe$/);
     assert.equal(launchArgs[2].windowsHide, true);
     assert.equal(launchArgs[2].detached, false, 'PowerShell must not use DETACHED_PROCESS');
-    assert.ok(Buffer.from(launchArgs[1].at(-1), 'base64').toString('utf16le').includes('C:\\Program Files\\Voicecord'));
+    assert.ok(Buffer.from(launchArgs[1].at(-1), 'base64').toString('utf16le').includes('C:\\Program Files\\PawTalk'));
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 test('corrupt and truncated downloads never launch and can be retried', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'voicecord-update-'));
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-update-'));
   let body = Buffer.alloc(bytes.length), launched = false;
   const updater = new Updater({ keys, current: '0.1.0', directory, script: '', installDirectory: '',
     fetcher: async url => url.includes('api.github.com') ? Response.json([release('0.2.0')]) : url.endsWith('update-manifest.json') ? new Response(manifest()) : new Response(body),
@@ -111,7 +111,7 @@ test('untrusted manifests from a favorite report its name and never offer instal
 });
 
 test('persisted authenticated offers prevent rollback and signed metadata must match release data', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'voicecord-trust-'));
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-trust-'));
   try {
     let v = '0.3.0';
     const options = { keys, directory, current: '0.1.0', fetcher: async url => url.includes('api.github.com') ? Response.json([release(v)]) : new Response(manifest(v)) };
@@ -125,7 +125,7 @@ test('persisted authenticated offers prevent rollback and signed metadata must m
 });
 
 test('broken direct downloads switch to streaming room relay; corrupt relays never launch', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'voicecord-relay-'));
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-relay-'));
   try {
     let corrupt = false, launched = false;
     const sources = [];
@@ -141,7 +141,7 @@ test('broken direct downloads switch to streaming room relay; corrupt relays nev
     await updater.check(); await updater.install();
     assert.deepEqual(sources, ['GitHub', 'Relay room']);
     assert.equal(launched, true);
-    assert.deepEqual(await readFile(path.join(directory, 'Voicecord-0.2.0.exe')), bytes);
+    assert.deepEqual(await readFile(path.join(directory, 'PawTalk-0.2.0.exe')), bytes);
     corrupt = true; launched = false;
     const state = await updater.install();
     assert.equal(state.status, 'security-failed'); assert.equal(state.source, 'Relay room');
@@ -152,7 +152,7 @@ test('broken direct downloads switch to streaming room relay; corrupt relays nev
 
 test('real HTTP stalled and slow downloads abort and fall back to a room stream', async () => {
   const { createServer } = await import('node:http');
-  const directory = await mkdtemp(path.join(tmpdir(), 'voicecord-http-update-'));
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-http-update-'));
   let mode = 'slow', relayCalls = 0;
   const primary = createServer((req, res) => {
     if (req.url.includes('/repos/')) return res.end(JSON.stringify([release('0.2.0')]));
@@ -174,7 +174,7 @@ test('real HTTP stalled and slow downloads abort and fall back to a room stream'
       assert.equal((await updater.check()).status, 'available');
       await updater.install();
       assert.equal(launched, true, mode);
-      assert.deepEqual(await readFile(path.join(directory, 'Voicecord-0.2.0.exe')), bytes);
+      assert.deepEqual(await readFile(path.join(directory, 'PawTalk-0.2.0.exe')), bytes);
     }
     assert.equal(relayCalls, 2);
   } finally {
@@ -185,7 +185,7 @@ test('real HTTP stalled and slow downloads abort and fall back to a room stream'
 });
 
 test('installer verification enforces signed size even for oversized responses', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'voicecord-size-'));
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-size-'));
   try {
     await assert.rejects(download({ fetcher: async () => new Response(Buffer.alloc(bytes.length + 1)), source: { base: 'https://room.example', name: 'Oversize' },
       manifest: verifyManifest(manifest(), keys), partial: path.join(directory, 'installer.part'), onProgress: () => {} }), { code: 'UPDATE_SECURITY', source: 'Oversize' });

@@ -29,7 +29,7 @@ export function ServerKey({ onClose }: { onClose(): void }) {
   }
   const fields = pair ? [
     { name: 'secret', title: t("Ключ для участников"), value: pair.key, hint: t("Сохраните ключ и отправьте друзьям для подключения.") },
-    { name: 'env', title: t("Настройки сервера (.env)"), value: `VOICECORD_E2EE=true\nVOICECORD_E2EE_KEY_ID=${pair.hash}`, hint: t("Добавьте эти строки в .env на VPS и перезапустите сервер. Сам ключ на VPS не нужен.") },
+    { name: 'env', title: t("Настройки сервера (.env)"), value: `PAWTALK_E2EE=true\nPAWTALK_E2EE_KEY_ID=${pair.hash}`, hint: t("Добавьте эти строки в .env на VPS и перезапустите сервер. Сам ключ на VPS не нужен.") },
   ] : [];
   return <Modal title={t("Ключ шифрования для сервера")} className="server-key-modal" onClose={onClose}>
     <p className="host-hint">{t("Один ключ для вас и друзей. Настройки ниже — для вашего VPS.")}</p>

@@ -102,14 +102,14 @@ func (a *app) token(identity, nickname string, profileIDs ...string) (string, er
 		"video": map[string]any{"roomJoin": true, "room": roomName, "canPublish": true, "canSubscribe": true, "canPublishData": true, "canPublishSources": []string{"microphone"}, "canUpdateOwnMetadata": false},
 	}
 	if a.cfg.RequireE2EE {
-		claims["attributes"] = map[string]string{"voicecord.e2ee": "required"}
+		claims["attributes"] = map[string]string{"pawtalk.e2ee": "required"}
 	}
 	if len(profileIDs) > 0 && profileIDs[0] != "" {
 		attributes, _ := claims["attributes"].(map[string]string)
 		if attributes == nil {
 			attributes = map[string]string{}
 		}
-		attributes["voicecord.profile"] = profileIDs[0]
+		attributes["pawtalk.profile"] = profileIDs[0]
 		claims["attributes"] = attributes
 	}
 	payload, e := json.Marshal(claims)
@@ -247,7 +247,7 @@ func (a *app) handler() http.Handler {
 	return mux
 }
 func loadConfig() (config, error) {
-	c := config{APIKey: os.Getenv("LIVEKIT_API_KEY"), APISecret: os.Getenv("LIVEKIT_API_SECRET"), LivekitURL: os.Getenv("LIVEKIT_URL"), PasswordHash: os.Getenv("VOICECORD_PASSWORD_HASH"), Listen: os.Getenv("LISTEN_ADDR")}
+	c := config{APIKey: os.Getenv("LIVEKIT_API_KEY"), APISecret: os.Getenv("LIVEKIT_API_SECRET"), LivekitURL: os.Getenv("LIVEKIT_URL"), PasswordHash: os.Getenv("PAWTALK_PASSWORD_HASH"), Listen: os.Getenv("LISTEN_ADDR")}
 	var policyErr error
 	c.RequireE2EE, c.E2EEKeyID, policyErr = encryptionPolicy()
 	if policyErr != nil {
@@ -271,16 +271,16 @@ func loadConfig() (config, error) {
 
 func encryptionPolicy() (bool, string, error) {
 	required := false
-	if raw := os.Getenv("VOICECORD_E2EE"); raw != "" {
+	if raw := os.Getenv("PAWTALK_E2EE"); raw != "" {
 		value, err := strconv.ParseBool(raw)
 		if err != nil {
-			return false, "", errors.New("VOICECORD_E2EE must be true or false")
+			return false, "", errors.New("PAWTALK_E2EE must be true or false")
 		}
 		required = value
 	}
-	keyID := os.Getenv("VOICECORD_E2EE_KEY_ID")
+	keyID := os.Getenv("PAWTALK_E2EE_KEY_ID")
 	if keyID != "" && (len(keyID) != 64 || strings.Trim(keyID, "0123456789abcdef") != "") {
-		return false, "", errors.New("VOICECORD_E2EE_KEY_ID must be a lowercase SHA-256 hex digest")
+		return false, "", errors.New("PAWTALK_E2EE_KEY_ID must be a lowercase SHA-256 hex digest")
 	}
 	return required, keyID, nil
 }
@@ -331,7 +331,7 @@ func main() {
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 	}()
-	log.Printf("Voicecord API listening on %s", c.Listen)
+	log.Printf("PawTalk API listening on %s", c.Listen)
 	if e = srv.ListenAndServe(); e != nil && !errors.Is(e, http.ErrServerClosed) {
 		log.Fatal(e)
 	}

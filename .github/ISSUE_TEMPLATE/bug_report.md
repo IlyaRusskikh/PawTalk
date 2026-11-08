@@ -24,7 +24,7 @@ What happened, and what did you expect? / Что произошло и что о
 
 ## Environment / Окружение
 
-- Voicecord version / Версия:
+- PawTalk version / Версия:
 - Windows version / Версия Windows:
 - Room / Комната: built-in / встроенная, or / или Linux VPS
 - Network / Сеть: LAN / локальная, or / или internet; CGNAT if known / если известно

@@ -21,7 +21,7 @@ export function SettingsShell({ section, onChange, children }: { section: Settin
     event.preventDefault();
     const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (items.findIndex(item => item.id === section) + direction + items.length) % items.length;
     onChange(items[index].id); document.getElementById(`settings-tab-${items[index].id}`)?.focus();
-  }}><div className="settings-nav-caption">VOICECORD</div>{items.map(item => <button type="button" key={item.id} role="tab" id={`settings-tab-${item.id}`} aria-controls="settings-panel" aria-selected={section === item.id} tabIndex={section === item.id ? 0 : -1} onClick={() => onChange(item.id)}><Icon name={item.icon} size={18}/>{item.label}</button>)}</nav>
+  }}><div className="settings-nav-caption">PAWTALK</div>{items.map(item => <button type="button" key={item.id} role="tab" id={`settings-tab-${item.id}`} aria-controls="settings-panel" aria-selected={section === item.id} tabIndex={section === item.id ? 0 : -1} onClick={() => onChange(item.id)}><Icon name={item.icon} size={18}/>{item.label}</button>)}</nav>
     <div className="settings-panel" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${section}`} tabIndex={0} key={section}>{children}</div>
   </div>;
 }

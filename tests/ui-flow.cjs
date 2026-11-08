@@ -1,7 +1,7 @@
 const { app, BrowserWindow, session } = require('electron');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-app.setPath('userData', path.join(require('node:os').tmpdir(), 'voicecord-ui-flow-' + process.pid));
+app.setPath('userData', path.join(require('node:os').tmpdir(), 'pawtalk-ui-flow-' + process.pid));
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
@@ -15,15 +15,15 @@ app.whenReady().then(async () => {
  const click = text => run(`Array.from((Array.from(document.querySelectorAll('dialog[open]')).at(-1) || document).querySelectorAll('button')).find(b=>b.textContent.startsWith(${JSON.stringify(text)})).click()`);
  const input = value => run(`(()=>{const el=document.querySelector('dialog:last-of-type input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
  try {
-  await win.loadURL(process.env.VOICECORD_UI_TEST_URL); await wait();
-  await run(`localStorage.setItem('voicecord.bookmarks',JSON.stringify([{address:'https://voice.example.com',name:'Test bookmark'}]))`);
+  await win.loadURL(process.env.PAWTALK_UI_TEST_URL); await wait();
+  await run(`localStorage.setItem('pawtalk.bookmarks',JSON.stringify([{address:'https://voice.example.com',name:'Test bookmark'}]))`);
   await win.reload(); await wait();
   assert.equal(await run(`document.querySelector('.brand-mark')`), null);
   await click('Сгенерировать ключ шифрования'); await wait();
   const serverKey = await run(`document.querySelector('#server-key-secret').value`);
   const serverHash = require('node:crypto').createHash('sha256').update(Buffer.from(serverKey, 'hex')).digest('hex');
   assert.match(serverKey, /^[a-f0-9]{64}$/);
-  assert.equal(await run(`document.querySelector('#server-key-env').value`), `VOICECORD_E2EE=true\nVOICECORD_E2EE_KEY_ID=${serverHash}`);
+  assert.equal(await run(`document.querySelector('#server-key-env').value`), `PAWTALK_E2EE=true\nPAWTALK_E2EE_KEY_ID=${serverHash}`);
   assert.equal(await run(`window.testCalls().length`), 0, 'key generation needs no server');
   assert.equal(await run(`JSON.stringify(localStorage).includes(${JSON.stringify(serverKey)})`), false);
   const output = path.resolve('release/qa'); await require('node:fs/promises').mkdir(output,{recursive:true});
@@ -35,7 +35,7 @@ app.whenReady().then(async () => {
   await click('Присоединиться к комнате'); await wait();
   assert.equal(await run(`document.querySelector('dialog input[type=password]')`), null);
   assert.equal(await run(`document.querySelector('.join-submit').disabled`), true);
-  await input('https://github.com/IlyaRusskikh/voicecord'); await wait();
+  await input('https://github.com/IlyaRusskikh/pawtalk'); await wait();
   assert.equal(await run(`document.querySelector('dialog input').getAttribute('aria-invalid')`), 'true');
   assert.match(await run(`document.querySelector('#join-address-hint').textContent`), /Адрес не распознан/);
   assert.equal(await run(`document.querySelector('.join-submit').disabled`), true);
@@ -49,11 +49,11 @@ app.whenReady().then(async () => {
   assert.equal(await run(`window.testCalls().find(v=>v[0]==='connect')[1].password`), 'typed-secret');
   await run(`document.querySelectorAll('dialog [aria-label="Закрыть"]')[1].click()`); await wait();
   assert.equal(await run(`document.querySelectorAll('dialog[open]').length`), 1);
-  await input('  voicecord://192.168.0.13:18443/'+'a'.repeat(64)+'#password=invited-secret  '); await wait();
+  await input('  pawtalk://192.168.0.13:18443/'+'a'.repeat(64)+'#password=invited-secret  '); await wait();
   await click('Присоединиться'); await wait();
   assert.equal(await run(`window.testCalls().filter(v=>v[0]==='diagnose').length`), 1);
   assert.equal(await run(`window.testCalls().filter(v=>v[0]==='connect').at(-1)[1].password`), 'invited-secret');
-  assert.equal(await run(`window.testCalls().filter(v=>v[0]==='connect').at(-1)[1].address`), 'voicecord://192.168.0.13:18443/'+'a'.repeat(64)+'#password=invited-secret');
+  assert.equal(await run(`window.testCalls().filter(v=>v[0]==='connect').at(-1)[1].address`), 'pawtalk://192.168.0.13:18443/'+'a'.repeat(64)+'#password=invited-secret');
   await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`); await wait();
   await run(`document.querySelector('.bookmark-orb').click()`); await wait();
   assert.equal(await run(`window.testCalls().filter(v=>v[0]==='connect').at(-1)[1].password`), 'saved-secret');
@@ -70,9 +70,9 @@ app.whenReady().then(async () => {
   assert.equal(await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).querySelector('input').checked`),false);
   assert.equal(await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.querySelector('strong').textContent==='Эхоподавление').querySelector('input').checked`),true);
   await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).querySelector('input').click()`);await wait();
-  assert.equal(await run(`JSON.parse(localStorage.getItem('voicecord.settings')).nearbyVoiceSuppression`),true);
+  assert.equal(await run(`JSON.parse(localStorage.getItem('pawtalk.settings')).nearbyVoiceSuppression`),true);
   await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).querySelector('input').click()`);await wait();
-  assert.equal(await run(`JSON.parse(localStorage.getItem('voicecord.settings')).nearbyVoiceSuppression`),false);
+  assert.equal(await run(`JSON.parse(localStorage.getItem('pawtalk.settings')).nearbyVoiceSuppression`),false);
   await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).scrollIntoView({block:'center'})`);await wait();
   await require('node:fs/promises').writeFile(path.resolve('release/qa/latency-settings.png'),(await win.webContents.capturePage()).toPNG());
   await run(`document.querySelector('#settings-tab-updates').click()`); await wait();

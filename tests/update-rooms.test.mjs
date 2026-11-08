@@ -12,8 +12,8 @@ test('update favorites exclude credentials and validate origins', () => {
   assert.throws(() => normalizeRooms(Array(51).fill({ name: 'Room', address: 'room.example' })));
 });
 test('favorites persist, follow deletions, and verify invitation certificates before relay requests', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'voicecord-update-rooms-'));
-  const calls = [], address = 'voicecord://192.0.2.1:8443/' + 'a'.repeat(64);
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-update-rooms-'));
+  const calls = [], address = 'pawtalk://192.0.2.1:8443/' + 'a'.repeat(64);
   const options = { verify: async value => calls.push(['verify', value]), trust: value => calls.push(['trust', value]) };
   try {
     const rooms = new UpdateRooms(path.join(directory, 'rooms.json'), options);

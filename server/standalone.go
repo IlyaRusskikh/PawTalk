@@ -37,7 +37,7 @@ type serverState struct {
 }
 
 func stateDir() string {
-	if dir := os.Getenv("VOICECORD_DATA_DIR"); dir != "" {
+	if dir := os.Getenv("PAWTALK_DATA_DIR"); dir != "" {
 		return dir
 	}
 	return "/data"
@@ -103,7 +103,7 @@ func createState(ip string) (serverState, string, error) {
 	var state serverState
 	parsed := net.ParseIP(ip)
 	if parsed == nil || parsed.IsUnspecified() || parsed.IsMulticast() {
-		return state, "", errors.New("VOICECORD_PUBLIC_IP must be the server's reachable IPv4 or IPv6 address")
+		return state, "", errors.New("PAWTALK_PUBLIC_IP must be the server's reachable IPv4 or IPv6 address")
 	}
 	state.IP = parsed.String()
 	random := make([]byte, 64)
@@ -152,7 +152,7 @@ func stateCertificate(state serverState) (tls.Certificate, string, error) {
 
 func invitation(state serverState) string {
 	_, fingerprint, _ := stateCertificate(state)
-	return "voicecord://" + net.JoinHostPort(state.IP, fmt.Sprint(standalonePort)) + "/" + fingerprint
+	return "pawtalk://" + net.JoinHostPort(state.IP, fmt.Sprint(standalonePort)) + "/" + fingerprint
 }
 
 func mediaConfig(state serverState) string {
@@ -202,9 +202,9 @@ func standalone(args []string) error {
 	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
 		switch {
 		case args[0] == "--e2ee":
-			_ = os.Setenv("VOICECORD_E2EE", "true")
+			_ = os.Setenv("PAWTALK_E2EE", "true")
 		case strings.HasPrefix(args[0], "--e2ee-key-id="):
-			_ = os.Setenv("VOICECORD_E2EE_KEY_ID", strings.TrimPrefix(args[0], "--e2ee-key-id="))
+			_ = os.Setenv("PAWTALK_E2EE_KEY_ID", strings.TrimPrefix(args[0], "--e2ee-key-id="))
 		default:
 			return errors.New("unknown server option; supported: --e2ee, --e2ee-key-id=<sha256>")
 		}
@@ -217,10 +217,10 @@ func standalone(args []string) error {
 	if _, err := chatStorageLimit(); err != nil {
 		return err
 	}
-	if raw := os.Getenv("VOICECORD_PORT"); raw != "" {
+	if raw := os.Getenv("PAWTALK_PORT"); raw != "" {
 		port, err := strconv.Atoi(raw)
 		if err != nil || port < 1024 || port > 65532 {
-			return errors.New("VOICECORD_PORT must be 1024..65532")
+			return errors.New("PAWTALK_PORT must be 1024..65532")
 		}
 		standalonePort = port
 		mediaAddress = fmt.Sprintf("http://127.0.0.1:%d", port+3)
@@ -277,7 +277,7 @@ func standalone(args []string) error {
 	state, err := readState(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		var password string
-		state, password, err = createState(os.Getenv("VOICECORD_PUBLIC_IP"))
+		state, password, err = createState(os.Getenv("PAWTALK_PUBLIC_IP"))
 		if err != nil {
 			return err
 		}
@@ -288,15 +288,15 @@ func standalone(args []string) error {
 	} else if err != nil {
 		return err
 	}
-	if ip := os.Getenv("VOICECORD_PUBLIC_IP"); ip != "" && !net.ParseIP(ip).Equal(net.ParseIP(state.IP)) {
-		return errors.New("VOICECORD_PUBLIC_IP differs from saved state; restore the original IP or use a new data volume")
+	if ip := os.Getenv("PAWTALK_PUBLIC_IP"); ip != "" && !net.ParseIP(ip).Equal(net.ParseIP(state.IP)) {
+		return errors.New("PAWTALK_PUBLIC_IP differs from saved state; restore the original IP or use a new data volume")
 	}
 	certificate, _, err := stateCertificate(state)
 	if err != nil {
 		return err
 	}
 	// Runtime config stays in tmpfs, separate from persistent state.
-	f, err := os.CreateTemp("", "voicecord-livekit-*.yaml")
+	f, err := os.CreateTemp("", "pawtalk-livekit-*.yaml")
 	if err != nil {
 		return err
 	}
@@ -308,7 +308,7 @@ func standalone(args []string) error {
 	if err = f.Close(); err != nil {
 		return err
 	}
-	executable := os.Getenv("VOICECORD_LIVEKIT_EXECUTABLE")
+	executable := os.Getenv("PAWTALK_LIVEKIT_EXECUTABLE")
 	if executable == "" {
 		executable = "/livekit-server"
 	}
@@ -359,7 +359,7 @@ func standalone(args []string) error {
 	srv := &http.Server{Handler: standaloneHandler(state, chat), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}}
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(tls.NewListener(listener, srv.TLSConfig)) }()
-	log.Printf("Voicecord ready. Invitation: %s", invitation(state))
+	log.Printf("PawTalk ready. Invitation: %s", invitation(state))
 	select {
 	case <-ctx.Done():
 	case err = <-done:
