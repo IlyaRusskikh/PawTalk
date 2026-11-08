@@ -34,21 +34,25 @@ PawTalk использует новые идентификаторы в клие
    native sink-error handling and file-based packaged asset loading. It uses
    synthetic chat transport; real audio devices and separate networks still
    need manual verification.
-3. Run checks, review the complete diff and create the transition commit.
-4. Rename `IlyaRusskikh/voicecord` to `IlyaRusskikh/pawtalk`, then run
-   `git remote set-url origin https://github.com/IlyaRusskikh/pawtalk.git`, verify
-   remote access and push. Do not reuse the old repository name.
-5. Before a release tag, configure the GitHub Actions secret
-   `PAWTALK_UPDATE_PRIVATE_KEY` with the existing Ed25519 signing key. The public
-   key is unchanged; its identifier is now `pawtalk-2026`. Bump the version per
-   `RELEASING.md`; never reuse a tag. New installers use `PawTalk.Setup.X.Y.Z.exe`.
-6. Publish the new GHCR image, check public access, and update download links to
-   the actual new release. Deploy Pages separately and verify `/pawtalk/` and
-   locale links. Existing 0.5.2 links retain `Voicecord.Setup.0.5.2.exe`.
+3. Rename `IlyaRusskikh/voicecord` to `IlyaRusskikh/pawtalk` and point `origin`
+   at `https://github.com/IlyaRusskikh/PawTalk.git`. This migration is complete;
+   the old 0.5.2 release remains available under the renamed repository.
+4. Configure `PAWTALK_UPDATE_PRIVATE_KEY` in GitHub Actions with the existing
+   Ed25519 key. The public key is unchanged and its identifier is `pawtalk-2026`.
+   The secret is configured. Keep the private key outside the repository.
+5. For a release, bump the version per `RELEASING.md`, update the examples,
+   READMEs, first-call guide and both landing pages, then run the checks and
+   review the full diff. New Windows installers use `PawTalk.Setup.X.Y.Z.exe`.
+6. Push the version commit and a new annotated tag. After tag CI succeeds,
+   publish the four verified release assets and notes. Confirm the GHCR image is
+   public, then deploy Pages separately and verify English and Russian URLs.
+   Never replace an existing release, tag or installer.
 
 Сначала согласуйте и подключите звуки, выполните проверки и создайте коммит.
-Затем переименуйте репозиторий, смените `origin`, проверьте доступ и выполните push.
-Перед выпуском создайте секрет `PAWTALK_UPDATE_PRIVATE_KEY` с прежним ключом и
-назначьте новую версию. Сайт, GHCR и ссылки загрузки обновляются отдельно.
+Репозиторий переименован, `origin` указывает на `IlyaRusskikh/PawTalk`, а секрет
+`PAWTALK_UPDATE_PRIVATE_KEY` настроен. Для выпуска назначьте новую версию,
+обновите документацию и сайт, проверьте diff и CI, затем отправьте новый тег.
+После зелёного CI опубликуйте ассеты релиза, проверьте публичный GHCR-образ
+и отдельно разверните Pages.
 Подпись проекта в Codex и локальный путь checkout не входят в коммит; при переносе
 checkout учитывайте существующие Git worktree.

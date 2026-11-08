@@ -1,6 +1,6 @@
 # Changelog / История изменений
 
-## Unreleased
+## 0.6.0 — 2026-11-08 — PawTalk / Ребрендинг PawTalk
 
 - Add approved cat-recording notification sounds: CC0 variant B double meow for joining, CC0 variant A single meow for leaving, and five softly faded purr variations for unseen messages in the connected room. Honor sound/output/deafen settings, suppress own/history/reconnect notifications, and limit message sound frequency. / Подключены согласованные записи: двойное мяу CC0 B для входа, одиночное CC0 A для выхода и пять мурлыканий с плавными краями для новых сообщений вне просмотра в текущей комнате. Учитываются настройки звука, устройства, громкости и отключения звука; свои сообщения, история и восстановление после переподключения не озвучиваются, частота сигналов ограничена.
 
