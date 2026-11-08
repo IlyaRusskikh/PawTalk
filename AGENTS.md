@@ -11,6 +11,22 @@
   `npm test`. Go baseline inside `server`: `go test ./...`, `go vet ./...`.
   Audio and networking changes need relevant smoke/integration checks; distinguish
   synthetic checks from real-device and external-network verification.
+- Before pushing changes, run the affected CI checks locally against the final
+  candidate, fix failures, and inspect their exit codes and output. Before a
+  release/tag push, run every applicable locally available step from
+  `.github/workflows/check.yml`, plus `node scripts/packaged-smoke.mjs` after
+  building the installer. Check website changes with `node scripts/check-website.mjs`.
+  Do not substitute a successful build or unit suite for integration checks.
+  If a later change affects a verified behavior, rerun its checks before pushing.
+- Reproduce CI environment differences explicitly: test both normal/reduced
+  motion, empty/populated clipboard representations, Russian/English UI, and
+  the actual Electron/native API. Add regression coverage for each CI-only failure.
+  Do not mock nonexistent platform APIs or assume workstation defaults match CI.
+  Do not run `npm ci` while build/test processes use `node_modules`.
+- Report which pre-push checks passed and which could not run locally (such as
+  native Linux/arm64 or unavailable Docker). Never claim local success guarantees
+  GitHub success. After pushing, distinguish a branch run from the release-tag
+  run; give the user the tag workflow URL when handing off CI monitoring.
 - When asked to release, follow `docs/RELEASING.md`: X.Y.Z uses Z for small fixes,
   Y for substantial changes and X for very large changes. Reset lower components.
   Update both package manifests, CHANGELOG, and version-specific documentation.
