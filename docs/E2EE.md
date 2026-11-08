@@ -87,8 +87,10 @@ VOICECORD_E2EE_KEY_ID=ПУБЛИЧНЫЙ_SHA256_ОТПЕЧАТОК_КЛЮЧА
 
 ```sh
 cd /opt/voicecord
-docker compose -f compose.server.ghcr.yaml up -d
-docker compose -f compose.server.ghcr.yaml exec server /voicecord serve info
+python3 scripts/server-update.py deploy --config .env --stack voicecord
+# Дождитесь готовности сервиса по инструкции SERVER.md.
+CID=$(docker ps -q --filter label=com.docker.swarm.service.name=voicecord_server --filter status=running)
+test -n "$CID" && docker exec "$CID" /voicecord serve info
 ```
 
 Передайте приглашение из последней команды в локальную команду генерации, если ключ ещё не создавали:
@@ -99,7 +101,7 @@ node scripts/e2ee-key.mjs 'voicecord://IP:18443/ОТПЕЧАТОК_СЕРТИФ�
 
 Она создаёт **новый** ключ и готовое приглашение с ним. Используйте именно выведенный с ним `VOICECORD_E2EE_KEY_ID` в `.env`. Если ключ уже создан, в клиенте можно открыть обычное приглашение VPS и ввести существующий ключ в форме подключения; после входа «Пригласить пользователя» включит его в ссылку. Пароль входа остаётся прежним.
 
-Альтернативный флаг для прямого запуска образа: `voicecord-server:local --e2ee` (вместо `VOICECORD_E2EE=true`); идентификатор задаётся через `VOICECORD_E2EE_KEY_ID` либо аргумент `--e2ee-key-id=<sha256>`. Сетевые порты и volume — как в [SERVER.md](SERVER.md).
+Установка VPS и применение настроек выполняются только через Swarm: [SERVER.md](SERVER.md).
 
 При `VOICECORD_E2EE=true` старые клиенты без поддержки E2EE получают HTTP 426. Если задан `VOICECORD_E2EE_KEY_ID`, API также отвергает неправильный ключ по его идентификатору (HTTP 403). Без этого идентификатора разные ключи обнаруживаются только при попытке расшифровки голоса, поэтому идентификатор рекомендуется задавать всегда.
 

@@ -55,7 +55,7 @@ In the room creation dialog, choose **Check** next to **Can I host over the inte
 <details>
 <summary>Which devices can run Voicecord?</summary>
 
-The desktop client runs on Windows 10/11 x64. You can deploy the persistent server with Docker Compose on Linux amd64 or arm64. Voice travels through a LiveKit media server over WebRTC. [Server guide (Russian)](docs/SERVER.md).
+The desktop client runs on Windows 10/11 x64. You can deploy the persistent server with Docker Swarm on Linux amd64 or arm64. Voice travels through a LiveKit media server over WebRTC. [Server guide (Russian)](docs/SERVER.md).
 
 </details>
 
@@ -111,7 +111,7 @@ history and password-protected room previews with participants and unread counts
 Images load on demand and are released outside the viewport. E2EE rooms encrypt
 messages and images; without E2EE the server can read retained content. These
 changes are included in **0.5.2**. Run `review.cmd` for an isolated local profile.
-VPS Swarm deployment and opt-in server updates: [SWARM.md](docs/SWARM.md).
+Docker Swarm is the only supported VPS deployment method. Migration and opt-in server updates: [SWARM.md](docs/SWARM.md).
 Client startup update checks can be disabled under Settings → Updates. App language
 is under Settings → Application. The voice/chat room retains its original layout.
 The chat field has a “+ → Send file” menu; Enter sends and Shift+Enter adds a line.

@@ -1,4 +1,5 @@
-# Public prebuilt server image. See docs/SERVER.md.
+# Legacy Compose configuration; VPS deployment is supported only via Swarm.
+# For installation and migration, see docs/SERVER.md and docs/SWARM.md.
 name: voicecord-server
 services:
   server:

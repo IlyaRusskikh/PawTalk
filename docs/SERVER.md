@@ -1,30 +1,24 @@
-# Установка сервера Voicecord на Linux — пошагово
+# Установка сервера Voicecord на VPS — Docker Swarm
 
-В следующей сборке сервер сможет передавать клиентские обновления с GitHub
-потоком без хранения EXE. `VOICECORD_UPDATE_PROXY=true` включает эту возможность,
-`false` отключает; после изменения пересоздайте контейнер или примените стек.
-Лимиты и проверка подписей описаны в [UPDATES.md](UPDATES.md).
+Единственный поддерживаемый способ установки постоянного сервера на VPS —
+**Docker Swarm**. Обычный Docker Compose для VPS больше не поддерживается.
+Достаточно одного VPS: он работает как единственный manager-узел.
 
-Новый вариант с Docker Swarm, healthcheck/rollback и автообновлением по флагу
-включён в 0.5.2: [SWARM.md](SWARM.md). Он не применялся к VPS. Ниже сохранена
-инструкция для установки Compose.
+Нужны Linux amd64 или arm64, постоянный публичный IP, Docker Engine, Python 3.9+
+и `curl`. Compose plugin, исходники, Node.js, Go и компилятор на VPS не нужны.
+Домен и публичный TLS-сертификат также не требуются. Готовый публичный образ:
+`ghcr.io/ilyarusskikh/voicecord-server:0.5.2`.
 
-В версии 0.5.2 добавлен параметр `.env` `VOICECORD_CHAT_MAX_MB=128`:
-бюджет SQLite-базы чата в МиБ, включая текст, картинки, профили и индексы.
-`0` отключает лимит. История не удаляется по возрасту; при заполнении удаляются
-самые старые сообщения. После изменения параметра пересоздайте контейнер или
-примените обновлённый Swarm-стек. В старых опубликованных образах параметр отсутствует.
-Размер относится к базе `/data/chat.sqlite`, а не ко всему образу контейнера;
-временный журнал транзакций и служебные файлы сервера учитываются отдельно.
+Ниже описана новая установка. Для существующей комнаты сначала выполните
+[миграцию с Compose](SWARM.md#переход-с-compose), сохранив прежний volume.
+Обновления, откат и необязательный таймер: [SWARM.md](SWARM.md).
+Реальный rollout/rollback на Linux Swarm и приёмка на VPS ещё не выполнялись.
 
-Путь установки: **Docker → готовый образ из GitHub → порты → запуск контейнера → подключение**.
-На VPS нужны только Docker Engine с Compose, два файла настройки и доступный
-извне постоянный IP. Исходники, Node.js, Go, Windows-клиент и компилятор на VPS
-не нужны. Домен и публичный TLS-сертификат также не требуются.
-
-Образ: `ghcr.io/ilyarusskikh/voicecord-server:0.5.2`.
-Для установки используется готовый публичный образ: публиковать его самостоятельно
-или настраивать GitHub Actions не требуется.
+`VOICECORD_CHAT_MAX_MB=128` ограничивает SQLite-базу чата в МиБ; `0` отключает
+лимит. При заполнении удаляются старейшие сообщения без ограничения по возрасту.
+`VOICECORD_UPDATE_PROXY=true` разрешает потоковую передачу клиентских обновлений
+с GitHub без хранения EXE. Лимиты и проверка подписей: [UPDATES.md](UPDATES.md).
+Изменения конфигурации применяются повторным развёртыванием стека.
 
 ## 1. Подключитесь к VPS и определите права
 
@@ -49,7 +43,7 @@ id
 
 | Что | Под какими правами работает |
 | --- | --- |
-| Установка Docker, firewall, запуск/обновление контейнера | Администратор VPS: `root` либо через `sudo` |
+| Установка Docker, firewall, запуск/обновление сервиса | Администратор VPS: `root` либо через `sudo` |
 | Docker daemon в этом варианте установки | `root` на хосте |
 | Процессы Voicecord и LiveKit внутри контейнера | Непривилегированный UID/GID `65532:65532` |
 | Файлы настройки `/opt/voicecord` | Владелец `root`; `.env` с правами `600` |
@@ -63,17 +57,17 @@ id
 Не добавляйте обычных пользователей в группу `docker` ради «ограниченных прав»:
 эта группа предоставляет административный доступ к хосту. Это прямо описано в
 [документации Docker о правах](https://docs.docker.com/engine/install/linux-postinstall/).
-Rootless Docker — другой режим; этот Compose рассчитан на обычный Docker Engine
+Rootless Docker — другой режим; этот Swarm-стек рассчитан на обычный Docker Engine
 с сетью хоста. Публикуемый образ содержит **Linux amd64 и arm64** под одним тегом:
 `x86_64` в `uname -m` соответствует amd64, `aarch64` — arm64. Docker автоматически
 скачивает нужный вариант; отдельные команды для ARM-сервера не требуются.
 32-битный ARM (например, `armv7l`) не поддерживается: базовый образ LiveKit
 этой версии опубликован только для amd64 и arm64.
 
-## 2. Установите Docker Engine и Compose
+## 2. Установите Docker Engine и включите Swarm
 
 Выполните **одну** готовую инструкцию для своего дистрибутива. Нужны Docker Engine,
-Compose plugin и запущенный Docker daemon. Docker Desktop на VPS не нужен.
+Docker CLI со встроенными командами Swarm и запущенный Docker daemon. Docker Desktop на VPS не нужен.
 
 | Дистрибутив | Инструкция установки |
 | --- | --- |
@@ -86,7 +80,7 @@ Compose plugin и запущенный Docker daemon. Docker Desktop на VPS н
 | AlmaLinux и другие производные | [Docker: другие дистрибутивы](https://docs.docker.com/engine/install/#other-linux-distributions); используйте совместимый репозиторий для своей версии ОС |
 | openSUSE | [Docker в openSUSE](https://en.opensuse.org/SDB:Docker) |
 | Arch Linux | [Docker в ArchWiki](https://wiki.archlinux.org/title/Docker) |
-| Alpine Linux | [Docker и Compose в Alpine Wiki](https://wiki.alpinelinux.org/wiki/Docker) |
+| Alpine Linux | [Docker в Alpine Wiki](https://wiki.alpinelinux.org/wiki/Docker) |
 
 На Debian начинайте с раздела **Install using the apt repository**: добавьте
 официальный репозиторий Docker и установите указанные там пакеты. Команды из
@@ -98,14 +92,12 @@ Compose plugin и запущенный Docker daemon. Docker Desktop на VPS н
 
 ```sh
 docker version
-docker compose version
 docker run --rm hello-world
 ```
 
-Ожидается: `docker version` показывает **Client и Server**, Compose отвечает
-версией, `hello-world` печатает подтверждение успешного запуска. Нужен современный
-`docker compose` с пробелом, а не старый Python `docker-compose`.
-Если эти проверки не прошли, к запуску Voicecord пока не переходите.
+Ожидается: `docker version` показывает **Client и Server**, а `hello-world`
+печатает подтверждение успешного запуска. Если проверки не прошли,
+к запуску Voicecord пока не переходите.
 
 Проверьте, используется ли systemd:
 
@@ -126,54 +118,84 @@ systemctl enable --now docker
 Остальные шаги одинаковы для перечисленных Linux-систем; установка на каждой
 из них отдельно не проходила аппаратную проверку проекта.
 
-## 3. Скачайте два файла для запуска
+Инициализируйте одноузловой Swarm. Вместо примера укажите постоянный IP
+интерфейса VPS (`ip -br addr`), доступный самому хосту:
 
-Для этого шага нужны `curl` и любой текстовый редактор. На Debian, если их нет:
+```sh
+docker info --format '{{.Swarm.LocalNodeState}}'
+docker swarm init --advertise-addr 203.0.113.10
+docker node ls
+docker node update --label-add voicecord.data=true "$(docker info --format '{{.Swarm.NodeID}}')"
+```
+
+Если Swarm уже `active`, пропустите `swarm init` и убедитесь, что работаете на
+manager-узле. Не выходите из существующего Swarm ради повторной установки.
+При NAT адрес интерфейса для `--advertise-addr` может отличаться от публичного
+`VOICECORD_PUBLIC_IP`. Метку `voicecord.data=true` назначайте **только узлу с
+данными комнаты**. Здесь это сам VPS; команды `docker exec` и операции с volume
+выполняются на нём. Локальный volume не реплицируется между узлами.
+
+Для одного VPS управляющие порты Swarm не открывайте в интернет. Для нескольких
+узлов нужны отдельная настройка доверенной сети и правила между узлами:
+[документация Docker](https://docs.docker.com/engine/swarm/swarm-tutorial/).
+
+## 3. Скачайте файлы развёртывания и заполните `.env`
+
+Для этого шага нужны `curl`, Python 3.9+ и текстовый редактор. На Debian:
 
 ```sh
 apt-get update
-apt-get install -y ca-certificates curl nano
+apt-get install -y ca-certificates curl nano python3
+python3 --version
 ```
 
-Создайте папку и скачайте Compose и шаблон конфигурации **одной версии**:
+Скачайте стек, скрипт и шаблон **одной версии**. Скрипт ищет стек относительно
+своей папки, поэтому сохраните указанную структуру:
 
 ```sh
-install -d -m 755 /opt/voicecord
+install -d -m 755 /opt/voicecord/scripts /opt/voicecord/deploy
 cd /opt/voicecord
 VOICECORD_RELEASE=0.5.2
-curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/compose.server.ghcr.yaml" -o compose.server.ghcr.yaml
-curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/.env.server.example" -o .env.server.example
-if [ ! -e .env ]; then cp .env.server.example .env; fi
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/compose.server.swarm.yaml" -o compose.server.swarm.yaml
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/scripts/server-update.py" -o scripts/server-update.py
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/.env.server.swarm.example" -o .env.server.swarm.example
+if [ ! -e .env ]; then cp .env.server.swarm.example .env; fi
 chmod 600 .env
 nano .env
 ```
 
 В `nano`: сохранить — `Ctrl+O`, Enter; выйти — `Ctrl+X`.
-Замените пример IP на публичный IP VPS и выберите режим E2EE по пояснениям ниже:
+Для новой установки замените пример IP на публичный IP VPS. Основные строки:
 
 ```dotenv
 VOICECORD_IMAGE=ghcr.io/ilyarusskikh/voicecord-server:0.5.2
+VOICECORD_RELEASE=0.5.2
 VOICECORD_PUBLIC_IP=203.0.113.10
 VOICECORD_PORT=18443
 VOICECORD_E2EE=false
 VOICECORD_E2EE_KEY_ID=
 VOICECORD_CHAT_MAX_MB=128
+VOICECORD_UPDATE_PROXY=true
+VOICECORD_DATA_VOLUME=voicecord-server_server_data
+VOICECORD_AUTO_UPDATE=false
+VOICECORD_UPDATE_CHANNEL=preview
+VOICECORD_UPDATE_REPOSITORY=IlyaRusskikh/voicecord
 ```
 
-`203.0.113.10` здесь — пример, его нельзя оставлять как адрес своего сервера.
-Укажите IP из панели хостинга. Для IPv6 в `.env` адрес пишется без квадратных
-скобок; доступность IPv6 нужна у всех клиентов. В начале проще использовать IPv4.
-Пароль сюда не вписывается: Voicecord сгенерирует его при первом запуске.
+Пароль в `.env` не вписывается: сервер сгенерирует его при первом запуске.
+IPv6 указывайте без квадратных скобок; он должен быть доступен всем клиентам.
+Для начала проще использовать IPv4. При повторной установке не перезаписывайте
+существующий `.env`: сохраните IP, volume и настройки комнаты.
 
 ### Разбор `.env`: что и как заполнять
 
 Для обычного запуска **обязательно замените только `VOICECORD_PUBLIC_IP`**.
 Остальные значения из шаблона подходят для старта. `.env` лежит рядом с
-`compose.server.ghcr.yaml`, в этой инструкции — `/opt/voicecord/.env`.
+`compose.server.swarm.yaml`, в этой инструкции — `/opt/voicecord/.env`.
 
 | Параметр | Допустимое значение и что поставить |
 | --- | --- |
-| `VOICECORD_IMAGE` | Полное имя опубликованного образа: `ghcr.io/ilyarusskikh/voicecord-server:0.5.2`. Число после `:` — версия сервера. Для обновления укажите новую опубликованную версию. Не добавляйте `v` перед номером и не используйте тег неудачного CI. Это параметр Compose, а не настройка внутри приложения. |
+| `VOICECORD_IMAGE` | Полное имя опубликованного образа: `ghcr.io/ilyarusskikh/voicecord-server:0.5.2`. Число после `:` — версия сервера. Для обновления укажите новую опубликованную версию. Не добавляйте `v` перед номером и не используйте тег неудачного CI. Это параметр Swarm-стека, а не настройка внутри приложения. |
 | `VOICECORD_PUBLIC_IP` | Публичный IP вашего VPS из панели хостинга, **без** `https://`, порта и пути. IPv4: `203.0.113.10` (замените на свой); IPv6 — без `[]`. Для нового сервера значение обязательно. После первого запуска адрес сохранён в volume: другой IP в `.env` вызовет ошибку несовпадения. Простым редактированием этой строки перенести существующий сервер на другой IP нельзя. |
 | `VOICECORD_PORT` | Целое число `1024–65532`; по умолчанию `18443`. Это основной TCP-порт. Дополнительно откройте TCP `PORT+1` и UDP `PORT+2`. Например, при `20000` нужны TCP `20000`, TCP `20001`, UDP `20002`. Внутренний TCP `PORT+3` не открывайте в интернете. При смене порта обновите firewall и раздайте новое приглашение. |
 | `VOICECORD_E2EE` | `false` или `true`, по умолчанию `false`. `true` требует сквозного шифрования у всех участников; это экспериментальный режим. Без E2EE сервер может читать текст и картинки. |
@@ -197,12 +219,9 @@ VOICECORD_CHAT_MAX_MB=128
 `да`/`нет`, `on`/`off` или `1`/`0`. Пароль комнаты и секретный ключ участников
 в этот `.env` не добавляются.
 
-### Дополнительные параметры `.env` для Swarm и автообновления
+### Параметры Swarm и автообновления
 
-Для этого варианта берите шаблон [`.env.server.swarm.example`](../.env.server.swarm.example)
-и следуйте [инструкции Swarm](SWARM.md). В обычном Compose эти дополнительные
-строки **не включат автообновление**: нужны скрипт, systemd-таймер и управляемый
-Swarm-сервис из той инструкции.
+Эти строки уже включены в `.env.server.swarm.example`.
 
 | Параметр | Что поставить |
 | --- | --- |
@@ -212,34 +231,27 @@ Swarm-сервис из той инструкции.
 | `VOICECORD_UPDATE_CHANNEL` | `preview` или `stable`. `preview` учитывает и предварительные выпуски; для `0.5.2`, опубликованной как pre-release, нужен `preview`. `stable` исключает все pre-release и может не находить новых версий. |
 | `VOICECORD_UPDATE_REPOSITORY` | Оставьте `IlyaRusskikh/voicecord`. Для своего форка — `владелец/репозиторий`, без URL и `.git`; образ должен находиться в соответствующем `ghcr.io/владелец/репозиторий-server`. Обычно менять не нужно. |
 
-Например, к базовым строкам выше для **уже настроенного Swarm** добавляются:
-
-```dotenv
-VOICECORD_RELEASE=0.5.2
-VOICECORD_DATA_VOLUME=voicecord-server_server_data
-VOICECORD_AUTO_UPDATE=true
-VOICECORD_UPDATE_CHANNEL=preview
-VOICECORD_UPDATE_REPOSITORY=IlyaRusskikh/voicecord
-```
+`VOICECORD_UPDATE_PROXY` — `true` по умолчанию; `false` отключает передачу
+клиентских обновлений с GitHub. Подробнее: [UPDATES.md](UPDATES.md).
 
 ### Как применить изменения `.env`
 
-Обычный Compose, команды из `/opt/voicecord`:
+Из `/opt/voicecord` выполните:
 
 ```sh
-docker compose --env-file .env -f compose.server.ghcr.yaml config -q
-docker compose --env-file .env -f compose.server.ghcr.yaml pull
-docker compose --env-file .env -f compose.server.ghcr.yaml up -d --force-recreate
-docker compose --env-file .env -f compose.server.ghcr.yaml ps
+python3 scripts/server-update.py deploy --config .env --stack voicecord
+docker service ps voicecord_server --no-trunc
 ```
 
-`config -q` проверяет Compose и подстановки; диапазоны значений Voicecord проверяет
-сам сервер при запуске. Обычный `docker compose restart` **не перечитывает**
-переменные уже созданного контейнера, поэтому нужен `up -d` с пересозданием.
-Volume при этом сохраняется; **не добавляйте `down -v`**.
-Для Swarm применяйте конфигурацию командой `deploy` из [SWARM.md](SWARM.md),
-а не командами Compose выше. `docker stack deploy` сам не читает `.env`;
-скрипт Voicecord передаёт значения из файла в окружение.
+`docker stack deploy` сам не загружает `.env`: скрипт читает файл без исполнения
+его содержимого и передаёт значения Docker. Диапазоны значений Voicecord
+проверяет при запуске. Развёртывание асинхронное: успешный выход `deploy` ещё не
+означает готовность комнаты. Дождитесь проверки из шага 6. Перезапуск сервиса
+без `deploy` не применяет изменения `.env`. Volume сохраняется.
+
+После автообновления сначала перенесите текущие версию и образ из сервиса в
+`VOICECORD_RELEASE` и `VOICECORD_IMAGE` файла `.env`, как описано в
+[SWARM.md](SWARM.md#ручное-обновление-и-откат), иначе `deploy` вернёт старый образ.
 
 ### Если хотите включить E2EE
 
@@ -274,7 +286,8 @@ E2EE можно включить сразу, **до первого запуск�
    `VOICECORD_E2EE_KEY_ID=…`, подставив полный отпечаток вместо многоточия.
    Сам секретный ключ на VPS не копируйте.
 3. Продолжайте установку. Если сервер уже работает, примените изменения из
-   `/opt/voicecord` командой `docker compose -f compose.server.ghcr.yaml up -d`.
+   `/opt/voicecord` командой
+   `python3 scripts/server-update.py deploy --config .env --stack voicecord`.
 4. При подключении участники должны использовать один и тот же секретный ключ
    в клиенте Voicecord. Как добавить его в приглашение, описано в [E2EE.md](E2EE.md).
 
@@ -283,31 +296,23 @@ E2EE можно включить сразу, **до первого запуск�
 E2EE, но не проверяет совпадение ключа при входе; поэтому отпечаток рекомендуется
 задавать всегда.
 
-В `/opt/voicecord` должны находиться `compose.server.ghcr.yaml` и `.env`;
-`.env.server.example` можно оставить как образец. Ничего из локальных
-`deploy/generated/`, `node_modules/`, `resources/server/`, Windows `.exe` или
-всей рабочей папки с компьютера копировать на VPS не нужно.
+## 4. Подготовьте постоянный volume
 
-При повторной установке не перезаписывайте существующий `.env` шаблоном:
-в нём должны остаться действующие IP, версия образа и настройки комнаты.
-
-## 4. Скачайте образ сервера
-
-Из папки `/opt/voicecord`:
+**Только для новой комнаты** создайте volume с именем из `VOICECORD_DATA_VOLUME`:
 
 ```sh
-cd /opt/voicecord
-docker compose -f compose.server.ghcr.yaml config -q
-docker compose -f compose.server.ghcr.yaml pull
+docker volume create voicecord-server_server_data
+docker volume inspect voicecord-server_server_data
 ```
 
-Первая команда проверяет настройку; при успехе ничего не печатает. Вторая
-скачивает готовый образ. Это и есть получение серверной части: сборки на VPS нет.
-Публичный пакет GHCR скачивается без `docker login`, PAT и SSH-ключа GitHub.
+Volume объявлен в стеке как внешний: Swarm не создаёт его при развёртывании.
+Если выбрали другое имя, подставьте его во все команды. Для существующей комнаты
+используйте прежний volume после [миграции](SWARM.md#переход-с-compose).
+Новый пустой volume создаёт другую комнату с новым паролем и сертификатом.
 
-При `denied`, `unauthorized` или `manifest unknown` сначала проверьте, что:
-версия опубликована, пакет сделан публичным, имя и тег в `.env` написаны верно.
-Не создавайте токен на VPS для обхода ещё не опубликованного/закрытого пакета.
+Образ будет скачан при развёртывании стека. Публичный GHCR не требует токена.
+При `denied` проверьте доступность пакета; при `manifest unknown` — опубликованный
+тег. Не переходите к запуску несуществующего образа.
 
 ## 5. Откройте порты
 
@@ -388,7 +393,7 @@ iptables -S INPUT
   Одна строка `ACCEPT` не отменяет ограничений в других правилах.
 - Таблицы и цепочки `DOCKER`, NAT и `FORWARD` могут появиться после установки
   Docker. Их наличие и даже `policy drop` в `FORWARD` сами по себе не означают
-  блокировку Voicecord: этот Compose использует сеть хоста. Предупреждение
+  блокировку Voicecord: этот Swarm-стек использует сеть хоста. Предупреждение
   `managed by iptables-nft, do not touch!` не является ошибкой запуска;
   вручную редактировать эти таблицы ради Voicecord не нужно.
 - Если есть `DROP`/`REJECT`, `policy drop` в цепочках входящего трафика либо
@@ -399,14 +404,14 @@ iptables -S INPUT
 
 **Если входящий трафик на Linux не блокируется, добавлять разрешающие правила
 на нём не требуется.** Проверьте разрешения у хостинга либо проброс на роутере,
-проверьте занятость портов ниже и переходите к **шагу 6 «Запустите контейнер»**.
+проверьте занятость портов ниже и переходите к **шагу 6 «Разверните стек»**.
 Например, вывод только с правилами Docker/NAT/FORWARD, без фильтрации входящего
 трафика, и `iptables -S INPUT` с единственной строкой `-P INPUT ACCEPT` позволяет
 продолжить установку без UFW.
 
 Не сбрасывайте весь ruleset и не отключайте firewall или SELinux.
 
-Compose использует **host networking**: порты слушаются прямо на VPS, секция
+Swarm-сервис использует **host networking**: порты слушаются прямо на VPS, секция
 `ports:` и ручные `-p` здесь не нужны. См. [Docker host networking](https://docs.docker.com/engine/network/drivers/host/).
 Проверьте занятость портов перед запуском, если доступен `ss`:
 
@@ -423,42 +428,48 @@ ss -lntup
 [«Проверка доступа из интернета и проброса портов»](#проверка-доступа-из-интернета-и-проброса-портов):
 наличие разрешений или правил проброса ещё не подтверждает доступность сервера.
 
-## 6. Запустите контейнер
+## 6. Разверните стек
 
 ```sh
 cd /opt/voicecord
-docker compose -f compose.server.ghcr.yaml up -d --no-build
-docker compose -f compose.server.ghcr.yaml ps
-docker compose -f compose.server.ghcr.yaml logs server
+python3 scripts/server-update.py deploy --config .env --stack voicecord
+docker stack services voicecord
+docker service ps voicecord_server --no-trunc
+docker service logs --tail 50 voicecord_server
 ```
 
-При первом старте найдите строку **`Initial room password`** и сохраните пароль
-в менеджере паролей. Он выводится только один раз; после старта на диске хранится
-его хеш. Начальные Docker-журналы содержат пароль — не публикуйте их в issues.
-Строка `Voicecord ready` означает, что API и голосовой сервер запущены.
+Дождитесь `1/1` у сервиса и задачи `Running`. В начальных логах найдите
+**`Room password: ...`** и сразу сохраните пароль в менеджере паролей: он
+выводится только при первом запуске. На диске хранится его хеш. Начальные
+Docker-журналы содержат пароль — не публикуйте их. `Voicecord ready` означает,
+что API и голосовой сервер запущены.
 
-Через некоторое время `ps` должен показывать `Up` и `(healthy)`.
-Проверьте процесс и внутреннюю готовность:
+Для команд внутри контейнера находите текущую задачу **на узле с данными**:
 
 ```sh
-docker compose -f compose.server.ghcr.yaml exec server id
-docker compose -f compose.server.ghcr.yaml exec server /voicecord serve healthcheck
+CID=$(docker ps -q --filter label=com.docker.swarm.service.name=voicecord_server --filter status=running)
+test -n "$CID" && docker exec "$CID" id
+test -n "$CID" && docker exec "$CID" /voicecord serve healthcheck
+docker inspect --format '{{.State.Health.Status}}' "$CID"
 ```
 
-`id` показывает UID/GID `65532`, а `healthcheck` завершается без ошибки.
-`-d` оставляет сервер в фоне: SSH можно закрыть. Docker и политика
-`restart: unless-stopped` поднимут его после перезагрузки VPS, если вы сами
-не остановили контейнер. Отдельный systemd unit для Voicecord не требуется.
+`id` показывает UID/GID `65532`, healthcheck завершается без ошибки, статус
+становится `healthy`. Пустой `CID` означает отсутствие работающей задачи на этом
+узле: проверьте `service ps`. После обновления, перезапуска или отката получите
+`CID` заново. Не увеличивайте `replicas`: фиксированные порты и локальная SQLite
+рассчитаны на одну задачу.
 
-Healthcheck проверяет HTTPS и доступность LiveKit внутри VPS; он не подтверждает
-проходимость голосовых портов из интернета. Docker сам по статусу `unhealthy`
-контейнер не перезапускает. При завершении LiveKit сервер выходит, и применяется
-политика перезапуска.
+SSH можно закрыть. При включённом автозапуске Docker Swarm восстанавливает сервис
+после перезагрузки VPS. Swarm заменяет завершившиеся и нездоровые задачи согласно
+политике сервиса. Обновление использует `stop-first` и автоматический откат при
+сбое; звонок прерывается. Healthcheck проверяет HTTPS и LiveKit внутри VPS,
+но не подтверждает доступность голосовых портов из интернета.
 
 ## 7. Получите приглашение и подключитесь
 
 ```sh
-docker compose -f compose.server.ghcr.yaml exec server /voicecord serve info
+CID=$(docker ps -q --filter label=com.docker.swarm.service.name=voicecord_server --filter status=running)
+test -n "$CID" && docker exec "$CID" /voicecord serve info
 ```
 
 Результат — `voicecord://IP:18443/отпечаток`. Передайте участнику полную ссылку
@@ -481,7 +492,7 @@ docker compose -f compose.server.ghcr.yaml exec server /voicecord serve info
 Используйте этот раздел, если контейнер показывает `(healthy)`, но клиент не
 подключается, сообщает о тайм-ауте или ошибке TLS. Внутренний healthcheck не
 проверяет маршрут от участника до сервера. Пустая колонка `PORTS` в `docker ps`
-для этого Compose нормальна: используется `network_mode: host`.
+для этого Swarm-сервиса нормальна: используется внешняя сеть `host`.
 
 Ниже указаны стандартные порты. Если меняли `VOICECORD_PORT`, подставьте свой
 базовый порт вместо `18443`; голосовые порты — базовый плюс 1 (TCP) и плюс 2 (UDP).
@@ -571,134 +582,111 @@ Linux-сервера**, с теми же внутренними портами. 
 
 ## Обслуживание и обновление
 
-Все команды ниже выполняются на VPS из `/opt/voicecord`.
+Все команды выполняются на VPS. Имя стека — `voicecord`, сервис —
+`voicecord_server`. Не меняйте их случайно при повторном развёртывании.
 
 ```sh
-# Состояние / свежий журнал
 cd /opt/voicecord
-docker compose -f compose.server.ghcr.yaml ps
-docker compose -f compose.server.ghcr.yaml logs --tail 50 server
+docker stack services voicecord
+docker service ps voicecord_server --no-trunc
+docker service logs --tail 50 voicecord_server
 
-# Перезапуск / остановка / запуск без изменения данных
-docker compose -f compose.server.ghcr.yaml restart server
-docker compose -f compose.server.ghcr.yaml stop server
-docker compose -f compose.server.ghcr.yaml start server
+# Перезапуск текущего сервиса; звонок прервётся
+docker service update --force --detach=false voicecord_server
+
+# Остановка / запуск без удаления данных
+docker service scale voicecord_server=0
+docker service scale voicecord_server=1
 ```
 
-Для обновления сначала сохраните данные комнаты. Затем измените **только тег
-версии образа** в `VOICECORD_IMAGE` файла `.env`, например на опубликованный
-`0.1.1`, и выполните:
-
-```sh
-docker compose -f compose.server.ghcr.yaml pull
-docker compose -f compose.server.ghcr.yaml up -d --no-build
-docker compose -f compose.server.ghcr.yaml exec server /voicecord serve healthcheck
-```
-
-Контейнер пересоздаётся, разговор прерывается. Данные комнаты сохраняются в volume,
-приглашение и пароль при том же IP остаются прежними. Обычный `restart` не
-переключает контейнер на новый образ. Для отката задайте предыдущий тег и повторите
-`pull` / `up`, предварительно проверив совместимость данных в release notes.
-Не используйте `latest` для воспроизводимой установки. Можно закрепить digest
-`ghcr.io/ilyarusskikh/voicecord-server@sha256:…` из результата публикации.
+Повторный `deploy` возвращает одну реплику даже после остановки через `scale=0`.
+Ручное обновление, rollback и opt-in автообновление: [SWARM.md](SWARM.md).
+Перед обновлением сделайте резервную копию; сохраняйте точную версию или digest
+образа. Автообновление выключено по умолчанию.
 
 ### Сменить или восстановить пароль
 
-В **Bash** выполните (на Alpine при необходимости сначала установите Bash):
+В **Bash** выполните на узле с данными (на Alpine сначала установите Bash):
 
 ```bash
-read -r -s -p 'Новый пароль (от 8 символов): ' ROOM_PASSWORD
-printf '\n'
-printf '%s' "$ROOM_PASSWORD" | docker compose -f compose.server.ghcr.yaml exec -T server /voicecord serve reset-password
-unset ROOM_PASSWORD
+CID=$(docker ps -q --filter label=com.docker.swarm.service.name=voicecord_server --filter status=running)
+if [ -n "$CID" ]; then
+  read -r -s -p 'Новый пароль (от 8 символов): ' ROOM_PASSWORD
+  printf '\n'
+  printf '%s' "$ROOM_PASSWORD" | docker exec -i "$CID" /voicecord serve reset-password
+  unset ROOM_PASSWORD
+fi
 ```
 
-Если команда ответила `Password updated`, примените новый пароль:
+После ответа `Password updated` примените новый пароль:
 
 ```sh
-docker compose -f compose.server.ghcr.yaml restart server
+docker service update --force --detach=false voicecord_server
 ```
 
-Команда не помещает пароль в историю shell. Приглашение не меняется; текущие
-разговоры прерываются после перезапуска. При ошибке `permission denied` не
-меняйте права на `777`: проверьте пользователя контейнера и владельца данных.
+Пароль не попадает в историю shell. Приглашение сохраняется, звонки прерываются.
+При `permission denied` проверьте UID/GID и владельца данных; не ставьте права `777`.
 
 ### Где данные и как сохранить комнату
 
-Данные находятся **не в `/opt/voicecord` и не внутри образа**, а в Docker volume
-`voicecord-server_server_data`: `state.json` содержит IP, хеш пароля, ключи LiveKit,
-сертификат и приватный TLS-ключ. Пересборка или замена образа их не стирает.
-Имя volume зависит от `name: voicecord-server`; не меняйте имя проекта случайно.
+Данные находятся в volume из `VOICECORD_DATA_VOLUME`, по умолчанию
+`voicecord-server_server_data`, на узле с меткой `voicecord.data=true`.
+`state.json` содержит IP, хеш пароля, ключи LiveKit, сертификат и приватный TLS-ключ;
+`chat.sqlite` — историю. Замена образа и удаление стека сохраняют внешний volume.
+**Удаление volume уничтожает комнату.**
 
-Для резервной копии остановите комнату, сохраните весь volume средствами Docker
-или snapshot хостинга, затем запустите комнату. Копия volume, `.env`, версия
-образа и исходный IP нужны для восстановления. Храните копию как секрет и вне VPS.
-`docker compose down` сохраняет volume; **`down -v` и удаление volume уничтожают
-состояние комнаты**. Для обычной остановки используйте `stop`.
+Если установлен таймер, перед копированием остановите его командой
+`systemctl stop voicecord-update.timer` и дождитесь завершения уже запущенного
+обновления (`systemctl status voicecord-update.service`). Затем остановите сервис:
 
-Восстановление полного volume на том же IP сохраняет приглашение и пароль;
-файлы должны оставаться доступны UID/GID `65532:65532`. Сертификат действует
-десять лет. При смене IP, утрате ключей или истечении сертификата создайте
-**отдельный новый volume/Compose-проект**, укажите новый IP и раздайте новое
-приглашение. Не удаляйте старый volume до проверки резервной копии; старый и новый
-серверы не могут одновременно занимать те же порты.
+```sh
+docker service scale voicecord_server=0
+docker service ps voicecord_server --no-trunc
+docker ps --filter label=com.docker.swarm.service.name=voicecord_server
+```
+
+Дождитесь остановки всех задач и отсутствия контейнера в `docker ps`. Сохраните
+**весь volume** средствами резервного копирования Docker или snapshot хостинга,
+затем запустите `docker service scale voicecord_server=1` и проверьте готовность.
+Копируйте SQLite вместе со служебными файлами. Сохраните также `.env`, файлы
+развёртывания, текущие версию/digest образа и исходный IP. Храните копию как секрет
+вне VPS. Во время копирования не запускайте `deploy` или обновлятор. После копирования
+верните таймер командой `systemctl start voicecord-update.timer`, если он был включён.
+
+Восстановление полного volume на прежнем IP сохраняет приглашение и пароль.
+Файлы должны быть доступны UID/GID `65532:65532`. Метку узла назначайте только
+узлу с восстановленными данными. При смене IP, утрате ключей или истечении
+десятилетнего сертификата создайте **отдельный новый volume** и раздайте новое
+приглашение. Не удаляйте старый volume до проверки резервной копии. Две комнаты
+не должны использовать один volume или одинаковые порты на одном узле.
 
 ## Если что-то не работает
 
 | Симптом | Что проверить |
 | --- | --- |
-| `docker: command not found` | Docker Engine установлен и терминал видит его CLI |
+| `docker: command not found` | Установлен Docker Engine и доступен CLI |
 | `Cannot connect to the Docker daemon` | Демон запущен; выбран правильный Docker context |
-| `docker: 'compose' is not a docker command` | Установлен современный Compose plugin |
-| `denied` / `unauthorized` при pull | Пакет GHCR опубликован и сделан публичным владельцем |
+| `This node is not a swarm manager` | Swarm включён; команды выполняются на manager-узле |
+| Сервис `0/1`, задача `Pending` | `docker service ps --no-trunc`, метку `voicecord.data=true`, доступность узла |
+| `volume ... not found` | Внешний volume существует на узле с данными, имя совпадает с `.env` |
+| `denied` / `unauthorized` при pull | Пакет GHCR опубликован и публичен |
 | `manifest unknown` | Тег существует; версия в `.env` совпадает с опубликованной |
-| `no matching manifest` / `exec format error` | Архитектура VPS совпадает с архитектурой образа |
-| `address already in use` | Свободны все четыре порта от базового до базового + 3 |
-| `VOICECORD_PUBLIC_IP differs from saved state` | В `.env` верните сохранённый IP; для нового IP нужна новая комната |
-| Клиент получает timeout | Проверьте три порта на VPS и у хостинга, IP, NAT и маршрут |
-| Сервер healthy, голос не проходит | Проверьте медиапорты, UDP/TCP и разговор из другой сети |
+| `no matching manifest` / `exec format error` | Архитектура VPS поддерживается образом |
+| `address already in use` | Свободны четыре порта от базового до базового + 3; старый контейнер остановлен |
+| `VOICECORD_PUBLIC_IP differs from saved state` | Верните сохранённый IP; для нового IP нужна новая комната |
+| После `deploy` работает прежний образ | Проверьте `UpdateStatus` сервиса: мог произойти откат |
+| Пустой `CID` | Задача работает на этом узле и имеет статус `Running` |
+| Клиент получает timeout | Проверьте порты на VPS и у хостинга, IP, NAT и маршрут |
+| Сервер healthy, голос не проходит | Проверьте медиапорты и разговор из другой сети |
 
-Не публикуйте `state.json`, полные приглашения с секретами или начальные журналы.
-При обращении за помощью достаточно указать версию, ОС, стадию ошибки и текст
-ошибки без секретов.
+Не публикуйте `state.json`, полные приглашения с секретами и начальные журналы.
+Для обращения за помощью достаточно версии, ОС, стадии ошибки и текста без секретов.
 
-## Сборка из исходников и разработка
+## Собственный образ
 
-Альтернатива GHCR: склонируйте публичный репозиторий на Linux-машину с Docker,
-затем соберите образ:
-
-```sh
-git clone https://github.com/IlyaRusskikh/voicecord.git
-cd voicecord
-docker build -f server/standalone.Dockerfile -t voicecord-server:local .
-```
-
-На машине сборки сохраните образ в архив:
-
-```sh
-docker image save -o voicecord-server.tar voicecord-server:local
-```
-
-Передайте архив на VPS по SFTP/SCP и загрузите его там:
-
-```sh
-docker image load -i voicecord-server.tar
-```
-
-В `.env` поставьте `VOICECORD_IMAGE=voicecord-server:local`.
-В таком режиме пропустите `pull` и запускайте `up -d --no-build --pull never`.
-На VPS по-прежнему достаточно Compose, `.env` и загруженного образа той же
-архитектуры; исходники и Windows-бинарники не требуются.
-Старый `compose.server.yaml` с `build:` остаётся вариантом для локальной сборки.
-
-Проверки разработчика (Node.js нужен только на машине тестирования):
-
-```sh
-node scripts/server-smoke.mjs
-npm run test:server
-```
-
-Первый тест проверяет сборку, TLS, пароль, данные, отказ LiveKit и SIGTERM;
-второй добавляет двусторонний синтетический звук Electron. Тесты используют
-изолированные контейнеры/volume, не меняют пользовательские конфигурации и требуют
-свободных тестовых портов 31443–31445 (для звука также 5173).
+На машине сборки с исходниками и Docker соберите образ и опубликуйте его в своём
+registry, доступном VPS. Укажите точное имя/тег или digest в `VOICECORD_IMAGE`,
+соответствующую версию в `VOICECORD_RELEASE`, оставьте `VOICECORD_AUTO_UPDATE=false`
+и примените тот же Swarm-стек через `deploy`. Образ должен соответствовать
+архитектуре VPS. `docker stack deploy` не собирает образы. Compose-файлы разработки
+не являются способом установки на VPS.

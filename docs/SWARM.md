@@ -1,74 +1,127 @@
-# Swarm и обновления VPS
+# Docker Swarm: обслуживание и обновления VPS
 
-Этот вариант развёртывания включён в 0.5.0. Реальный rollout на VPS ещё не проверен.
-Перед миграцией сохраните резервную копию volume.
+Docker Swarm — единственный поддерживаемый способ развёртывания постоянного
+сервера на VPS. Новая установка с готовым образом без исходников:
+[SERVER.md](SERVER.md). Здесь описаны миграция существующей комнаты, ручные
+обновления, откат и необязательный таймер. Обычный Compose для VPS больше
+не поддерживается; ниже он упоминается только для остановки старой установки.
 
-`VOICECORD_CHAT_MAX_MB` в `.env` задаёт бюджет SQLite-базы чата в МиБ: `128` по
-умолчанию, `0` — без лимита. Учитываются сообщения, изображения, профили и индексы;
-удаляется старейшая история с освобождением дискового места. Срока хранения в семь
-дней нет. Изменение применяется при следующем `stack deploy`, вместе с конфигурацией
-сервиса; временные журналы транзакций не входят в бюджет базы.
+Реальный rollout/rollback на Linux Swarm и приёмка на VPS ещё не выполнялись.
+Перед миграцией и обновлениями сохраняйте резервную копию всего volume.
 
 ## Как обновляется комната
 
-`compose.server.swarm.yaml` запускает одну комнату как сервис Swarm. TLS, пароль
-и SQLite остаются в существующем Docker volume. Сервис закреплён за узлом с меткой
-`voicecord.data=true`; назначайте её только узлу с данными комнаты.
-Обновление использует `stop-first`, healthcheck и автоматический rollback.
+`compose.server.swarm.yaml` запускает одну комнату как сервис `voicecord_server`
+стека `voicecord`. TLS, пароль и SQLite находятся во внешнем Docker volume из
+`VOICECORD_DATA_VOLUME`. Сервис закреплён за узлом с меткой `voicecord.data=true`;
+назначайте её только узлу с данными комнаты. Локальный volume не реплицируется.
+Команды управления выполняются на manager-узле, операции с volume и `docker exec`
+— на узле с данными. В одноузловой установке это один VPS.
 
-У комнаты фиксированные TCP/UDP-порты и локальная SQLite, поэтому две копии
-одновременно не запускаются. Обновление кратко прерывает звонок; участникам может
-потребоваться переподключиться. Это rolling update с откатом, а не миграция
-активного звонка без разрыва. Основание: [host networking](https://docs.docker.com/engine/network/drivers/host/)
+Обновление использует `stop-first`, healthcheck и автоматический rollback.
+У комнаты фиксированные TCP/UDP-порты и локальная SQLite: оставляйте `replicas: 1`.
+Звонок прерывается; участникам может потребоваться переподключиться.
+См. [host networking](https://docs.docker.com/engine/network/drivers/host/)
 и [настройки update/rollback](https://docs.docker.com/reference/compose-file/deploy/).
+
+`VOICECORD_CHAT_MAX_MB=128` задаёт бюджет SQLite-базы чата в МиБ, `0` отключает
+лимит. Учитываются сообщения, изображения, профили и индексы; удаляется старейшая
+история. Изменения `.env` применяются через `deploy`, а не простым перезапуском.
 
 ## Переход с Compose
 
-Команды выполняются владельцем VPS под root. Нужны Docker Engine и Python 3.
-Храните исходники и файлы развёртывания в `/opt/voicecord`.
+Команды выполняются на VPS под root. Нужны Docker Engine, Python 3.9+ и файлы
+из [шага 3 установки](SERVER.md#3-скачайте-файлы-развёртывания-и-заполните-env).
 
-1. Запишите имя существующего volume: `docker volume ls`. Для обычной установки
-   это `voicecord-server_server_data`. Не удаляйте volume и не используйте `down -v`.
-2. Остановите старый контейнер через его Compose-файл. Пока сервер остановлен,
-   сделайте резервную копию volume, включая SQLite, TLS и состояние комнаты.
-3. Инициализируйте Swarm, если он ещё не включён:
-
-   ```sh
-   docker swarm init --advertise-addr 203.0.113.10
-   docker node update --label-add voicecord.data=true "$(docker info --format '{{.Swarm.NodeID}}')"
-   ```
-
-   Подставьте IP VPS. Для одного VPS не открывайте управляющие порты Swarm в интернет.
-   Пользовательские порты Voicecord остаются прежними.
-4. Скопируйте `.env.server.swarm.example` в `.env`. Укажите реальный IP, прежние
-   настройки E2EE и **точное имя существующего** volume в `VOICECORD_DATA_VOLUME`.
-   Для нового сервера сначала создайте отдельный volume через `docker volume create`.
-5. Для собственной сборки этой версии соберите локальный образ:
+1. Найдите контейнер старой комнаты и проверьте его подключение `/data` через
+   `docker inspect`. Запишите точное имя volume: обычно это
+   `voicecord-server_server_data`. Сохраните прежний `.env` отдельно.
+2. Остановите старый контейнер через использованный ранее Compose-файл. Например,
+   для установки из GHCR:
 
    ```sh
-   docker build -f server/standalone.Dockerfile -t voicecord-server:review .
+   cd /opt/voicecord
+   docker compose -f compose.server.ghcr.yaml stop server
+   docker compose -f compose.server.ghcr.yaml ps -a
    ```
 
-   Укажите `VOICECORD_IMAGE=voicecord-server:review`, оставьте
-   `VOICECORD_AUTO_UPDATE=false`. Для опубликованных версий используйте точный
-   тег `ghcr.io/ilyarusskikh/voicecord-server:X.Y.Z` из соответствующего релиза.
-6. Запустите вручную:
+   Это единственный шаг с Compose — остановка старой установки. Не удаляйте volume
+   и не используйте `down -v`. Дождитесь остановки и сохраните резервную копию
+   **всего volume**, включая SQLite, TLS и состояние комнаты.
+3. Включите Swarm и назначьте узлу с данными метку, как в
+   [шаге 2 установки](SERVER.md#2-установите-docker-engine-и-включите-swarm).
+   Не запускайте `swarm init`, если узел уже состоит в Swarm. Для одного VPS
+   управляющие порты Swarm в интернет не открываются.
+4. Подготовьте `.env` по `.env.server.swarm.example`: перенесите прежние IP, порт,
+   настройки E2EE, лимит истории и прокси обновлений. В `VOICECORD_DATA_VOLUME`
+   укажите **точное имя прежнего volume**. Не создавайте пустой volume взамен.
+   Укажите согласованные `VOICECORD_IMAGE` и `VOICECORD_RELEASE`, оставьте
+   `VOICECORD_AUTO_UPDATE=false`. Сначала мигрируйте на той же версии образа;
+   обновление версии выполняйте отдельно после проверки комнаты.
+5. Разверните стек:
 
    ```sh
    python3 scripts/server-update.py deploy --config .env --stack voicecord
+   docker stack services voicecord
    docker service ps voicecord_server --no-trunc
    docker service logs --tail 30 voicecord_server
    ```
 
-Проверьте прежнее приглашение, два клиента и историю. Для этой схемы не увеличивайте
-`replicas` и не снимайте привязку к узлу: другие узлы не имеют этого локального volume.
-Чтобы вернуться к Compose, сначала остановите и удалите сервис Swarm, дождитесь
-остановки его задачи, затем запустите прежний контейнер с тем же volume.
-Не запускайте одновременно два сервера с этим volume.
+Дождитесь `1/1`, задачи `Running` и статуса контейнера `healthy` по
+[шагу 6 установки](SERVER.md#6-разверните-стек). Проверьте прежнее приглашение,
+пароль, историю и голос двух клиентов из разных сетей. Не запускайте одновременно
+старый контейнер и сервис Swarm с одним volume. Не снимайте привязку к узлу
+и не увеличивайте число реплик.
+
+## Ручное обновление и откат
+
+Все команды ниже выполняются из `/opt/voicecord`. Сначала сделайте
+[резервную копию](SERVER.md#где-данные-и-как-сохранить-комнату).
+Прочитайте release notes, проверьте совместимость данных и существование
+публичного образа новой версии. Не используйте `latest`.
+
+Для ручного обновления измените в `.env` **обе строки**:
+`VOICECORD_IMAGE=ghcr.io/ilyarusskikh/voicecord-server:X.Y.Z` и
+`VOICECORD_RELEASE=X.Y.Z`, подставив опубликованную версию без `v`.
+При необходимости скачайте обновлённые стек и скрипт той же версии по схеме
+из `SERVER.md`; сохраните рабочий `.env`. Примените конфигурацию:
+
+```sh
+python3 scripts/server-update.py deploy --config .env --stack voicecord
+docker service ps voicecord_server --no-trunc
+docker service inspect --format '{{json .UpdateStatus}}' voicecord_server
+docker service logs --tail 30 voicecord_server
+```
+
+`deploy` возвращает управление до завершения rollout. Дождитесь `1/1`, `healthy`
+и, при обновлении существующего сервиса, `UpdateStatus.State=completed`.
+`rollback_completed` означает возврат прежней конфигурации, а не успешную установку
+новой версии. Проверьте приглашение, историю и голос.
+
+Ручной откат к предыдущей спецификации сервиса:
+
+```sh
+python3 scripts/server-update.py rollback --config .env --stack voicecord
+```
+
+Откат возвращает предыдущую спецификацию, включая образ и настройки, но
+**не откатывает содержимое volume**. При несовместимых изменениях данных нужна
+подходящая резервная копия. На самой первой установке предыдущей спецификации нет.
+
+После отката или автоматического обновления проверьте фактические образ и версию:
+
+```sh
+docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' voicecord_server
+docker service inspect --format '{{index .Spec.Labels "io.voicecord.version"}}' voicecord_server
+```
+
+Перенесите эти значения в `VOICECORD_IMAGE` и `VOICECORD_RELEASE` файла `.env`
+перед следующим `deploy`. Скрипт обновляет сервис, но не переписывает `.env`;
+старые значения при повторном развёртывании вернут старую версию.
 
 ## Автообновление — только по флагу
 
-В `.env`:
+В `.env` по умолчанию:
 
 ```dotenv
 VOICECORD_AUTO_UPDATE=false
@@ -76,11 +129,11 @@ VOICECORD_UPDATE_CHANNEL=preview
 VOICECORD_UPDATE_REPOSITORY=IlyaRusskikh/voicecord
 ```
 
-`false` отключает и сетевую проверку, и обновление таймером. `stable` учитывает только
-обычные релизы, `preview` — также предварительные выпуски. Скрипт выбирает более новую
-X.Y.Z-версию, сравнивает digest из описания GitHub Release с GHCR, загружает образ
-по digest и дожидается rollout. Содержимое `.env` и скачанные shell-скрипты не
-выполняются. Docker socket в контейнер не монтируется: обновление работает на хосте.
+`false` отключает сетевую проверку и обновление таймером. `stable` учитывает только
+обычные релизы, `preview` — также предварительные выпуски. Скрипт выбирает более
+новую X.Y.Z-версию, сравнивает digest из GitHub Release с GHCR, загружает образ
+по digest и дожидается rollout. `.env` и скачанные shell-скрипты не выполняются.
+Обновлятор работает на хосте; Docker socket не монтируется в контейнер.
 
 Ручная проверка без установки работает независимо от переключателя:
 
@@ -88,29 +141,39 @@ X.Y.Z-версию, сравнивает digest из описания GitHub Rel
 python3 scripts/server-update.py check --config .env --stack voicecord
 ```
 
-Чтобы включить расписание, установите unit-файлы, затем явно измените флаг на `true`:
+На VPS с systemd скачайте unit-файлы той же версии, что скрипт (ниже `0.5.2`),
+и установите их. Они рассчитаны на `/opt/voicecord`, `/usr/bin/python3`
+и стек `voicecord`:
 
 ```sh
+cd /opt/voicecord
+VOICECORD_RELEASE=0.5.2
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/deploy/voicecord-update.service" -o deploy/voicecord-update.service
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/deploy/voicecord-update.timer" -o deploy/voicecord-update.timer
 install -m 644 deploy/voicecord-update.service /etc/systemd/system/
 install -m 644 deploy/voicecord-update.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now voicecord-update.timer
 ```
 
-Проверка запускается раз в 30 минут со случайным сдвигом. Одновременные обновления
-блокируются lock-файлом. Пути в service рассчитаны на `/opt/voicecord`.
+Затем явно поставьте в `.env` `VOICECORD_AUTO_UPDATE=true`. Таймер перечитывает
+файл при каждом запуске; для этого флага `deploy` не нужен. На системах без systemd
+используйте ручные обновления; установка этого таймера к ним не применяется.
+
+Проверка выполняется раз в 30 минут со случайным сдвигом. Одновременные запуски
+автоматического `update` блокируются lock-файлом. Ручной `deploy` и rollback
+выполняйте после остановки таймера и завершения уже работающего обновлятора.
 
 ```sh
 systemctl list-timers voicecord-update.timer
 journalctl -u voicecord-update.service -n 30
-python3 scripts/server-update.py rollback --config .env --stack voicecord
 ```
 
-При неуспешном rollout Swarm возвращает PreviousSpec. Скрипт считает такой запуск
-ошибкой и не сообщает об успешном обновлении. Чтобы выключить автообновление,
-поставьте `VOICECORD_AUTO_UPDATE=false`; таймер можно также остановить через
+При неуспешном rollout Swarm возвращает предыдущую спецификацию. Скрипт считает
+это ошибкой. Для выключения автообновлений поставьте
+`VOICECORD_AUTO_UPDATE=false`; таймер можно также остановить через
 `systemctl disable --now voicecord-update.timer`.
 
-Локально проверены разбор stack-конфигурации Docker CLI и unit-тесты выключенного
-режима, выбора версий/каналов, несовпадения digest и последовательности обновления.
-Реальный rollout/rollback на Linux Swarm и приёмка на VPS ещё не выполнялись.
+Локально ранее проверены разбор stack-конфигурации Docker CLI и unit-тесты
+выключенного режима, выбора версий/каналов, несовпадения digest и последовательности
+обновления. Это не заменяет проверку реального rollout/rollback на VPS.

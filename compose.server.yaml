@@ -1,4 +1,5 @@
-# Linux VPS: VOICECORD_PUBLIC_IP=203.0.113.10 docker compose -f compose.server.yaml up -d --build
+# Local build/test configuration; not supported for VPS deployment.
+# Use compose.server.swarm.yaml for VPS installation; see docs/SERVER.md.
 name: voicecord-server
 services:
   server:
