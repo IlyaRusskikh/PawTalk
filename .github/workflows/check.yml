@@ -46,7 +46,16 @@ jobs:
           go-version: '1.27.3'
           cache: false
       - run: npm ci
+      - name: Cache Electron binary
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\electron-cache
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            electron-${{ runner.os }}-${{ runner.arch }}-
       - name: Install Electron with retries
+        env:
+          electron_config_cache: ${{ runner.temp }}\electron-cache
         run: node scripts/install-electron.mjs
       - run: npm run check:public
       - run: npm run native:build
