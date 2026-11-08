@@ -35,7 +35,7 @@ export function normalizeTheme(saved: unknown): Theme {
   return result;
 }
 export function loadTheme(): Theme {
-  try { return normalizeTheme(JSON.parse(localStorage.getItem('voicecord.theme') ?? '{}')); }
+  try { return normalizeTheme(JSON.parse(localStorage.getItem('pawtalk.theme') ?? '{}')); }
   catch { return { ...defaultTheme }; }
 }
 export function luminance(color: string) {

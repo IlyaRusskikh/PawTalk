@@ -1,7 +1,7 @@
 # Application language and updates / Язык и обновления
 
-Available starting with Voicecord 0.2.0. Published 0.1.0 needs one manual upgrade.
-Доступно с Voicecord 0.2.0. С версии 0.1.0 нужно один раз обновиться вручную.
+Available starting with PawTalk 0.2.0. Published 0.1.0 needs one manual upgrade.
+Доступно с PawTalk 0.2.0. С версии 0.1.0 нужно один раз обновиться вручную.
 
 ## Русский
 
@@ -10,7 +10,7 @@ Available starting with Voicecord 0.2.0. Published 0.1.0 needs one manual upgrad
 приложения» без перезапуска. При обновлении сохраняется язык профиля пользователя.
 
 Установленное Windows-приложение при запуске проверяет публичные релизы
-`IlyaRusskikh/voicecord` через GitHub API, включая pre-release. Выбирается наибольшая
+`IlyaRusskikh/pawtalk` через GitHub API, включая pre-release. Выбирается наибольшая
 версия выше текущей по порядку SemVer; черновики и релизы без подходящего
 Windows x64 установщика и SHA-256 пропускаются. Проверяются до 1000 последних
 релизов. API может ограничить частоту запросов; ошибки проверки не мешают запуску.
@@ -33,7 +33,7 @@ Windows x64 установщика и SHA-256 пропускаются. Пров
    звонок, останавливает встроенный сервер и закрывается. В модалке заранее
    показано предупреждение о прерывании звонка или отключении гостей.
 3. Приложение сначала ждёт подтверждения готовности помощника. Его отдельное
-   окно показывает этап и прошедшее время даже после закрытия Voicecord.
+   окно показывает этап и прошедшее время даже после закрытия PawTalk.
    Помощник ждёт завершения процесса, затем запускает NSIS с `/S --updated
    --force-run`. Штатный NSIS-скрипт сначала вызывает деинсталлятор предыдущей
    версии, затем устанавливает новую в ту же папку и запускает её.
@@ -51,9 +51,9 @@ Windows x64 установщика и SHA-256 пропускаются. Пров
 
 Комнаты передают установщик потоком без записи на диск. Маленькие метаданные
 кешируются в памяти на минуту. Лимиты сервера: две передачи одновременно,
-до 1 МиБ/с на установщик, 20 запросов в минуту с IP. `VOICECORD_UPDATE_PROXY=false`
+до 1 МиБ/с на установщик, 20 запросов в минуту с IP. `PAWTALK_UPDATE_PROXY=false`
 отключает прокси; для Docker передайте переменную в окружение контейнера.
-Прокси работает только с релизами Voicecord и проверяет перенаправления GitHub.
+Прокси работает только с релизами PawTalk и проверяет перенаправления GitHub.
 Пароль комнаты и ключ E2EE для публичной раздачи обновления не передаются.
 
 Клиент переключает источник при отсутствии данных 20 секунд или скорости ниже
@@ -67,11 +67,11 @@ Windows x64 установщика и SHA-256 пропускаются. Пров
 
 ### Ручное обновление Windows
 
-1. Скачайте `Voicecord.Setup.X.Y.Z.exe` из нужного GitHub Release; при необходимости включите VPN.
-2. Полностью завершите Voicecord через «Выйти» в трее. Звонок и ваша комната остановятся.
+1. Скачайте `PawTalk.Setup.X.Y.Z.exe` из нужного GitHub Release; при необходимости включите VPN.
+2. Полностью завершите PawTalk через «Выйти» в трее. Звонок и ваша комната остановятся.
 3. Запустите скачанный EXE. Оставьте прежнюю папку и тот же вариант установки
    (для текущего пользователя либо для всех пользователей).
-4. Завершите установку и откройте Voicecord. **Удалять старую версию вручную не нужно:**
+4. Завершите установку и откройте PawTalk. **Удалять старую версию вручную не нужно:**
    установщик сам выполняет замену, сохраняя настройки, закладки и пароли профиля
    того же пользователя Windows. Не удаляйте папку пользовательских данных.
 
@@ -120,8 +120,8 @@ older clients keep their previous updater until upgraded.
 
 Rooms stream installer bytes without writing them to disk. Metadata is cached in
 memory for one minute. Limits: two upstream requests at once, 1 MiB/s per installer,
-20 requests per minute per IP. Set `VOICECORD_UPDATE_PROXY=false` in the server
-process/container environment to disable the relay. Only Voicecord release
+20 requests per minute per IP. Set `PAWTALK_UPDATE_PROXY=false` in the server
+process/container environment to disable the relay. Only PawTalk release
 resources and approved GitHub redirects are accepted. Room passwords and E2EE
 keys are never sent to the update relay. Broken connections try another source;
 invalid signatures or checksums stop installation with the source name and advice
@@ -131,16 +131,16 @@ can still hide updates; availability requires an accessible honest source.
 
 ### Manual Windows upgrade
 
-Download the release EXE (use a VPN if needed), completely exit Voicecord from its
+Download the release EXE (use a VPN if needed), completely exit PawTalk from its
 tray menu, then run the new installer using the existing directory and installation
-scope (current user or all users). Finish installation and reopen Voicecord.
+scope (current user or all users). Finish installation and reopen PawTalk.
 **Do not uninstall the old version manually.** NSIS replaces it and preserves the
 same Windows user's profile, settings, bookmarks and saved passwords. Calls and
 hosted rooms stop during the upgrade. Do not delete the user-data directory.
 
 ## Maintainers
 
-Attach `Voicecord.Setup.X.Y.Z.exe` and `update-manifest.json`
+Attach `PawTalk.Setup.X.Y.Z.exe` and `update-manifest.json`
 to the matching `vX.Y.Z` release. Keep its SHA-256
 digest exposed by GitHub and attach `SHA256SUMS.txt` as documented in
 [RELEASING.md](RELEASING.md). Never replace published assets. The updater uses

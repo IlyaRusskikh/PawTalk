@@ -1,12 +1,12 @@
 param([string]$Invitation)
 $ErrorActionPreference = 'Stop'
-if (-not $Invitation) { $Invitation = Read-Host 'Paste the current voicecord:// invitation' }
+if (-not $Invitation) { $Invitation = Read-Host 'Paste the current pawtalk:// invitation' }
 $report = [ordered]@{ utc = [DateTime]::UtcNow.ToString('o'); stage = 'input'; ok = $false }
 $tcp = $null
 $stream = $null
 try {
     $uri = [Uri]$Invitation.Trim()
-    if ($uri.Scheme -ne 'voicecord' -or $uri.Port -lt 1 -or $uri.AbsolutePath -notmatch '^/[a-f0-9]{64}$' -or $uri.UserInfo -or $uri.Query -or $uri.Fragment) { throw 'Invalid Voicecord invitation' }
+    if ($uri.Scheme -ne 'pawtalk' -or $uri.Port -lt 1 -or $uri.AbsolutePath -notmatch '^/[a-f0-9]{64}$' -or $uri.UserInfo -or $uri.Query -or $uri.Fragment) { throw 'Invalid PawTalk invitation' }
     $ip = $null
     if (-not [System.Net.IPAddress]::TryParse($uri.Host, [ref]$ip)) { throw 'Expected an IP address' }
     $report.server = $uri.Authority

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
+    paw: <g fill="currentColor" stroke="none"><ellipse cx="5" cy="9" rx="2.4" ry="3.2" transform="rotate(-25 5 9)"/><ellipse cx="10" cy="5" rx="2.3" ry="3" transform="rotate(-8 10 5)"/><ellipse cx="16" cy="5.5" rx="2.3" ry="3" transform="rotate(14 16 5.5)"/><ellipse cx="20" cy="10" rx="2.3" ry="3" transform="rotate(30 20 10)"/><path d="M6 16c1.5-1.5 2.7-5 6-5s4.5 3.5 6 5c3 3-1 6-4 4.5a4.5 4.5 0 0 0-4 0C7 22 3 19 6 16Z"/></g>,
     copy: <><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></>,
     'zoom-in': <><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6M10 7v6M7 10h6"/></>,
     'zoom-out': <><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6M7 10h6"/></>,

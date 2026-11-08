@@ -1,5 +1,5 @@
 const { createHmac, createPrivateKey, createPublicKey, sign, randomBytes } = require('node:crypto');
-const seedSlot = 'voicecord:device-profile:v1';
+const seedSlot = 'pawtalk:device-profile:v1';
 const ed25519SeedHeader = Buffer.from('302e020100300506032b657004220420', 'hex');
 
 function profileSigner(credentials) {
@@ -16,10 +16,10 @@ function profileSigner(credentials) {
     })().catch(() => { pending = undefined; });
     const root = await pending;
     if (!root) return undefined;
-    const seed = createHmac('sha256', root).update('voicecord-profile-v1\n' + scope).digest();
+    const seed = createHmac('sha256', root).update('pawtalk-profile-v1\n' + scope).digest();
     const privateKey = createPrivateKey({ key: Buffer.concat([ed25519SeedHeader, seed]), format: 'der', type: 'pkcs8' });
     const key = createPublicKey(privateKey).export({ format: 'der', type: 'spki' }).subarray(-32);
-    const signature = sign(null, Buffer.from('voicecord-profile-v1\n' + challenge + '\n' + nickname), privateKey);
+    const signature = sign(null, Buffer.from('pawtalk-profile-v1\n' + challenge + '\n' + nickname), privateKey);
     return { key: key.toString('base64url'), challenge, signature: signature.toString('base64url') };
   };
 }

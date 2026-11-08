@@ -22,7 +22,7 @@ process.on('message', async input => {
   if (input.stop) { void stop(); return; }
   try {
     const { default: NatAPI } = await import('@silentbot1/nat-api');
-    mapper = new NatAPI({ ttl: 1200, autoUpdate: false, enablePMP: false, description: 'Voicecord temporary room', upnpPermanentFallback: false });
+    mapper = new NatAPI({ ttl: 1200, autoUpdate: false, enablePMP: false, description: 'PawTalk temporary room', upnpPermanentFallback: false });
     let mapped = true;
     for (const [port, protocol] of [[input.port, 'TCP'], [input.port+1, 'TCP'], [input.port+2, 'UDP']]) {
       if (stopping) return;
@@ -34,7 +34,7 @@ process.on('message', async input => {
         await mapper.destroy();
         const gateway = await windowsGateway();
         if (gateway) {
-          mapper = new NatAPI({ ttl: 1200, autoUpdate: false, enablePMP: false, enableUPNP: false, description: 'Voicecord temporary room' });
+          mapper = new NatAPI({ ttl: 1200, autoUpdate: false, enablePMP: false, enableUPNP: false, description: 'PawTalk temporary room' });
           const { default: PMP } = await import('@silentbot1/nat-api/lib/pmp/index.js');
           mapper._pmpClient = new PMP(gateway);
           const mapping = mapper._pmpClient.portMapping.bind(mapper._pmpClient);
@@ -67,7 +67,7 @@ process.on('message', async input => {
         let valid = true;
         for (const [port, protocol] of [[input.port, 'TCP'], [input.port+1, 'TCP'], [input.port+2, 'UDP']]) {
           if (stopping) return;
-          const [ok] = await mapper._map({ publicPort: port, privatePort: port, protocol, ttl: 1200, description: 'Voicecord temporary room' });
+          const [ok] = await mapper._map({ publicPort: port, privatePort: port, protocol, ttl: 1200, description: 'PawTalk temporary room' });
           if (!ok) valid = false;
         }
         if (await mapper.externalIp() !== externalIP) valid = false;

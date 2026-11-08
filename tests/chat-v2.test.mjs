@@ -55,7 +55,7 @@ test('chat IPC forwards bounded page cursors and keeps attachment bytes out of h
 });
 
 test('automatic update preference survives restarts and rejects untyped values', async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'voicecord-update-pref-'));
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-update-pref-'));
   try {
     const file = path.join(dir, 'updates.json'); const settings = new UpdatePreferences(file);
     assert.equal(settings.enabled, true); settings.setEnabled(false);

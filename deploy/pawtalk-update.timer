@@ -1,5 +1,5 @@
 [Unit]
-Description=Check for Voicecord server updates every 30 minutes
+Description=Check for PawTalk server updates every 30 minutes
 
 [Timer]
 OnBootSec=5min

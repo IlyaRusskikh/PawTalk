@@ -2,15 +2,15 @@
 version: '3.8'
 services:
   server:
-    image: ${VOICECORD_IMAGE:?Set VOICECORD_IMAGE}
+    image: ${PAWTALK_IMAGE:?Set PAWTALK_IMAGE}
     networks: [host]
     environment:
-      VOICECORD_PUBLIC_IP: ${VOICECORD_PUBLIC_IP:?Set VOICECORD_PUBLIC_IP}
-      VOICECORD_PORT: ${VOICECORD_PORT:-18443}
-      VOICECORD_E2EE: ${VOICECORD_E2EE:-false}
-      VOICECORD_E2EE_KEY_ID: ${VOICECORD_E2EE_KEY_ID:-}
-      VOICECORD_CHAT_MAX_MB: ${VOICECORD_CHAT_MAX_MB:-128}
-      VOICECORD_UPDATE_PROXY: ${VOICECORD_UPDATE_PROXY:-true}
+      PAWTALK_PUBLIC_IP: ${PAWTALK_PUBLIC_IP:?Set PAWTALK_PUBLIC_IP}
+      PAWTALK_PORT: ${PAWTALK_PORT:-18443}
+      PAWTALK_E2EE: ${PAWTALK_E2EE:-false}
+      PAWTALK_E2EE_KEY_ID: ${PAWTALK_E2EE_KEY_ID:-}
+      PAWTALK_CHAT_MAX_MB: ${PAWTALK_CHAT_MAX_MB:-128}
+      PAWTALK_UPDATE_PROXY: ${PAWTALK_UPDATE_PROXY:-true}
     volumes:
       - server_data:/data
       - type: tmpfs
@@ -21,7 +21,7 @@ services:
     cap_drop: [ALL]
     stop_grace_period: 20s
     healthcheck:
-      test: [CMD, /voicecord, serve, healthcheck]
+      test: [CMD, /pawtalk, serve, healthcheck]
       interval: 10s
       timeout: 5s
       start_period: 30s
@@ -29,10 +29,10 @@ services:
     deploy:
       replicas: 1
       labels:
-        io.voicecord.managed: 'true'
-        io.voicecord.version: ${VOICECORD_RELEASE:-0.4.1}
+        io.pawtalk.managed: 'true'
+        io.pawtalk.version: ${PAWTALK_RELEASE:-0.4.1}
       placement:
-        constraints: [node.labels.voicecord.data == true]
+        constraints: [node.labels.pawtalk.data == true]
       update_config:
         parallelism: 1
         order: stop-first
@@ -59,4 +59,4 @@ networks:
 volumes:
   server_data:
     external: true
-    name: ${VOICECORD_DATA_VOLUME:?Set the existing data volume name}
+    name: ${PAWTALK_DATA_VOLUME:?Set the existing data volume name}

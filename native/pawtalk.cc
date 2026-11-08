@@ -16,12 +16,12 @@
 
 #ifdef __MINGW32__
 #include <delayimp.h>
-static FARPROC WINAPI VoicecordDelayLoad(unsigned event, PDelayLoadInfo info) {
+static FARPROC WINAPI PawTalkDelayLoad(unsigned event, PDelayLoadInfo info) {
   if(event == dliNotePreLoadLibrary && _stricmp(info->szDll, "node.exe") == 0)
     return reinterpret_cast<FARPROC>(GetModuleHandleW(nullptr));
   return nullptr;
 }
-extern "C" PfnDliHook __pfnDliNotifyHook2 = VoicecordDelayLoad;
+extern "C" PfnDliHook __pfnDliNotifyHook2 = PawTalkDelayLoad;
 #endif
 
 using Microsoft::WRL::ComPtr;
@@ -207,4 +207,4 @@ static Napi::Object Init(Napi::Env env, Napi::Object exports) {
   env.AddCleanupHook([] { StopHook(); delete ducking; ducking=nullptr; });
   return exports;
 }
-NODE_API_MODULE(voicecord, Init)
+NODE_API_MODULE(pawtalk, Init)

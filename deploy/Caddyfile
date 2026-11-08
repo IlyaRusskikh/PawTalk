@@ -21,6 +21,6 @@ https://{$SERVER_HOST} {
 		reverse_proxy 127.0.0.1:7880
 	}
 	handle {
-		respond "Voicecord voice server" 200
+		respond "PawTalk voice server" 200
 	}
 }

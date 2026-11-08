@@ -1,7 +1,7 @@
 const { app, BrowserWindow, session } = require('electron');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-app.setPath('userData', path.join(require('node:os').tmpdir(), 'voicecord-bookmarks-' + process.pid));
+app.setPath('userData', path.join(require('node:os').tmpdir(), 'pawtalk-bookmarks-' + process.pid));
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
@@ -13,7 +13,7 @@ app.whenReady().then(async () => {
  const wait = () => new Promise(resolve => setTimeout(resolve, 150));
  try {
   await win.loadFile(path.resolve('dist/index.html')); await wait();
-  await js(`localStorage.setItem('voicecord.bookmarks', JSON.stringify(['A','B','C'].map(name=>({name,address:'https://'+name.toLowerCase()+'.example.com'}))))`);
+  await js(`localStorage.setItem('pawtalk.bookmarks', JSON.stringify(['A','B','C'].map(name=>({name,address:'https://'+name.toLowerCase()+'.example.com'}))))`);
   await win.reload(); await wait();
   assert.deepEqual(await js(`[...document.querySelectorAll('.participant-pin')].map(el=>el.textContent)`), ['3','3','3'], 'counts load while disconnected');
   await js('window.testWindowActive(false)');
@@ -35,7 +35,7 @@ app.whenReady().then(async () => {
   await new Promise(resolve => setTimeout(resolve, 230));
   const visualOrder = `[...document.querySelectorAll('.bookmark-orb')].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top).map(el=>el.getAttribute('aria-label'))`;
   assert.deepEqual(await js(visualOrder), ['B','C','A'], 'placeholder occupies the destination before drop');
-  assert.deepEqual(await js(`JSON.parse(localStorage.getItem('voicecord.bookmarks')).map(item=>item.name)`), ['A','B','C'], 'preview is not persisted');
+  assert.deepEqual(await js(`JSON.parse(localStorage.getItem('pawtalk.bookmarks')).map(item=>item.name)`), ['A','B','C'], 'preview is not persisted');
   await js('window.finishBookmarkDrag(false)'); await wait();
   assert.equal(await js(`document.querySelector('.bookmark-placeholder')`), null);
   assert.deepEqual(await js(visualOrder), ['A','B','C'], 'cancelling restores the original layout');
@@ -52,13 +52,13 @@ app.whenReady().then(async () => {
   await js(`document.querySelector('#settings-tab-general').click()`); await wait();
   const row = text => `Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.querySelector('strong').textContent===${JSON.stringify(text)}).querySelector('input')`;
   assert.equal(await js(`${row('Запускать свёрнутым в трее')}.disabled`),true);
-  await js(`${row('Запускать Voicecord при входе в Windows')}.click()`); await wait();
+  await js(`${row('Запускать PawTalk при входе в Windows')}.click()`); await wait();
   assert.equal(await js(`${row('Запускать свёрнутым в трее')}.disabled`),false);
   await js(`${row('Запускать свёрнутым в трее')}.click()`); await wait();
   assert.equal(await js(`${row('Запускать свёрнутым в трее')}.checked`),true);
   const fs=require('node:fs/promises');await fs.mkdir(path.resolve('release/qa'),{recursive:true});
   await fs.writeFile(path.resolve('release/qa/startup-tray-ru.png'),(await win.webContents.capturePage()).toPNG());
-  await js(`document.querySelector('dialog [aria-label="Закрыть"]').click();localStorage.setItem('voicecord.bookmarks',JSON.stringify(Array.from({length:30},(_,i)=>({name:'Room '+i,address:'https://room'+i+'.example.com'}))))`);
+  await js(`document.querySelector('dialog [aria-label="Закрыть"]').click();localStorage.setItem('pawtalk.bookmarks',JSON.stringify(Array.from({length:30},(_,i)=>({name:'Room '+i,address:'https://room'+i+'.example.com'}))))`);
   await win.reload(); await wait(); await wait();
   const railWidth = await js(`document.querySelector('.rail').getBoundingClientRect().width`);
   assert.equal(railWidth,84,'overflow does not widen the rail');

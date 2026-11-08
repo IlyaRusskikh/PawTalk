@@ -10,13 +10,13 @@ export function t(source: string, ...values: unknown[]): string {
 }
 export async function initializeLanguage() {
   try {
-    const value = await window.desktop?.getLanguage?.() ?? localStorage.getItem('voicecord.language');
+    const value = await window.desktop?.getLanguage?.() ?? localStorage.getItem('pawtalk.language');
     apply(value === 'en' ? 'en' : 'ru');
   } catch { apply('ru'); }
 }
 export async function changeLanguage(value: Language) {
   await window.desktop?.setLanguage?.(value);
-  localStorage.setItem('voicecord.language', value);
+  localStorage.setItem('pawtalk.language', value);
   apply(value);
 }
 export function useLanguage() {

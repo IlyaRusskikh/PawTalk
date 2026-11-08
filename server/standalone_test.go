@@ -63,7 +63,7 @@ func TestStandaloneAddressesAndCertificate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(invitation(state), "voicecord://[2001:db8::1]:18443/") {
+	if !strings.HasPrefix(invitation(state), "pawtalk://[2001:db8::1]:18443/") {
 		t.Fatal(invitation(state))
 	}
 	state.IP = "203.0.113.20"

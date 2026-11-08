@@ -78,6 +78,32 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
   const navigation = useRef(false);
   const refresh = useRef<(() => void) | undefined>(undefined);
   const [menu, setMenu] = useState<{ message: ChatMessage; x: number; y: number }>();
+  const notificationReady = useRef(false);
+  const notificationView = useRef({ visible, connected, covered });
+  notificationView.current = { visible, connected, covered };
+  const windowActive = useRef(document.visibilityState === 'visible' && document.hasFocus());
+  const liveKeys = useRef(new Set<string>());
+
+  useEffect(() => {
+    let changed = false;
+    const receive = (active: boolean) => { changed = true; windowActive.current = active; };
+    const refreshActive = () => receive(document.visibilityState === 'visible' && document.hasFocus());
+    const off = window.desktop?.onWindowActive?.(receive);
+    if (window.desktop?.windowActive) void window.desktop.windowActive().then(active => { if (!changed) windowActive.current = active; }).catch(() => {});
+    window.addEventListener('focus', refreshActive); window.addEventListener('blur', refreshActive);
+    document.addEventListener('visibilitychange', refreshActive);
+    return () => { changed = true; off?.(); window.removeEventListener('focus', refreshActive); window.removeEventListener('blur', refreshActive); document.removeEventListener('visibilitychange', refreshActive); };
+  }, []);
+
+  function notifyUnseen(incoming: ChatMessage[]) {
+    const view = notificationView.current;
+    if (!view.connected) return;
+    const remote = incoming.some(message => message.authorIdentity !== identity
+      && !(access?.profileId && message.authorId === access.profileId)
+      && message.key !== pending.current?.packet.requestId
+      && !rows.current.some(row => row.key === message.key));
+    if (remote && (!view.visible || view.covered || !windowActive.current || document.visibilityState !== 'visible' || !follow.current || !atLatest())) session.notifyMessage();
+  }
 
   async function getKey() {
     if (!key) {
@@ -88,7 +114,7 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
   }
   async function getProfileKey() {
     if (!key) return undefined;
-    profileEncryption.current ??= chatKey(key, access!.feed, 'Voicecord chat profile v1'); return profileEncryption.current;
+    profileEncryption.current ??= chatKey(key, access!.feed, 'PawTalk chat profile v1'); return profileEncryption.current;
   }
   function commit(next: ChatMessage[], context = rows.current) {
     groupBefore.current = next.length ? merge(groupBefore.current ? [groupBefore.current] : [], context).filter(message => message.id < next[0].id).at(-1) : undefined;
@@ -166,6 +192,9 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
         const last = paged ? metadata.last : Math.max(boundsRef.current.last, page.cursor);
         if (!Number.isSafeInteger(last) || last! < page.first || page.messages.some(message => message.id > last!)) throw new Error('Invalid chat bounds');
         const wasLatest = atLatest();
+        // Only new live poll results can notify. Initial/reloaded history is silent.
+        if (kind === 'poll' && notificationReady.current) notifyUnseen(page.messages.filter(message => message.id > after));
+        if (kind === 'initial' || kind === 'poll') notificationReady.current = true;
         boundsRef.current = { first: page.first, last: last! }; setBounds(boundsRef.current);
         if (kind === 'initial') { newest.current = last!; setEntryLast(last!); }
         else if (kind === 'poll') newest.current = Math.max(newest.current, page.cursor);
@@ -246,6 +275,8 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
   }, [limit]);
   useEffect(() => {
     if (!access || !connected) return;
+    // The first result after joining/reconnecting or rebuilding this feed is a baseline.
+    notificationReady.current = false;
     let active = true, polling = false, requested = false;
     let notification: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
@@ -275,9 +306,13 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
           try { content = await decryptChat(undefined, JSON.parse(raw)); } catch {}
           if (!content && raw.trim() && payload.length <= chatTextLimit) content = { key: crypto.randomUUID(), text: raw.trim() };
         }
-        if (active && content && !rows.current.some(message => message.key === content!.key)) {
+        if (active && content && !liveKeys.current.has(content.key) && !rows.current.some(message => message.key === content!.key)) {
           const id = ++newest.current;
-          commit([...rows.current, { ...content, id, author, authorIdentity, sent: Date.now() }].slice(-windowLimit.current));
+          const message = { ...content, id, author, authorIdentity, sent: Date.now() };
+          liveKeys.current.add(content.key);
+          if (liveKeys.current.size > chatMessageLimit) liveKeys.current.delete(liveKeys.current.values().next().value!);
+          notifyUnseen([message]);
+          commit([...rows.current, message].slice(-windowLimit.current));
         }
       } catch { /* Ignore invalid live packets. */ }
     })(); };
@@ -504,7 +539,7 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
     {sendError && <p className="text-error" role="alert">{t("Отправка не подтверждена. Попробуйте снова.")}</p>}
     {rateLimited && <p className="text-error" role="status">{t("Слишком много сообщений. Подождите секунду.")}</p>}
     {notice && <p className="chat-inline-notice" role="status">{notice}<button type="button" aria-label={t("Закрыть сообщение")} onClick={() => setNotice('')}>×</button></p>}
-    <div className="chat-typing" role="status">{typists.length > 0 && <><span className="chat-typing-dots" aria-hidden="true"><i/><i/><i/></span>{typists.length === 1 ? t("{0} печатает…", typists[0].name) : t("Несколько участников печатают…")}</>}</div>
+    <div className="chat-typing" role="status">{typists.length > 0 && <><span className="chat-typing-paws" aria-hidden="true"><Icon name="paw" size={14}/><Icon name="paw" size={14}/><Icon name="paw" size={14}/></span>{typists.length === 1 ? t("{0} печатает…", typists[0].name) : t("Несколько участников печатают…")}</>}</div>
     <form className="chat-composer" onSubmit={event => { event.preventDefault(); void send(); }} onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} onDrop={event => { event.preventDefault(); void chooseImage(event.dataTransfer.files[0]); }}>
       {reply && <div className="chat-reply-draft"><Icon name="reply" size={16}/><div><strong>{t("Ответ {0}", reply.author)}</strong><span>{reply.text}</span></div><button type="button" aria-label={t("Отменить ответ")} disabled={sending} onClick={() => setReply(undefined)}>×</button></div>}
       {imageDraft && <div className="chat-attachment-draft"><img src={imageDraft.preview} alt={imageDraft.image.name}/><div><strong>{imageDraft.image.name}</strong><span>{Math.ceil(imageDraft.image.size / 1024)} {t("КБ")}</span></div><button type="button" aria-label={t("Удалить вложение")} disabled={sending} onClick={() => { ++selection.current; setImageDraft(undefined); uploaded.current = undefined; pending.current = undefined; }}>×</button></div>}

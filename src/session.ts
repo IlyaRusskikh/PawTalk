@@ -2,19 +2,20 @@ import { t } from './i18n';
 import { Room, RoomEvent, Track, LocalAudioTrack, AudioPresets, ConnectionState, ExternalE2EEKeyProvider, isE2EESupported, type RemoteAudioTrack, type RemoteTrackPublication } from 'livekit-client';
 import E2EEWorker from 'livekit-client/e2ee-worker?worker';
 import { mediaKeyBytes } from '../shared/encryption.mjs';
-import { Microphone, playCue } from './audio';
+import { Microphone } from './audio';
+import { playSound } from './sounds';
 import type { Settings } from './settings';
 import { RttMeter } from '../shared/rtt.mjs';
 import { PacketLossMeter } from '../shared/packet-loss.mjs';
 import { avatarPayloadLimit, validAvatar } from './avatarImage';
 import { chatSendsPerSecond } from './chat';
 
-const chatTopic = 'voicecord.chat.v1';
-const typingTopic = 'voicecord.typing.v1';
-const avatarTopic = 'voicecord.avatar.v1';
-const nicknameTopic = 'voicecord.nickname.v1';
-const profileRequestTopic = 'voicecord.profile-request.v1';
-const chatRefreshTopic = 'voicecord.chat-refresh.v1';
+const chatTopic = 'pawtalk.chat.v1';
+const typingTopic = 'pawtalk.typing.v1';
+const avatarTopic = 'pawtalk.avatar.v1';
+const nicknameTopic = 'pawtalk.nickname.v1';
+const profileRequestTopic = 'pawtalk.profile-request.v1';
+const chatRefreshTopic = 'pawtalk.chat-refresh.v1';
 
 export interface Person { id: string; name: string; avatar?: string; speaking: boolean; muted: boolean; deafened?: boolean; local: boolean; rtt?: number; packetLoss?: number; }
 export interface Snapshot { state: string; people: Person[]; db: number; speaking: boolean; threshold?: number; rtt?: number; packetLoss?: number; e2ee?: boolean; }
@@ -48,6 +49,12 @@ export class VoiceSession {
   onTyping?: (identity: string, typing: boolean) => void;
   onChatRefresh?: () => void;
   constructor(public settings: Settings, private transport: { sharedAudioContext?: boolean } = {}) {}
+  private playRoomCue(connected: boolean) {
+    if (!this.deafened) void playSound(connected ? 'join' : 'leave', this.settings);
+  }
+  notifyMessage() {
+    if (!this.deafened && this.state === 'connected') void playSound('message', this.settings);
+  }
   private syncGate() { this.mic?.update(this.settings, this.muted || this.deafened || this.state !== 'connected', this.ptt); }
   private emit() {
     const room = this.room;
@@ -87,7 +94,7 @@ export class VoiceSession {
     });
   }
   async connect(url: string, token: string, encryption: { required?: boolean; key?: string } = {}) {
-    if (encryption.required && !isE2EESupported()) throw new Error(t("Этот клиент не поддерживает E2EE. Обновите Voicecord."));
+    if (encryption.required && !isE2EESupported()) throw new Error(t("Этот клиент не поддерживает E2EE. Обновите PawTalk."));
     if (encryption.required) { try { mediaKeyBytes(encryption.key); } catch { throw new Error(t('Нужен ключ E2EE из приглашения: 64 шестнадцатеричных символа.')); } }
     if (encryption.key && !encryption.required) throw new Error(t("Сервер не подтвердил обязательное E2EE."));
     this.stopped = false;
@@ -124,7 +131,7 @@ export class VoiceSession {
       track.detach().forEach(el => el.remove()); this.elements.delete(id);
     });
     room.on(RoomEvent.ActiveSpeakersChanged, speakers => { this.speakers = new Set(speakers.map(p => p.identity)); this.emit(); });
-    room.on(RoomEvent.ParticipantConnected, p => { this.publishAudioState(); if (this.avatar) this.publishAvatar(p.identity); this.publishNickname(p.identity); if (this.settings.sounds) playCue(true); this.emit(); });
+    room.on(RoomEvent.ParticipantConnected, p => { this.publishAudioState(); if (this.avatar) this.publishAvatar(p.identity); this.publishNickname(p.identity); this.playRoomCue(true); this.emit(); });
     const peerChatTimes = new Map<string, number[]>();
     const peerProfileRequests = new Map<string, number>();
     room.on(RoomEvent.ParticipantDisconnected, p => {
@@ -171,11 +178,11 @@ export class VoiceSession {
         this.emit();
         return;
       }
-      if (topic === 'voicecord.audio-state.v1' && participant && payload.length <= 100) {
+      if (topic === 'pawtalk.audio-state.v1' && participant && payload.length <= 100) {
         try { const state = JSON.parse(new TextDecoder().decode(payload)); if (typeof state.deafened === 'boolean') { this.peerDeafened.set(participant.identity, state.deafened); this.emit(); } } catch {}
         return;
       }
-      if (topic !== 'voicecord.rtt.v1' || !participant || payload.length > 100) return;
+      if (topic !== 'pawtalk.rtt.v1' || !participant || payload.length > 100) return;
       try { const value = JSON.parse(new TextDecoder().decode(payload));
         const rtt = typeof value.rtt === 'number' && value.rtt >= 0 && value.rtt <= 60000 ? value.rtt : undefined;
         const packetLoss = typeof value.loss === 'number' && value.loss >= 0 && value.loss <= 100 ? value.loss : undefined;
@@ -183,7 +190,7 @@ export class VoiceSession {
         this.emit();
       } catch { /* Ignore malformed peer telemetry. */ }
     });
-    room.on(RoomEvent.ParticipantDisconnected, () => { if (this.settings.sounds) playCue(false); this.emit(); });
+    room.on(RoomEvent.ParticipantDisconnected, () => { this.playRoomCue(false); this.emit(); });
     room.on(RoomEvent.TrackMuted, () => this.emit()); room.on(RoomEvent.TrackUnmuted, () => this.emit());
     room.on(RoomEvent.AudioPlaybackStatusChanged, () => { if (!room.canPlaybackAudio) this.onError(t("Не удалось включить воспроизведение. Переподключитесь к комнате.")); });
     room.on(RoomEvent.ConnectionStateChanged, state => { this.state = state; if (state === 'connected') { this.publishAudioState(); this.syncProfile(); } else { this.rttMeter.reset(); this.lossMeter.reset(); this.packetLoss = undefined; this.peerNetwork.clear(); this.peerDeafened.clear(); } this.syncGate(); this.emit(); });
@@ -206,7 +213,7 @@ export class VoiceSession {
       await room.startAudio();
       if (generation !== this.generation) return;
       this.syncProfile();
-      if (this.settings.sounds) playCue(true);
+      this.playRoomCue(true);
       let tick = 0;
       this.timer = setInterval(() => {
         const others = [...this.speakers].some(id => id !== room.localParticipant.identity && !this.deafened && !this.peopleVolume.get(id)?.muted);
@@ -253,7 +260,7 @@ export class VoiceSession {
     this.applyVolumes(); this.emit();
   }
   private publishAudioState() {
-    if (this.room?.state === ConnectionState.Connected) void this.room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ deafened: this.deafened })), { reliable: true, topic: 'voicecord.audio-state.v1' }).catch(() => {});
+    if (this.room?.state === ConnectionState.Connected) void this.room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ deafened: this.deafened })), { reliable: true, topic: 'pawtalk.audio-state.v1' }).catch(() => {});
   }
   private publishAvatar(identity?: string) {
     const room = this.room;
@@ -332,7 +339,7 @@ export class VoiceSession {
       const loss = this.lossMeter.sample(streams);
       this.packetLoss = streams.length ? loss : undefined;
       const telemetry = { rtt: rtt ?? null, loss: this.packetLoss ?? null };
-      void this.room?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(telemetry)), { reliable: false, topic: 'voicecord.rtt.v1' }).catch(() => {});
+      void this.room?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(telemetry)), { reliable: false, topic: 'pawtalk.rtt.v1' }).catch(() => {});
       this.emit();
     } catch { this.emit(); /* Existing measurements still expire if polling fails. */ }
     finally { this.collecting = false; }
@@ -351,7 +358,7 @@ export class VoiceSession {
     this.peopleVolume.clear(); this.speakers.clear(); this.speaking = false; this.db = -100; this.ptt = false; this.state = 'disconnected';
     void window.desktop?.duck({ active: false, factor: 1 }).catch(() => {});
     this.rtt = undefined; this.packetLoss = undefined; this.lossMeter.reset(); this.rttMeter.reset(); this.peerNetwork.clear(); this.peerDeafened.clear(); this.peerAvatars.clear(); this.peerNicknames.clear();
-    if (wasConnected && this.settings.sounds) playCue(false);
+    if (wasConnected) this.playRoomCue(false);
     this.emit();
     await Promise.allSettled([room?.disconnect(), playback?.close()]);
     worker?.terminate();

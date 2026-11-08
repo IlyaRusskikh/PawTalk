@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs/promises');
-app.setPath('userData', path.join(os.tmpdir(), 'voicecord-fixes-' + process.pid));
+app.setPath('userData', path.join(os.tmpdir(), 'pawtalk-fixes-' + process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 app.disableHardwareAcceleration();
@@ -41,7 +41,7 @@ app.on('browser-window-created', (_event, win) => {
       await wait(200);
       await fs.mkdir('release/qa', { recursive: true });
       await fs.writeFile('release/qa/profile-field-spacing.png', (await win.webContents.capturePage()).toPNG());
-      if (process.env.VOICECORD_VERIFY_HOST_CHECK === '1') {
+      if (process.env.PAWTALK_VERIFY_HOST_CHECK === '1') {
         const result = await js('window.desktop.checkHost(18443)');
         console.log('Real Electron IPC network result: ' + JSON.stringify(result));
         assert.equal(result.state, 'internet', 'current external network reachability');

@@ -23,7 +23,7 @@ test('preview keeps credentials in main, caches logins and falls back for older 
 test('preview avatars authenticate the profile/feed and are absent without an E2EE key', () => {
   const key = 'a'.repeat(64), feed = 'b'.repeat(32), id = 'c'.repeat(64);
   const clear = 'data:image/png;base64,aGVsbG8=';
-  const secret = hkdfSync('sha256', Buffer.from(key, 'hex'), Buffer.from(feed), Buffer.from('Voicecord chat profile v1'), 32);
+  const secret = hkdfSync('sha256', Buffer.from(key, 'hex'), Buffer.from(feed), Buffer.from('PawTalk chat profile v1'), 32);
   const iv = Buffer.alloc(12, 7), cipher = createCipheriv('aes-256-gcm', secret, iv); cipher.setAAD(Buffer.from(id));
   const bytes = Buffer.concat([cipher.update(clear), cipher.final(), cipher.getAuthTag()]);
   const profile = { id, nonce: iv.toString('base64'), ciphertext: bytes.toString('base64') };

@@ -8,11 +8,11 @@ const os = require('node:os');
 const https = require('node:https');
 const { X509Certificate, createHash, randomBytes } = require('node:crypto');
 const { invitation } = require('../electron/address.cjs');
-app.setPath('userData', path.join(os.tmpdir(), 'voicecord-docs-' + process.pid));
+app.setPath('userData', path.join(os.tmpdir(), 'pawtalk-docs-' + process.pid));
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
-delete process.env.VOICECORD_DEV_URL;
+delete process.env.PAWTALK_DEV_URL;
 process.argv.push('--smoke', '--offscreen-smoke');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, label) {
@@ -62,12 +62,12 @@ app.on('browser-window-created', (_event, win) => {
     let vite, exitCode = 0;
     const guests = [];
     try {
-      const output = process.env.VOICECORD_CAPTURE_DIR ? path.resolve(process.env.VOICECORD_CAPTURE_DIR) : path.resolve(__dirname, '../website/assets');
+      const output = process.env.PAWTALK_CAPTURE_DIR ? path.resolve(process.env.PAWTALK_CAPTURE_DIR) : path.resolve(__dirname, '../website/assets');
       await fs.mkdir(output, { recursive: true });
       for (let i = 0; i < 80 && !await run(`!!document.querySelector('.home-actions')`); i++) await wait(100);
       await wait(400);
       // Avoid registering shortcuts already used by the user's running client.
-      await run(`localStorage.setItem('voicecord.settings', JSON.stringify({muteKey:'',deafenKey:''}))`);
+      await run(`localStorage.setItem('pawtalk.settings', JSON.stringify({muteKey:'',deafenKey:''}))`);
       await new Promise(resolve => { win.webContents.once('did-finish-load', resolve); win.reload(); });
       for (let i = 0; i < 80 && !await run(`!!document.querySelector('.home-actions')`); i++) await wait(100);
       assert.equal(await run('window.desktop.pendingInvitation()'), '', 'no live invitation');
@@ -80,7 +80,7 @@ app.on('browser-window-created', (_event, win) => {
       };
       for (const language of ['ru', 'en']) {
         await run(`window.desktop.setLanguage(${JSON.stringify(language)})`);
-        await run(`localStorage.setItem('voicecord.nickname',${JSON.stringify(language === 'en' ? 'Guest' : 'Гость')})`);
+        await run(`localStorage.setItem('pawtalk.nickname',${JSON.stringify(language === 'en' ? 'Guest' : 'Гость')})`);
         await new Promise(resolve => { win.webContents.once('did-finish-load', resolve); win.reload(); });
         for (let i = 0; i < 80 && !await run(`!!document.querySelector('.home-actions')`); i++) await wait(100);
         const suffix = language === 'en' ? '-en' : '';
@@ -151,7 +151,7 @@ app.on('browser-window-created', (_event, win) => {
             const field = form.querySelectorAll('input')[index];
             set.call(field, value); field.dispatchEvent(new Event('input', { bubbles: true }));
           }
-          if (!${process.env.VOICECORD_CHAT_ACCEPTANCE === '1' && language === 'en'}) document.querySelector('.encryption-toggle input').click();
+          if (!${process.env.PAWTALK_CHAT_ACCEPTANCE === '1' && language === 'en'}) document.querySelector('.encryption-toggle input').click();
         })()`);
         await run(`document.querySelector('dialog[open] form').requestSubmit()`);
         await until(() => run('!!document.querySelector(".room-content dialog[open] .host-stop") && !!document.querySelector(".chat-compose")'), 'demo room and invitation');
@@ -187,7 +187,7 @@ app.on('browser-window-created', (_event, win) => {
         await until(() => run('document.querySelectorAll(".person-card").length === 3 && document.querySelectorAll(".chat-message").length === 3'), 'demo chat');
         assert.equal(await run('document.querySelectorAll("dialog[open]").length'), 0, 'no invitation is visible in the capture');
         await capture(`room-chat${suffix}.png`);
-        if (process.env.VOICECORD_CHAT_ACCEPTANCE === '1') {
+        if (process.env.PAWTALK_CHAT_ACCEPTANCE === '1') {
           await run(`(async()=>{
             const canvas=document.createElement('canvas');canvas.width=420;canvas.height=220;
             const context=canvas.getContext('2d');context.fillStyle='#486b85';context.fillRect(0,0,420,220);

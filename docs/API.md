@@ -5,7 +5,7 @@
 Новый сервер возвращает `chatProtocol: 2`, `chatFeed`, `chatToken`, `chatEphemeral`
 в комнатах с E2EE и без него. Без E2EE сообщения и вложения доступны серверу;
 клиент не обозначает такой чат как сквозное шифрование. Встроенная комната хранит
-до 500 сообщений в памяти. Для отдельного сервера `VOICECORD_CHAT_MAX_MB`
+до 500 сообщений в памяти. Для отдельного сервера `PAWTALK_CHAT_MAX_MB`
 задаёт размер SQLite-базы в МиБ (128 по умолчанию, `0` — без лимита), включая
 сообщения, картинки, профили и индексы. При заполнении удаляются старейшие сообщения;
 срока в семь дней и ограничения на количество сохранённых сообщений больше нет.
@@ -24,7 +24,7 @@
 - `POST /api/chat/attachments/{id}` принимает до 2 МиБ + 28 байт двоичных данных
   (исходный файл + IV/tag AES-GCM в E2EE). `id` — 32 hex-символа. Повтор тех же
   байтов идемпотентен, конфликт получает 409, превышение размера — 413.
-  Вложения входят в общий `VOICECORD_CHAT_MAX_MB`; на автора допускаются три
+  Вложения входят в общий `PAWTALK_CHAT_MAX_MB`; на автора допускаются три
   незавершённые загрузки. Если новая загрузка не помещается даже после очистки,
   сервер возвращает 507 и откатывает удаление существующей истории. Неиспользованные
   загрузки удаляются через десять минут при следующей очистке (раз в минуту).
@@ -49,7 +49,7 @@
 {"nickname":"Друг","password":"общий пароль"}
 ```
 
-Для комнаты с обязательным E2EE клиент добавляет `"e2ee":true` и `"e2eeKeyId":"<SHA256 raw 32-byte key>"`. Секретный ключ API не принимает. Без этих полей возвращается HTTP 426; при несовпадении с настроенным `VOICECORD_E2EE_KEY_ID` — 403. Ответ успешного входа содержит `e2eeRequired`; при обязательном режиме JWT также содержит атрибут `voicecord.e2ee=required`. Это политика клиентов, а не криптографическая проверка SFU содержимого опубликованных кадров. Подробности: [E2EE.md](E2EE.md).
+Для комнаты с обязательным E2EE клиент добавляет `"e2ee":true` и `"e2eeKeyId":"<SHA256 raw 32-byte key>"`. Секретный ключ API не принимает. Без этих полей возвращается HTTP 426; при несовпадении с настроенным `PAWTALK_E2EE_KEY_ID` — 403. Ответ успешного входа содержит `e2eeRequired`; при обязательном режиме JWT также содержит атрибут `pawtalk.e2ee=required`. Это политика клиентов, а не криптографическая проверка SFU содержимого опубликованных кадров. Подробности: [E2EE.md](E2EE.md).
 
 `GET /api/config` возвращает публичную политику `{"e2eeRequired":true|false}` без пароля и ключей.
 
@@ -73,7 +73,7 @@
 
 `GET /api/chat?after=0` возвращает `first` с первым доступным номером (0 для пустой ленты) и массив `messages` в порядке возрастания `id`. При следующем запросе клиент передаёт самый большой полученный номер в `after`. Записи содержат `id`, `author`, `sent` (Unix-время в миллисекундах), `requestId`, `nonce` и `ciphertext`. Сообщения подтверждённого профиля также содержат `authorId`.
 
-`GET /api/config` выдаёт одноразовый `profileChallenge`, когда сервер поддерживает историю чата. Клиент передаёт в `POST /api/connect` объект `profile` с публичным ключом Ed25519 (`key`), `challenge` и `signature`. Ключ и подпись кодируются в Base64URL без дополнения. Подписывается строка `voicecord-profile-v1\n<challenge>\n<nickname>` с исходным никнеймом запроса. Ответ содержит `profileId` с SHA-256 публичного ключа, а токен чата привязан к этому ID.
+`GET /api/config` выдаёт одноразовый `profileChallenge`, когда сервер поддерживает историю чата. Клиент передаёт в `POST /api/connect` объект `profile` с публичным ключом Ed25519 (`key`), `challenge` и `signature`. Ключ и подпись кодируются в Base64URL без дополнения. Подписывается строка `pawtalk-profile-v1\n<challenge>\n<nickname>` с исходным никнеймом запроса. Ответ содержит `profileId` с SHA-256 публичного ключа, а токен чата привязан к этому ID.
 
 `POST /api/chat/profile` обновляет никнейм подтверждённого автора и, при наличии, зашифрованный аватар. В теле передаются `nickname` и необязательные `nonce` и `ciphertext` в Base64. Чтобы получить актуальные профили вместе с сообщениями, клиент добавляет `profilesAfter=0` к первому запросу истории. Затем передаёт наибольшую полученную `revision`. Профили содержат `id`, `revision`, `nickname` и зашифрованный аватар. Новый клиент получает профиль автора даже в его отсутствие.
 
@@ -87,7 +87,7 @@ HTTP 200: `{"status":"ok"}`. Проверяет процесс API; не про�
 
 `LISTEN_ADDR` — по умолчанию `127.0.0.1:8080`.
 
-Обязательные `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (минимум 32 символа), `LIVEKIT_URL`, `VOICECORD_PASSWORD_HASH`.
+Обязательные `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (минимум 32 символа), `LIVEKIT_URL`, `PAWTALK_PASSWORD_HASH`.
 
 Формат хеша: `pbkdf2-sha256$600000$<base64url salt 16 bytes>$<base64url SHA256 digest 32 bytes>`, без padding. Получить свой хеш можно командой `go run . hash-password`, передав пароль в stdin; configure использует тот же формат.
 
@@ -97,8 +97,8 @@ HTTP 200: `{"status":"ok"}`. Проверяет процесс API; не про�
 
 ## Client update relay / Прокси обновлений клиента
 
-- `GET /api/updates/releases?per_page=100&page=1` forwards the fixed Voicecord GitHub releases endpoint (pages 1–10).
+- `GET /api/updates/releases?per_page=100&page=1` forwards the fixed PawTalk GitHub releases endpoint (pages 1–10).
 - `GET /api/updates/assets/vX.Y.Z/update-manifest.json` forwards the signed manifest.
-- `GET /api/updates/assets/vX.Y.Z/Voicecord.Setup.X.Y.Z.exe` streams that installer without disk storage.
+- `GET /api/updates/assets/vX.Y.Z/PawTalk.Setup.X.Y.Z.exe` streams that installer without disk storage.
 
-Public, read-only, no room password/E2EE key. Arbitrary destinations and caller credentials are rejected/not forwarded. Metadata is cached in memory for 60 seconds; installers are not cached. Two upstream requests at once, 1 MiB/s per installer, 20 requests/minute/IP; 429/503 indicate throttling/busy/disabled. Set `VOICECORD_UPDATE_PROXY=false` to disable. The client must independently authenticate manifests and verify installer bytes. See [UPDATES.md](UPDATES.md) and [UPDATE-SIGNING.md](UPDATE-SIGNING.md).
+Public, read-only, no room password/E2EE key. Arbitrary destinations and caller credentials are rejected/not forwarded. Metadata is cached in memory for 60 seconds; installers are not cached. Two upstream requests at once, 1 MiB/s per installer, 20 requests/minute/IP; 429/503 indicate throttling/busy/disabled. Set `PAWTALK_UPDATE_PROXY=false` to disable. The client must independently authenticate manifests and verify installer bytes. See [UPDATES.md](UPDATES.md) and [UPDATE-SIGNING.md](UPDATE-SIGNING.md).

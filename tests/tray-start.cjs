@@ -1,7 +1,7 @@
 const { app } = require('electron');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-app.setPath('userData', path.join(require('node:os').tmpdir(), 'voicecord-tray-start-' + process.pid));
+app.setPath('userData', path.join(require('node:os').tmpdir(), 'pawtalk-tray-start-' + process.pid));
 app.disableHardwareAcceleration();
 process.argv.push('--start-in-tray');
 app.once('browser-window-created', (_event, win) => {

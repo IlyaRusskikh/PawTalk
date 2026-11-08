@@ -17,8 +17,8 @@ async function download(url) {
   return Buffer.from(await r.arrayBuffer());
 }
 await mkdir(output, { recursive: true });
-const go = process.env.VOICECORD_GO || (await access(path.join(tmpdir(), 'voicecord-tools/go/bin/go.exe')).then(() => path.join(tmpdir(), 'voicecord-tools/go/bin/go.exe')).catch(() => 'go'));
-run(go, ['build', '-trimpath', '-o', path.join(output, 'voicecord-api.exe'), '.'], { cwd: path.join(root, 'server'), env: { ...process.env, GOOS: 'windows', GOARCH: 'amd64' } });
+const go = process.env.PAWTALK_GO || (await access(path.join(tmpdir(), 'pawtalk-tools/go/bin/go.exe')).then(() => path.join(tmpdir(), 'pawtalk-tools/go/bin/go.exe')).catch(() => 'go'));
+run(go, ['build', '-trimpath', '-o', path.join(output, 'pawtalk-api.exe'), '.'], { cwd: path.join(root, 'server'), env: { ...process.env, GOOS: 'windows', GOARCH: 'amd64' } });
 const goRoot = spawnSync(go, ['env', 'GOROOT'], { encoding: 'utf8', windowsHide: true });
 if (goRoot.status !== 0) throw new Error('Could not locate Go license');
 await copyFile(path.join(goRoot.stdout.trim(), 'LICENSE'), path.join(output, 'GO-LICENSE'));

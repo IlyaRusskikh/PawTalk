@@ -12,19 +12,19 @@ const { diagnosticCommand } = createRequire(import.meta.url)('../electron/diagno
 const pin = 'a'.repeat(64);
 test('CMD diagnostics exclude password, fit CMD limit, and reject injected targets', () => {
  const mediaKey = 'b'.repeat(64);
- const command = diagnosticCommand(`voicecord://192.168.0.13:18443/${pin}#password=hidden-secret&name=room&e2ee=${mediaKey}`);
+ const command = diagnosticCommand(`pawtalk://192.168.0.13:18443/${pin}#password=hidden-secret&name=room&e2ee=${mediaKey}`);
  assert.ok(command.length < 8191);
  const source = Buffer.from(command.split(' ').at(-1), 'base64').toString('utf16le');
  assert.ok(!source.includes('hidden-secret'));
  assert.ok(!source.includes(mediaKey));
  assert.ok(source.includes(pin));
  assert.ok(source.includes('/healthz') && source.includes('/rtc'));
- for (const input of ['https://example.com', `voicecord://evil.example:18443/${pin}`, `voicecord://127.0.0.1:18443/${pin}#password=x&bad=value`]) assert.throws(() => diagnosticCommand(input));
+ for (const input of ['https://example.com', `pawtalk://evil.example:18443/${pin}`, `pawtalk://127.0.0.1:18443/${pin}#password=x&bad=value`]) assert.throws(() => diagnosticCommand(input));
 });
 test('generated command verifies real TLS pin, endpoints, TCP, and rejects wrong pins', { skip: process.platform !== 'win32' }, async t => {
- const go = process.env.VOICECORD_GO || path.join(tmpdir(), 'voicecord-tools/go/bin/go.exe');
+ const go = process.env.PAWTALK_GO || path.join(tmpdir(), 'pawtalk-tools/go/bin/go.exe');
  try { await access(go); } catch { t.skip('Go test certificate generator unavailable'); return; }
- const dir = await mkdtemp(path.join(tmpdir(), 'voicecord-diagnostic-test-'));
+ const dir = await mkdtemp(path.join(tmpdir(), 'pawtalk-diagnostic-test-'));
  let web, tcp;
  try {
   const file = path.join(dir, 'cert.go');
@@ -43,7 +43,7 @@ func main(){k,_:=rsa.GenerateKey(rand.Reader,2048);c:=&x509.Certificate{SerialNu
   tcp = net.createServer(socket => socket.end());
   await new Promise((resolve, reject) => { tcp.once('error', reject); tcp.listen(port + 1, '127.0.0.1', resolve); });
   const run = async fingerprint => {
-   const command = diagnosticCommand(`voicecord://127.0.0.1:${port}/${fingerprint}`);
+   const command = diagnosticCommand(`pawtalk://127.0.0.1:${port}/${fingerprint}`);
    return await new Promise((resolve, reject) => {
     const child = spawn('powershell.exe', ['-NoProfile', '-EncodedCommand', command.split(' ').at(-1)], { windowsHide: true });
     let out = ''; child.stdout.on('data', b => out += b); child.stderr.on('data', b => out += b);

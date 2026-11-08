@@ -7,8 +7,8 @@ import { createRequire } from 'node:module';
 const { StartupSettings } = createRequire(import.meta.url)('../electron/startup.cjs');
 
 test('tray startup preserves login enablement, matches Windows arguments and persists separately from manual launches', async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'voicecord-startup-'));
-  let saved = { path: 'C:\\Voicecord.exe', args: [], openAtLogin: true };
+  const dir = await mkdtemp(path.join(tmpdir(), 'pawtalk-startup-'));
+  let saved = { path: 'C:\\PawTalk.exe', args: [], openAtLogin: true };
   const app = { getPath: () => saved.path,
     getLoginItemSettings: options => ({ openAtLogin: options.path === saved.path && JSON.stringify(options.args) === JSON.stringify(saved.args) && saved.openAtLogin }),
     setLoginItemSettings: value => { saved = value; } };
@@ -22,7 +22,7 @@ test('tray startup preserves login enablement, matches Windows arguments and per
     restored.setInTray(false); assert.equal(saved.openAtLogin, false); assert.deepEqual(saved.args, []);
     restored.setEnabled(true); assert.equal(restored.enabled(), true);
   } finally {
-    assert.ok(path.resolve(dir).startsWith(path.join(path.resolve(tmpdir()), 'voicecord-startup-')));
+    assert.ok(path.resolve(dir).startsWith(path.join(path.resolve(tmpdir()), 'pawtalk-startup-')));
     await rm(dir, { recursive: true, force: true });
   }
 });

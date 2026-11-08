@@ -18,7 +18,7 @@ export function UpdateSettings() {
     return () => { active = false; off?.(); };
   }, []);
   const supported = !!window.desktop?.checkUpdate;
-  return <section className="settings-card update-settings"><h1>{t("Обновления")}</h1><p className="settings-description">{t("Новые возможности и исправления Voicecord.")}</p>
+  return <section className="settings-card update-settings"><h1>{t("Обновления")}</h1><p className="settings-description">{t("Новые возможности и исправления PawTalk.")}</p>
     <p className="current-version">{t("Текущая версия: {0}", version)}</p>
     <Toggle label={t("Автообновление")} detail={t("Проверять новые версии при запуске. Установка — после вашего подтверждения.")} checked={enabled} disabled={!supported || busy} onChange={value => {
       setBusy(true); setError(false);

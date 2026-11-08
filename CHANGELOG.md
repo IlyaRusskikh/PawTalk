@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add approved cat-recording notification sounds: CC0 variant B double meow for joining, CC0 variant A single meow for leaving, and five softly faded purr variations for unseen messages in the connected room. Honor sound/output/deafen settings, suppress own/history/reconnect notifications, and limit message sound frequency. / Подключены согласованные записи: двойное мяу CC0 B для входа, одиночное CC0 A для выхода и пять мурлыканий с плавными краями для новых сообщений вне просмотра в текущей комнате. Учитываются настройки звука, устройства, громкости и отключения звука; свои сообщения, история и восстановление после переподключения не озвучиваются, частота сигналов ограничена.
+
+- Rename the product and technical identifiers from Voicecord to PawTalk: desktop identity, invitations, storage keys, native module, server configuration, update assets and deployment examples. Fresh installation is required. Replace the logo with a speech-paw symbol and typing dots with animated paws, respecting reduced motion. / Продукт и технические идентификаторы переименованы из Voicecord в PawTalk: приложение, приглашения, ключи хранения, нативный модуль, серверные настройки, обновления и примеры развёртывания. Нужна новая установка. Добавлены логотип с лапкой и хвостиком речевого облака и лапки вместо точек при печати, с учётом уменьшения движения.
+
 - Add favorite-room streaming proxies for client update checks/downloads, fallback on blocked or slow GitHub access, and Ed25519-signed release manifests with independent installer verification. Unsafe updates stop with the source name and manual VPN download advice. Document manual installation over the existing version. / Добавлены потоковые прокси через избранные комнаты для проверки и загрузки обновлений, переключение при недоступном или медленном GitHub, подписанные Ed25519 манифесты и независимая проверка установщика. Небезопасное обновление останавливается с указанием источника и советом загрузить вручную через VPN. Описана ручная установка поверх прежней версии.
 
 ## 0.5.2 — 2026-11-07 — Empty Windows clipboard / Пустой буфер Windows

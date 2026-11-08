@@ -9,8 +9,8 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
-const project = `voicecord-smoke-${process.pid}`;
-const folder = await mkdtemp(path.join(os.tmpdir(), 'voicecord-docker-'));
+const project = `pawtalk-smoke-${process.pid}`;
+const folder = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-docker-'));
 const file = path.join(folder, 'compose.json');
 const password = randomBytes(24).toString('base64url');
 const salt = randomBytes(16);
@@ -55,7 +55,7 @@ try {
     api: {
       build: { context: root, dockerfile: 'server/Dockerfile' },
       ports: ['127.0.0.1:8080:8080'],
-      environment: { LISTEN_ADDR: '0.0.0.0:8080', LIVEKIT_URL: 'ws://127.0.0.1:7880', LIVEKIT_API_KEY: key, LIVEKIT_API_SECRET: secret, VOICECORD_PASSWORD_HASH: hash.replaceAll('$', () => '$$') },
+      environment: { LISTEN_ADDR: '0.0.0.0:8080', LIVEKIT_URL: 'ws://127.0.0.1:7880', LIVEKIT_API_KEY: key, LIVEKIT_API_SECRET: secret, PAWTALK_PASSWORD_HASH: hash.replaceAll('$', () => '$$') },
       read_only: true, cap_drop: ['ALL'], security_opt: ['no-new-privileges:true'],
     },
     livekit: {
@@ -71,7 +71,7 @@ try {
   started = true;
   await run('docker', [...composeArgs, 'up', '-d', '--build']);
   await waitFor('http://127.0.0.1:8080/healthz');
-  const env = { ...process.env, VOICECORD_TEST_PASSWORD: password }; delete env.ELECTRON_RUN_AS_NODE;
+  const env = { ...process.env, PAWTALK_TEST_PASSWORD: password }; delete env.ELECTRON_RUN_AS_NODE;
   vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1'], { cwd: root, windowsHide: true, stdio: 'ignore' });
   vite.on('error', error => console.error(error.message));
   await waitFor('http://127.0.0.1:5173/tests/voice.html');
@@ -89,5 +89,5 @@ try {
   vite?.kill();
   if (started) await run('docker', [...composeArgs, 'down', '--volumes', '--remove-orphans']).catch(error => { console.error(error.message); process.exitCode = 1; });
   // Only the exact temporary directory created by this test can be removed.
-  if (path.dirname(path.resolve(folder)) === path.resolve(os.tmpdir()) && path.basename(folder).startsWith('voicecord-docker-')) await rm(folder, { recursive: true, force: true });
+  if (path.dirname(path.resolve(folder)) === path.resolve(os.tmpdir()) && path.basename(folder).startsWith('pawtalk-docker-')) await rm(folder, { recursive: true, force: true });
 }

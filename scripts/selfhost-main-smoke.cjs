@@ -5,7 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { randomBytes } = require('node:crypto');
 const { spawn } = require('node:child_process');
-app.setPath('userData', path.join(os.tmpdir(), 'voicecord-selfhost-ui-'+process.pid));
+app.setPath('userData', path.join(os.tmpdir(), 'pawtalk-selfhost-ui-'+process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 app.disableHardwareAcceleration();
@@ -25,7 +25,7 @@ app.on('browser-window-created', (_event, win) => {
     const js = code => win.webContents.executeJavaScript(code, true);
     try {
       await until(() => js('!!document.querySelector("h1")'), 'app ready');
-      await js(`localStorage.setItem('voicecord.settings',JSON.stringify({noiseMode:'off',autoSensitivity:false,threshold:-80,echoCancellation:false,autoGainControl:false,sounds:false}))`);
+      await js(`localStorage.setItem('pawtalk.settings',JSON.stringify({noiseMode:'off',autoSensitivity:false,threshold:-80,echoCancellation:false,autoGainControl:false,sounds:false}))`);
       const loaded = new Promise(resolve => win.webContents.once('did-finish-load', resolve)); win.reload(); await loaded;
       await until(() => js('!!document.querySelector("h1")'), 'reloaded app ready');
       await js(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Создать комнату').click()`);
@@ -70,7 +70,7 @@ app.on('browser-window-created', (_event, win) => {
       assert.equal(await clipboard.readText(), status.invitations[0]);
       const address = status.invitations[status.internet ? 1 : 0] || status.localAddress;
       const credentials = await new Promise((resolve, reject) => {
-        const env = { ...process.env, VOICECORD_TEST_INVITATION: address, VOICECORD_TEST_PASSWORD: password };
+        const env = { ...process.env, PAWTALK_TEST_INVITATION: address, PAWTALK_TEST_PASSWORD: password };
         delete env.ELECTRON_RUN_AS_NODE;
         const client = spawn(process.execPath, [path.resolve('scripts/invitation-client-smoke.cjs')], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
         let stdout = '', stderr = '';
@@ -82,8 +82,8 @@ app.on('browser-window-created', (_event, win) => {
           clearTimeout(timeout);
           if (code !== 0) { reject(new Error(`Guest main failed: ${stderr}`)); return; }
           try {
-            const line = stdout.split(/\r?\n/).find(line => line.startsWith('VOICECORD_TEST_CREDENTIALS:'));
-            resolve(JSON.parse(line.slice('VOICECORD_TEST_CREDENTIALS:'.length)));
+            const line = stdout.split(/\r?\n/).find(line => line.startsWith('PAWTALK_TEST_CREDENTIALS:'));
+            resolve(JSON.parse(line.slice('PAWTALK_TEST_CREDENTIALS:'.length)));
           } catch { reject(new Error('No guest credentials returned')); }
         });
       });

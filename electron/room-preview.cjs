@@ -6,7 +6,7 @@ function avatar(profile, key, feed, encrypted) {
     let bytes = Buffer.from(profile.ciphertext, 'base64');
     if (encrypted) {
       if (!/^[a-f0-9]{64}$/.test(key || '')) return;
-      const secret = hkdfSync('sha256', Buffer.from(key, 'hex'), Buffer.from(feed), Buffer.from('Voicecord chat profile v1'), 32);
+      const secret = hkdfSync('sha256', Buffer.from(key, 'hex'), Buffer.from(feed), Buffer.from('PawTalk chat profile v1'), 32);
       const iv = Buffer.from(profile.nonce || '', 'base64'); if (iv.length !== 12 || bytes.length < 17) return;
       const decipher = createDecipheriv('aes-256-gcm', secret, iv); decipher.setAAD(Buffer.from(profile.id)); decipher.setAuthTag(bytes.subarray(-16));
       bytes = Buffer.concat([decipher.update(bytes.subarray(0, -16)), decipher.final()]);

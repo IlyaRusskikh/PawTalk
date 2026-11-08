@@ -1,9 +1,9 @@
 {
-  "name": "voicecord",
+  "name": "pawtalk",
   "version": "0.5.2",
   "private": true,
   "description": "Private, self-hosted voice room for Windows",
-  "author": "Voicecord contributors",
+  "author": "PawTalk contributors",
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "electron/main.cjs",
@@ -19,6 +19,7 @@
     "smoke": "electron scripts/smoke.cjs",
     "test:chat-ui": "node scripts/chat-ui-smoke.mjs",
     "test:chat-main": "node scripts/chat-main-smoke.mjs",
+    "test:sounds": "node scripts/sounds-smoke.mjs",
     "test:docker": "node scripts/docker-smoke.mjs",
     "test:server": "node scripts/server-smoke.mjs --audio",
     "test:e2ee": "node scripts/e2ee-benchmark.mjs --security-only",
@@ -54,13 +55,13 @@
     "vite": "8.3.5"
   },
   "build": {
-    "appId": "local.voicecord.desktop",
-    "productName": "Voicecord",
+    "appId": "local.pawtalk.desktop",
+    "productName": "PawTalk",
     "protocols": [
       {
-        "name": "Приглашение Voicecord",
+        "name": "Приглашение PawTalk",
         "schemes": [
-          "voicecord"
+          "pawtalk"
         ]
       }
     ],
@@ -83,8 +84,8 @@
         "to": "diagnostics/check-selfhost.ps1"
       },
       {
-        "from": "native/build/Release/voicecord.node",
-        "to": "voicecord.node"
+        "from": "native/build/Release/pawtalk.node",
+        "to": "pawtalk.node"
       },
       {
         "from": "resources/server",
@@ -103,14 +104,14 @@
     "win": {
       "target": "nsis",
       "signAndEditExecutable": true,
-      "icon": "assets/voicecord.ico",
+      "icon": "assets/pawtalk.ico",
       "signExecutable": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "assets/voicecord.ico",
-      "uninstallerIcon": "assets/voicecord.ico",
+      "installerIcon": "assets/pawtalk.ico",
+      "uninstallerIcon": "assets/pawtalk.ico",
       "installerLanguages": [
         "en_US",
         "ru_RU"

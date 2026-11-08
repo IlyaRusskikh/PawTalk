@@ -1,13 +1,13 @@
 import { spawn, spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import tls from 'node:tls';
-const profile = await mkdtemp(path.join(os.tmpdir(), 'voicecord-packaged-'));
-const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.VOICECORD_DEV_URL;
-const invite = `voicecord://127.0.0.1:32443/${'a'.repeat(64)}`;
-const child = spawn(path.resolve(process.env.VOICECORD_PACKAGED_DIR || 'release/win-unpacked', 'Voicecord.exe'), ['--smoke', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=19337', `--user-data-dir=${profile}`, invite], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+const profile = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-packaged-'));
+const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.PAWTALK_DEV_URL;
+const invite = `pawtalk://127.0.0.1:32443/${'a'.repeat(64)}`;
+const child = spawn(path.resolve(process.env.PAWTALK_PACKAGED_DIR || 'release/win-unpacked', 'PawTalk.exe'), ['--smoke', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=19337', `--user-data-dir=${profile}`, invite], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
 let stderr = '';
 child.stderr.on('data', data => { stderr = (stderr + data.toString()).slice(-131072); });
 let socket;
@@ -42,6 +42,14 @@ try {
   const info = await evaluate('window.desktop.capabilities()');
   assert.equal(info.native, true); assert.equal(info.packaged, true);
   assert.equal(await evaluate('typeof window.require'), 'undefined');
+  const sounds = JSON.parse(await readFile('public/sounds/sources.json', 'utf8')).assets;
+  const packagedSounds = await evaluate(`(async()=>{const ctx=new OfflineAudioContext(1,1,48000);const results=[];for(const asset of ${JSON.stringify(sounds.map(({ name, sha256 }) => ({ name, sha256 })))}){const response=await fetch(new URL('./sounds/'+asset.name,document.baseURI));if(!response.ok)throw Error(asset.name);const bytes=await response.arrayBuffer();const digest=await crypto.subtle.digest('SHA-256',bytes);const sha256=Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,'0')).join('');const buffer=await ctx.decodeAudioData(bytes);results.push({name:asset.name,sha256,channels:buffer.numberOfChannels,seconds:buffer.duration});}return results;})()`);
+  assert.equal(packagedSounds.length, 7, 'all notification recordings are packaged');
+  for (const sound of packagedSounds) {
+    assert.equal(sound.sha256, sounds.find(asset => asset.name === sound.name).sha256, 'packaged recording is the approved file');
+    assert.equal(sound.channels, 1);
+    assert.ok(sound.seconds > .3 && sound.seconds < .9);
+  }
   for(let i=0;i<100;i++) {
     if(await evaluate('!!document.querySelector("h1")')) break;
     await new Promise(resolve=>setTimeout(resolve,100));
@@ -106,7 +114,7 @@ try {
   const ownDiagnosis = await evaluate('window.desktop.hostStatus().then(s=>window.desktop.diagnose(s.invitations[0]))');
   assert.equal(ownDiagnosis.ok, true, ownDiagnosis.message);
   assert.match(ownDiagnosis.message, /напрямую/);
-  if (process.env.VOICECORD_EXPECT_PORT_MAPPING === '1') assert.equal(hostStatus.mapped, true, 'packaged mapper opens all ports on test router');
+  if (process.env.PAWTALK_EXPECT_PORT_MAPPING === '1') assert.equal(hostStatus.mapped, true, 'packaged mapper opens all ports on test router');
   const hosted = await evaluate(`window.desktop.hostStatus().then(s=>window.desktop.connect({address:s.localAddress,nickname:'Packaged',password:window.selfhostPassword}))`);
   assert.equal(hosted.error, undefined, hosted.error);
   assert.ok(hosted.token, 'packaged TLS room returns token');

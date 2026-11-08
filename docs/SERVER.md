@@ -1,4 +1,4 @@
-# Установка сервера Voicecord на VPS — Docker Swarm
+# Установка сервера PawTalk на VPS — Docker Swarm
 
 Единственный поддерживаемый способ установки постоянного сервера на VPS —
 **Docker Swarm**. Обычный Docker Compose для VPS больше не поддерживается.
@@ -7,16 +7,16 @@
 Нужны Linux amd64 или arm64, постоянный публичный IP, Docker Engine, Python 3.9+
 и `curl`. Compose plugin, исходники, Node.js, Go и компилятор на VPS не нужны.
 Домен и публичный TLS-сертификат также не требуются. Готовый публичный образ:
-`ghcr.io/ilyarusskikh/voicecord-server:0.5.2`.
+`ghcr.io/ilyarusskikh/pawtalk-server:0.5.2`.
 
 Ниже описана новая установка. Для существующей комнаты сначала выполните
 [миграцию с Compose](SWARM.md#переход-с-compose), сохранив прежний volume.
 Обновления, откат и необязательный таймер: [SWARM.md](SWARM.md).
 Реальный rollout/rollback на Linux Swarm и приёмка на VPS ещё не выполнялись.
 
-`VOICECORD_CHAT_MAX_MB=128` ограничивает SQLite-базу чата в МиБ; `0` отключает
+`PAWTALK_CHAT_MAX_MB=128` ограничивает SQLite-базу чата в МиБ; `0` отключает
 лимит. При заполнении удаляются старейшие сообщения без ограничения по возрасту.
-`VOICECORD_UPDATE_PROXY=true` разрешает потоковую передачу клиентских обновлений
+`PAWTALK_UPDATE_PROXY=true` разрешает потоковую передачу клиентских обновлений
 с GitHub без хранения EXE. Лимиты и проверка подписей: [UPDATES.md](UPDATES.md).
 Изменения конфигурации применяются повторным развёртыванием стека.
 
@@ -45,11 +45,11 @@ id
 | --- | --- |
 | Установка Docker, firewall, запуск/обновление сервиса | Администратор VPS: `root` либо через `sudo` |
 | Docker daemon в этом варианте установки | `root` на хосте |
-| Процессы Voicecord и LiveKit внутри контейнера | Непривилегированный UID/GID `65532:65532` |
-| Файлы настройки `/opt/voicecord` | Владелец `root`; `.env` с правами `600` |
+| Процессы PawTalk и LiveKit внутри контейнера | Непривилегированный UID/GID `65532:65532` |
+| Файлы настройки `/opt/pawtalk` | Владелец `root`; `.env` с правами `600` |
 | Данные комнаты | Docker volume, доступ к данным у UID `65532` внутри контейнера |
 
-Отдельного пользователя `voicecord` на самом VPS создавать не требуется:
+Отдельного пользователя `pawtalk` на самом VPS создавать не требуется:
 пользователь приложения уже определён в образе. Контейнер запускается без
 `--privileged`, без capabilities, с основной файловой системой только для чтения.
 Запись разрешена в `/data` и во временный `/tmp`.
@@ -97,7 +97,7 @@ docker run --rm hello-world
 
 Ожидается: `docker version` показывает **Client и Server**, а `hello-world`
 печатает подтверждение успешного запуска. Если проверки не прошли,
-к запуску Voicecord пока не переходите.
+к запуску PawTalk пока не переходите.
 
 Проверьте, используется ли systemd:
 
@@ -125,13 +125,13 @@ systemctl enable --now docker
 docker info --format '{{.Swarm.LocalNodeState}}'
 docker swarm init --advertise-addr 203.0.113.10
 docker node ls
-docker node update --label-add voicecord.data=true "$(docker info --format '{{.Swarm.NodeID}}')"
+docker node update --label-add pawtalk.data=true "$(docker info --format '{{.Swarm.NodeID}}')"
 ```
 
 Если Swarm уже `active`, пропустите `swarm init` и убедитесь, что работаете на
 manager-узле. Не выходите из существующего Swarm ради повторной установки.
 При NAT адрес интерфейса для `--advertise-addr` может отличаться от публичного
-`VOICECORD_PUBLIC_IP`. Метку `voicecord.data=true` назначайте **только узлу с
+`PAWTALK_PUBLIC_IP`. Метку `pawtalk.data=true` назначайте **только узлу с
 данными комнаты**. Здесь это сам VPS; команды `docker exec` и операции с volume
 выполняются на нём. Локальный volume не реплицируется между узлами.
 
@@ -153,12 +153,12 @@ python3 --version
 своей папки, поэтому сохраните указанную структуру:
 
 ```sh
-install -d -m 755 /opt/voicecord/scripts /opt/voicecord/deploy
-cd /opt/voicecord
-VOICECORD_RELEASE=0.5.2
-curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/compose.server.swarm.yaml" -o compose.server.swarm.yaml
-curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/scripts/server-update.py" -o scripts/server-update.py
-curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/voicecord/v${VOICECORD_RELEASE}/.env.server.swarm.example" -o .env.server.swarm.example
+install -d -m 755 /opt/pawtalk/scripts /opt/pawtalk/deploy
+cd /opt/pawtalk
+PAWTALK_RELEASE=0.5.2
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/compose.server.swarm.yaml" -o compose.server.swarm.yaml
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/scripts/server-update.py" -o scripts/server-update.py
+curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/.env.server.swarm.example" -o .env.server.swarm.example
 if [ ! -e .env ]; then cp .env.server.swarm.example .env; fi
 chmod 600 .env
 nano .env
@@ -168,18 +168,18 @@ nano .env
 Для новой установки замените пример IP на публичный IP VPS. Основные строки:
 
 ```dotenv
-VOICECORD_IMAGE=ghcr.io/ilyarusskikh/voicecord-server:0.5.2
-VOICECORD_RELEASE=0.5.2
-VOICECORD_PUBLIC_IP=203.0.113.10
-VOICECORD_PORT=18443
-VOICECORD_E2EE=false
-VOICECORD_E2EE_KEY_ID=
-VOICECORD_CHAT_MAX_MB=128
-VOICECORD_UPDATE_PROXY=true
-VOICECORD_DATA_VOLUME=voicecord-server_server_data
-VOICECORD_AUTO_UPDATE=false
-VOICECORD_UPDATE_CHANNEL=preview
-VOICECORD_UPDATE_REPOSITORY=IlyaRusskikh/voicecord
+PAWTALK_IMAGE=ghcr.io/ilyarusskikh/pawtalk-server:0.5.2
+PAWTALK_RELEASE=0.5.2
+PAWTALK_PUBLIC_IP=203.0.113.10
+PAWTALK_PORT=18443
+PAWTALK_E2EE=false
+PAWTALK_E2EE_KEY_ID=
+PAWTALK_CHAT_MAX_MB=128
+PAWTALK_UPDATE_PROXY=true
+PAWTALK_DATA_VOLUME=pawtalk-server_server_data
+PAWTALK_AUTO_UPDATE=false
+PAWTALK_UPDATE_CHANNEL=preview
+PAWTALK_UPDATE_REPOSITORY=IlyaRusskikh/pawtalk
 ```
 
 Пароль в `.env` не вписывается: сервер сгенерирует его при первом запуске.
@@ -189,18 +189,18 @@ IPv6 указывайте без квадратных скобок; он дол�
 
 ### Разбор `.env`: что и как заполнять
 
-Для обычного запуска **обязательно замените только `VOICECORD_PUBLIC_IP`**.
+Для обычного запуска **обязательно замените только `PAWTALK_PUBLIC_IP`**.
 Остальные значения из шаблона подходят для старта. `.env` лежит рядом с
-`compose.server.swarm.yaml`, в этой инструкции — `/opt/voicecord/.env`.
+`compose.server.swarm.yaml`, в этой инструкции — `/opt/pawtalk/.env`.
 
 | Параметр | Допустимое значение и что поставить |
 | --- | --- |
-| `VOICECORD_IMAGE` | Полное имя опубликованного образа: `ghcr.io/ilyarusskikh/voicecord-server:0.5.2`. Число после `:` — версия сервера. Для обновления укажите новую опубликованную версию. Не добавляйте `v` перед номером и не используйте тег неудачного CI. Это параметр Swarm-стека, а не настройка внутри приложения. |
-| `VOICECORD_PUBLIC_IP` | Публичный IP вашего VPS из панели хостинга, **без** `https://`, порта и пути. IPv4: `203.0.113.10` (замените на свой); IPv6 — без `[]`. Для нового сервера значение обязательно. После первого запуска адрес сохранён в volume: другой IP в `.env` вызовет ошибку несовпадения. Простым редактированием этой строки перенести существующий сервер на другой IP нельзя. |
-| `VOICECORD_PORT` | Целое число `1024–65532`; по умолчанию `18443`. Это основной TCP-порт. Дополнительно откройте TCP `PORT+1` и UDP `PORT+2`. Например, при `20000` нужны TCP `20000`, TCP `20001`, UDP `20002`. Внутренний TCP `PORT+3` не открывайте в интернете. При смене порта обновите firewall и раздайте новое приглашение. |
-| `VOICECORD_E2EE` | `false` или `true`, по умолчанию `false`. `true` требует сквозного шифрования у всех участников; это экспериментальный режим. Без E2EE сервер может читать текст и картинки. |
-| `VOICECORD_E2EE_KEY_ID` | При `false` оставьте пустым: `VOICECORD_E2EE_KEY_ID=`. При `true` для истории чата укажите SHA-256 отпечаток общего ключа — ровно 64 символа `0–9`, `a–f` в нижнем регистре. Вставляйте идентификатор из генератора, **не секретный ключ для участников**. Сам ключ передаётся друзьям для подключения. Без настроенного отпечатка чат E2EE недоступен. |
-| `VOICECORD_CHAT_MAX_MB` | Целое неотрицательное число; по умолчанию `128`. Единица — МиБ (`1024 × 1024` байт). `64` ограничит базу примерно 64 МиБ, `512` — 512 МиБ, `0` отключит ограничение. Учитываются сообщения, картинки, профили и индексы SQLite. Это не количество сообщений и не размер всего контейнера. |
+| `PAWTALK_IMAGE` | Полное имя опубликованного образа: `ghcr.io/ilyarusskikh/pawtalk-server:0.5.2`. Число после `:` — версия сервера. Для обновления укажите новую опубликованную версию. Не добавляйте `v` перед номером и не используйте тег неудачного CI. Это параметр Swarm-стека, а не настройка внутри приложения. |
+| `PAWTALK_PUBLIC_IP` | Публичный IP вашего VPS из панели хостинга, **без** `https://`, порта и пути. IPv4: `203.0.113.10` (замените на свой); IPv6 — без `[]`. Для нового сервера значение обязательно. После первого запуска адрес сохранён в volume: другой IP в `.env` вызовет ошибку несовпадения. Простым редактированием этой строки перенести существующий сервер на другой IP нельзя. |
+| `PAWTALK_PORT` | Целое число `1024–65532`; по умолчанию `18443`. Это основной TCP-порт. Дополнительно откройте TCP `PORT+1` и UDP `PORT+2`. Например, при `20000` нужны TCP `20000`, TCP `20001`, UDP `20002`. Внутренний TCP `PORT+3` не открывайте в интернете. При смене порта обновите firewall и раздайте новое приглашение. |
+| `PAWTALK_E2EE` | `false` или `true`, по умолчанию `false`. `true` требует сквозного шифрования у всех участников; это экспериментальный режим. Без E2EE сервер может читать текст и картинки. |
+| `PAWTALK_E2EE_KEY_ID` | При `false` оставьте пустым: `PAWTALK_E2EE_KEY_ID=`. При `true` для истории чата укажите SHA-256 отпечаток общего ключа — ровно 64 символа `0–9`, `a–f` в нижнем регистре. Вставляйте идентификатор из генератора, **не секретный ключ для участников**. Сам ключ передаётся друзьям для подключения. Без настроенного отпечатка чат E2EE недоступен. |
+| `PAWTALK_CHAT_MAX_MB` | Целое неотрицательное число; по умолчанию `128`. Единица — МиБ (`1024 × 1024` байт). `64` ограничит базу примерно 64 МиБ, `512` — 512 МиБ, `0` отключит ограничение. Учитываются сообщения, картинки, профили и индексы SQLite. Это не количество сообщений и не размер всего контейнера. |
 
 **Как выбрать объём истории:** начните со `128`. Если хотите хранить больше
 картинок и переписки, поставьте `512` или `1024`. При заполнении удаляется самая
@@ -225,38 +225,38 @@ IPv6 указывайте без квадратных скобок; он дол�
 
 | Параметр | Что поставить |
 | --- | --- |
-| `VOICECORD_RELEASE` | Номер версии образа **без `v`**, например `0.5.2`. При ручном развёртывании должен соответствовать тегу `VOICECORD_IMAGE`; записывается в метку сервиса, по которой обновлятор определяет текущую версию. Не оставляйте старый номер при смене образа. |
-| `VOICECORD_DATA_VOLUME` | Точное имя существующего Docker volume с `/data`, например `voicecord-server_server_data`. Найдите его через `docker volume ls` и проверьте подключение текущего контейнера. Не подставляйте случайное имя: другой volume означает другой сервер, пароль и историю. Для новой установки создайте volume по инструкции Swarm. |
-| `VOICECORD_AUTO_UPDATE` | `false` по умолчанию — таймер не проверяет и не обновляет сервер. `true` разрешает автоматическое обновление настроенному таймеру. Одна строка без установки таймера ничего не запускает. Ручная команда `check` работает и при `false`. |
-| `VOICECORD_UPDATE_CHANNEL` | `preview` или `stable`. `preview` учитывает и предварительные выпуски; для `0.5.2`, опубликованной как pre-release, нужен `preview`. `stable` исключает все pre-release и может не находить новых версий. |
-| `VOICECORD_UPDATE_REPOSITORY` | Оставьте `IlyaRusskikh/voicecord`. Для своего форка — `владелец/репозиторий`, без URL и `.git`; образ должен находиться в соответствующем `ghcr.io/владелец/репозиторий-server`. Обычно менять не нужно. |
+| `PAWTALK_RELEASE` | Номер версии образа **без `v`**, например `0.5.2`. При ручном развёртывании должен соответствовать тегу `PAWTALK_IMAGE`; записывается в метку сервиса, по которой обновлятор определяет текущую версию. Не оставляйте старый номер при смене образа. |
+| `PAWTALK_DATA_VOLUME` | Точное имя существующего Docker volume с `/data`, например `pawtalk-server_server_data`. Найдите его через `docker volume ls` и проверьте подключение текущего контейнера. Не подставляйте случайное имя: другой volume означает другой сервер, пароль и историю. Для новой установки создайте volume по инструкции Swarm. |
+| `PAWTALK_AUTO_UPDATE` | `false` по умолчанию — таймер не проверяет и не обновляет сервер. `true` разрешает автоматическое обновление настроенному таймеру. Одна строка без установки таймера ничего не запускает. Ручная команда `check` работает и при `false`. |
+| `PAWTALK_UPDATE_CHANNEL` | `preview` или `stable`. `preview` учитывает и предварительные выпуски; для `0.5.2`, опубликованной как pre-release, нужен `preview`. `stable` исключает все pre-release и может не находить новых версий. |
+| `PAWTALK_UPDATE_REPOSITORY` | Оставьте `IlyaRusskikh/pawtalk`. Для своего форка — `владелец/репозиторий`, без URL и `.git`; образ должен находиться в соответствующем `ghcr.io/владелец/репозиторий-server`. Обычно менять не нужно. |
 
-`VOICECORD_UPDATE_PROXY` — `true` по умолчанию; `false` отключает передачу
+`PAWTALK_UPDATE_PROXY` — `true` по умолчанию; `false` отключает передачу
 клиентских обновлений с GitHub. Подробнее: [UPDATES.md](UPDATES.md).
 
 ### Как применить изменения `.env`
 
-Из `/opt/voicecord` выполните:
+Из `/opt/pawtalk` выполните:
 
 ```sh
-python3 scripts/server-update.py deploy --config .env --stack voicecord
-docker service ps voicecord_server --no-trunc
+python3 scripts/server-update.py deploy --config .env --stack pawtalk
+docker service ps pawtalk_server --no-trunc
 ```
 
 `docker stack deploy` сам не загружает `.env`: скрипт читает файл без исполнения
-его содержимого и передаёт значения Docker. Диапазоны значений Voicecord
+его содержимого и передаёт значения Docker. Диапазоны значений PawTalk
 проверяет при запуске. Развёртывание асинхронное: успешный выход `deploy` ещё не
 означает готовность комнаты. Дождитесь проверки из шага 6. Перезапуск сервиса
 без `deploy` не применяет изменения `.env`. Volume сохраняется.
 
 После автообновления сначала перенесите текущие версию и образ из сервиса в
-`VOICECORD_RELEASE` и `VOICECORD_IMAGE` файла `.env`, как описано в
+`PAWTALK_RELEASE` и `PAWTALK_IMAGE` файла `.env`, как описано в
 [SWARM.md](SWARM.md#ручное-обновление-и-откат), иначе `deploy` вернёт старый образ.
 
 ### Если хотите включить E2EE
 
 Если E2EE не нужно, оставьте обе строки как в примере выше: ничего генерировать
-или дописывать после `VOICECORD_E2EE_KEY_ID=` не нужно.
+или дописывать после `PAWTALK_E2EE_KEY_ID=` не нужно.
 
 E2EE можно включить сразу, **до первого запуска сервера**. Предварительно
 запускать сервер с `false` не требуется.
@@ -265,11 +265,11 @@ E2EE можно включить сразу, **до первого запуск�
 
 > **Важно: сразу сохраните оба значения из генератора!**
 > `Client key (SECRET): …` (в Node.js-версии — `Ключ для клиентов (секрет): …`)
-> нужен для подключения участников, а `VOICECORD_E2EE_KEY_ID=…` — для `.env` сервера.
+> нужен для подключения участников, а `PAWTALK_E2EE_KEY_ID=…` — для `.env` сервера.
 > Эта пара показывается только при данном запуске: генератор не сохраняет её в файл,
 > а повторный запуск создаст **новый** ключ и отпечаток. До закрытия окна сохраните
 > оба значения в менеджере паролей. Из отпечатка нельзя восстановить секретный ключ.
-> Если ключ потерян, создайте новую пару, обновите `VOICECORD_E2EE_KEY_ID` на сервере,
+> Если ключ потерян, создайте новую пару, обновите `PAWTALK_E2EE_KEY_ID` на сервере,
 > примените конфигурацию и передайте новый секретный ключ всем участникам.
 
 1. На своём доверенном компьютере, **не на VPS**, создайте ключ одним из способов:
@@ -282,14 +282,14 @@ E2EE можно включить сразу, **до первого запуск�
    исходников выполните `scripts\e2ee-key.cmd`. Используется встроенный Windows
    PowerShell. Вариант с Node.js для любой ОС: `node scripts/e2ee-key.mjs`.
 2. Сохраните секретный ключ и его отпечаток, как указано в предупреждении выше. В `.env` на VPS
-   перенесите только выведенные строки `VOICECORD_E2EE=true` и
-   `VOICECORD_E2EE_KEY_ID=…`, подставив полный отпечаток вместо многоточия.
+   перенесите только выведенные строки `PAWTALK_E2EE=true` и
+   `PAWTALK_E2EE_KEY_ID=…`, подставив полный отпечаток вместо многоточия.
    Сам секретный ключ на VPS не копируйте.
 3. Продолжайте установку. Если сервер уже работает, примените изменения из
-   `/opt/voicecord` командой
-   `python3 scripts/server-update.py deploy --config .env --stack voicecord`.
+   `/opt/pawtalk` командой
+   `python3 scripts/server-update.py deploy --config .env --stack pawtalk`.
 4. При подключении участники должны использовать один и тот же секретный ключ
-   в клиенте Voicecord. Как добавить его в приглашение, описано в [E2EE.md](E2EE.md).
+   в клиенте PawTalk. Как добавить его в приглашение, описано в [E2EE.md](E2EE.md).
 
 Каждый запуск генератора создаёт новый ключ и новый отпечаток. Не запускайте его
 отдельно для каждого участника. При `true` без `KEY_ID` сервер требует поддержку
@@ -298,11 +298,11 @@ E2EE, но не проверяет совпадение ключа при вхо
 
 ## 4. Подготовьте постоянный volume
 
-**Только для новой комнаты** создайте volume с именем из `VOICECORD_DATA_VOLUME`:
+**Только для новой комнаты** создайте volume с именем из `PAWTALK_DATA_VOLUME`:
 
 ```sh
-docker volume create voicecord-server_server_data
-docker volume inspect voicecord-server_server_data
+docker volume create pawtalk-server_server_data
+docker volume inspect pawtalk-server_server_data
 ```
 
 Volume объявлен в стеке как внешний: Swarm не создаёт его при развёртывании.
@@ -359,7 +359,7 @@ ufw allow 18445/udp
 
 Не включайте неактивный UFW вслепую по SSH: сначала нужно разрешить фактический
 SSH-порт. При `Status: inactive` либо ошибке `ufw: команда не найдена` /
-`ufw: command not found` устанавливать или включать UFW ради Voicecord не нужно.
+`ufw: command not found` устанавливать или включать UFW ради PawTalk не нужно.
 Проверьте остальные способы фильтрации ниже: отсутствие UFW не означает
 отсутствия другого firewall.
 
@@ -393,9 +393,9 @@ iptables -S INPUT
   Одна строка `ACCEPT` не отменяет ограничений в других правилах.
 - Таблицы и цепочки `DOCKER`, NAT и `FORWARD` могут появиться после установки
   Docker. Их наличие и даже `policy drop` в `FORWARD` сами по себе не означают
-  блокировку Voicecord: этот Swarm-стек использует сеть хоста. Предупреждение
+  блокировку PawTalk: этот Swarm-стек использует сеть хоста. Предупреждение
   `managed by iptables-nft, do not touch!` не является ошибкой запуска;
-  вручную редактировать эти таблицы ради Voicecord не нужно.
+  вручную редактировать эти таблицы ради PawTalk не нужно.
 - Если есть `DROP`/`REJECT`, `policy drop` в цепочках входящего трафика либо
   переходы в другие цепочки, проверьте всю соответствующую политику и добавьте
   три разрешения через уже используемый способ управления firewall.
@@ -419,7 +419,7 @@ Swarm-сервис использует **host networking**: порты слуш
 ss -lntup
 ```
 
-Если `18443`–`18446` заняты, в `.env` можно поставить `VOICECORD_PORT=19443`:
+Если `18443`–`18446` заняты, в `.env` можно поставить `PAWTALK_PORT=19443`:
 тогда наружу открываются TCP `19443`, TCP `19444`, UDP `19445`, а TCP `19446`
 остаётся внутренним. Допустимый базовый порт: `1024`–`65532`.
 При NAT нужен доступный публичный IP и проброс этих же портов без перенумерации;
@@ -431,25 +431,25 @@ ss -lntup
 ## 6. Разверните стек
 
 ```sh
-cd /opt/voicecord
-python3 scripts/server-update.py deploy --config .env --stack voicecord
-docker stack services voicecord
-docker service ps voicecord_server --no-trunc
-docker service logs --tail 50 voicecord_server
+cd /opt/pawtalk
+python3 scripts/server-update.py deploy --config .env --stack pawtalk
+docker stack services pawtalk
+docker service ps pawtalk_server --no-trunc
+docker service logs --tail 50 pawtalk_server
 ```
 
 Дождитесь `1/1` у сервиса и задачи `Running`. В начальных логах найдите
 **`Room password: ...`** и сразу сохраните пароль в менеджере паролей: он
 выводится только при первом запуске. На диске хранится его хеш. Начальные
-Docker-журналы содержат пароль — не публикуйте их. `Voicecord ready` означает,
+Docker-журналы содержат пароль — не публикуйте их. `PawTalk ready` означает,
 что API и голосовой сервер запущены.
 
 Для команд внутри контейнера находите текущую задачу **на узле с данными**:
 
 ```sh
-CID=$(docker ps -q --filter label=com.docker.swarm.service.name=voicecord_server --filter status=running)
+CID=$(docker ps -q --filter label=com.docker.swarm.service.name=pawtalk_server --filter status=running)
 test -n "$CID" && docker exec "$CID" id
-test -n "$CID" && docker exec "$CID" /voicecord serve healthcheck
+test -n "$CID" && docker exec "$CID" /pawtalk serve healthcheck
 docker inspect --format '{{.State.Health.Status}}' "$CID"
 ```
 
@@ -468,11 +468,11 @@ SSH можно закрыть. При включённом автозапуск�
 ## 7. Получите приглашение и подключитесь
 
 ```sh
-CID=$(docker ps -q --filter label=com.docker.swarm.service.name=voicecord_server --filter status=running)
-test -n "$CID" && docker exec "$CID" /voicecord serve info
+CID=$(docker ps -q --filter label=com.docker.swarm.service.name=pawtalk_server --filter status=running)
+test -n "$CID" && docker exec "$CID" /pawtalk serve info
 ```
 
-Результат — `voicecord://IP:18443/отпечаток`. Передайте участнику полную ссылку
+Результат — `pawtalk://IP:18443/отпечаток`. Передайте участнику полную ссылку
 и пароль лично. В Windows-клиенте задайте никнейм в **«Настройки → Обо мне»**,
 нажмите **«Присоединиться к комнате»**, вставьте ссылку и введите пароль,
 когда приложение его запросит.
@@ -494,7 +494,7 @@ test -n "$CID" && docker exec "$CID" /voicecord serve info
 проверяет маршрут от участника до сервера. Пустая колонка `PORTS` в `docker ps`
 для этого Swarm-сервиса нормальна: используется внешняя сеть `host`.
 
-Ниже указаны стандартные порты. Если меняли `VOICECORD_PORT`, подставьте свой
+Ниже указаны стандартные порты. Если меняли `PAWTALK_PORT`, подставьте свой
 базовый порт вместо `18443`; голосовые порты — базовый плюс 1 (TCP) и плюс 2 (UDP).
 
 ### 1. Проверьте HTTPS на самом сервере
@@ -507,7 +507,7 @@ ss -lntp 'sport = :18443'
 ```
 
 Ожидается ответ `200 OK` с `{"status":"ok"}` и прослушиваемый порт `18443`
-процесса `voicecord` на внешних интерфейсах (`*:18443`, `0.0.0.0:18443` или
+процесса `pawtalk` на внешних интерфейсах (`*:18443`, `0.0.0.0:18443` или
 `[::]:18443`), а не только на loopback. Если локальный HTTPS не отвечает,
 сначала проверьте состояние и журналы контейнера из шага 6.
 
@@ -536,7 +536,7 @@ curl.exe -vk --connect-timeout 5 --max-time 10 https://203.0.113.10:18443/health
 | Локально и извне `200 OK` и `{"status":"ok"}` | HTTPS доступен. Если приложение не входит, получите актуальное приглашение через `serve info` и проверьте ошибку клиента: эта проверка curl не подтверждает совпадение отпечатка, пароль или E2EE-ключ. |
 | Локально `200 OK`, извне тайм-аут до установки TCP | Проверьте IP/порт, firewall хостинга, проброс и прохождение пакетов по пункту 3. На этом этапе TLS и E2EE ещё не проверяются. |
 | Извне `Connection refused` | Соединение явно отклонено: проверьте слушающий порт, назначение проброса и правила `REJECT`. |
-| TCP установился, затем TLS завершился ошибкой или завис | Проверьте, что внешний порт направлен именно на HTTPS-порт Voicecord, а не на другой сервис. Также проверьте VPN, прокси и сетевые фильтры на пути. |
+| TCP установился, затем TLS завершился ошибкой или завис | Проверьте, что внешний порт направлен именно на HTTPS-порт PawTalk, а не на другой сервис. Также проверьте VPN, прокси и сетевые фильтры на пути. |
 | Извне `200 OK`, но другое содержимое | На внешнем адресе может отвечать другой сервис. Проверьте IP, порт и назначение проброса. |
 
 ### 3. Посмотрите, доходят ли запросы до Linux-сервера
@@ -556,7 +556,7 @@ tcpdump -ni any 'tcp port 18443'
 | Пакетов нет | Запрос не наблюдается на сетевых интерфейсах сервера. Перепроверьте адрес и порт теста, затем firewall хостинга, роутер и маршрут перед сервером. |
 | Приходят TCP SYN (`[S]`), но нет ответных SYN-ACK (`[S.]`) | Проверьте firewall Linux, прослушиваемый адрес/порт и маршрут ответа, в том числе через VPN. |
 | Есть SYN и SYN-ACK, но соединение не завершается | Проверьте обратный маршрут и фильтрацию между сервером и клиентом. |
-| TCP-соединение установилось и идёт обмен данными | Запрос достигает сервера. Сопоставьте ошибку curl и журналы Voicecord, чтобы проверить следующий этап — TLS и HTTP. |
+| TCP-соединение установилось и идёт обмен данными | Запрос достигает сервера. Сопоставьте ошибку curl и журналы PawTalk, чтобы проверить следующий этап — TLS и HTTP. |
 
 ### 4. Если сервер находится за роутером
 
@@ -582,21 +582,21 @@ Linux-сервера**, с теми же внутренними портами. 
 
 ## Обслуживание и обновление
 
-Все команды выполняются на VPS. Имя стека — `voicecord`, сервис —
-`voicecord_server`. Не меняйте их случайно при повторном развёртывании.
+Все команды выполняются на VPS. Имя стека — `pawtalk`, сервис —
+`pawtalk_server`. Не меняйте их случайно при повторном развёртывании.
 
 ```sh
-cd /opt/voicecord
-docker stack services voicecord
-docker service ps voicecord_server --no-trunc
-docker service logs --tail 50 voicecord_server
+cd /opt/pawtalk
+docker stack services pawtalk
+docker service ps pawtalk_server --no-trunc
+docker service logs --tail 50 pawtalk_server
 
 # Перезапуск текущего сервиса; звонок прервётся
-docker service update --force --detach=false voicecord_server
+docker service update --force --detach=false pawtalk_server
 
 # Остановка / запуск без удаления данных
-docker service scale voicecord_server=0
-docker service scale voicecord_server=1
+docker service scale pawtalk_server=0
+docker service scale pawtalk_server=1
 ```
 
 Повторный `deploy` возвращает одну реплику даже после остановки через `scale=0`.
@@ -609,11 +609,11 @@ docker service scale voicecord_server=1
 В **Bash** выполните на узле с данными (на Alpine сначала установите Bash):
 
 ```bash
-CID=$(docker ps -q --filter label=com.docker.swarm.service.name=voicecord_server --filter status=running)
+CID=$(docker ps -q --filter label=com.docker.swarm.service.name=pawtalk_server --filter status=running)
 if [ -n "$CID" ]; then
   read -r -s -p 'Новый пароль (от 8 символов): ' ROOM_PASSWORD
   printf '\n'
-  printf '%s' "$ROOM_PASSWORD" | docker exec -i "$CID" /voicecord serve reset-password
+  printf '%s' "$ROOM_PASSWORD" | docker exec -i "$CID" /pawtalk serve reset-password
   unset ROOM_PASSWORD
 fi
 ```
@@ -621,7 +621,7 @@ fi
 После ответа `Password updated` примените новый пароль:
 
 ```sh
-docker service update --force --detach=false voicecord_server
+docker service update --force --detach=false pawtalk_server
 ```
 
 Пароль не попадает в историю shell. Приглашение сохраняется, звонки прерываются.
@@ -629,29 +629,29 @@ docker service update --force --detach=false voicecord_server
 
 ### Где данные и как сохранить комнату
 
-Данные находятся в volume из `VOICECORD_DATA_VOLUME`, по умолчанию
-`voicecord-server_server_data`, на узле с меткой `voicecord.data=true`.
+Данные находятся в volume из `PAWTALK_DATA_VOLUME`, по умолчанию
+`pawtalk-server_server_data`, на узле с меткой `pawtalk.data=true`.
 `state.json` содержит IP, хеш пароля, ключи LiveKit, сертификат и приватный TLS-ключ;
 `chat.sqlite` — историю. Замена образа и удаление стека сохраняют внешний volume.
 **Удаление volume уничтожает комнату.**
 
 Если установлен таймер, перед копированием остановите его командой
-`systemctl stop voicecord-update.timer` и дождитесь завершения уже запущенного
-обновления (`systemctl status voicecord-update.service`). Затем остановите сервис:
+`systemctl stop pawtalk-update.timer` и дождитесь завершения уже запущенного
+обновления (`systemctl status pawtalk-update.service`). Затем остановите сервис:
 
 ```sh
-docker service scale voicecord_server=0
-docker service ps voicecord_server --no-trunc
-docker ps --filter label=com.docker.swarm.service.name=voicecord_server
+docker service scale pawtalk_server=0
+docker service ps pawtalk_server --no-trunc
+docker ps --filter label=com.docker.swarm.service.name=pawtalk_server
 ```
 
 Дождитесь остановки всех задач и отсутствия контейнера в `docker ps`. Сохраните
 **весь volume** средствами резервного копирования Docker или snapshot хостинга,
-затем запустите `docker service scale voicecord_server=1` и проверьте готовность.
+затем запустите `docker service scale pawtalk_server=1` и проверьте готовность.
 Копируйте SQLite вместе со служебными файлами. Сохраните также `.env`, файлы
 развёртывания, текущие версию/digest образа и исходный IP. Храните копию как секрет
 вне VPS. Во время копирования не запускайте `deploy` или обновлятор. После копирования
-верните таймер командой `systemctl start voicecord-update.timer`, если он был включён.
+верните таймер командой `systemctl start pawtalk-update.timer`, если он был включён.
 
 Восстановление полного volume на прежнем IP сохраняет приглашение и пароль.
 Файлы должны быть доступны UID/GID `65532:65532`. Метку узла назначайте только
@@ -667,13 +667,13 @@ docker ps --filter label=com.docker.swarm.service.name=voicecord_server
 | `docker: command not found` | Установлен Docker Engine и доступен CLI |
 | `Cannot connect to the Docker daemon` | Демон запущен; выбран правильный Docker context |
 | `This node is not a swarm manager` | Swarm включён; команды выполняются на manager-узле |
-| Сервис `0/1`, задача `Pending` | `docker service ps --no-trunc`, метку `voicecord.data=true`, доступность узла |
+| Сервис `0/1`, задача `Pending` | `docker service ps --no-trunc`, метку `pawtalk.data=true`, доступность узла |
 | `volume ... not found` | Внешний volume существует на узле с данными, имя совпадает с `.env` |
 | `denied` / `unauthorized` при pull | Пакет GHCR опубликован и публичен |
 | `manifest unknown` | Тег существует; версия в `.env` совпадает с опубликованной |
 | `no matching manifest` / `exec format error` | Архитектура VPS поддерживается образом |
 | `address already in use` | Свободны четыре порта от базового до базового + 3; старый контейнер остановлен |
-| `VOICECORD_PUBLIC_IP differs from saved state` | Верните сохранённый IP; для нового IP нужна новая комната |
+| `PAWTALK_PUBLIC_IP differs from saved state` | Верните сохранённый IP; для нового IP нужна новая комната |
 | После `deploy` работает прежний образ | Проверьте `UpdateStatus` сервиса: мог произойти откат |
 | Пустой `CID` | Задача работает на этом узле и имеет статус `Running` |
 | Клиент получает timeout | Проверьте порты на VPS и у хостинга, IP, NAT и маршрут |
@@ -685,8 +685,8 @@ docker ps --filter label=com.docker.swarm.service.name=voicecord_server
 ## Собственный образ
 
 На машине сборки с исходниками и Docker соберите образ и опубликуйте его в своём
-registry, доступном VPS. Укажите точное имя/тег или digest в `VOICECORD_IMAGE`,
-соответствующую версию в `VOICECORD_RELEASE`, оставьте `VOICECORD_AUTO_UPDATE=false`
+registry, доступном VPS. Укажите точное имя/тег или digest в `PAWTALK_IMAGE`,
+соответствующую версию в `PAWTALK_RELEASE`, оставьте `PAWTALK_AUTO_UPDATE=false`
 и примените тот же Swarm-стек через `deploy`. Образ должен соответствовать
 архитектуре VPS. `docker stack deploy` не собирает образы. Compose-файлы разработки
 не являются способом установки на VPS.

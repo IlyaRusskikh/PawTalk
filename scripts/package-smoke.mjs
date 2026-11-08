@@ -10,9 +10,9 @@ const socket = net.createServer();
 await new Promise(r => socket.listen(0, '127.0.0.1', r));
 const port = socket.address().port;
 await new Promise(r => socket.close(r));
-const profile = await mkdtemp(path.join(os.tmpdir(), 'voicecord-package-smoke-'));
-const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.VOICECORD_DEV_URL;
-const child = spawn(path.resolve('release/win-unpacked/Voicecord.exe'), ['--smoke','--offscreen-smoke',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`], { env, windowsHide: true, stdio: ['ignore','pipe','pipe'] });
+const profile = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-package-smoke-'));
+const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.PAWTALK_DEV_URL;
+const child = spawn(path.resolve('release/win-unpacked/PawTalk.exe'), ['--smoke','--offscreen-smoke',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`], { env, windowsHide: true, stdio: ['ignore','pipe','pipe'] });
 let exited = false, output = '';
 child.stdout.on('data', data => output += data); child.stderr.on('data', data => output += data);
 child.on('exit', () => { exited = true; });
@@ -54,7 +54,7 @@ try {
  for(let i=0;i<60;i++){if(await evaluate("document.querySelector('h1')?.textContent === 'The conversation starts here.'"))break;await sleep(100);}
  assert.equal(await evaluate('document.documentElement.lang'),'en');
  assert.equal(await evaluate("document.querySelector('h1').textContent"),'The conversation starts here.');
- console.log('PASS packaged Voicecord: launch, preload, native module, logo, settings modal, language IPC/persistence, packaged update helper.');
+ console.log('PASS packaged PawTalk: launch, preload, native module, logo, settings modal, language IPC/persistence, packaged update helper.');
  await send('Browser.close').catch(()=>{});
 } finally {
  ws?.close();

@@ -1,6 +1,6 @@
 # Standalone LAN stack for Docker Desktop (Linux containers) on Windows.
 # Start through lan.cmd; do not combine with compose.yaml/compose.local.yaml.
-name: voicecord-lan
+name: pawtalk-lan
 services:
   proxy:
     image: caddy:2.11.7-alpine

@@ -22,7 +22,7 @@ export function resetSettingsTab(settings: Settings, tab: keyof typeof settingsT
 export function loadSettings(): Settings {
   const result = { ...defaults };
   try {
-    const saved = JSON.parse(localStorage.getItem('voicecord.settings') || '{}');
+    const saved = JSON.parse(localStorage.getItem('pawtalk.settings') || '{}');
     if (saved.noiseMode === undefined && saved.noiseSuppression === false) saved.noiseMode = 'off';
     for (const key of Object.keys(defaults) as (keyof Settings)[]) {
       if (typeof saved[key] === typeof defaults[key]) (result as unknown as Record<string, unknown>)[key] = saved[key];
@@ -36,4 +36,4 @@ export function loadSettings(): Settings {
   } catch { /* Corrupt preferences revert to safe defaults. */ }
   return result;
 }
-export function remember(settings: Settings) { localStorage.setItem('voicecord.settings', JSON.stringify(settings)); }
+export function remember(settings: Settings) { localStorage.setItem('pawtalk.settings', JSON.stringify(settings)); }

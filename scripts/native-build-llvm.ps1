@@ -12,7 +12,7 @@ try {
     & (Join-Path $CompilerRoot 'bin/clang++.exe') -std=c++17 -shared -static `
         -DNAPI_CPP_EXCEPTIONS -DNOMINMAX -DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0A00 `
         -I 'node_modules/node-addon-api' -I $NodeHeaders `
-        'native/voicecord.cc' $NodeImportLibrary '-Wl,--delayload,node.exe' `
-        -lole32 -luuid -luser32 -o 'native/build/Release/voicecord.node'
+        'native/pawtalk.cc' $NodeImportLibrary '-Wl,--delayload,node.exe' `
+        -lole32 -luuid -luser32 -o 'native/build/Release/pawtalk.node'
     if ($LASTEXITCODE -ne 0) { throw 'Native build failed' }
 } finally { Pop-Location }

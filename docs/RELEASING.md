@@ -29,7 +29,7 @@
    `Release 0.1.0`, затем аннотированный тег (подставьте текущую версию):
 
    ```sh
-   git tag -a v0.1.0 -m "Voicecord 0.1.0"
+   git tag -a v0.1.0 -m "PawTalk 0.1.0"
    git push origin main
    git push origin v0.1.0
    ```
@@ -42,10 +42,10 @@
    При первом выпуске сделайте пакет публичным по разделу
    [«Первая публикация образа»](#первая-публикация-образа-для-владельца-репозитория).
    Скачайте artifact
-   `voicecord-windows`: в нём установщик, его SHA-256, подписанный манифест и один архив лицензий. До tag push настройте signing secret по [UPDATE-SIGNING.md](UPDATE-SIGNING.md).
+   `pawtalk-windows`: в нём установщик, его SHA-256, подписанный манифест и один архив лицензий. До tag push настройте signing secret по [UPDATE-SIGNING.md](UPDATE-SIGNING.md).
    Откройте **Releases → Draft a new release**, выберите существующий тег,
    перенесите описание из CHANGELOG и приложите файлы из artifact. Укажите команду
-   `docker pull ghcr.io/ilyarusskikh/voicecord-server:X.Y.Z`, ссылку на исходный
+   `docker pull ghcr.io/ilyarusskikh/pawtalk-server:X.Y.Z`, ссылку на исходный
    тег и digest образа из Summary. Обновите пример версии в `.env.server.example`
    перед выпуском, чтобы шаблон ссылался на этот же образ.
 7. Обновите в обоих README версию, прямую ссылку на фактическое имя установщика
@@ -70,10 +70,10 @@ SSH нужен для Git push, а не для сборки. GitHub Desktop та
 
 В каждом новом релизе прикрепляйте четыре основных файла:
 
-- `Voicecord.Setup.X.Y.Z.exe` — установщик Windows x64;
+- `PawTalk.Setup.X.Y.Z.exe` — установщик Windows x64;
 - `update-manifest.json` — подписанный Ed25519 манифест этой сборки; [настройка ключа и подписи](UPDATE-SIGNING.md);
 - `SHA256SUMS.txt` — SHA-256 именно загруженного EXE (можно также указать ZIP);
-- `Voicecord.Licenses.X.Y.Z.zip` — `LICENSE`, `THIRD_PARTY_NOTICES.md` и
+- `PawTalk.Licenses.X.Y.Z.zip` — `LICENSE`, `THIRD_PARTY_NOTICES.md` и
   папка `licenses/` из той же версии/сборки.
 
 Не прикрепляйте лицензии по одному и не дублируйте исходники отдельным ассетом:
@@ -100,19 +100,19 @@ Workflow `.github/workflows/check.yml` публикует образ после 
 2. Дождитесь зелёного **Verify and package → Publish server image to GHCR**.
    В Summary появятся имя, версия и digest образа. Для публикации используется
    `GITHUB_TOKEN` с `packages: write`; личный PAT в Secrets не нужен.
-3. Откройте профиль GitHub → **Packages → voicecord-server → Package settings**.
+3. Откройте профиль GitHub → **Packages → pawtalk-server → Package settings**.
    В разделе видимости выберите **Change visibility → Public** и подтвердите.
    Публичность репозитория сама по себе не делает новый пакет публичным.
 4. Проверьте скачивание на машине без GitHub-логина:
-   `docker pull ghcr.io/ilyarusskikh/voicecord-server:0.1.0`.
+   `docker pull ghcr.io/ilyarusskikh/pawtalk-server:0.1.0`.
    После этого инструкция для VPS готова к использованию без авторизации.
 
 Проверьте общий manifest командой
-`docker buildx imagetools inspect ghcr.io/ilyarusskikh/voicecord-server:0.1.0`:
+`docker buildx imagetools inspect ghcr.io/ilyarusskikh/pawtalk-server:0.1.0`:
 в нём должны присутствовать `linux/amd64` и `linux/arm64`.
 
 При форке имя образа вычисляется из `<владелец>/<репозиторий>-server` в нижнем
-регистре; обновите `VOICECORD_IMAGE` и ссылки скачивания под свой fork.
+регистре; обновите `PAWTALK_IMAGE` и ссылки скачивания под свой fork.
 Не заменяйте уже опубликованный тег версии; выпускайте новый номер.
 Механизм публикации и видимости описан в [документации GHCR](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
@@ -127,7 +127,7 @@ Use `npm version patch|minor|major --no-git-tag-version --ignore-scripts`
 (choose one keyword) to update both manifests. Update CHANGELOG and both READMEs,
 run the checks above, build and smoke-test the installer, then commit and create
 an annotated `vX.Y.Z` tag. Push the branch and the tag. CI validates tag/version
-consistency and uploads `voicecord-windows`. After both test jobs pass, a tag push
+consistency and uploads `pawtalk-windows`. After both test jobs pass, a tag push
 also publishes `ghcr.io/<owner>/<repo>-server:X.Y.Z` and `:sha-<commit>` for
 Linux amd64 and arm64 under one multi-platform manifest. Server lifecycle checks
 run on native runners for both architectures. Make the GHCR package public once,
@@ -145,9 +145,9 @@ Also update both `website/` pages and `docs/FIRST-CALL.ru.md`, and run
 Review and publish. Never replace a released tag or binary; issue a new version.
 Do not upload local QA reports, recordings or an entire `release/` directory.
 
-Use exactly four primary assets: signed `update-manifest.json` ([key setup](UPDATE-SIGNING.md)), `Voicecord.Setup.X.Y.Z.exe`,
+Use exactly four primary assets: signed `update-manifest.json` ([key setup](UPDATE-SIGNING.md)), `PawTalk.Setup.X.Y.Z.exe`,
 `SHA256SUMS.txt` for the exact uploaded installer, and
-`Voicecord.Licenses.X.Y.Z.zip` containing `LICENSE`, `THIRD_PARTY_NOTICES.md`
+`PawTalk.Licenses.X.Y.Z.zip` containing `LICENSE`, `THIRD_PARTY_NOTICES.md`
 and `licenses/` from the same release/build. Do not attach licenses separately
 or upload a duplicate source archive; GitHub supplies Source code ZIP/TAR for
 the tag automatically. Link the tag and license ZIP in the release description.

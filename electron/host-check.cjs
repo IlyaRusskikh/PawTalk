@@ -3,8 +3,8 @@ const { spawn } = require('node:child_process');
 const path = require('node:path');
 
 function parseResult(line) {
-  if (!line.startsWith('VOICECORD_PREFLIGHT_RESULT:')) return null;
-  const result = JSON.parse(line.slice('VOICECORD_PREFLIGHT_RESULT:'.length));
+  if (!line.startsWith('PAWTALK_PREFLIGHT_RESULT:')) return null;
+  const result = JSON.parse(line.slice('PAWTALK_PREFLIGHT_RESULT:'.length));
   if (!['internet', 'unconfirmed', 'error', 'cancelled'].includes(result.state) ||
       !Array.isArray(result.tcp) || result.tcp.length !== 2 || result.tcp.some(v => typeof v !== 'boolean') ||
       typeof result.udp !== 'boolean' || (result.state === 'internet' && (!result.tcp.every(Boolean) || !result.udp))) {

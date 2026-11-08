@@ -15,7 +15,7 @@ class GateProcessor extends AudioWorkletProcessor {
   lastReport = 0; destroyed = false; failed = false;
   constructor(options?: { processorOptions?: { rnnoiseModule?: WebAssembly.Module } }) {
     super();
-    if (sampleRate !== 48000) throw new Error('Voicecord requires 48 kHz audio');
+    if (sampleRate !== 48000) throw new Error('PawTalk requires 48 kHz audio');
     const module = options?.processorOptions?.rnnoiseModule;
     if (module) this.engine = new RnnoiseEngine(module);
     this.pipeline = new VoicePipeline(this.engine);
@@ -44,4 +44,4 @@ class GateProcessor extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor('voicecord-gate', GateProcessor);
+registerProcessor('pawtalk-gate', GateProcessor);

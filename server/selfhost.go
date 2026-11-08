@@ -45,7 +45,7 @@ func roomCertificateFor(addresses []string, lifetime time.Duration) (tls.Certifi
 	if err != nil {
 		return tls.Certificate{}, "", err
 	}
-	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "Voicecord room"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(lifetime), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, DNSNames: []string{"voicecord.local"}}
+	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "PawTalk room"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(lifetime), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, DNSNames: []string{"pawtalk.local"}}
 	seen := make(map[string]bool)
 	for _, address := range append([]string{"127.0.0.1", "::1"}, addresses...) {
 		ip := net.ParseIP(address)

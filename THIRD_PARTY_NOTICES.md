@@ -1,6 +1,6 @@
 # Third-party notices
 
-Voicecord's original source is AGPL-3.0-only (see `LICENSE`). This does not
+PawTalk's original source is AGPL-3.0-only (see `LICENSE`). This does not
 relicense third-party components. Preserve their notices when redistributing.
 Pinned npm dependencies and their license identifiers are in `package-lock.json`;
 their original license files are installed by `npm ci`.
@@ -19,9 +19,9 @@ their original license files are installed by `npm ci`.
 
 ## RNNoise audio processing
 
-Voicecord includes the default RNNoise neural model and WebAssembly code from
+PawTalk includes the default RNNoise neural model and WebAssembly code from
 `@shiguredo/rnnoise-wasm` 2025.1.5, generated from the package at build time.
-The JavaScript audio adapter and streaming pipeline in `shared/` are Voicecord code.
+The JavaScript audio adapter and streaming pipeline in `shared/` are PawTalk code.
 
 - RNNoise: Xiph.Org Foundation and contributors; BSD 3-clause. See `licenses/RNNoise.BSD.txt`.
 - rnnoise-wasm build/wrapper: Copyright 2021–2025 Takeru Ohta and Shiguredo Inc.; Apache License 2.0. See `licenses/rnnoise-wasm.APACHE2.txt`.
@@ -38,9 +38,22 @@ No endorsement or affiliation with Krisp or Discord is implied.
 - Go runtime and standard library: The Go Authors, BSD 3-clause. See the bundled `server/GO-LICENSE`.
 - SQLite and its Go driver (`modernc.org/sqlite`) store the chat ciphertext. See `licenses/go-runtime.txt` for their notices and those of the Go dependencies pinned in `server/go.mod`.
 
+## Notification recordings
+
+All seven notification recordings are edits of works by **Joseph SARDIN /
+BigSoundBank**, dedicated under **CC0 1.0 Universal**:
+
+- Join (approved variant B): https://bigsoundbank.com/meow-cat-13-s1901.html.
+- Leave (approved variant A): https://bigsoundbank.com/meow-cat-2-s1890.html.
+- Five purrs: https://bigsoundbank.com/cat-purr-s0436.html.
+
+License: https://creativecommons.org/publicdomain/zero/1.0/.
+Asset-specific provenance and checksums are bundled in `sounds/sources.json`
+and `sounds/README.md`. The earlier user-provided meows are no longer used.
+
 ## Corresponding source
 
-Release publishers must link the exact Voicecord source tag alongside each binary
+Release publishers must link the exact PawTalk source tag alongside each binary
 and preserve upstream sources/notices for embedded components. LiveKit Server
 source for the bundled version: https://github.com/livekit/livekit/tree/v1.13.11.
 The npm lockfile and preparation scripts record reproducible dependency versions;

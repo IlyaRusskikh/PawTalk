@@ -78,7 +78,7 @@ func TestVerifiedProfileKeepsLatestNameAndAvatarForOfflineHistory(t *testing.T) 
 		if err := json.Unmarshal(call("GET", "/api/config", "", nil, 200), &config); err != nil {
 			t.Fatal(err)
 		}
-		signed := ed25519.Sign(private, []byte("voicecord-profile-v1\n"+config.ProfileChallenge+"\n"+name))
+		signed := ed25519.Sign(private, []byte("pawtalk-profile-v1\n"+config.ProfileChallenge+"\n"+name))
 		proof := profileProof{b64.EncodeToString(public), config.ProfileChallenge, b64.EncodeToString(signed)}
 		body, _ := json.Marshal(map[string]any{"nickname": name, "password": "test-password", "e2ee": true, "e2eeKeyId": keyID, "profile": proof})
 		var join struct{ ChatToken, ProfileID string }

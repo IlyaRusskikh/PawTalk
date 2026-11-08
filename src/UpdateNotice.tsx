@@ -30,7 +30,7 @@ export function UpdateNotice({ blocked, active, hosting }: { blocked: boolean; a
   }
   return <>
     {available && !blocked && !open && <button className="icon-button update-indicator" title={t("Доступно обновление")} aria-label={t("Доступно обновление")} onClick={() => setOpen(true)}><Icon name="download"/></button>}
-    {open && !blocked && <Modal title={t("Обновление Voicecord")} className="update-modal" onClose={() => { if (!downloading) setOpen(false); }}>
+    {open && !blocked && <Modal title={t("Обновление PawTalk")} className="update-modal" onClose={() => { if (!downloading) setOpen(false); }}>
       {state.version && <p>{t("Доступна версия ")}{state.version}{state.prerelease ? t(" (предварительный выпуск)") : ''}.</p>}
       {state.status !== 'security-failed' && <p>{t("Новая версия будет загружена и проверена. Затем приложение закроется, предыдущая версия будет удалена, новая — установлена и запущена. Настройки, язык, закладки и пароли сохранятся.")}</p>}
       {state.status !== 'security-failed' && (hosting ? <p className="text-error">{t("Установка закроет вашу комнату и отключит всех участников.")}</p> : active ? <p className="text-error">{t("Установка прервёт текущий звонок.")}</p> : null)}

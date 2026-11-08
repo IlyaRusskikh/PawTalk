@@ -3,7 +3,7 @@ const { spawn } = require('node:child_process');
 const path = require('node:path');
 const { waitForHelper, helperLaunch } = require('../electron/update-progress.cjs');
 app.whenReady().then(async () => {
-  const directory = process.env.VOICECORD_HANDOFF_DIRECTORY;
+  const directory = process.env.PAWTALK_HANDOFF_DIRECTORY;
   const ready = path.join(directory, 'ready');
   const done = path.join(directory, 'done');
   const quote = value => "'" + value.replaceAll("'", "''") + "'";

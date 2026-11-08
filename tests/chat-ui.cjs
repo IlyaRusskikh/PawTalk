@@ -2,7 +2,7 @@ const { app, BrowserWindow } = require('electron');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs/promises');
-app.setPath('userData', path.join(require('node:os').tmpdir(), 'voicecord-chat-ui-' + process.pid));
+app.setPath('userData', path.join(require('node:os').tmpdir(), 'pawtalk-chat-ui-' + process.pid));
 app.disableHardwareAcceleration();
 app.whenReady().then(async () => {
   const win = new BrowserWindow({ show: false, width: 1240, height: 860, webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, backgroundThrottling: false } });
@@ -13,7 +13,7 @@ app.whenReady().then(async () => {
   const output = path.resolve('release/qa'); await fs.mkdir(output, { recursive: true });
   const capture = async name => { await delay(150); await fs.writeFile(path.join(output, name + '.png'), (await win.webContents.capturePage()).toPNG()); };
   try {
-    await win.loadURL(process.env.VOICECORD_UI_TEST_URL + '/tests/chat-ui.html');
+    await win.loadURL(process.env.PAWTALK_UI_TEST_URL + '/tests/chat-ui.html');
     await run(`window.sentAnimations=[];const originalAnimate=Element.prototype.animate;Element.prototype.animate=function(frames,options){if(this.matches('.chat-message-body p'))window.sentAnimations.push(options?.duration);return originalAnimate.call(this,frames,options)};undefined`);
     await until('window.ready && document.querySelectorAll(".chat-message").length===100', 'initial 100 messages');
     assert.equal(await run('document.querySelector("[data-message-row]").dataset.messageRow'), '151');
@@ -78,6 +78,13 @@ app.whenReady().then(async () => {
     win.webContents.debugger.attach('1.3');
     await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
     assert.equal(await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`),false);
+    await run('window.emitTyping(true)');
+    await until('document.querySelectorAll(".chat-typing-paws svg").length===3', 'three typing paws');
+    assert.equal(await run(`getComputedStyle(document.querySelector('.chat-typing-paws svg')).animationName`), 'typing-paw');
+    assert.ok(await run(`document.querySelector('.chat-typing').textContent.includes('Алексей печатает')`), 'typing status remains readable');
+    await capture('pawtalk-typing-paws');
+    await run('window.emitTyping(false)');
+    await until('!document.querySelector(".chat-typing-paws")', 'typing paws clear');
     await run(`document.querySelector('.chat-compose textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',shiftKey:true,bubbles:true,cancelable:true}))`);
     assert.equal(await run('!!window.lastSent'), false, 'Shift+Enter does not send');
     await run(`document.querySelector('.chat-compose textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}))`);
@@ -92,6 +99,11 @@ app.whenReady().then(async () => {
     const animatedCount=await run('window.sentAnimations.length');
     await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
     assert.equal(await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`),true);
+    await run('window.emitTyping(true)');
+    await until('document.querySelectorAll(".chat-typing-paws svg").length===3', 'static typing paws');
+    assert.equal(await run(`getComputedStyle(document.querySelector('.chat-typing-paws svg')).animationName`), 'none');
+    assert.equal(await run(`getComputedStyle(document.querySelector('.chat-typing-paws svg')).opacity`), '1');
+    await run('window.emitTyping(false)');
     await run(`(()=>{const el=document.querySelector('.chat-compose textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'Reduced motion test');el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await run(`document.querySelector('.chat-composer').requestSubmit()`);
     await until(`window.lastSent?.text==='Reduced motion test' && !document.querySelector('.chat-compose textarea').value`,'send with reduced motion');

@@ -44,8 +44,8 @@ export function App() {
   const [chatWindow, setChatWindow] = useState(loadChatWindow);
   const [activeUnread, setActiveUnread] = useState(0);
   const [nativeNoticeDismissed, setNativeNoticeDismissed] = useState(false);
-  useEffect(() => { try { localStorage.setItem('voicecord.chat.window', String(chatWindow)); } catch {} }, [chatWindow]);
-  useEffect(() => { applyTheme(theme); try { localStorage.setItem('voicecord.theme', JSON.stringify(theme)); } catch {} }, [theme]);
+  useEffect(() => { try { localStorage.setItem('pawtalk.chat.window', String(chatWindow)); } catch {} }, [chatWindow]);
+  useEffect(() => { applyTheme(theme); try { localStorage.setItem('pawtalk.theme', JSON.stringify(theme)); } catch {} }, [theme]);
   const [modal, setModal] = useState<'join' | 'create' | 'share' | 'host-share' | 'settings' | 'server-key' | null>(null);
   const [roomName, setRoomName] = useState('');
   const [page, setPage] = useState<'home' | 'room'>('home');
@@ -72,7 +72,7 @@ export function App() {
   }
   const [hostRunning, setHostRunning] = useState(false);
   const [address, setAddress] = useState('');
-  const [nickname, setNickname] = useState(() => stored('voicecord.nickname') || t("Гость"));
+  const [nickname, setNickname] = useState(() => stored('pawtalk.nickname') || t("Гость"));
   const [avatar, setAvatar] = useState(() => {
     const saved = stored(avatarStorageKey);
     return validAvatar(saved) ? saved : undefined;
@@ -106,7 +106,7 @@ export function App() {
   const currentTarget = useRef<JoinTarget | null>(null);
   const [bookmarkBusy, setBookmarkBusy] = useState(false);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>(() => {
-    try { const data = JSON.parse(stored('voicecord.bookmarks') || '[]'); return Array.isArray(data) ? data.filter(v => v && typeof v.address === 'string' && typeof v.name === 'string' && !v.address.includes('#')).slice(0, 50) : []; } catch { return []; }
+    try { const data = JSON.parse(stored('pawtalk.bookmarks') || '[]'); return Array.isArray(data) ? data.filter(v => v && typeof v.address === 'string' && typeof v.name === 'string' && !v.address.includes('#')).slice(0, 50) : []; } catch { return []; }
   });
   const [menu, setMenu] = useState<{ address: string; x: number; y: number } | null>(null);
   const [presence, setPresence] = useState<Record<string, RoomPreview>>({});
@@ -120,12 +120,12 @@ export function App() {
             const item = bookmarks[index++];
             try {
               let saved: { feed?: string; ephemeral?: boolean } = {};
-              try { saved = JSON.parse(localStorage.getItem('voicecord.chat.feed.' + item.address) ?? '{}'); } catch {}
+              try { saved = JSON.parse(localStorage.getItem('pawtalk.chat.feed.' + item.address) ?? '{}'); } catch {}
               const after = saved.feed ? readChatCursor({ handle: '', feed: saved.feed, ephemeral: !!saved.ephemeral }) : 0;
               const preview = window.desktop?.roomPreview ? await window.desktop.roomPreview(item.address, { feed: saved.feed, after }) : undefined;
               const count = preview ? undefined : await window.desktop?.roomPresence?.(item.address);
               result[item.address] = preview ?? (typeof count === 'number' ? { status: 'online', participants: count, unread: 0, details: false } : { status: 'offline' });
-              if (preview?.feed) try { localStorage.setItem('voicecord.chat.feed.' + item.address, JSON.stringify({ feed: preview.feed, ephemeral: preview.ephemeral })); } catch {}
+              if (preview?.feed) try { localStorage.setItem('pawtalk.chat.feed.' + item.address, JSON.stringify({ feed: preview.feed, ephemeral: preview.ephemeral })); } catch {}
             } catch { result[item.address] = { status: 'offline' }; }
           }
         }));
@@ -142,7 +142,7 @@ export function App() {
     return () => { poll.stop(); off?.(); window.removeEventListener('focus', fallback); window.removeEventListener('blur', fallback); document.removeEventListener('visibilitychange', fallback); };
   }, [bookmarks]);
   useEffect(() => {
-    localStorage.setItem('voicecord.bookmarks', JSON.stringify(bookmarks));
+    localStorage.setItem('pawtalk.bookmarks', JSON.stringify(bookmarks));
     void window.desktop?.setUpdateRooms?.(bookmarks.map(({ address, name }) => ({ address, name }))).catch(() => {});
   }, [bookmarks]);
   useEffect(() => {
@@ -152,13 +152,13 @@ export function App() {
     return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', key); window.removeEventListener('resize', close); };
   }, []);
   function savedNames(): Record<string, string> {
-    try { const value = JSON.parse(stored('voicecord.roomNames') || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; }
+    try { const value = JSON.parse(stored('pawtalk.roomNames') || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; }
   }
   function renameRoom(address: string, name: string) {
     const clean = name.trim();
     if (!clean) return;
     setBookmarks(prev => prev.map(item => item.address === address ? { ...item, name: clean } : item));
-    localStorage.setItem('voicecord.roomNames', JSON.stringify({ ...savedNames(), [address]: clean }));
+    localStorage.setItem('pawtalk.roomNames', JSON.stringify({ ...savedNames(), [address]: clean }));
     if (currentTarget.current?.address.split('#')[0] === address) setRoomName(clean);
     setRenaming(null);
   }
@@ -171,7 +171,7 @@ export function App() {
       const clean = target.address.split('#')[0];
       if (isBookmarked) { await window.desktop.savePassword({ address: clean, password: null }); setBookmarks(prev => prev.filter(item => item.address !== clean)); return; }
       let secret = target.password;
-      if (target.address.startsWith('voicecord://')) secret = new URLSearchParams(new URL(target.address).hash.slice(1)).get('password') ?? secret;
+      if (target.address.startsWith('pawtalk://')) secret = new URLSearchParams(new URL(target.address).hash.slice(1)).get('password') ?? secret;
       await window.desktop.savePassword({ address: clean, password: secret, e2eeKey: target.e2eeKey ?? null });
       setBookmarks(prev => [...prev.filter(v => v.address !== clean), { address: clean, name: roomName || t("Комната") }]);
     } catch { setError(t("Не удалось изменить закладку в защищённом хранилище.")); }
@@ -202,7 +202,7 @@ export function App() {
     void window.desktop?.pendingInvitation?.().then(receive);
     return off;
   }, []);
-  useEffect(() => { localStorage.setItem('voicecord.nickname', nickname); }, [nickname]);
+  useEffect(() => { localStorage.setItem('pawtalk.nickname', nickname); }, [nickname]);
   const stopPreview = () => { testMic.current?.stop(); testMic.current = undefined; setTesting(false); setPreviewReady(false); setTestDb(-100); setTestSpeaking(false); };
   async function refreshDevices() { try { setDevices(await navigator.mediaDevices.enumerateDevices()); } catch { setError(t("Не удалось получить список аудиоустройств")); } }
   useEffect(() => {
@@ -271,8 +271,8 @@ export function App() {
       unusedChat = result.chat?.handle;
       if (id !== attempt.current) return;
       if (result.error) throw new Error(result.error);
-      if (!hosting) localStorage.setItem('voicecord.address', target.address.split('#')[0]);
-      localStorage.setItem('voicecord.nickname', target.nickname);
+      if (!hosting) localStorage.setItem('pawtalk.address', target.address.split('#')[0]);
+      localStorage.setItem('pawtalk.nickname', target.nickname);
       setChatRoom(null);
       await controller.current!.disconnect();
       if (id !== attempt.current) return;
@@ -281,7 +281,7 @@ export function App() {
       joinedOwnHost.current = result.ownHost ?? hosting;
       currentTarget.current = { ...target, e2eeKey: result.e2eeKey };
       setActiveUnread(0);
-      if (result.chat) try { localStorage.setItem('voicecord.chat.feed.' + target.address.split('#')[0], JSON.stringify({ feed: result.chat.feed, ephemeral: result.chat.ephemeral })); } catch {}
+      if (result.chat) try { localStorage.setItem('pawtalk.chat.feed.' + target.address.split('#')[0], JSON.stringify({ feed: result.chat.feed, ephemeral: result.chat.ephemeral })); } catch {}
       setChatRoom({ identity: result.identity, nickname: target.nickname.trim(), access: result.chat, key: result.e2eeKey });
       unusedChat = undefined;
       if (hosting && savedNames()[target.address.split('#')[0]]) setRoomName(savedNames()[target.address.split('#')[0]]);
@@ -327,7 +327,7 @@ export function App() {
     <button className="icon-button call-leave" title={t("Отключиться")} onClick={() => void disconnect()}><Icon name="exit"/></button>
   </div>;
   return <div className="app">
-    <aside className="rail"><button className={`server-orb home-orb ${!showRoom ? 'selected' : ''}`} title={t("Главная")} onClick={() => { setPage('home'); setModal(null); }}><img src="./voicecord-mark.svg" width="44" height="44" alt="Voicecord"/></button><div className="rail-line"/><BookmarkRail bookmarks={bookmarks} activeAddress={inRoom ? currentTarget.current?.address.split('#')[0] : undefined} selected={showRoom} people={snapshot.people.length} livePeople={snapshot.people} unread={activeUnread} presence={presence} disabled={busy || hostBusy || bookmarkBusy} onOpen={item => void openBookmark(item)} onReorder={setBookmarks} onMenu={(address, x, y) => setMenu({ address, x: Math.max(8, Math.min(x, window.innerWidth - 210)), y: Math.max(8, Math.min(y, window.innerHeight - 120)) })}/><button className="icon-button rail-settings" title={t("Настройки")} onClick={() => setModal('settings')}><Icon name="settings"/></button></aside>
+    <aside className="rail"><button className={`server-orb home-orb ${!showRoom ? 'selected' : ''}`} title={t("Главная")} onClick={() => { setPage('home'); setModal(null); }}><img src="./pawtalk-mark.svg" width="44" height="44" alt="PawTalk"/></button><div className="rail-line"/><BookmarkRail bookmarks={bookmarks} activeAddress={inRoom ? currentTarget.current?.address.split('#')[0] : undefined} selected={showRoom} people={snapshot.people.length} livePeople={snapshot.people} unread={activeUnread} presence={presence} disabled={busy || hostBusy || bookmarkBusy} onOpen={item => void openBookmark(item)} onReorder={setBookmarks} onMenu={(address, x, y) => setMenu({ address, x: Math.max(8, Math.min(x, window.innerWidth - 210)), y: Math.max(8, Math.min(y, window.innerHeight - 120)) })}/><button className="icon-button rail-settings" title={t("Настройки")} onClick={() => setModal('settings')}><Icon name="settings"/></button></aside>
     {menu && <div className="bookmark-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={e => e.stopPropagation()}><button autoFocus role="menuitem" onClick={() => { const item = bookmarks.find(b => b.address === menu.address); if (item) setRenaming(item); setMenu(null); }}>{t("Переименовать")}</button><button role="menuitem" onClick={() => void removeBookmark(menu.address)}>{t("Удалить закладку")}</button></div>}
     <UpdateNotice blocked={modal !== null || renaming !== null} active={active || busy} hosting={hostRunning}/>
     <main>
@@ -341,7 +341,7 @@ export function App() {
         {showRoom && <div className="page-title">
           <div>
             <div className="room-title"><h1>{showRoom ? roomName || t("Вы в хорошей компании.") : t("Разговор начинается здесь.")}</h1>{showRoom && <button className={`icon-button bookmark-add ${isBookmarked ? 'bookmarked' : ''}`} aria-pressed={isBookmarked} title={isBookmarked ? t("Удалить закладку") : t("Добавить в закладки")} disabled={bookmarkBusy} onClick={() => void toggleBookmark()}><Icon name="star"/></button>}</div>
-            {!showRoom && <p>{t("Voicecord — личная голосовая комната для вас и друзей. Подключитесь к серверу или создайте свой прямо на этом компьютере.")}</p>}
+            {!showRoom && <p>{t("PawTalk — личная голосовая комната для вас и друзей. Подключитесь к серверу или создайте свой прямо на этом компьютере.")}</p>}
           </div>
           {showRoom ? <div className="room-presence">
             {snapshot.e2ee && <span className="e2ee-badge" title={t("Голос зашифрован между участниками. Экспериментальный режим.")}>E2EE</span>}
@@ -376,7 +376,7 @@ export function App() {
           </div>
         </div>
         <div className="form-fields"><label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div><p>{t("Никнейм обновляется и в открытой комнате.")}</p></div></section>}
-      {settingsSection === 'general' && <section className="settings-card"><h1>{t("Приложение")}</h1><div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setSettingsError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label></div>{autoStart !== null && <Toggle label={t("Запускать Voicecord при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</section>}
+      {settingsSection === 'general' && <section className="settings-card"><h1>{t("Приложение")}</h1><div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setSettingsError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label></div>{autoStart !== null && <Toggle label={t("Запускать PawTalk при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</section>}
       {settingsSection === 'appearance' && <AppearanceSettings theme={theme} onChange={setTheme}/>}
       {settingsSection === 'chat' && <ChatSettings value={chatWindow} onChange={setChatWindow}/>}
       {settingsSection === 'updates' && <UpdateSettings/>}

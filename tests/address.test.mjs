@@ -6,10 +6,10 @@ const { invitation } = createRequire(import.meta.url)('../electron/address.cjs')
 
 test('room invitations carry a strict certificate pin without weakening IP/TLS validation', () => {
  const pin = 'a'.repeat(64);
- const address = `voicecord://203.0.113.10:18443/${pin}`;
+ const address = `pawtalk://203.0.113.10:18443/${pin}`;
  assert.equal(serverURL(address), 'https://203.0.113.10:18443');
  assert.equal(invitation(address).fingerprint, pin);
- for (const bad of [`voicecord://example.com:18443/${pin}`, `voicecord://203.0.113.10/${pin}`, `voicecord://203.0.113.10:18443/abc`, `${address}?x=1`, `${address}#x`, `voicecord://user@203.0.113.10:18443/${pin}`]) assert.throws(() => serverURL(bad));
+ for (const bad of [`pawtalk://example.com:18443/${pin}`, `pawtalk://203.0.113.10/${pin}`, `pawtalk://203.0.113.10:18443/abc`, `${address}?x=1`, `${address}#x`, `pawtalk://user@203.0.113.10:18443/${pin}`]) assert.throws(() => serverURL(bad));
 });
 test('accept IP literals and explicit TLS ports', () => {
  assert.equal(serverURL('203.0.113.10'), 'https://203.0.113.10');
@@ -25,12 +25,12 @@ test('reject plaintext, credentials, paths, redirects and arbitrary schemes', ()
 test('password invitations preserve TLS pins and decode Unicode and special characters', () => {
  const pin = 'b'.repeat(64);
  const password = 'пароль & # ? / 🔑';
- const address = `voicecord://192.168.0.13:18443/${pin}#password=${encodeURIComponent(password)}&name=${encodeURIComponent('хостит Илья')}`;
+ const address = `pawtalk://192.168.0.13:18443/${pin}#password=${encodeURIComponent(password)}&name=${encodeURIComponent('хостит Илья')}`;
  assert.equal(invitation(address).password, password);
  assert.equal(invitation(address).fingerprint, pin);
  assert.equal(serverURL(address), 'https://192.168.0.13:18443');
  assert.throws(() => invitation(address + '&unknown=value'));
- assert.throws(() => invitation(`voicecord://192.168.0.13:18443/${pin}#password=${'a'.repeat(1025)}`));
+ assert.throws(() => invitation(`pawtalk://192.168.0.13:18443/${pin}#password=${'a'.repeat(1025)}`));
 });
 
 test('domain names use HTTPS and reject credentials and paths', () => {

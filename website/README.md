@@ -1,4 +1,4 @@
-# Voicecord project website
+# PawTalk project website
 
 Static English (`index.html`) and Russian (`ru/index.html`) pages. No JavaScript,
 external fonts, trackers, package install or application server is required.
@@ -16,7 +16,7 @@ node scripts/preview-website.mjs
 Open `http://127.0.0.1:5187` (Ctrl+C stops the local server), or serve the `website`
 directory with another static HTTP server. Check both languages, narrow screens,
 keyboard focus, FAQ and downloads.
-The intended canonical base is `https://ilyarusskikh.github.io/voicecord/`.
+The intended canonical base is `https://ilyarusskikh.github.io/pawtalk/`.
 It is a deployment target, not a claim that the site has already been published.
 Before using a custom domain, change canonical, alternate and Open Graph URLs
 in both pages and the URL check in `scripts/check-website.mjs`.
@@ -45,8 +45,8 @@ Do not advertise unreleased behavior as available in the installer.
 
 ## Screenshots
 
-`assets/voicecord.svg` is copied from the project's existing `assets/voicecord.svg`.
-PNG screenshots show the Voicecord 0.5.0 desktop interface in both languages.
+`assets/pawtalk.svg` is copied from the project's existing `assets/pawtalk.svg`.
+PNG screenshots show the PawTalk 0.5.0 desktop interface in both languages.
 The capture uses an isolated profile, synthetic microphones and a temporary E2EE
 room populated with demo participants and messages. The invitation dialog is
 closed before capture. Audio settings show fake Chromium audio devices.

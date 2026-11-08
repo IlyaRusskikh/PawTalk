@@ -2,7 +2,7 @@ export const avatarSize = 128;
 export const avatarPayloadLimit = 12000;
 export const avatarFileLimit = 10 * 1024 * 1024;
 export const avatarFormats = ['image/png', 'image/jpeg', 'image/webp'];
-export const avatarStorageKey = 'voicecord.avatar';
+export const avatarStorageKey = 'pawtalk.avatar';
 
 export function validAvatar(value: string): boolean {
   const prefix = 'data:image/webp;base64,';

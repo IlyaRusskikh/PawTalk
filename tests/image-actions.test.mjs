@@ -23,7 +23,7 @@ test('image actions reject oversized, malformed and huge dimensions before nativ
 
 test('image IPC authorizes before copying, preserves original bytes when saving and respects cancellation', async () => {
   const handlers = new Map(); let allowed = false, copied;
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'voicecord-image-actions-'));
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-image-actions-'));
   const file = path.join(dir, 'saved.png'); let cancel = true;
   registerImageActions({ ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, authorized: () => { if (!allowed) throw Error('Unauthorized'); }, nativeImage,
     ClipboardItem: class { constructor(items) { this.items = items; } }, clipboard: { write: async value => { copied = value; } }, dialog: { showSaveDialog: async () => ({ canceled: cancel, filePath: file }) }, getWindow: () => ({}), t: value => value });

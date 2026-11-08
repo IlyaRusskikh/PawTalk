@@ -5,8 +5,8 @@ $ErrorActionPreference = 'Stop'
 
 try {
     $uri = $null
-    if ($Invitation -and (-not [Uri]::TryCreate($Invitation, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'voicecord')) {
-        throw 'Expected a voicecord:// invitation from the VPS.'
+    if ($Invitation -and (-not [Uri]::TryCreate($Invitation, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'pawtalk')) {
+        throw 'Expected a pawtalk:// invitation from the VPS.'
     }
 
     $keyBytes = New-Object byte[] 32
@@ -33,8 +33,8 @@ try {
     }
 
     Write-Output "Client key (SECRET): $key"
-    Write-Output 'VOICECORD_E2EE=true'
-    Write-Output "VOICECORD_E2EE_KEY_ID=$keyId"
+    Write-Output 'PAWTALK_E2EE=true'
+    Write-Output "PAWTALK_E2EE_KEY_ID=$keyId"
     if ($invitationWithKey) { Write-Output "Invitation with key (SECRET): $invitationWithKey" }
 } catch {
     [Console]::Error.WriteLine($_.Exception.Message)

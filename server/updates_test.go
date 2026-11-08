@@ -20,7 +20,7 @@ func (f updateRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { re
 func TestUpdateResourcesAndRedirectsAreRestricted(t *testing.T) {
 	for _, resource := range []string{
 		"/api/updates/releases?per_page=100&page=1", "/api/updates/releases?per_page=100&page=10",
-		"/api/updates/assets/v0.6.0/update-manifest.json", "/api/updates/assets/v0.6.0/Voicecord.Setup.0.6.0.exe",
+		"/api/updates/assets/v0.6.0/update-manifest.json", "/api/updates/assets/v0.6.0/PawTalk.Setup.0.6.0.exe",
 	} {
 		if _, _, ok := updateTarget(httptest.NewRequest("GET", resource, nil)); !ok {
 			t.Fatal(resource)
@@ -28,14 +28,14 @@ func TestUpdateResourcesAndRedirectsAreRestricted(t *testing.T) {
 	}
 	for _, resource := range []string{
 		"/api/updates/releases?per_page=100&page=11", "/api/updates/releases?per_page=100&page=1&url=https://evil.example",
-		"/api/updates/assets/v0.6.0/other.exe", "/api/updates/assets/v0.6.0/Voicecord.Setup.0.5.0.exe",
+		"/api/updates/assets/v0.6.0/other.exe", "/api/updates/assets/v0.6.0/PawTalk.Setup.0.5.0.exe",
 		"/api/updates/assets/v0.6.0/update-manifest.json?url=https://evil.example", "/api/updates/assets/v0.6.0/../secret",
 	} {
 		if _, _, ok := updateTarget(httptest.NewRequest("GET", resource, nil)); ok {
 			t.Fatal(resource)
 		}
 	}
-	for _, address := range []string{"http://release-assets.githubusercontent.com/file", "https://evil.example/file", "https://github.com/other/repo/releases/download/v1/file", "https://user@github.com/IlyaRusskikh/voicecord/releases/download/v1/file", "https://127.0.0.1/file"} {
+	for _, address := range []string{"http://release-assets.githubusercontent.com/file", "https://evil.example/file", "https://github.com/other/repo/releases/download/v1/file", "https://user@github.com/IlyaRusskikh/pawtalk/releases/download/v1/file", "https://127.0.0.1/file"} {
 		r, _ := http.NewRequest("GET", address, nil)
 		if updateRedirect(r, nil) == nil {
 			t.Fatal(address)
@@ -73,7 +73,7 @@ func TestUpdateRelayCachesOnlyMetadataAndDoesNotForwardCredentials(t *testing.T)
 	if calls.Load() != 1 {
 		t.Fatal("metadata was not cached")
 	}
-	t.Setenv("VOICECORD_UPDATE_PROXY", "false")
+	t.Setenv("PAWTALK_UPDATE_PROXY", "false")
 	w := httptest.NewRecorder()
 	p.ServeHTTP(w, httptest.NewRequest("GET", "/api/updates/releases?per_page=100&page=1", nil))
 	if w.Code != 503 {
@@ -85,7 +85,7 @@ func TestUpdateRelayStreamsBeforeUpstreamFinishesAndCancelsOnDisconnect(t *testi
 	finish := make(chan struct{})
 	cancelled := make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != updateRepo+"/releases/download/v0.6.0/Voicecord.Setup.0.6.0.exe" {
+		if r.URL.Path != updateRepo+"/releases/download/v0.6.0/PawTalk.Setup.0.6.0.exe" {
 			t.Error(r.URL.Path)
 		}
 		_, _ = w.Write([]byte("first"))
@@ -114,7 +114,7 @@ func TestUpdateRelayStreamsBeforeUpstreamFinishesAndCancelsOnDisconnect(t *testi
 	defer relay.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	r, _ := http.NewRequestWithContext(ctx, "GET", relay.URL+"/api/updates/assets/v0.6.0/Voicecord.Setup.0.6.0.exe", nil)
+	r, _ := http.NewRequestWithContext(ctx, "GET", relay.URL+"/api/updates/assets/v0.6.0/PawTalk.Setup.0.6.0.exe", nil)
 	res, err := http.DefaultClient.Do(r)
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +150,7 @@ func TestUpdateRelayBoundsBusyAndOversizedResponses(t *testing.T) {
 	p.slots <- struct{}{}
 	p.slots <- struct{}{}
 	w = httptest.NewRecorder()
-	p.ServeHTTP(w, httptest.NewRequest("GET", "/api/updates/assets/v0.6.0/Voicecord.Setup.0.6.0.exe", nil))
+	p.ServeHTTP(w, httptest.NewRequest("GET", "/api/updates/assets/v0.6.0/PawTalk.Setup.0.6.0.exe", nil))
 	if w.Code != 503 {
 		t.Fatal(w.Code)
 	}

@@ -171,9 +171,9 @@ for (const scenario of ['timeout', 'udp-first', 'tcp-first', 'cancel', 'extra-po
     if (scenario !== 'timeout' && !cancellation) {
       assert.ok(Date.now() - connectedAt < 5000, 'full success exits immediately instead of waiting 180 seconds');
       assert.match(output, /=== RESULT ===\s+SUCCESS:/);
-      assert.match(output, /VOICECORD_PREFLIGHT_RESULT:.*"state":"internet"/);
+      assert.match(output, /PAWTALK_PREFLIGHT_RESULT:.*"state":"internet"/);
     }
-    if (cancellation) assert.match(output, /VOICECORD_PREFLIGHT_RESULT:.*"state":"cancelled"/);
+    if (cancellation) assert.match(output, /PAWTALK_PREFLIGHT_RESULT:.*"state":"cancelled"/);
     assert.match(output, /CALLER_STILL_RUNNING/, 'the script returns to its caller without exit');
     if (!cancellation) assert.match(output, /TCP connection accepted/);
     assert.match(output, /Synthetic: no router/);

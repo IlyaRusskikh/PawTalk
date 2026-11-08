@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const os=require('node:os');
-app.setPath('userData',path.join(os.tmpdir(),'voicecord-ui-session-'+process.pid));
+app.setPath('userData',path.join(os.tmpdir(),'pawtalk-ui-session-'+process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 app.disableHardwareAcceleration();
@@ -16,10 +16,10 @@ app.on('browser-window-created',(_event,win)=>{
   const load=()=>new Promise(resolve=>win.webContents.once('did-finish-load',resolve));
   win.webContents.once('did-finish-load',async()=>{
     try{
-      assert.ok(process.env.VOICECORD_TEST_PASSWORD,'test password required');
+      assert.ok(process.env.PAWTALK_TEST_PASSWORD,'test password required');
       await until(`!!document.querySelector('form')`,'connection form');
       assert.equal(await js(`document.querySelectorAll('.participants-heading,.empty-room,.connection-popover').length`),0);
-      const secret=JSON.stringify(process.env.VOICECORD_TEST_PASSWORD);
+      const secret=JSON.stringify(process.env.PAWTALK_TEST_PASSWORD);
       await js(`(()=>{const inputs=document.querySelectorAll('form input');const set=(input,value)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));};set(inputs[0],'http://127.0.0.1:8080');set(inputs[1],'Проверка интерфейса');set(inputs[2],${secret});})()`);
       await until(`!document.querySelector('.save-password input').disabled`,'protected storage');
       await js(`document.querySelector('.save-password input').click();document.querySelector('button[title="Микрофон"]').click();document.querySelector('form').requestSubmit()`);

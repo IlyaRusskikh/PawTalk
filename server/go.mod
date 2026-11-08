@@ -1,4 +1,4 @@
-module voicecord/server
+module pawtalk/server
 
 go 1.27.0
 

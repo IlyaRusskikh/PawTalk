@@ -19,6 +19,6 @@ https://{$SERVER_IP} {
 		reverse_proxy livekit:7880
 	}
 	handle {
-		respond "Voicecord LAN server" 200
+		respond "PawTalk LAN server" 200
 	}
 }

@@ -8,7 +8,7 @@ Set-StrictMode -Version Latest
 $root = Split-Path -Parent $PSScriptRoot
 $generated = Join-Path $root 'deploy/generated'
 $lanEnv = Join-Path $generated 'lan.env'
-$certificate = Join-Path $generated 'voicecord-lan-root.crt'
+$certificate = Join-Path $generated 'pawtalk-lan-root.crt'
 $originalServerIP = $env:SERVER_IP
 function Invoke-LanCommand {
     param([string]$Program, [string[]]$Arguments)
@@ -38,14 +38,14 @@ try {
     if ($Action -eq 'trust') {
         if (!(Test-Path -LiteralPath $certificate)) { throw 'Start the LAN server first to export its certificate.' }
         Invoke-LanCommand 'certutil.exe' @('-user', '-addstore', 'Root', $certificate)
-        Write-Host 'LAN CA trusted for the current Windows user. Fully exit Voicecord via the tray and restart it.'
+        Write-Host 'LAN CA trusted for the current Windows user. Fully exit PawTalk via the tray and restart it.'
     } elseif ($Action -eq 'firewall') {
         $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
         if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
             throw 'Open PowerShell as Administrator, then run .\lan.cmd firewall from the project folder.'
         }
         if (!(Get-NetIPAddress -AddressFamily IPv4 -IPAddress $ServerIP -ErrorAction SilentlyContinue)) { throw 'ServerIP is not assigned to this computer.' }
-        foreach ($rule in @(@{Name='Voicecord-LAN-TCP'; Protocol='TCP'; Ports=@(443,7881)}, @{Name='Voicecord-LAN-UDP'; Protocol='UDP'; Ports=@(7882)})) {
+        foreach ($rule in @(@{Name='PawTalk-LAN-TCP'; Protocol='TCP'; Ports=@(443,7881)}, @{Name='PawTalk-LAN-UDP'; Protocol='UDP'; Ports=@(7882)})) {
             # Refresh only our own named rules; never disable Windows Firewall.
             Get-NetFirewallRule -Name $rule.Name -ErrorAction SilentlyContinue | Remove-NetFirewallRule
             New-NetFirewallRule -Name $rule.Name -DisplayName $rule.Name -Direction Inbound -Action Allow -Protocol $rule.Protocol -LocalPort $rule.Ports -LocalAddress $ServerIP -RemoteAddress LocalSubnet -Profile Any | Out-Null
@@ -58,12 +58,12 @@ try {
         foreach ($line in Get-Content -LiteralPath (Join-Path $generated 'api.env')) {
             if ($line -match '^([A-Z_]+)=(.*)$') { $values[$Matches[1]] = $Matches[2].Trim("'") }
         }
-        foreach ($required in @('LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'VOICECORD_PASSWORD_HASH')) {
+        foreach ($required in @('LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'PAWTALK_PASSWORD_HASH')) {
             if (!$values.ContainsKey($required) -or !$values[$required]) { throw "Missing server setting: $required" }
         }
         # Reuse existing secrets/hash. Do not rotate the user's password.
         Save-LanText 'lan.env' "SERVER_IP=$ServerIP`n"
-        Save-LanText 'api.lan.env' "LISTEN_ADDR=127.0.0.1:8080`nLIVEKIT_URL=wss://$ServerIP/rtc`nLIVEKIT_API_KEY=$($values['LIVEKIT_API_KEY'])`nLIVEKIT_API_SECRET=$($values['LIVEKIT_API_SECRET'])`nVOICECORD_PASSWORD_HASH='$($values['VOICECORD_PASSWORD_HASH'])'`n"
+        Save-LanText 'api.lan.env' "LISTEN_ADDR=127.0.0.1:8080`nLIVEKIT_URL=wss://$ServerIP/rtc`nLIVEKIT_API_KEY=$($values['LIVEKIT_API_KEY'])`nLIVEKIT_API_SECRET=$($values['LIVEKIT_API_SECRET'])`nPAWTALK_PASSWORD_HASH='$($values['PAWTALK_PASSWORD_HASH'])'`n"
         Save-LanText 'livekit.lan.yaml' "port: 7880`nbind_addresses: [0.0.0.0]`nrtc:`n  tcp_port: 7881`n  udp_port: 7882`n  use_external_ip: false`n  node_ip: $ServerIP`nkeys:`n  $($values['LIVEKIT_API_KEY']): $($values['LIVEKIT_API_SECRET'])`nroom:`n  auto_create: true`n  empty_timeout: 300`n  max_participants: 30`nlogging:`n  level: info`n"
         Invoke-LanCommand 'docker' @('info', '--format', '{{.OSType}}')
         Invoke-LanCommand 'docker' ($compose + @('config', '-q'))
@@ -80,15 +80,15 @@ try {
         if (!$exported) { throw 'Certificate export failed. Inspect: docker compose --env-file deploy/generated/lan.env -f compose.lan.yaml logs proxy' }
         $clientFolder = Join-Path $root 'release/lan-client'
         New-Item -ItemType Directory -Force -Path $clientFolder | Out-Null
-        Copy-Item -LiteralPath $certificate -Destination (Join-Path $clientFolder 'voicecord-lan-root.crt') -Force
+        Copy-Item -LiteralPath $certificate -Destination (Join-Path $clientFolder 'pawtalk-lan-root.crt') -Force
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'trust-lan-certificate.cmd') -Destination (Join-Path $clientFolder 'trust-lan-certificate.cmd') -Force
-        [IO.File]::WriteAllText((Join-Path $clientFolder 'README.txt'), "Voicecord LAN`r`nServer: https://$ServerIP`r`n`r`n1. Use the same local network as the server.`r`n2. Run trust-lan-certificate.cmd once under the Windows user who runs Voicecord.`r`n3. Fully exit Voicecord via the tray and restart it.`r`n4. Enter $ServerIP, your nickname and the server password.`r`n`r`nThis folder contains only the public LAN certificate. Obtain it directly from the server owner.`r`nNo administrator rights are required for certificate trust in the current user's store.`r`n", (New-Object Text.UTF8Encoding($false)))
-        Compress-Archive -Path (Join-Path $clientFolder '*') -DestinationPath (Join-Path $root 'release/Voicecord-LAN-client.zip') -Force
+        [IO.File]::WriteAllText((Join-Path $clientFolder 'README.txt'), "PawTalk LAN`r`nServer: https://$ServerIP`r`n`r`n1. Use the same local network as the server.`r`n2. Run trust-lan-certificate.cmd once under the Windows user who runs PawTalk.`r`n3. Fully exit PawTalk via the tray and restart it.`r`n4. Enter $ServerIP, your nickname and the server password.`r`n`r`nThis folder contains only the public LAN certificate. Obtain it directly from the server owner.`r`nNo administrator rights are required for certificate trust in the current user's store.`r`n", (New-Object Text.UTF8Encoding($false)))
+        Compress-Archive -Path (Join-Path $clientFolder '*') -DestinationPath (Join-Path $root 'release/PawTalk-LAN-client.zip') -Force
         Write-Host "`nLAN address: https://$ServerIP" -ForegroundColor Green
         Write-Host 'Password unchanged. No host Go/Node process is needed for the server.'
         Write-Host 'On this PC: .\lan.cmd trust'
         Write-Host 'Once, in Administrator PowerShell: .\lan.cmd firewall'
-        Write-Host 'For friends: share release/Voicecord-LAN-client.zip and the installer (never the deploy/generated folder).'
+        Write-Host 'For friends: share release/PawTalk-LAN-client.zip and the installer (never the deploy/generated folder).'
     } elseif ($Action -eq 'stop') {
         Invoke-LanCommand 'docker' ($compose + @('stop'))
     } else {

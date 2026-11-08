@@ -2,7 +2,7 @@ const { app, BrowserWindow, session } = require('electron');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs/promises');
-app.setPath('userData', path.join(require('node:os').tmpdir(), 'voicecord-update-ui-' + process.pid));
+app.setPath('userData', path.join(require('node:os').tmpdir(), 'pawtalk-update-ui-' + process.pid));
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
@@ -16,7 +16,7 @@ app.whenReady().then(async () => {
   const click = text => run(`Array.from((document.querySelector('dialog[open]') || document).querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(text)}).click()`);
   const screenshot = async name => { win.webContents.invalidate(); await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }); await wait(200); await fs.mkdir('release/qa', { recursive: true }); await fs.writeFile(`release/qa/${name}.png`, (await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG()); };
   try {
-    await win.loadURL(process.env.VOICECORD_UI_TEST_URL);
+    await win.loadURL(process.env.PAWTALK_UI_TEST_URL);
     await until(`!!document.querySelector('.home-actions')`);
     for (const width of [940, 1100, 1240]) {
       win.setSize(width, 760); await wait(80);

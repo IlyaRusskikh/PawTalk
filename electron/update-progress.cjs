@@ -2,8 +2,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const labels = {
-  ru: { title: 'Обновление Voicecord', waiting: 'Закрываем приложение…', installing: 'Устанавливаем новую версию…', starting: 'Запускаем Voicecord…', done: 'Обновление завершено', failure: 'Обновление не завершено', details: 'Подробности сохранены в журнале:', elapsed: 'Прошло', seconds: 'сек.', hint: 'Это может занять несколько минут. Дождитесь запуска приложения.' },
-  en: { title: 'Voicecord update', waiting: 'Closing the app…', installing: 'Installing the new version…', starting: 'Starting Voicecord…', done: 'Update complete', failure: 'Update did not complete', details: 'Details were saved to the log:', elapsed: 'Elapsed', seconds: 'sec.', hint: 'This may take a few minutes. Please wait for the app to start.' },
+  ru: { title: 'Обновление PawTalk', waiting: 'Закрываем приложение…', installing: 'Устанавливаем новую версию…', starting: 'Запускаем PawTalk…', done: 'Обновление завершено', failure: 'Обновление не завершено', details: 'Подробности сохранены в журнале:', elapsed: 'Прошло', seconds: 'сек.', hint: 'Это может занять несколько минут. Дождитесь запуска приложения.' },
+  en: { title: 'PawTalk update', waiting: 'Closing the app…', installing: 'Installing the new version…', starting: 'Starting PawTalk…', done: 'Update complete', failure: 'Update did not complete', details: 'Details were saved to the log:', elapsed: 'Elapsed', seconds: 'sec.', hint: 'This may take a few minutes. Please wait for the app to start.' },
 };
 function helperLaunch(executable, args, directory) {
   const quoteArgument = value => '"' + String(value).replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, '$1$1') + '"';

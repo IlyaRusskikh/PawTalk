@@ -11,7 +11,7 @@ test('media keys are random, independent of passwords, and have matching Node/We
   assert.throws(() => mediaKeyBytes('weak-password'));
 });
 test('encrypted invitations keep key local and validate unique fields', () => {
-  const key = generateMediaKey(); const link = `voicecord://127.0.0.1:18443/${'a'.repeat(64)}#password=secret&name=Room&e2ee=${key}`;
+  const key = generateMediaKey(); const link = `pawtalk://127.0.0.1:18443/${'a'.repeat(64)}#password=secret&name=Room&e2ee=${key}`;
   assert.equal(invitation(link).e2eeKey, key); assert.equal(invitationMediaKey(link), key);
   assert.equal(invitation(link).origin, 'https://127.0.0.1:18443');
   for (const bad of [link+'&e2ee='+key, link.replace(key, 'bad'), link+'&unknown=x']) assert.throws(() => invitation(bad));

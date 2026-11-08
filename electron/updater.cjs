@@ -4,7 +4,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { labels, helperLaunch, waitForHelper } = require('./update-progress.cjs');
 
-const REPOSITORY = 'IlyaRusskikh/voicecord';
+const REPOSITORY = 'IlyaRusskikh/pawtalk';
 const API = `https://api.github.com/repos/${REPOSITORY}/releases`;
 const { verifyManifest, UpdateSecurityError } = require('./update-manifest.cjs');
 const { metadata, download } = require('./update-transport.cjs');
@@ -33,7 +33,7 @@ function selectRelease(releases, current) {
   return releases.filter(r => !r.draft && version(r.tag_name || '') && compare(r.tag_name, current) > 0)
     .sort((a, b) => compare(b.tag_name, a.tag_name)).flatMap(r => {
       const v = r.tag_name.replace(/^v/, '');
-      const asset = r.assets?.find(a => [ `Voicecord Setup ${v}.exe`, `Voicecord.Setup.${v}.exe` ].includes(a.name)
+      const asset = r.assets?.find(a => [ `PawTalk Setup ${v}.exe`, `PawTalk.Setup.${v}.exe` ].includes(a.name)
         && a.state === 'uploaded' && Number.isSafeInteger(a.size) && a.size > 0 && a.size <= MAX_SIZE
         && /^sha256:[a-f0-9]{64}$/i.test(a.digest || '')
         && validAssetURL(a.browser_download_url, r.tag_name));
@@ -48,7 +48,7 @@ function validAssetURL(value, tag) {
   } catch { return false; }
 }
 class Updater {
-  constructor({ current, directory, script, installDirectory, executable = path.join(installDirectory || '', 'Voicecord.exe'), language = () => 'ru', fetcher = fetch, launch = spawn, onState = () => {}, rooms = () => [], roomFetcher = fetcher, keys, downloadPolicy }) {
+  constructor({ current, directory, script, installDirectory, executable = path.join(installDirectory || '', 'PawTalk.exe'), language = () => 'ru', fetcher = fetch, launch = spawn, onState = () => {}, rooms = () => [], roomFetcher = fetcher, keys, downloadPolicy }) {
     Object.assign(this, { current, directory, script, installDirectory, executable, language, fetcher, launch, onState, rooms, roomFetcher, keys, downloadPolicy });
     this.state = { status: 'idle' }; this.release = null; this.busy = false;
   }
@@ -118,7 +118,7 @@ class Updater {
     this.busy = true;
     const { manifest, version: next, prerelease } = this.release;
     const partial = path.join(this.directory, 'installer.part');
-    const installer = path.join(this.directory, `Voicecord-${next}.exe`);
+    const installer = path.join(this.directory, `PawTalk-${next}.exe`);
     try {
       try { verifyManifest(this.release.signedManifest, this.keys); }
       catch { throw new UpdateSecurityError(this.release.metadataSource); }
