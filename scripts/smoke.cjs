@@ -44,7 +44,16 @@ app.whenReady().then(async () => {
     const tab = async name => { await run(`document.querySelector('#settings-tab-${name}').click()`); await wait(50); await until(() => run(`(()=>{const panel=document.querySelector('#settings-panel');const anchor=document.querySelector('#settings-anchor-${name}')||panel;const heading=anchor.querySelector('h1');return !!heading&&Math.abs(heading.getBoundingClientRect().top-panel.getBoundingClientRect().top-parseFloat(getComputedStyle(panel).paddingTop))<1;})()`), 'anchor settles: '+name); };
     const output = path.resolve('release/qa'); await fs.mkdir(output, { recursive: true });
     const capture = async name => { await wait(200); await fs.writeFile(path.join(output, name + '.png'), (await win.webContents.capturePage()).toPNG()); };
+    // Windows runners may request reduced motion. Set the media preference
+    // before checking animations so assertions do not inherit the host setting.
+    win.webContents.debugger.attach('1.3');
+    const setMotion = async motion => {
+      await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: motion }] });
+      assert.equal(await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`), motion === 'reduce');
+    };
     await win.loadFile(path.resolve('dist/index.html'));
+    await setMotion('reduce');
+    await setMotion('no-preference');
     await until(() => run(`!!document.querySelector('.home-actions')`), 'home renders');
     assert.ok(await run(`(()=>{const home=document.querySelector('.home-screen');const stack=document.querySelector('.toast-stack');const before=home.getBoundingClientRect().top;stack.style.display='none';const after=home.getBoundingClientRect().top;stack.style.removeProperty('display');return Math.abs(before-after)<1&&getComputedStyle(stack).position==='fixed'})()`), 'notifications do not move page content');
     await capture('home-review');
@@ -152,15 +161,20 @@ app.whenReady().then(async () => {
     assert.ok(await run(`window.settingsStartupNode===document.querySelector('#settings-anchor-general')`), 'system anchors preserve mounted startup settings');
     await run(`document.querySelector('#settings-panel').scrollTo({top:0,behavior:'instant'})`);
     await until(() => run(`document.querySelector('#settings-tab-general').getAttribute('aria-selected')==='true'`), 'manual scrolling updates current anchor');
-    win.webContents.debugger.attach('1.3');
     for (const motion of ['reduce', 'no-preference']) {
-      await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: motion }] });
+      await setMotion(motion);
       for (const language of ['en', 'ru']) {
         await tab('language');
         await run(`(()=>{const el=document.querySelector('#settings-panel select');el.value='${language}';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
         await until(() => run(`document.documentElement.lang==='${language}'`), 'language switches');
         for (const section of ['voice', 'sounds', 'shortcuts', 'appearance', 'chat', 'general', 'updates', 'language', 'profile']) {
+          if (section === 'sounds') await run(`window.settingsScrollFrames=[];document.querySelector('#settings-panel').addEventListener('scroll',event=>window.settingsScrollFrames.push(event.target.scrollTop));true`);
           await tab(section);
+          if (section === 'sounds') {
+            assert.equal(await run(`getComputedStyle(document.querySelector('#settings-panel')).scrollBehavior`), motion === 'reduce' ? 'auto' : 'smooth');
+            const frames = await run(`new Set(window.settingsScrollFrames).size`);
+            assert.ok(motion === 'reduce' ? frames <= 2 : frames > 2, 'anchor scroll respects ' + motion + ' in ' + language + ': ' + frames + ' positions');
+          }
           assert.ok(await run(`document.querySelector('#settings-panel').scrollWidth<=document.querySelector('#settings-panel').clientWidth+1`), section + ' fits ' + language + ' ' + motion);
           if (section === 'voice') {
             assert.equal(await run(`document.querySelector('.settings-advanced').open`), false);
