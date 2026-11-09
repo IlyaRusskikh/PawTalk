@@ -1,9 +1,10 @@
 const { t } = require('../shared/i18n.cjs');
-const { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage, powerMonitor, globalShortcut, net, safeStorage, clipboard, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage, powerMonitor, globalShortcut, net, safeStorage, clipboard, dialog, shell } = require('electron');
 const path = require('node:path');
 const { localInvitation, verifyInvitation, connectionError } = require('./connection.cjs');
 const { X509Certificate, createHash, randomUUID } = require('node:crypto');
 const { requestChat, validChatAccess } = require('./chat.cjs');
+const { externalLinkHandler } = require('./external-links.cjs');
 const { profileSigner } = require('./profile.cjs');
 const { serverURL, invitation } = require('./address.cjs');
 const { diagnosticCommand } = require('./diagnostic-command.cjs');
@@ -353,7 +354,7 @@ else {
     });
     win.removeMenu();
     for (const event of ['show', 'hide', 'minimize', 'restore', 'focus', 'blur']) win.on(event, () => send('window-active-changed', win.isVisible() && !win.isMinimized() && win.isFocused()));
-    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.webContents.setWindowOpenHandler(externalLinkHandler(url => shell.openExternal(url)));
     win.webContents.on('will-navigate', event => event.preventDefault());
     win.webContents.on('render-process-gone', restoreAudio);
     win.on('close', event => { if (!quitting) { event.preventDefault(); win.hide(); } });
