@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { createRequire } from 'node:module';
-const { Updater, compare, selectRelease } = createRequire(import.meta.url)('../electron/updater.cjs');
+const { Updater, compare, selectRelease, validAssetURL } = createRequire(import.meta.url)('../electron/updater.cjs');
 const { verifyManifest } = createRequire(import.meta.url)('../electron/update-manifest.cjs');
 const { download } = createRequire(import.meta.url)('../electron/update-transport.cjs');
 const pair = generateKeyPairSync('ed25519');
@@ -31,6 +31,25 @@ test('only complete, verifiable installers from this repository are offered', ()
   const external = release('0.3.0'); external.assets[0].browser_download_url = 'https://evil.example/setup.exe';
   const otherTag = release('0.4.0'); otherTag.assets[0].browser_download_url = otherTag.assets[0].browser_download_url.replace('/v0.4.0/', '/v0.3.0/');
   assert.equal(selectRelease([invalid, external, otherTag, release('0.5.0', { draft: true })], '0.1.0'), null);
+});
+
+test('GitHub repository casing does not hide releases or weaken tag and origin checks', async () => {
+  for (const repository of ['IlyaRusskikh/PawTalk', 'IlyaRusskikh/pawtalk', 'ilyarusskikh/PAWTALK']) {
+    const candidate = release('0.7.1');
+    candidate.assets[0].browser_download_url = `https://github.com/${repository}/releases/download/v0.7.1/PawTalk.Setup.0.7.1.exe`;
+    assert.equal(selectRelease([candidate], '0.6.0').version, '0.7.1');
+    const updater = new Updater({ current: '0.7.0', keys,
+      fetcher: async url => url.includes('api.github.com') ? Response.json([candidate]) : new Response(manifest('0.7.1')) });
+    assert.equal((await updater.check()).status, 'available', repository);
+  }
+  for (const url of [
+    'https://github.com/IlyaRusskikh/PawTalk-evil/releases/download/v0.7.1/setup.exe',
+    'https://github.com/other/PawTalk/releases/download/v0.7.1/setup.exe',
+    'https://github.com/IlyaRusskikh/PawTalk/releases/download/V0.7.1/setup.exe',
+    'https://github.com/IlyaRusskikh/PawTalk/RELEASES/download/v0.7.1/setup.exe',
+    'https://github.com/IlyaRusskikh/PawTalk/releases/download/v0.7.1/setup.exe?token=x',
+    'https://user@github.com/IlyaRusskikh/PawTalk/releases/download/v0.7.1/setup.exe',
+  ]) assert.equal(validAssetURL(url, 'v0.7.1'), false, url);
 });
 test('download verifies all bytes before launching hidden NSIS helper', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-update-'));

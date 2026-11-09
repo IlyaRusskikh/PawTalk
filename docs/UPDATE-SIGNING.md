@@ -72,3 +72,11 @@ For key rotation, distribute both public keys before signing with the new key.
 Clients reject expired manifests and authenticated version rollback, but a relay
 can still hide the existence of an update. Losing or compromising the sole signing
 key requires a separate recovery plan for already installed clients.
+
+## Recovery from 0.6.0 / 0.7.0 — Восстановление обновлений
+
+These versions compare the GitHub owner/repository path with case sensitivity and can incorrectly report that no update is available. Install [PawTalk 0.7.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.7.1) manually over the existing installation; user preferences are preserved. The fix cannot be delivered automatically to clients which reject its release URL.
+
+Версии 0.6.0 и 0.7.0 могут показывать «У вас последняя версия», отбрасывая URL с другим регистром владельца или репозитория. Установите 0.7.1 вручную поверх текущего PawTalk; настройки сохраняются. Начиная с 0.7.1 только эти два сегмента сравниваются без учёта регистра, а тег и ограничения URL остаются строгими. При использовании прокси обновлений обновите и сервер.
+
+Read-only live verification (Electron network stack; never installs): run Electron with `scripts/update-live-smoke.cjs`. `PAWTALK_UPDATE_TEST_CURRENT` selects the simulated installed version (default 0.6.0); a newer published signed release must exist.

@@ -1,5 +1,11 @@
 # Changelog / История изменений
 
+## 0.7.1 — 2026-11-09 — Update discovery / Обнаружение обновлений
+
+- Fix update discovery when GitHub returns the repository name as PawTalk instead of pawtalk. Compare only owner/repository names without case sensitivity; keep strict host, protocol, credentials and release-tag checks. / Исправлено обнаружение обновлений при разном регистре имени репозитория GitHub. Только владелец и репозиторий сравниваются без учёта регистра; проверки хоста, протокола, реквизитов и тега сохраняются.
+- Apply the same rule to server update-relay redirects and use canonical repository URLs. Add regression tests for mixed case, foreign repositories and altered tag paths, plus a read-only live Electron check against signed GitHub release metadata. / Исправлены редиректы серверного прокси обновлений и приведены к каноническому виду URL. Добавлены проверки регистра, чужих репозиториев и изменённых тегов, а также проверка настоящих подписанных метаданных GitHub через Electron.
+- **Manual recovery required for 0.6.0 and 0.7.0:** install 0.7.1 over the existing PawTalk installation; preferences are preserved. These clients cannot discover the fix themselves. / **Для 0.6.0 и 0.7.0 требуется ручная установка 0.7.1 поверх текущего PawTalk:** настройки сохраняются, старые клиенты не обнаруживают исправление самостоятельно.
+
 ## 0.7.0 — 2026-11-09 — Chat and settings / Чат и настройки
 
 - Edit and delete your own messages with signed-profile authorization and synchronized history; updated servers advertise support. E2EE edits keep the message key and encrypt new content with a fresh nonce. / Редактирование и удаление своих сообщений с проверкой подписанного профиля и синхронизацией истории; требуется обновлённый сервер. E2EE сохраняет ключ сообщения и использует новый nonce.

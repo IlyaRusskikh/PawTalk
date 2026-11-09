@@ -1,7 +1,7 @@
 const fs = require('node:fs/promises');
 const { createHash } = require('node:crypto');
 const { UpdateSecurityError } = require('./update-manifest.cjs');
-const REPOSITORY = 'IlyaRusskikh/pawtalk';
+const REPOSITORY = 'IlyaRusskikh/PawTalk';
 function endpoint(source, pathname) {
   return source ? source.base + '/api/updates/' + pathname : pathname.startsWith('releases?')
     ? `https://api.github.com/repos/${REPOSITORY}/${pathname}`

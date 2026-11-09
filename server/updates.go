@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const updateRepo = "/IlyaRusskikh/pawtalk"
+const updateRepo = "/IlyaRusskikh/PawTalk"
 
 var updateTag = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$`)
 
@@ -41,7 +41,10 @@ func updateRedirect(req *http.Request, via []*http.Request) error {
 	if u.Host == "release-assets.githubusercontent.com" {
 		return nil
 	}
-	if u.Host == "github.com" && strings.HasPrefix(u.Path, updateRepo+"/releases/download/") {
+	// Only the GitHub owner/repository is case-insensitive, not the asset path.
+	if u.Host == "github.com" && len(u.Path) > len(updateRepo) &&
+		strings.EqualFold(u.Path[:len(updateRepo)], updateRepo) &&
+		strings.HasPrefix(u.Path[len(updateRepo):], "/releases/download/") {
 		return nil
 	}
 	return fmt.Errorf("update redirect host not allowed")

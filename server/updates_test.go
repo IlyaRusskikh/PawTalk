@@ -18,6 +18,12 @@ type updateRoundTrip func(*http.Request) (*http.Response, error)
 func (f updateRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestUpdateResourcesAndRedirectsAreRestricted(t *testing.T) {
+	for _, repository := range []string{"IlyaRusskikh/PawTalk", "IlyaRusskikh/pawtalk", "ilyarusskikh/PAWTALK"} {
+		r, _ := http.NewRequest("GET", "https://github.com/"+repository+"/releases/download/v0.7.1/PawTalk.Setup.0.7.1.exe", nil)
+		if err := updateRedirect(r, nil); err != nil {
+			t.Fatal(repository, err)
+		}
+	}
 	for _, resource := range []string{
 		"/api/updates/releases?per_page=100&page=1", "/api/updates/releases?per_page=100&page=10",
 		"/api/updates/assets/v0.6.0/update-manifest.json", "/api/updates/assets/v0.6.0/PawTalk.Setup.0.6.0.exe",
@@ -35,7 +41,7 @@ func TestUpdateResourcesAndRedirectsAreRestricted(t *testing.T) {
 			t.Fatal(resource)
 		}
 	}
-	for _, address := range []string{"http://release-assets.githubusercontent.com/file", "https://evil.example/file", "https://github.com/other/repo/releases/download/v1/file", "https://user@github.com/IlyaRusskikh/pawtalk/releases/download/v1/file", "https://127.0.0.1/file"} {
+	for _, address := range []string{"http://release-assets.githubusercontent.com/file", "https://evil.example/file", "https://github.com/other/repo/releases/download/v1/file", "https://github.com/IlyaRusskikh/PawTalk-evil/releases/download/v1/file", "https://github.com/IlyaRusskikh/PawTalk/RELEASES/download/v1/file", "https://user@github.com/IlyaRusskikh/pawtalk/releases/download/v1/file", "https://127.0.0.1/file"} {
 		r, _ := http.NewRequest("GET", address, nil)
 		if updateRedirect(r, nil) == nil {
 			t.Fatal(address)

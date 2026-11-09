@@ -1,5 +1,14 @@
 # Проверки
 
+## PawTalk 0.7.1 — 9 ноября 2026
+
+- Added mixed-case GitHub owner/repository regression coverage in the updater and server redirect allowlist. Foreign repositories, changed tags, credentials and unsupported URLs remain rejected.
+- Read-only live Electron/net.fetch verification discovered the published 0.7.0 release from a simulated 0.6.0 client and verified its actual Ed25519-signed manifest. No installer was launched. After publishing 0.7.1, repeat with PAWTALK_UPDATE_TEST_CURRENT=0.7.0 to verify discovery of this fix.
+- Both Docker images and Compose validation passed. The container lifecycle/TLS/auth/persistence smoke passed on ports 39443–39445; the usual test UDP port 31445 was occupied by another local process.
+- Clean dependency installation, LLVM native build/smoke, production build, all 114 JavaScript tests, six Python updater tests, Go race tests/vet, NSIS packaging and packaged executable smoke passed locally.
+- Built-renderer motion/navigation/geometry, UI flow, update UI, native clipboard, realtime two-client voice, paged chat, main-process attachments/mutations, formatting/deletion, sounds and external links passed. Audio uses synthetic microphones; hardware/external-network/UAC/load acceptance remains outstanding. Native Linux amd64/arm64 and signed release artifacts are checked by the tag workflow.
+
+
 ## PawTalk 0.7.0 — 9 ноября 2026
 
 - Windows: clean dependency install, LLVM native build/smoke, production renderer, NSIS installer and packaged executable smoke passed. The packaged smoke waits for the preload bridge before invoking IPC.

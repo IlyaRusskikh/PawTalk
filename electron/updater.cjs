@@ -4,8 +4,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { labels, helperLaunch, waitForHelper } = require('./update-progress.cjs');
 
-const REPOSITORY = 'IlyaRusskikh/pawtalk';
-const API = `https://api.github.com/repos/${REPOSITORY}/releases`;
+const REPOSITORY = 'IlyaRusskikh/PawTalk';
 const { verifyManifest, UpdateSecurityError } = require('./update-manifest.cjs');
 const { metadata, download } = require('./update-transport.cjs');
 const MAX_SIZE = 1024 * 1024 * 1024;
@@ -43,8 +42,12 @@ function selectRelease(releases, current) {
 function validAssetURL(value, tag) {
   try {
     const u = new URL(value);
+    const parts = u.pathname.split('/');
     return u.protocol === 'https:' && u.hostname === 'github.com' && !u.port && !u.username && !u.password && !u.search && !u.hash
-      && u.pathname.startsWith(`/${REPOSITORY}/releases/download/${encodeURIComponent(tag)}/`);
+      // GitHub owner/repository names are case-insensitive; tags and asset paths
+      // remain case-sensitive. Do not normalize the entire download path.
+      && parts.slice(1, 3).join('/').toLowerCase() === REPOSITORY.toLowerCase()
+      && parts.slice(3).join('/').startsWith(`releases/download/${encodeURIComponent(tag)}/`);
   } catch { return false; }
 }
 class Updater {
