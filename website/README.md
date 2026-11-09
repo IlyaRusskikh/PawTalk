@@ -46,7 +46,7 @@ Do not advertise unreleased behavior as available in the installer.
 ## Screenshots
 
 `assets/pawtalk.svg` is copied from the project's existing `assets/pawtalk.svg`.
-PNG screenshots show the PawTalk 0.6.0 desktop interface in both languages.
+PNG screenshots show the PawTalk 0.7.0 desktop interface in both languages.
 The capture uses an isolated profile, synthetic microphones and a temporary E2EE
 room populated with demo participants and messages. The invitation dialog is
 closed before capture. Audio settings show fake Chromium audio devices.
@@ -58,7 +58,7 @@ After building, regenerate on Windows from the repository root:
 ```
 
 The script captures home, room creation, language and audio settings, circular
-avatar cropping and the room chat in Russian and English. It requires the built
+avatar cropping, notification volume/sound previews and the room chat in Russian and English. It requires the built
 native module and bundled server. It uses a new temporary profile and
 disables mute/deafen shortcuts in that profile to avoid conflicts with another
 running client. It does not change the user's profile. Inspect every screenshot

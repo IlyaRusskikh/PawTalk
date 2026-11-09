@@ -100,6 +100,9 @@ app.on('browser-window-created', (_event, win) => {
         assert.equal(await run(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent===${JSON.stringify(test)}&&!b.disabled)`), true);
         await run(`document.querySelector('.voice-settings').scrollIntoView({block:'start'})`);
         await capture(`audio-settings${suffix}.png`);
+        await run(`document.querySelector('#settings-tab-sounds').click()`);
+        await wait(800);
+        await capture(`sound-settings${suffix}.png`);
         await run(`document.querySelector('#settings-tab-profile').click()`);
         const avatarFile = path.join(app.getPath('userData'), 'demo-avatar.png');
         const png = await run(`(() => {

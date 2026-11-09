@@ -2,11 +2,11 @@
 
 [Русский](README.ru.md) · English
 
-PawTalk is the new name of Voicecord. The PawTalk 0.6.0 public preview is now available. Install it separately from Voicecord and create new `pawtalk://` invitations; profiles, server configuration and old invitations are not migrated. See [transition notes](docs/PAWTALK.md).
+PawTalk is the new name of Voicecord. The PawTalk 0.7.0 public preview is now available. Install it separately from Voicecord and create new `pawtalk://` invitations; profiles, server configuration and old invitations are not migrated. See [transition notes](docs/PAWTALK.md).
 
 PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
 
-**[Download PawTalk 0.6.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.6.0/PawTalk.Setup.0.6.0.exe)** · [Get started](#get-started) · [Self-hosting guide (Russian)](docs/SERVER.md)
+**[Download PawTalk 0.7.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.7.0/PawTalk.Setup.0.7.0.exe)** · [Get started](#get-started) · [Self-hosting guide (Russian)](docs/SERVER.md)
 
 ![PawTalk room with three participants, call controls and encrypted text chat](website/assets/room-chat-en.png)
 
@@ -40,7 +40,7 @@ PawTalk takes inspiration from **Discord** for easy-to-join voice rooms and indi
 
 ## Get started
 
-1. **Install PawTalk.** [Download the installer](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.6.0/PawTalk.Setup.0.6.0.exe) on each Windows PC. Choose English or Russian.
+1. **Install PawTalk.** [Download the installer](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.7.0/PawTalk.Setup.0.7.0.exe) on each Windows PC. Choose English or Russian.
 2. **Pick a nickname.** Open **Settings → About me** and enter a nickname. You can test your microphone under **Voice**.
 3. **Get your friends together.** Select **Create a room**, give the room a name, and choose a password of at least 8 characters. Share the full invitation privately. Your friend opens **Join a room** and pastes the link.
 
@@ -134,7 +134,7 @@ Message menus include **Copy text**. The room rail hides its scrollbar and shows
 indexes. Oldest messages are evicted and disk pages reclaimed; 0.5.2
 has no seven-day or 500-message VPS retention cap. Embedded rooms keep 500 messages.
 
-**0.6.0 is a public pre-release.** It introduces the PawTalk identity, animated typing paws, and CC0 cat sounds for room events and unseen messages. A fresh installation is required. [Release notes and source](https://github.com/IlyaRusskikh/pawtalk/releases/tag/v0.6.0). [Changelog](CHANGELOG.md).
+**0.7.0 is a public pre-release.** It adds message editing/deletion, Markdown and selection formatting, browser links, reorganized settings and notification volume. Upgrade the server to enable message changes. Voicecord users still need a separate PawTalk installation. [Release notes and source](https://github.com/IlyaRusskikh/pawtalk/releases/tag/v0.7.0). [Changelog](CHANGELOG.md).
 
 Voicecord 0.5.2 was the previous public pre-release; its [release notes and source](https://github.com/IlyaRusskikh/pawtalk/releases/tag/v0.5.2) remain available.
 

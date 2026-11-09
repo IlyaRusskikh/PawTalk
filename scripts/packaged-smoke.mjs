@@ -39,6 +39,15 @@ try {
     const message = JSON.parse(event.data); const request = pending.get(message.id);
     if (request) { pending.delete(message.id); if (message.error) request.reject(new Error(JSON.stringify(message.error))); else request.resolve(message.result); }
   });
+  // A file: debugger target can appear before preload initializes its context.
+  // Wait for the bridge rather than racing the first document navigation.
+  let bridgeReady = false;
+  for (let i = 0; i < 100; i++) {
+    try { bridgeReady = await evaluate('typeof window.desktop?.capabilities === "function"'); } catch { /* Navigation may replace the context. */ }
+    if (bridgeReady) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(bridgeReady, 'packaged preload exposes the desktop bridge');
   const info = await evaluate('window.desktop.capabilities()');
   assert.equal(info.native, true); assert.equal(info.packaged, true);
   assert.equal(await evaluate('typeof window.require'), 'undefined');

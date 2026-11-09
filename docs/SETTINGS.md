@@ -1,6 +1,6 @@
 # Settings organization
 
-The November 2026 settings audit uses the supplied Discord desktop screenshots as the layout reference. All existing PawTalk settings are retained; stored keys and defaults are unchanged.
+The November 2026 settings audit uses the supplied Discord desktop screenshots as the layout reference. Existing PawTalk settings are retained. Version 0.7.0 adds notificationVolume (default 1); existing stored preferences remain compatible.
 
 | Location | Existing controls | Reference behavior |
 | --- | --- | --- |

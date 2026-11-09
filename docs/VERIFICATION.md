@@ -1,5 +1,15 @@
 # Проверки
 
+## PawTalk 0.7.0 — 9 ноября 2026
+
+- Windows: clean dependency install, LLVM native build/smoke, production renderer, NSIS installer and packaged executable smoke passed. The packaged smoke waits for the preload bridge before invoking IPC.
+- All 113 JavaScript tests and six Python updater tests passed. Go race tests and go vet passed with Go 1.27.3 and the local LLVM C compiler.
+- Built-renderer navigation/geometry/motion, UI flow, update UI, native clipboard IPC, two-client realtime, paged chat, main-process image/mutation flows, inline formatting/deletion, notification playback and external-link checks passed.
+- Fourteen RU/EN screenshots were captured from isolated real Electron main/preload/renderer sessions with demo participants and synthetic microphones, including the new Sounds section. Reviewed all images; no live invitations or personal data are shown. Website links, metadata and image bounds passed the site guard.
+- Both Docker images built successfully; Compose configurations and the read-only non-root server lifecycle/TLS/auth/persistence smoke passed locally.
+- Tests use synthetic microphones/transports where stated. Real microphones, game/PTT behavior, separate internet networks, UAC and hardware load remain outside this local verification. Native Linux amd64/arm64 and final signed release artifacts are verified by the tag workflow.
+
+
 ## PawTalk 0.2.0 — 5 ноября 2026
 
 - Production build, Windows NSIS packaging, 72 JS tests, Go tests/vet, native smoke,

@@ -1,5 +1,12 @@
 # Changelog / История изменений
 
+## 0.7.0 — 2026-11-09 — Chat and settings / Чат и настройки
+
+- Edit and delete your own messages with signed-profile authorization and synchronized history; updated servers advertise support. E2EE edits keep the message key and encrypt new content with a fresh nonce. / Редактирование и удаление своих сообщений с проверкой подписанного профиля и синхронизацией истории; требуется обновлённый сервер. E2EE сохраняет ключ сообщения и использует новый nonce.
+- Add Discord-style Markdown, selection formatting, inline editing (Enter/Shift+Enter/Esc), deletion previews and Shift-delete without confirmation. Open HTTP(S) links in the default browser. / Markdown, форматирование выделения, редактирование в сообщении (Enter/Shift+Enter/Esc), превью удаления и удаление с Shift без подтверждения. HTTP(S)-ссылки открываются в браузере.
+- Group Voice/Sounds and System settings into continuous pages with anchor navigation, consistent spacing and one reset per page. Add shared notification volume and meow/purr previews; simplify audio-device labels. / Голос/Звуки и Система собраны в общие страницы с якорями, едиными отступами и одной кнопкой сброса. Добавлены общая громкость уведомлений, прослушивание мяуканья/мурчания и понятные имена аудиоустройств.
+- Show connection progress and refresh bilingual documentation and landing-page screenshots. Make Windows smoke animation checks independent of runner preferences. / Добавлены этапы подключения, обновлены документация и скриншоты лендинга на двух языках. Проверки анимации Windows не зависят от настроек runner.
+
 ## 0.6.0 — 2026-11-08 — PawTalk / Ребрендинг PawTalk
 
 - Add approved cat-recording notification sounds: CC0 variant B double meow for joining, CC0 variant A single meow for leaving, and five softly faded purr variations for unseen messages in the connected room. Honor sound/output/deafen settings, suppress own/history/reconnect notifications, and limit message sound frequency. / Подключены согласованные записи: двойное мяу CC0 B для входа, одиночное CC0 A для выхода и пять мурлыканий с плавными краями для новых сообщений вне просмотра в текущей комнате. Учитываются настройки звука, устройства, громкости и отключения звука; свои сообщения, история и восстановление после переподключения не озвучиваются, частота сигналов ограничена.
