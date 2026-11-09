@@ -33,7 +33,13 @@ async function renewChat(access) {
 
 async function requestChat(fetch, access, input) {
   let body, binary = false, path = '/api/chat';
-  if (input?.attachment) {
+  if (input?.mutation) {
+    const { id, packet } = input.mutation;
+    if (!access.profileId || !Number.isSafeInteger(id) || id <= 0) throw new Error('Invalid message mutation');
+    if (packet && (typeof packet.requestId !== 'string' || !/^[a-f0-9]{32}$/.test(packet.requestId)
+      || typeof packet.nonce !== 'string' || typeof packet.ciphertext !== 'string' || packet.ciphertext.length > 16408)) throw new Error('Invalid mutation packet');
+    path += '/mutate'; body = JSON.stringify({ id, ...(packet ? { packet } : {}) });
+  } else if (input?.attachment) {
     const { id, data } = input.attachment;
     if (access.protocol !== 2 || typeof id !== 'string' || !/^[a-f0-9]{32}$/.test(id)) throw new Error('Invalid attachment request');
     if (data !== undefined && (!(data instanceof Uint8Array) || data.byteLength < 1 || data.byteLength > 2 * 1024 * 1024 + 28)) throw new Error('Invalid attachment size');
@@ -48,6 +54,14 @@ async function requestChat(fetch, access, input) {
       params.set(name, input[name]);
     }
     if (!params.has('limit') && !params.has('after')) params.set('after', '0');
+    if (input.ids !== undefined) {
+      if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > 500 || input.ids.some(id => !Number.isSafeInteger(id) || id <= 0)) throw new Error('Invalid message IDs');
+      params.set('ids', input.ids.join(','));
+      if (input.digest !== undefined) {
+        if (typeof input.digest !== 'string' || !/^[a-f0-9]{64}$/.test(input.digest)) throw new Error('Invalid sync digest');
+        params.set('digest', input.digest);
+      }
+    }
     path += '?' + params.toString();
     if (access.profileId && Number.isSafeInteger(input.profilesAfter) && input.profilesAfter >= 0) path += `&profilesAfter=${input.profilesAfter}`;
   } else if (access.profileId && input?.profile) {

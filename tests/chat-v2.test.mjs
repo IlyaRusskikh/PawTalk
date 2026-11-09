@@ -48,6 +48,14 @@ test('chat IPC forwards bounded page cursors and keeps attachment bytes out of h
   await requestChat(fetcher, access, { before: 100, limit: 50, profilesAfter: 0, readAfter: 80 });
   const query = new URL(url).searchParams;
   assert.equal(query.get('before'), '100'); assert.equal(query.get('limit'), '50'); assert.equal(query.get('readAfter'), '80');
+  await requestChat(fetcher, access, { limit: 500, ids: [1, 99], digest: 'd'.repeat(64) });
+  assert.equal(new URL(url).searchParams.get('ids'), '1,99');
+  assert.equal(new URL(url).searchParams.get('digest'), 'd'.repeat(64));
+  await assert.rejects(requestChat(fetcher, access, { limit: 500, ids: [0] }), /IDs/);
+  let posted;
+  await requestChat(async (url, options) => { posted={url, ...options}; return new Response('{"id":99}'); }, access, { mutation: { id: 99 } });
+  assert.equal(posted.url,access.base+'/api/chat/mutate'); assert.equal(posted.method,'POST');
+  assert.deepEqual(JSON.parse(posted.body),{id:99});
   await assert.rejects(requestChat(fetcher, access, { after: 0, limit: 501 }), /cursor/);
   await assert.rejects(requestChat(fetcher, access, { attachment: { id: 'b'.repeat(32), data: new Uint8Array(chatImageLimit + 29) } }), /size/);
   const bytes = await requestChat(async () => new Response(png), access, { attachment: { id: 'b'.repeat(32) } });

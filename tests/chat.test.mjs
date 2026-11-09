@@ -2,6 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chatKey, continuesMessageGroup, decodeHistory, decryptChat, encryptChat, readChatCursor, readChatPosition, writeChatCursor, writeChatPosition } from '../src/chat.ts';
 
+test('encrypted edits keep the message key, use fresh nonces and preserve attachments and replies', async () => {
+ const key=await chatKey('a'.repeat(64),'b'.repeat(32));
+ const original=await encryptChat(key,'before');
+ const extra={edited:true,reply:{key:'c'.repeat(32),id:1,author:'A',text:'quote'}};
+ const edited=await encryptChat(key,'**after**',extra,original.requestId);
+ assert.equal(edited.requestId,original.requestId); assert.notEqual(edited.nonce,original.nonce);
+ assert.deepEqual(await decryptChat(key,edited),{key:original.requestId,text:'**after**',...extra});
+ assert.equal(JSON.stringify(edited).includes('after'),false);
+});
+
 test('message groups follow identity, a five minute window and the date boundary', () => {
   const first = { id: 1, key: 'one', author: 'Alice', authorIdentity: 'alice', text: 'hello', sent: new Date(2026, 10, 7, 12).getTime() };
   const next = { ...first, id: 2, key: 'two', text: 'again', sent: first.sent + 1000 };

@@ -1,10 +1,10 @@
 import { mediaKeyBytes } from '../shared/encryption.mjs';
 
-export type ChatAccess = { handle: string; feed: string; ephemeral: boolean; profileId?: string; protocol?: number; encrypted?: boolean };
-export type ChatHistoryRequest = { after?: number; before?: number; around?: number; limit?: number; profilesAfter?: number; readAfter?: number };
+export type ChatAccess = { handle: string; feed: string; ephemeral: boolean; profileId?: string; protocol?: number; encrypted?: boolean; mutations?: boolean };
+export type ChatHistoryRequest = { after?: number; before?: number; around?: number; limit?: number; profilesAfter?: number; readAfter?: number; ids?: number[]; digest?: string };
 export type ChatImage = { id: string; name: string; mime: 'image/png' | 'image/jpeg' | 'image/webp'; size: number; width: number; height: number };
 export type ChatReply = { key: string; id?: number; author: string; text: string };
-export type ChatContent = { text: string; image?: ChatImage; reply?: ChatReply };
+export type ChatContent = { text: string; image?: ChatImage; reply?: ChatReply; edited?: boolean };
 export type ChatPacket = { requestId: string; nonce: string; ciphertext: string; attachmentId?: string };
 export type ChatProfilePacket = { nickname: string; nonce?: string; ciphertext?: string };
 export type ChatProfile = { id: string; revision: number; nickname: string; avatar?: string };
@@ -61,11 +61,11 @@ function parseContent(raw: string): ChatContent | undefined {
   if (reply && (typeof reply.key !== 'string' || !/^[a-f0-9-]{32,36}$/.test(reply.key)
     || (reply.id !== undefined && (!Number.isSafeInteger(reply.id) || reply.id <= 0))
     || typeof reply.author !== 'string' || reply.author.length > 64 || typeof reply.text !== 'string' || reply.text.length > 240)) return;
-  return { text: value.text.trim(), ...(value.image ? { image: value.image as ChatImage } : {}), ...(reply ? { reply: reply as ChatReply } : {}) };
+  return { text: value.text.trim(), ...(value.image ? { image: value.image as ChatImage } : {}), ...(reply ? { reply: reply as ChatReply } : {}), ...(value.edited === true ? { edited: true } : {}) };
 }
-export async function encryptChat(key: CryptoKey | undefined, text: string, extra?: Pick<ChatContent, 'image' | 'reply'>): Promise<ChatPacket> {
-  const requestId = crypto.randomUUID().replaceAll('-', '');
-  const clear = chatEncoder.encode(extra?.image || extra?.reply ? contentPrefix + JSON.stringify({ text, ...extra }) : text);
+export async function encryptChat(key: CryptoKey | undefined, text: string, extra?: Pick<ChatContent, 'image' | 'reply' | 'edited'>, existingKey?: string): Promise<ChatPacket> {
+  const requestId = existingKey ?? crypto.randomUUID().replaceAll('-', '');
+  const clear = chatEncoder.encode(extra?.image || extra?.reply || extra?.edited ? contentPrefix + JSON.stringify({ text, ...extra }) : text);
   if (clear.length > chatContentLimit || !parseContent(chatDecoder.decode(clear))) throw new Error('Invalid chat content');
   const attachment = extra?.image ? { attachmentId: extra.image.id } : {};
   if (!key) return { requestId, nonce: '', ciphertext: base64(clear), ...attachment };

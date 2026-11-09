@@ -220,6 +220,7 @@ func (a *app) connect(w http.ResponseWriter, r *http.Request) {
 		result["chatToken"] = a.chatToken(body.Nickname, profileID)
 		result["chatEphemeral"] = a.chat.ephemeral
 		result["chatProtocol"] = 2
+		result["chatMutations"] = true
 		if profileID != "" {
 			result["profileId"] = profileID
 		}
@@ -238,6 +239,7 @@ func (a *app) handler() http.Handler {
 	if a.chat != nil {
 		mux.HandleFunc("GET /api/chat", a.chatHistory)
 		mux.HandleFunc("POST /api/chat", a.chatPost)
+		mux.HandleFunc("POST /api/chat/mutate", a.chatMutate)
 		mux.HandleFunc("POST /api/chat/profile", a.chatProfile)
 		mux.HandleFunc("GET /api/chat/attachments/{id}", a.chatAttachment)
 		mux.HandleFunc("POST /api/chat/attachments/{id}", a.chatAttachment)

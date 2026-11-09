@@ -1,9 +1,13 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // Keep the legacy endpoint stable; v2 clients explicitly request a bounded page.
@@ -46,6 +50,24 @@ func (a *app) chatPage(w http.ResponseWriter, r *http.Request) {
 	}
 	sql := "SELECT id, request_id, author, author_id, sent, nonce, ciphertext, attachment_id FROM chat_messages WHERE feed = ?"
 	args := []any{a.chat.feed}
+	if query.Has("ids") {
+		ids := strings.Split(query.Get("ids"), ",")
+		if len(ids) > 500 {
+			fail(w, 400, "Too many message IDs")
+			return
+		}
+		marks := make([]string, len(ids))
+		for i, raw := range ids {
+			id, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil || id <= 0 {
+				fail(w, 400, "Invalid message ID")
+				return
+			}
+			marks[i] = "?"
+			args = append(args, id)
+		}
+		sql += " AND id IN (" + strings.Join(marks, ",") + ")"
+	}
 	switch {
 	case cursors["after"] > 0:
 		sql += " AND id > ? ORDER BY id ASC"
@@ -87,6 +109,24 @@ func (a *app) chatPage(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(messages, func(i, j int) bool { return messages[i].ID < messages[j].ID })
 	result := map[string]any{"first": first, "last": last, "messages": messages, "hasOlder": false, "hasNewer": false}
+	if query.Has("ids") {
+		encoded, err := json.Marshal(messages)
+		if err != nil {
+			fail(w, 503, "Chat history unavailable")
+			return
+		}
+		hash := sha256.Sum256(encoded)
+		digest := hex.EncodeToString(hash[:])
+		if query.Get("digest") == digest {
+			if tx.Commit() != nil {
+				fail(w, 503, "Chat history unavailable")
+				return
+			}
+			respond(w, 200, map[string]any{"unchanged": true, "digest": digest})
+			return
+		}
+		result["digest"] = digest
+	}
 	if query.Has("readAfter") {
 		var unread int
 		if tx.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM chat_messages WHERE feed=? AND id>?", a.chat.feed, cursors["readAfter"]).Scan(&unread) != nil {

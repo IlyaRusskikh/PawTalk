@@ -265,7 +265,7 @@ function registerIPC() {
         ? { handle: randomUUID(), feed: body.chatFeed, token: body.chatToken, profileId, base, join, renewAfter: 0, protocol: body.chatProtocol, encrypted: body.e2eeRequired === true, key: e2eeKey, ephemeral: body.chatEphemeral === true }
         : undefined;
       return { url: body.url, token: body.token, identity: body.identity, ownHost, e2eeRequired: body.e2eeRequired === true, ...(e2eeKey ? { e2eeKey } : {}),
-        ...(chatAccess ? { chat: { handle: chatAccess.handle, feed: chatAccess.feed, ephemeral: body.chatEphemeral === true, profileId, protocol: body.chatProtocol, encrypted: body.e2eeRequired === true } } : {}) };
+        ...(chatAccess ? { chat: { handle: chatAccess.handle, feed: chatAccess.feed, ephemeral: body.chatEphemeral === true, profileId, protocol: body.chatProtocol, encrypted: body.e2eeRequired === true, mutations: body.chatMutations === true } } : {}) };
     } catch (error) {
       return { error: connectionError(error) };
     }
