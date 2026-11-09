@@ -7,6 +7,10 @@ const os = require('node:os');
 app.setPath('userData', path.join(os.tmpdir(), 'pawtalk-renderer-smoke-' + process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
+// Chromium also consults the Windows animation setting independently of the
+// reduced-motion media query. Force its smooth-scrolling feature for this test;
+// the CSS reduced-motion rule still selects instant scrolling when requested.
+app.commandLine.appendSwitch('enable-smooth-scrolling');
 // Chromium's default fake microphone is an intermittent beep. Use a continuous,
 // speech-like PCM fixture so capture reopens cannot land in a silent interval.
 let audioFile = process.env.PAWTALK_TEST_AUDIO_FILE;
