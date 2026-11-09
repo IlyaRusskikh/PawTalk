@@ -17,7 +17,7 @@ for (const file of files.filter(file => file.endsWith('.html'))) {
   assert.ok(title?.includes('PawTalk'), `${file}: descriptive title`);
   assert.match(html, /<meta name="description" content="[^"]+">/, `${file}: description`);
   assert.match(html, /<html lang="(?:en|ru)">/, `${file}: page language`);
-  assert.match(html, /rel="canonical" href="https:\/\/ilyarusskikh.github.io\/pawtalk\/(?:ru\/)?"/, `${file}: expected Pages URL`);
+  assert.match(html, /rel="canonical" href="https:\/\/ilyarusskikh.github.io\/PawTalk\/(?:ru\/)?"/, `${file}: expected Pages URL`);
   for (const locale of ['en', 'ru', 'x-default']) assert.ok(html.includes(`hreflang="${locale}"`), `${file}: ${locale} alternate`);
   // Historical binaries retain the name under which they were published.
   assert.match(html, /releases\/download\/v(\d+\.\d+\.\d+)\/(?:PawTalk|Voicecord)\.Setup\.\1\.exe/, `${file}: installer URL`);

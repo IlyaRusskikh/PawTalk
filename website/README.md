@@ -16,7 +16,7 @@ node scripts/preview-website.mjs
 Open `http://127.0.0.1:5187` (Ctrl+C stops the local server), or serve the `website`
 directory with another static HTTP server. Check both languages, narrow screens,
 keyboard focus, FAQ and downloads.
-The intended canonical base is `https://ilyarusskikh.github.io/pawtalk/`.
+The intended canonical base is `https://ilyarusskikh.github.io/PawTalk/`.
 It is a deployment target, not a claim that the site has already been published.
 Before using a custom domain, change canonical, alternate and Open Graph URLs
 in both pages and the URL check in `scripts/check-website.mjs`.
