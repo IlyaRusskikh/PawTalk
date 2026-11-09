@@ -27,7 +27,7 @@ PawTalk takes inspiration from **Discord** for easy-to-join voice rooms and indi
 - **Make speech easier to hear.** RNNoise reduces background noise on your PC, echo cancellation reduces echo, and automatic gain control evens out the level of your voice.
 - **Return to your favorite rooms.** Bookmark a server so you can find it again quickly.
 - **Send messages during a call.** The room opens with chat below the participant cards. Press Enter to send or Shift+Enter for a new line. You can send up to three messages per second and see when someone else is typing. Drag the divider to resize either section. Built-in E2EE rooms keep history in memory until the server stops. VPS history uses a configurable storage budget with no age limit (see Project status).
-- **Hear the room.** All notification recordings use CC0. Cat meows mark joining and leaving. Five soft purr variations announce new messages in the current room when the app is inactive or the chat is scrolled up. Your own messages and loaded history stay silent. Sounds use your selected output device and volume; disable them under **Settings → Shortcuts → Notification sounds**.
+- **Hear the room.** All notification recordings use CC0. Cat meows mark joining and leaving. Five soft purr variations announce new messages in the current room when the app is inactive or the chat is scrolled up. Your own messages and loaded history stay silent. Sounds use your selected output device and volume; disable them under **Settings → Audio and devices → Sounds**.
 
 <details>
 <summary>See audio settings and room creation</summary>
@@ -115,10 +115,10 @@ Images load on demand and are released outside the viewport. E2EE rooms encrypt
 messages and images; without E2EE the server can read retained content. These
 changes are included in **0.5.2**. Run `review.cmd` for an isolated local profile.
 Docker Swarm is the only supported VPS deployment method. Migration and opt-in server updates: [SWARM.md](docs/SWARM.md).
-Client startup update checks can be disabled under Settings → Updates. App language
-is under Settings → Application. The voice/chat room retains its original layout.
+Client startup update checks can be disabled under Settings → System → Updates. App language
+is under Settings → Language. The voice/chat room retains its original layout.
 The chat field has a “+ → Send file” menu; Enter sends and Shift+Enter adds a line.
-Settings → Updates also shows the current application version.
+Settings → System → Updates also shows the current application version.
 Reachable rooms stay above offline rooms without changing the saved order.
 Images have a fitted viewer with zoom and pan, plus Save/Copy actions on right-click.
 All interface colors, status colors, shadows and corner sizes follow Appearance.
@@ -137,3 +137,13 @@ has no seven-day or 500-message VPS retention cap. Embedded rooms keep 500 messa
 **0.6.0 is a public pre-release.** It introduces the PawTalk identity, animated typing paws, and CC0 cat sounds for room events and unseen messages. A fresh installation is required. [Release notes and source](https://github.com/IlyaRusskikh/pawtalk/releases/tag/v0.6.0). [Changelog](CHANGELOG.md).
 
 Voicecord 0.5.2 was the previous public pre-release; its [release notes and source](https://github.com/IlyaRusskikh/pawtalk/releases/tag/v0.5.2) remain available.
+
+Connection attempts show an animated loading dialog with server and voice/chat stages. Message menus let you edit and delete your own messages on updated servers; changes sync to other participants. Select text in the composer or message editor to open the formatting toolbar. Chat supports Discord-style Markdown (bold, italic, underline, strikethrough, spoilers, code, quotes, headings, lists and links). Settings → Audio and devices → Sounds has one shared notification volume slider for all meows and purrs, plus sound previews.
+
+Settings group devices, input and processing under **Audio and devices → Voice**, with advanced processing and attenuation in a collapsible section. Notification cues have their own **Sounds** subsection. Startup and shortcuts are grouped under **System**. [Full settings map](docs/SETTINGS.md).
+
+Web links in messages open in your default browser. Edit messages directly in the chat (Enter to save, Shift+Enter for a new line, Esc to cancel). The deletion dialog previews the author and message; hold Shift while choosing Delete message to skip confirmation.
+
+Nested items under Audio and devices and System smoothly scroll to sections on one continuous page per group. All settings use a shared content width and spacing.
+
+Reset controls appear once at the end of the settings page, outside its anchor subsections.

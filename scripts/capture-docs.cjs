@@ -26,7 +26,7 @@ async function until(check, label) {
 function demoRequest(origin, fingerprint, endpoint, body, token) {
   return new Promise((resolve, reject) => {
     const request = https.request(origin + endpoint, {
-      method: 'POST', rejectUnauthorized: false, agent: false,
+      method: body === undefined ? 'GET' : 'POST', rejectUnauthorized: false, agent: false,
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
     }, response => {
       let data = '';
@@ -44,7 +44,7 @@ function demoRequest(origin, fingerprint, endpoint, body, token) {
     }));
     request.on('error', reject);
     request.setTimeout(5000, () => request.destroy(new Error('Demo server request timed out')));
-    request.end(JSON.stringify(body));
+    request.end(body === undefined ? undefined : JSON.stringify(body));
   });
 }
 
@@ -93,7 +93,7 @@ app.on('browser-window-created', (_event, win) => {
         await capture(`create-room${suffix}.png`);
         await run(`document.querySelector('dialog [aria-label=${JSON.stringify(close)}]').click()`);
         await run(`document.querySelector('[title=${JSON.stringify(settings)}]').click()`);
-        await run(`document.querySelector('#settings-tab-general').click()`);
+        await run(`document.querySelector('#settings-tab-language').click()`);
         await capture(`language-settings${suffix}.png`);
         await run(`document.querySelector('#settings-tab-voice').click()`);
         for (let i = 0; i < 80 && !await run(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent===${JSON.stringify(test)}&&!b.disabled)`); i++) await wait(100);
@@ -153,8 +153,17 @@ app.on('browser-window-created', (_event, win) => {
           }
           if (!${process.env.PAWTALK_CHAT_ACCEPTANCE === '1' && language === 'en'}) document.querySelector('.encryption-toggle input').click();
         })()`);
+        if (process.env.PAWTALK_CHAT_ACCEPTANCE === '1') await run(`(()=>{
+          window.sawConnectionLoading=false;
+          const observer=new MutationObserver(()=>{ if(document.querySelector('.connection-loading[open] [role="status"]')) { window.sawConnectionLoading=true;observer.disconnect(); } });
+          observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['open']});
+        })()`);
         await run(`document.querySelector('dialog[open] form').requestSubmit()`);
         await until(() => run('!!document.querySelector(".room-content dialog[open] .host-stop") && !!document.querySelector(".chat-compose")'), 'demo room and invitation');
+        if (process.env.PAWTALK_CHAT_ACCEPTANCE === '1') {
+          assert.equal(await run('window.sawConnectionLoading'), true, 'connection shows a loading dialog');
+          assert.equal(await run('!!document.querySelector(".connection-loading")'), false, 'loading closes after connection');
+        }
         await run(`document.querySelector('dialog [aria-label=${JSON.stringify(close)}]').click()`);
         const status = await run('window.desktop.hostStatus()');
         const { origin, e2eeKey } = invitation(status.localAddress);
@@ -169,10 +178,12 @@ app.on('browser-window-created', (_event, win) => {
         guestSession.setCertificateVerifyProc((request, callback) => {
           callback(new X509Certificate(request.certificate.data).fingerprint256.replaceAll(':', '').toLowerCase() === status.fingerprint ? 0 : -3);
         });
-        const { chatKey, encryptChat } = await import('../src/chat.ts');
+        const { chatKey, encryptChat, decryptChat } = await import('../src/chat.ts');
+        let reader;
         const e2eeKeyId = e2eeKey ? createHash('sha256').update(Buffer.from(e2eeKey, 'hex')).digest('hex') : undefined;
         for (const [index, nickname] of demo.names.entries()) {
           const credentials = await demoRequest(origin, status.fingerprint, '/api/connect', { nickname, password, e2ee: !!e2eeKey, e2eeKeyId });
+          reader = credentials;
           const guest = new BrowserWindow({ show: false, webPreferences: { session: guestSession, sandbox: true, offscreen: true, backgroundThrottling: false } });
           guests.push(guest);
           await guest.loadURL(`http://127.0.0.1:${vite.httpServer.address().port}/tests/voice.html`);
@@ -236,6 +247,32 @@ app.on('browser-window-created', (_event, win) => {
           await win.webContents.insertText(language === 'en' ? 'Reply from the real app.' : 'Ответ из настоящего приложения.');
           await run(`document.querySelector('.chat-composer').requestSubmit()`);
           await until(() => run('!!document.querySelector(".chat-reply-quote")'), 'reply saved through actual IPC and server');
+          await wait(200);
+          const editedKey = await run(`Array.from(document.querySelectorAll('[data-message-key]')).at(-1).dataset.messageKey`);
+          await run(`Array.from(document.querySelectorAll('.chat-message-more')).at(-1).click()`);
+          const editLabel = language === 'en' ? 'Edit' : 'Редактировать';
+          await until(() => run(`Array.from(document.querySelectorAll('.chat-message-menu button')).some(b=>b.textContent===${JSON.stringify(editLabel)})`), 'own edit menu through main');
+          await run(`Array.from(document.querySelectorAll('.chat-message-menu button')).find(b=>b.textContent===${JSON.stringify(editLabel)}).click()`);
+          await until(() => run(`!!document.querySelector('.chat-inline-edit textarea')`), 'inline editor');
+          await run(`(()=>{document.querySelector('.chat-inline-edit textarea').focus();document.querySelector('.chat-inline-edit textarea').select()})()`);
+          await win.webContents.insertText('**Edited through actual IPC**');
+          await run(`document.querySelector('.chat-inline-edit').requestSubmit()`);
+          await until(() => run(`Array.from(document.querySelectorAll('.chat-message-body p strong')).some(b=>b.textContent==='Edited through actual IPC') && !document.querySelector('dialog[open]')`), 'saved formatted edit');
+          const history = await demoRequest(origin, status.fingerprint, '/api/chat?after=0', undefined, reader.chatToken);
+          const editedRecord = history.messages.find(message => message.requestId === editedKey);
+          const decodedEdit = await decryptChat(e2eeKey ? await chatKey(e2eeKey, reader.chatFeed) : undefined, editedRecord);
+          assert.equal(decodedEdit.text,'**Edited through actual IPC**');
+          assert.equal(decodedEdit.edited,true); assert.ok(decodedEdit.reply,'edit preserves the reply');
+          await wait(200);
+          await run(`Array.from(document.querySelectorAll('.chat-message-more')).at(-1).click()`);
+          const deleteLabel = language === 'en' ? 'Delete message' : 'Удалить сообщение';
+          await until(() => run(`Array.from(document.querySelectorAll('.chat-message-menu button')).some(b=>b.textContent===${JSON.stringify(deleteLabel)})`), 'own delete menu');
+          await run(`Array.from(document.querySelectorAll('.chat-message-menu button')).find(b=>b.textContent===${JSON.stringify(deleteLabel)}).click()`);
+          await until(() => run(`!!document.querySelector('dialog[open] .modal-actions')`), 'delete confirmation');
+          await run(`document.querySelector('dialog .chat-delete-confirm').click()`);
+          await until(() => run(`!document.querySelector('[data-message-key="${editedKey}"]') && !document.querySelector('dialog[open]')`), 'delete through main');
+          const afterDelete = await demoRequest(origin, status.fingerprint, '/api/chat?after=0', undefined, reader.chatToken);
+          assert.ok(!afterDelete.messages.some(message=>message.requestId===editedKey),'deleted message is absent for another client');
         }
         while (guests.length) guests.pop().destroy();
         await run('window.desktop.stopHost()');
