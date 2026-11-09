@@ -49,6 +49,7 @@ export function JoinRoom({ address, setAddress, nickname, busy, error, onConnect
   }
   return <><Modal title={t("Присоединиться к комнате")} onClose={onClose}><form onSubmit={e => { e.preventDefault(); void submit(); }}>
     {(failure || error) && <ConnectionFailure detail={failure || error}/>}
+    {checking && <div className="connection-progress" role="status" aria-busy="true"><span className="connection-spinner" aria-hidden="true"/>{t("Проверяем соединение…")}</div>}
     <label>{t("Приглашение или адрес сервера")}<input autoFocus placeholder={t("pawtalk://… или server.example.com")} value={address} disabled={busy || checking} aria-describedby="join-address-hint" aria-invalid={!!address.trim() && !validAddress(address)} onChange={e => { revision.current++; setAddress(e.target.value); setFailure(''); }} autoComplete="off" spellCheck={false}/></label>
     <p id="join-address-hint" className="host-hint" aria-live="polite">{address.trim() && !validAddress(address) ? t("Адрес не распознан. Вставьте полное приглашение pawtalk://… или HTTPS-адрес сервера без пути. Ссылка на GitHub или файл установщика не подходит.") : t("Попросите владельца прислать приглашение из работающей комнаты. В одной локальной сети используйте LAN-приглашение. Ссылка может содержать пароль — не публикуйте её.")}</p>
     <button className="primary join-submit" disabled={!validAddress(address) || !nickname.trim() || busy || checking}>{checking ? t("Проверяем соединение…") : busy ? t("Подключение…") : t("Присоединиться")}</button>

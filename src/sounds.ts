@@ -1,6 +1,6 @@
 import type { Settings } from './settings';
 
-type SoundSettings = Pick<Settings, 'sounds' | 'outputDevice' | 'outputVolume'>;
+type SoundSettings = Pick<Settings, 'sounds' | 'outputDevice' | 'outputVolume'> & Partial<Pick<Settings, 'notificationVolume'>>;
 export type SoundEvent = 'join' | 'leave' | 'message';
 let context: AudioContext | undefined;
 let sink = '';
@@ -28,7 +28,8 @@ function nextPurr() {
 // One reusable context, routed to the same output device as the voice session.
 // A failed device/download never interrupts chat or a voice connection.
 export async function playSound(event: SoundEvent, settings: SoundSettings): Promise<string | undefined> {
-  if (!settings.sounds || settings.outputVolume <= 0 || active.size >= 4) return;
+  const volume = settings.notificationVolume ?? 1;
+  if (!settings.sounds || settings.outputVolume <= 0 || volume <= 0 || active.size >= 4) return;
   const now = performance.now();
   if (event === 'message') {
     if (now - lastMessage < 1500) return;
@@ -60,7 +61,7 @@ export async function playSound(event: SoundEvent, settings: SoundSettings): Pro
     const source = player.createBufferSource();
     const gain = player.createGain();
     source.buffer = buffer;
-    gain.gain.value = Math.max(0, Math.min(2, settings.outputVolume));
+    gain.gain.value = Math.max(0, Math.min(2, settings.outputVolume)) * Math.max(0, Math.min(1, volume));
     source.connect(gain).connect(player.destination);
     active.add(source);
     source.onended = () => {

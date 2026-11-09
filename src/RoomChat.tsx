@@ -7,6 +7,9 @@ import { ChatImage } from './ChatImage';
 import { Icon } from './Controls';
 import { Avatar } from './Avatar';
 import { MessageTime } from './MessageTime';
+import { MessageText } from './MessageText';
+import { FormattingTextarea } from './FormattingTextarea';
+import { Modal } from './Modal';
 import { t } from './i18n';
 import type { Person, VoiceSession } from './session';
 
@@ -30,6 +33,7 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
   const [profiles, setProfiles] = useState(new Map<string, ChatProfile>());
   const profilesRef = useRef(profiles);
   const profileCursor = useRef(0);
+  const syncDigest = useRef<string | undefined>(undefined);
   const currentProfile = useRef(profile); currentProfile.current = profile;
   const sentProfile = useRef<LocalProfile | undefined>(undefined);
   const encryption = useRef<Promise<CryptoKey> | undefined>(undefined);
@@ -78,6 +82,12 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
   const navigation = useRef(false);
   const refresh = useRef<(() => void) | undefined>(undefined);
   const [menu, setMenu] = useState<{ message: ChatMessage; x: number; y: number }>();
+  const [editing, setEditing] = useState<ChatMessage>();
+  const [editText, setEditText] = useState('');
+  const editInput = useRef<HTMLTextAreaElement>(null);
+  const [deleting, setDeleting] = useState<ChatMessage>();
+  const [mutating, setMutating] = useState(false);
+  const [mutationError, setMutationError] = useState('');
   const notificationReady = useRef(false);
   const notificationView = useRef({ visible, connected, covered });
   notificationView.current = { visible, connected, covered };
@@ -178,7 +188,13 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
           : { after: kind === 'poll' ? after : 0, ...(access.profileId ? { profilesAfter: profileAfter } : {}) };
         const raw = await window.desktop!.chatRequest(access.handle, request);
         const page = await decodeHistory(raw, paged || kind === 'poll' ? after : 0, await getKey());
-        let context = merge(rows.current, page.messages);
+        let synced: ChatMessage[] | undefined;
+        if (kind === 'poll' && access.mutations && rows.current.length) {
+          const snapshot = await window.desktop!.chatRequest(access.handle, { limit: 500, ids: rows.current.map(message => message.id), digest: syncDigest.current }) as { unchanged?: boolean; digest?: string };
+          if (!snapshot.unchanged) synced = (await decodeHistory(snapshot, 0, await getKey())).messages;
+          syncDigest.current = snapshot.digest;
+        }
+        let context = merge(synced ?? rows.current, page.messages);
         // Retain one predecessor as grouping metadata, without rendering or
         // downloading its image. Window edges must not invent author headers.
         if (paged && needsContext && pageSize === chatMessageLimit && page.messages[0]?.id > page.first) {
@@ -215,7 +231,7 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
           const start = first >= 0 && last >= 0 ? Math.min(first, Math.max(preferred, last + 1 - windowLimit.current)) : preferred;
           next = combined.slice(start, start + windowLimit.current);
         }
-        else if (kind === 'poll') next = wasLatest && follow.current ? merge(rows.current.filter(message => !page.first || message.id >= page.first), next).slice(-windowLimit.current) : rows.current;
+        else if (kind === 'poll') next = wasLatest && follow.current ? merge((synced ?? rows.current).filter(message => !page.first || message.id >= page.first), next).slice(-windowLimit.current) : synced ?? rows.current;
         else next = next.slice(-windowLimit.current);
         if (kind === 'latest') { follow.current = true; restore.current = false; }
         commit(next, context);
@@ -471,6 +487,50 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
     } finally { setSending(false); input.current?.focus({ preventScroll: true }); }
   }
   function nameOf(message: ChatMessage) { return (message.authorId ? profiles.get(message.authorId)?.nickname : undefined) ?? (message.authorIdentity ? people.find(person => person.id === message.authorIdentity)?.name : undefined) ?? message.author; }
+  function canModify(message: ChatMessage) { return !!access?.mutations && !!access.profileId && message.authorId === access.profileId; }
+  function cancelEdit() {
+    if (mutating) return;
+    setEditing(undefined); setMutationError(''); input.current?.focus({ preventScroll: true });
+  }
+  useLayoutEffect(() => {
+    const field = editInput.current;
+    if (!field) return;
+    field.style.height = 'auto'; field.style.height = `${field.scrollHeight}px`;
+    field.closest('.chat-inline-edit')?.scrollIntoView({ block: 'nearest' });
+  }, [editing?.key, editText, visible]);
+  useEffect(() => {
+    if (!editing || !visible) return;
+    const field = editInput.current;
+    field?.focus({ preventScroll: true }); field?.setSelectionRange(field.value.length, field.value.length);
+    field?.closest('.chat-inline-edit')?.scrollIntoView({ block: 'nearest' });
+  }, [editing?.key, visible]);
+  async function mutate(message: ChatMessage, text?: string) {
+    if (!access || !canModify(message) || mutating || !connected) return;
+    if (text !== undefined && ((!text.trim() && !message.image) || chatEncoder.encode(text.trim()).length > chatTextLimit)) return;
+    setMutating(true); setMutationError('');
+    const generation = epoch.current;
+    const job = queue.current.then(async () => {
+      const content = text === undefined ? undefined : { text: text.trim(), image: message.image, reply: message.reply, edited: true };
+      const packet = content ? await encryptChat(await getKey(), content.text, content, message.key) : undefined;
+      await window.desktop!.chatRequest(access.handle, { mutation: { id: message.id, ...(packet ? { packet } : {}) } });
+      if (generation !== epoch.current) return;
+      anchor.current = follow.current ? undefined : viewportAnchor(true);
+      commit(content ? rows.current.map(row => row.id === message.id ? { ...row, ...content } : row) : rows.current.filter(row => row.id !== message.id));
+      setEditing(current => current?.id === message.id ? undefined : current); setDeleting(undefined);
+      if (editing?.id === message.id) input.current?.focus({ preventScroll: true });
+      session.publishChatRefresh(); refresh.current?.();
+    });
+    queue.current = job.catch(() => {});
+    try { await job; } catch { if (generation === epoch.current) {
+      const error = t("Не удалось изменить сообщение. Попробуйте снова.");
+      if (editing || deleting) setMutationError(error); else setNotice(error);
+    } }
+    finally { if (generation === epoch.current) setMutating(false); }
+  }
+  function requestDelete(message: ChatMessage, skipConfirmation: boolean) {
+    setMenu(undefined); setMutationError('');
+    if (skipConfirmation) void mutate(message); else setDeleting(message);
+  }
   function beginReply(message: ChatMessage) {
     setReply({ key: message.key, ...(access ? { id: message.id } : {}), author: nameOf(message), text: (message.text || t("Изображение")).slice(0, 240) });
     setMenu(undefined); input.current?.focus({ preventScroll: true });
@@ -482,7 +542,7 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
       else await navigator.clipboard.writeText(message.text);
     } catch { setNotice(t("Не удалось скопировать текст.")); }
   }
-  function openMenu(message: ChatMessage, x: number, y: number) { setMenu({ message, x: Math.max(8, Math.min(x, window.innerWidth - 220)), y: Math.max(8, Math.min(y, window.innerHeight - (message.text ? 105 : 65))) }); }
+  function openMenu(message: ChatMessage, x: number, y: number) { setMenu({ message, x: Math.max(8, Math.min(x, window.innerWidth - 220)), y: Math.max(8, Math.min(y, window.innerHeight - (canModify(message) ? 205 : message.text ? 105 : 65))) }); }
   const unreadStart = !hasSent && entryLast !== undefined ? messages.findIndex(message => message.id > divider && message.id <= entryLast) : -1;
   const firstNew = unreadStart === 0 && groupBefore.current && groupBefore.current.id > divider ? -1 : unreadStart;
   const tooLong = chatEncoder.encode(draft.trim()).length > chatTextLimit;
@@ -508,10 +568,11 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
         const saved = message.authorId ? profiles.get(message.authorId) : undefined;
         const live = message.authorIdentity ? people.find(person => person.id === message.authorIdentity) : undefined;
         const name = nameOf(message);
-        const continuation = index !== firstNew && !message.reply && continuesMessageGroup(index ? messages[index - 1] : groupBefore.current, message);
+        const isEditing = editing?.id === message.id;
+        const continuation = !isEditing && index !== firstNew && !message.reply && continuesMessageGroup(index ? messages[index - 1] : groupBefore.current, message);
         return <article className={`chat-message${continuation ? ' chat-message-continuation' : ''}`} key={message.id}>
           {index === firstNew && <div className="chat-divider">{t("Новые сообщения")}</div>}
-          <div className="chat-message-row" data-message-row={message.id} data-message-key={message.key} onContextMenu={event => { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); openMenu(message, event.clientX || rect.left + 50, event.clientY || rect.top); }}>
+          <div className={`chat-message-row${isEditing ? ' chat-message-editing' : ''}`} data-message-row={message.id} data-message-key={message.key} onContextMenu={event => { if (isEditing) return; event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); openMenu(message, event.clientX || rect.left + 50, event.clientY || rect.top); }}>
             {continuation ? <span className="chat-continuation-time"><MessageTime sent={message.sent}/></span> : <Avatar name={name} image={saved?.avatar ?? live?.avatar} className="chat-avatar"/>}
             <div className="chat-message-body">
               {!continuation && <div className="chat-meta"><strong>{name}</strong><MessageTime sent={message.sent}/></div>}
@@ -522,10 +583,19 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
                 else if (access && message.reply!.id) void navigate('around', { around: message.reply!.id });
                 else { targetKey.current = undefined; setNotice(t("Исходное сообщение уже недоступно.")); }
               }}><Icon name="reply" size={13}/><strong>{message.reply.author}</strong><span>{message.reply.text}</span></button>}
-              {message.text && <p>{message.text}</p>}
+              {isEditing ? <form className="chat-inline-edit" aria-label={t("Редактировать сообщение")} onSubmit={event => { event.preventDefault(); void mutate(message, editText); }}>
+                <FormattingTextarea ref={editInput} onEscape={cancelEdit} aria-label={t("Сообщение")} rows={1} maxLength={chatTextLimit} value={editText} readOnly={mutating} onChange={event => setEditText(event.target.value)} onKeyDown={event => {
+                  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancelEdit(); return; }
+                  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+                  event.preventDefault(); if (!event.repeat) void mutate(message, editText);
+                }}/>
+                <div className="chat-edit-hint"><span>{t("Esc для")}</span> <button type="button" disabled={mutating} onClick={cancelEdit}>{t("отмены")}</button><span> · {t("Enter чтобы")}</span> <button type="submit" disabled={mutating || !connected || (!editText.trim() && !message.image) || chatEncoder.encode(editText.trim()).length > chatTextLimit}>{t("сохранить")}</button>{mutating && <span role="status"> · {t("Сохраняем…")}</span>}</div>
+                {chatEncoder.encode(editText.trim()).length > chatTextLimit && <p className="text-error" role="status">{t("Сообщение слишком длинное.")}</p>}
+                {mutationError && <p className="text-error" role="alert">{mutationError}</p>}
+              </form> : <>{message.text && <p><MessageText text={message.text}/></p>}{message.edited && <small className="chat-edited">{t("изменено")}</small>}</>}
               {message.image && access && <ChatImage image={message.image} access={access} getKey={getKey}/>}
             </div>
-            <button type="button" className="chat-message-more" aria-label={t("Действия с сообщением")} aria-haspopup="menu" onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); openMenu(message, rect.right - 185, rect.bottom + 4); }}><Icon name="more" size={18}/></button>
+            {!isEditing && <button type="button" className="chat-message-more" aria-label={t("Действия с сообщением")} aria-haspopup="menu" onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); openMenu(message, rect.right - 185, rect.bottom + 4); }}><Icon name="more" size={18}/></button>}
           </div>
           <div className="chat-read-end" data-chat-id={message.id}/>
         </article>;
@@ -548,13 +618,27 @@ export function RoomChat({ room, session, people, profile, visible, connected, c
           <button type="button" className="chat-attach" disabled={sending || !connected} aria-label={t("Добавить вложение")} aria-haspopup="menu" aria-expanded={attachmentMenu} onClick={() => setAttachmentMenu(value => !value)} onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); setAttachmentMenu(true); } }}><Icon name="plus" size={22}/></button>
           {attachmentMenu && <div className="chat-attachment-menu" role="menu" aria-label={t("Вложения")}><button type="button" role="menuitem" autoFocus onClick={() => { setAttachmentMenu(false); picker.current?.click(); }}><Icon name="image" size={18}/>{t("Отправить файл")}</button></div>}
         </div>
-        <textarea ref={input} rows={1} aria-label={t("Сообщение")} placeholder={t("Написать сообщение…")} value={draft} maxLength={chatTextLimit} readOnly={sending} onPaste={event => { const file = [...event.clipboardData.files].find(file => file.type.startsWith('image/')); if (file) { event.preventDefault(); void chooseImage(file); } }} onChange={event => { setDraft(event.target.value); pending.current = undefined; }} onKeyDown={event => {
+        <FormattingTextarea ref={input} rows={1} aria-label={t("Сообщение")} placeholder={t("Написать сообщение…")} value={draft} maxLength={chatTextLimit} readOnly={sending} onPaste={event => { const file = [...event.clipboardData.files].find(file => file.type.startsWith('image/')); if (file) { event.preventDefault(); void chooseImage(file); } }} onChange={event => { setDraft(event.target.value); pending.current = undefined; }} onKeyDown={event => {
           if (event.key === 'Escape' && reply) { setReply(undefined); return; }
           if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
           event.preventDefault(); if (!event.repeat) void send();
         }}/>
       </div>
     </form>
-    {menu && createPortal(<div className="chat-message-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={event => event.stopPropagation()}><button type="button" role="menuitem" autoFocus onClick={() => beginReply(menu.message)}><Icon name="reply" size={17}/>{t("Ответить")}</button>{menu.message.text && <button type="button" role="menuitem" onClick={() => void copyText(menu.message)}><Icon name="copy" size={17}/>{t("Скопировать текст")}</button>}</div>, document.body)}
+    {menu && createPortal(<div className="chat-message-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={event => event.stopPropagation()}><button type="button" role="menuitem" autoFocus onClick={() => beginReply(menu.message)}><Icon name="reply" size={17}/>{t("Ответить")}</button>{menu.message.text && <button type="button" role="menuitem" onClick={() => void copyText(menu.message)}><Icon name="copy" size={17}/>{t("Скопировать текст")}</button>}{canModify(menu.message) && <><button type="button" role="menuitem" disabled={!connected} onClick={() => { if (mutating) return; setEditing(menu.message); setEditText(menu.message.text); setMutationError(''); setMenu(undefined); }}><Icon name="edit" size={17}/>{t("Редактировать")}</button><div role="separator" className="chat-menu-separator"/><button type="button" role="menuitem" className="chat-menu-delete" disabled={!connected || mutating} onClick={event => requestDelete(menu.message, event.shiftKey)}><Icon name="trash" size={17}/>{t("Удалить сообщение")}</button></>}</div>, document.body)}
+
+    {deleting && <Modal title={t("Удалить сообщение")} className="chat-delete-modal" onClose={() => { if (!mutating) setDeleting(undefined); }}>
+      <p className="chat-delete-question">{t("Вы действительно хотите удалить это сообщение?")}</p>
+      <div className="chat-delete-preview">
+        <Avatar name={nameOf(deleting)} image={(deleting.authorId ? profiles.get(deleting.authorId)?.avatar : undefined) ?? (deleting.authorIdentity ? people.find(person => person.id === deleting.authorIdentity)?.avatar : undefined)} className="chat-avatar"/>
+        <div className="chat-message-body"><div className="chat-meta"><strong>{nameOf(deleting)}</strong><MessageTime sent={deleting.sent}/></div>
+          {deleting.text && <p><MessageText text={deleting.text}/></p>}
+          {deleting.image && <div className="chat-delete-attachment"><Icon name="image" size={16}/>{deleting.image.name}</div>}
+        </div>
+      </div>
+      <p className="chat-delete-tip"><strong>{t("Подсказка:")}</strong><br/>{t("Чтобы полностью обойти это подтверждение, удерживайте Shift при нажатии на «Удалить сообщение».")}</p>
+      {mutationError && <p className="text-error" role="alert">{mutationError}</p>}
+      <div className="modal-actions"><button type="button" className="chat-delete-cancel" disabled={mutating} onClick={() => setDeleting(undefined)}>{t("Отмена")}</button><button type="button" className="chat-delete-confirm" disabled={mutating || !connected} onClick={() => void mutate(deleting)}>{mutating ? t("Удаляем…") : t("Удалить")}</button></div>
+    </Modal>}
   </section>;
 }

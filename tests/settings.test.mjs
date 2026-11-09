@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import { loadSettings, remember } from '../src/settings.ts';
 let value = '{}';
 globalThis.localStorage = { getItem: () => value, setItem: (_key,next) => {value=next;} };
+test('one notification volume survives saving and clamps corrupt preferences', () => {
+ value='{}'; assert.equal(loadSettings().notificationVolume,1);
+ for (const [saved,expected] of [[0,0],[0.35,0.35],[-1,0],[9,1],['bad',1]]) {
+  value=JSON.stringify({notificationVolume:saved}); const settings=loadSettings();
+  assert.equal(settings.notificationVolume,expected); remember(settings); assert.equal(JSON.parse(value).notificationVolume,expected);
+ }
+});
 test('new preferences default to RNNoise; old disabled suppression stays disabled', () => {
  value='{}';assert.equal(loadSettings().noiseMode,'rnnoise');
  value=JSON.stringify({noiseSuppression:true});assert.equal(loadSettings().noiseMode,'rnnoise');

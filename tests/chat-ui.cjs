@@ -16,6 +16,41 @@ app.whenReady().then(async () => {
     await win.loadURL(process.env.PAWTALK_UI_TEST_URL + '/tests/chat-ui.html');
     await run(`window.sentAnimations=[];const originalAnimate=Element.prototype.animate;Element.prototype.animate=function(frames,options){if(this.matches('.chat-message-body p'))window.sentAnimations.push(options?.duration);return originalAnimate.call(this,frames,options)};undefined`);
     await until('window.ready && document.querySelectorAll(".chat-message").length===100', 'initial 100 messages');
+    assert.equal(await run('!!document.querySelector(".chat-format-help, .chat-format-toolbar")'), false);
+    const selectDraft = async (text, start, end) => {
+      await run(`(()=>{const field=document.querySelector('.chat-compose textarea');field.focus();Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(field,${JSON.stringify(text)});field.dispatchEvent(new Event('input',{bubbles:true}));field.setSelectionRange(${start},${end});document.dispatchEvent(new Event('selectionchange'));})()`);
+      await until('!!document.querySelector(".chat-format-toolbar")', 'formatting appears for selected text');
+    };
+    await selectDraft('select text after releasing', 0, 6);
+    await run(`(()=>{const field=document.querySelector('.chat-compose textarea');field.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:42}));field.setSelectionRange(0,12);document.dispatchEvent(new Event('selectionchange'));})()`);
+    assert.equal(await run('!!document.querySelector(".chat-format-toolbar")'), false, 'toolbar stays hidden while dragging a selection');
+    await run(`(()=>{const field=document.querySelector('.chat-compose textarea');field.setSelectionRange(0,18);document.dispatchEvent(new Event('selectionchange'));})()`);
+    assert.equal(await run('!!document.querySelector(".chat-format-toolbar")'), false, 'selection changes during a drag do not reopen the toolbar');
+    await run(`document.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:42}))`);
+    await until('!!document.querySelector(".chat-format-toolbar")', 'toolbar appears after releasing the selection');
+    for (const [label, expected] of [['Жирный','hello **world**'],['Курсив','hello *world*'],['Подчёркнутый','hello __world__'],['Зачёркнутый','hello ~~world~~'],['Код','hello `world`'],['Спойлер','hello ||world||'],['Цитата','> hello world']]) {
+      await selectDraft('hello world', 6, 11);
+      await run(`document.querySelector('.chat-format-toolbar button[aria-label="${label}"]').click()`);
+      assert.equal(await run('document.querySelector(".chat-compose textarea").value'), expected);
+      assert.equal(await run('document.activeElement===document.querySelector(".chat-compose textarea")'), true);
+    }
+    await selectDraft('hello **world**', 8, 13);
+    await run(`document.querySelector('.chat-format-toolbar button[aria-label="Жирный"]').click()`);
+    assert.equal(await run('document.querySelector(".chat-compose textarea").value'), 'hello world', 'format can be removed');
+    await run(`document.execCommand('undo')`);
+    assert.equal(await run('document.querySelector(".chat-compose textarea").value'), 'hello **world**', 'native undo restores formatting');
+    await selectDraft('hello **world**', 8, 13);
+    await run(`document.querySelector('.chat-format-toolbar button[aria-label="Курсив"]').click()`);
+    assert.equal(await run('document.querySelector(".chat-compose textarea").value'), 'hello ***world***', 'italic combines with bold');
+    await selectDraft('хочу форматировать текст удобно', 24, 30);
+    assert.ok(await run(`(()=>{const bar=document.querySelector('.chat-format-toolbar').getBoundingClientRect();const field=document.querySelector('.chat-compose textarea').getBoundingClientRect();return bar.left>=0&&bar.right<=innerWidth&&bar.bottom<=field.top+parseFloat(getComputedStyle(document.querySelector('.chat-compose textarea')).paddingTop)})()`), 'toolbar sits above the selection inside the window');
+    await capture('chat-selection-formatting');
+    await run(`window.changeLanguage('en')`);
+    await until(`!!document.querySelector('.chat-format-toolbar button[aria-label="Bold"]')`, 'English formatting labels');
+    await run(`window.changeLanguage('ru')`);
+    await run(`document.querySelector('.chat-compose textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+    await until('!document.querySelector(".chat-format-toolbar")', 'Escape dismisses formatting');
+    await run(`(()=>{const field=document.querySelector('.chat-compose textarea');field.setSelectionRange(0,field.value.length);document.execCommand('insertText',false,'');})()`);
     assert.equal(await run('document.querySelector("[data-message-row]").dataset.messageRow'), '151');
     assert.ok(await run('window.chatRequests.filter(r=>r.limit).every(r=>r.limit<=101)'), 'bounded initial fetch plus one grouping predecessor');
     assert.equal(await run('!!document.querySelector(".composer-avatar, .chat-send")'), false, 'composer has no avatar or send button');
@@ -44,7 +79,7 @@ app.whenReady().then(async () => {
       const shift = await run(`(()=>{const list=document.querySelector('.chat-stream'),row=list.querySelector('[data-message-row="${bottomAnchor.id}"]');return Math.abs(row.getBoundingClientRect().bottom-list.getBoundingClientRect().bottom-${bottomAnchor.offset})})()`);
       assert.ok(shift <= 1.1, 'split resizing anchors the lower visible message: ' + shift);
     }
-    assert.ok(await run(`(()=>{const row=document.querySelector('[data-message-row="${bottomAnchor.id}"]'),button=row.querySelector('.chat-message-more');return getComputedStyle(row).paddingRight==='0px'&&button.getBoundingClientRect().top<row.getBoundingClientRect().top})()`), 'message actions sit above the row without reserving text width');
+    assert.ok(await run(`(()=>{const row=document.querySelector('[data-message-row="${bottomAnchor.id}"]'),button=row.querySelector('.chat-message-more');return getComputedStyle(row).paddingRight==='8px'&&button.getBoundingClientRect().top<row.getBoundingClientRect().top})()`), 'message actions sit above the row with horizontal hover padding');
     await run(`document.querySelector('[data-message-row="${bottomAnchor.id}"] .chat-message-more').focus({preventScroll:true})`);
     await capture('chat-message-actions-review');
     await run(`document.activeElement.blur();document.querySelector('.chat-stream').scrollTop=document.querySelector('.chat-stream').scrollHeight`);
@@ -210,6 +245,10 @@ app.whenReady().then(async () => {
     assert.equal(await run('Number(document.querySelector("[data-message-row]").dataset.messageRow)'),1,'25-message window can scroll all the way back to the first message');
     await delay(3200);
     assert.equal(await run('Number(document.querySelector("[data-message-row]").dataset.messageRow)'),1,'polling and anchor restoration do not bounce the viewport forward');
+    await run(`document.querySelector('.chat-stream').scrollTop=0;document.querySelector('[data-message-row="1"] .chat-message-more').focus({preventScroll:true})`);
+    await delay(150);
+    assert.ok(await run(`(()=>{const list=document.querySelector('.chat-stream'),row=list.querySelector('[data-message-row="1"]'),button=row.querySelector('.chat-message-more'),r=row.getBoundingClientRect(),b=button.getBoundingClientRect(),s=list.getBoundingClientRect(),avatar=row.querySelector('.chat-avatar').getBoundingClientRect();return b.top>=s.top&&b.right<=s.right&&avatar.left-r.left>=8&&parseFloat(getComputedStyle(row).paddingRight)>=8&&button.contains(document.elementFromPoint(b.left+b.width/2,b.top+1))})()`), 'first message action button is fully visible and hover has padding on both sides');
+    await capture('chat-first-message-actions-review');
     win.webContents.debugger.detach();
     await run(`document.querySelector('[data-message-row="1"] .chat-message-more').click()`);
     await until('!!document.querySelector(".chat-message-menu")','reply to first message');

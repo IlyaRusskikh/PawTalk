@@ -58,10 +58,11 @@ app.whenReady().then(async () => {
 
     assert.equal(await run(`window.playSound('join',{sounds:false})`), undefined);
     assert.equal(await run(`window.playSound('join',{outputVolume:0})`), undefined);
+    for (const event of ['join','leave','message']) assert.equal(await run(`window.playSound('${event}',{notificationVolume:0})`), undefined, 'one notification volume mutes every cue');
     assert.equal(await run('window.audioPlays.length'), 0, 'mute settings do not start an audio source');
     assert.equal(await run(`window.playSound('join',{outputDevice:'pawtalk-nonexistent-output'})`), undefined, 'native sink errors are contained');
     assert.equal(await run('window.audioPlays.length'), 0, 'invalid output never falls back to an unintended device');
-    assert.equal(await run(`window.playSound('join')`), 'room-join.wav');
+    assert.equal(await run(`window.playSound('join',{notificationVolume:0.25,outputVolume:2})`), 'room-join.wav');
     assert.equal(await run(`window.playSound('leave')`), 'room-leave.wav');
     const names = [];
     for (let i = 0; i < 5; i++) {
@@ -72,6 +73,7 @@ app.whenReady().then(async () => {
     assert.equal(new Set(names).size, 5, 'all five purrs play without repetition');
     const plays = await run('window.audioPlays');
     assert.equal(plays.length, 7, 'exactly seven actual native audio sources');
+    assert.equal(plays[0].gain,0.5,'shared notification volume scales the selected output volume');
     assert.ok(plays.every(play => play.channels === 1 && play.sink === '' && play.seconds > .3 && play.seconds < .9), 'native playback uses the expected decoded assets and default sink');
     assert.deepEqual(errors, []);
     // Check packaged file:// asset resolution, independent of Vite's dev server.

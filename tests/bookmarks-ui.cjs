@@ -49,7 +49,7 @@ app.whenReady().then(async () => {
   await win.reload(); await wait();
   assert.deepEqual(await js(`[...document.querySelectorAll('.bookmark-orb')].map(el=>el.getAttribute('aria-label'))`), ['B','C','A'], 'order persists');
   await js(`document.querySelector('[title="Настройки"]').click()`); await wait();
-  await js(`document.querySelector('#settings-tab-general').click()`); await wait();
+  await js(`document.querySelector('#settings-tab-language').click()`); await wait();
   const row = text => `Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.querySelector('strong').textContent===${JSON.stringify(text)}).querySelector('input')`;
   assert.equal(await js(`${row('Запускать свёрнутым в трее')}.disabled`),true);
   await js(`${row('Запускать PawTalk при входе в Windows')}.click()`); await wait();
@@ -61,7 +61,7 @@ app.whenReady().then(async () => {
   await js(`document.querySelector('dialog [aria-label="Закрыть"]').click();localStorage.setItem('pawtalk.bookmarks',JSON.stringify(Array.from({length:30},(_,i)=>({name:'Room '+i,address:'https://room'+i+'.example.com'}))))`);
   await win.reload(); await wait(); await wait();
   const railWidth = await js(`document.querySelector('.rail').getBoundingClientRect().width`);
-  assert.equal(railWidth,84,'overflow does not widen the rail');
+  assert.equal(railWidth,72,'overflow does not widen the compact rail');
   assert.equal(await js(`getComputedStyle(document.querySelector('.bookmark-list')).scrollbarWidth`),'none');
   const hidden=await js(`(()=>{const list=document.querySelector('.bookmark-list'),bottom=list.getBoundingClientRect().bottom;return [...list.querySelectorAll('.bookmark-orb')].filter(button=>button.getBoundingClientRect().bottom>bottom+1).length})()`);
   assert.ok(hidden>0);

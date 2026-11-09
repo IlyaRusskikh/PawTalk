@@ -38,12 +38,12 @@ app.whenReady().then(async () => {
     assert.ok(await run(`!!document.querySelector('.update-indicator')`));
     await run(`document.querySelector('[title="Настройки"]').click()`); await wait(80);
     assert.equal(await run(`!!document.querySelector('.update-indicator')`), false, 'deferred icon hidden by settings');
-    await run(`document.querySelector('#settings-tab-general').click()`); await wait(80);
+    await run(`document.querySelector('#settings-tab-language').click()`); await wait(80);
     await run(`(()=>{const select=document.querySelector('select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'en');select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     await until(`document.querySelector('dialog h2').textContent === 'Settings'`);
     assert.equal(await run(`document.documentElement.lang`), 'en');
     assert.ok(await run(`document.querySelector('.settings-modal').textContent.includes('App language')`));
-    await run(`document.querySelector('#settings-tab-processing').click()`); await wait(80);
+    await run(`document.querySelector('#settings-tab-voice').click()`); await wait(80);
     assert.ok(await run(`document.querySelector('.settings-modal').textContent.includes('Noise suppression')`));
     await screenshot('settings-en');
     await run(`document.querySelector('dialog [aria-label="Close"]').click()`);
@@ -74,7 +74,7 @@ app.whenReady().then(async () => {
     assert.equal(await run(`document.querySelector('.update-actions .primary').disabled`), true);
     await click('Later');
     await run(`document.querySelector('[title="Settings"]').click()`); await wait(80);
-    await run(`document.querySelector('#settings-tab-general').click()`); await wait(80);
+    await run(`document.querySelector('#settings-tab-language').click()`); await wait(80);
     await run(`(()=>{const select=document.querySelector('select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'ru');select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     await until(`document.documentElement.lang === 'ru'`);
     await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`); await wait(80);

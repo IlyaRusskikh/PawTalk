@@ -2,6 +2,7 @@ import { useId, useRef, useState, type ReactNode } from 'react';
 import { Icon, Slider } from './Controls';
 import { t } from './i18n';
 import type { Settings } from './settings';
+import { audioDeviceLabel } from './audioDeviceLabel';
 
 export function AudioQuickMenu({ kind, settings, update, devices, onOpen, children }: {
   kind: 'input' | 'output'; settings: Settings; devices: MediaDeviceInfo[];
@@ -21,12 +22,12 @@ export function AudioQuickMenu({ kind, settings, update, devices, onOpen, childr
   const label = input ? t("Устройство ввода") : t("Устройство вывода");
   const icon = input ? 'mic' : 'headphones';
   const matchingDevices = devices.filter(device => device.kind === (input ? 'audioinput' : 'audiooutput'));
-  const defaultName = matchingDevices.find(device => device.deviceId === 'default')?.label.replace(/^(default|по умолчанию)\s*[-–—:]\s*/i, '');
+  const defaultName = audioDeviceLabel(matchingDevices.find(device => device.deviceId === 'default')?.label.replace(/^(default|по умолчанию)\s*[-–—:]\s*/i, '') ?? '');
   const choices = [
     { id: 'default', name: t("Системное устройство"), detail: defaultName },
     ...matchingDevices.filter(device => device.deviceId && !['default', 'communications'].includes(device.deviceId)).map((device, index) => ({
       id: device.deviceId,
-      name: device.label || (input ? t("Микрофон {0}", index + 1) : t("Динамик {0}", index + 1)),
+      name: audioDeviceLabel(device.label) || (input ? t("Микрофон {0}", index + 1) : t("Динамик {0}", index + 1)),
       detail: undefined,
     })),
   ];

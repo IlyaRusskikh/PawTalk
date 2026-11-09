@@ -8,7 +8,7 @@ import { AudioQuickMenu } from './AudioQuickMenu';
 import { BookmarkRail, type Bookmark, type RoomPreview } from './BookmarkRail';
 import { presencePoll } from '../shared/presence-poll.mjs';
 import { HomeScreen } from './HomeScreen';
-import { SettingsShell, type SettingsSection } from './SettingsShell';
+import { SettingsShell, settingsPage, type SettingsSection } from './SettingsShell';
 import { AppearanceSettings } from './AppearanceSettings';
 import { ChatSettings, loadChatWindow } from './ChatSettings';
 import { UpdateSettings } from './UpdateSettings';
@@ -40,6 +40,7 @@ export function App() {
   const keys: [number, string][] = [[5, t("Боковая кнопка мыши 4")], [6, t("Боковая кнопка мыши 5")], [32, t("Пробел")], [162, t("Левый Ctrl")], [163, t("Правый Ctrl")], [164, t("Левый Alt")], [165, t("Правый Alt")], [160, t("Левый Shift")], [161, t("Правый Shift")], [20, 'Caps Lock'], ...Array.from({ length: 26 }, (_, i) => [65 + i, String.fromCharCode(65 + i)] as [number, string]), ...Array.from({ length: 12 }, (_, i) => [112 + i, `F${i + 1}`] as [number, string])];
   const [settings, setSettings] = useState(loadSettings);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('profile');
+  const settingsPageId = settingsPage(settingsSection);
   const [theme, setTheme] = useState(loadTheme);
   const [chatWindow, setChatWindow] = useState(loadChatWindow);
   const [activeUnread, setActiveUnread] = useState(0);
@@ -82,6 +83,7 @@ export function App() {
   const [hostBusy, setHostBusy] = useState(false);
   const [settingsError, setSettingsError] = useState('');
   const [connectionError, setConnectionError] = useState('');
+  const [connectionStage, setConnectionStage] = useState<'server' | 'voice'>('server');
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   const [snapshot, setSnapshot] = useState(initial);
   const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
@@ -243,7 +245,7 @@ export function App() {
     }).catch(() => setKeyError(t("Не удалось настроить горячие клавиши")));
   }, [settings.pttKey, settings.muteKey, settings.deafenKey]);
   useEffect(() => {
-    if (modal !== 'settings' || !['voice', 'input', 'processing'].includes(settingsSection) || busy) return;
+    if (modal !== 'settings' || settingsPageId !== 'audio' || busy) return;
     let cancelled = false;
     const mic = new Microphone(currentSettings.current); mic.muted = false; testMic.current = mic;
     mic.onMeter = (db, speaking, threshold) => { if (!cancelled) { setTestDb(db); setTestSpeaking(speaking); setTestThreshold(threshold); } };
@@ -255,7 +257,7 @@ export function App() {
       if (!cancelled) { setPreviewReady(true); void refreshDevices(); }
     }).catch(error => { if (!cancelled) { mic.stop(); setSettingsError(t("Не удалось запустить микрофон: {0}", error.message)); } });
     return () => { cancelled = true; mic.stop(); if (testMic.current === mic) testMic.current = undefined; setTesting(false); setPreviewReady(false); setTestDb(-100); setTestSpeaking(false); };
-  }, [modal, settingsSection, active, busy]);
+  }, [modal, settingsPageId, active, busy]);
   useEffect(() => {
     const mic = testMic.current;
     if (mic) void mic.configure(settings).catch(error => { if (testMic.current === mic) setSettingsError(t("Не удалось применить настройки микрофона: {0}", error.message)); });
@@ -264,7 +266,7 @@ export function App() {
     if (active && target.address.split('#')[0] === currentTarget.current?.address.split('#')[0]) { setPage('room'); setModal(null); return; }
     if (!window.desktop) { setError(t("Подключение доступно в десктопном приложении. Эта страница — предпросмотр интерфейса.")); return; }
     if (settings.inputMode === 'ptt' && !native) { setError(t("Для Push-to-Talk нужно собрать нативный модуль Windows.")); return; }
-    const id = ++attempt.current; setBusy(true); setError(''); setConnectionError(''); stopPreview();
+    const id = ++attempt.current; setBusy(true); setConnectionStage('server'); setError(''); setConnectionError(''); stopPreview();
     let unusedChat: string | undefined;
     try {
       const result = await window.desktop.connect(target);
@@ -276,6 +278,7 @@ export function App() {
       setChatRoom(null);
       await controller.current!.disconnect();
       if (id !== attempt.current) return;
+      setConnectionStage('voice');
       await controller.current!.connect(result.url, result.token, { required: result.e2eeRequired, key: result.e2eeKey });
       if (id !== attempt.current) return;
       joinedOwnHost.current = result.ownHost ?? hosting;
@@ -376,12 +379,16 @@ export function App() {
           </div>
         </div>
         <div className="form-fields"><label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div><p>{t("Никнейм обновляется и в открытой комнате.")}</p></div></section>}
-      {settingsSection === 'general' && <section className="settings-card"><h1>{t("Приложение")}</h1><div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setSettingsError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label></div>{autoStart !== null && <Toggle label={t("Запускать PawTalk при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</section>}
+      {settingsSection === 'language' && <section className="settings-card"><h1>{t("Язык")}</h1><div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setSettingsError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label></div></section>}
+      {settingsPageId === 'system' && <section id="settings-anchor-general" className="settings-card settings-section"><h1>{t("Основные")}</h1>{autoStart !== null && <Toggle label={t("Запускать PawTalk при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</section>}
       {settingsSection === 'appearance' && <AppearanceSettings theme={theme} onChange={setTheme}/>}
       {settingsSection === 'chat' && <ChatSettings value={chatWindow} onChange={setChatWindow}/>}
-      {settingsSection === 'updates' && <UpdateSettings/>}
-      {['voice', 'input', 'processing', 'shortcuts'].includes(settingsSection) && <VoiceSettings section={settingsSection as 'voice' | 'input' | 'processing' | 'shortcuts'} settings={settings} update={update} devices={devices} keys={keys} db={db} threshold={threshold} speaking={active && !testing ? snapshot.speaking : testSpeaking} active={active} busy={busy} testing={testing} testBusy={testBusy} ready={previewReady} native={native} keyError={keyError} onTest={() => void toggleTest()} onReset={() => setSettings(current => resetSettingsTab(current, settingsSection as 'voice' | 'input' | 'processing' | 'shortcuts'))}/>}</SettingsShell></Modal>}
+
+      {['audio', 'system'].includes(settingsPageId) && <VoiceSettings section={settingsPageId === 'audio' ? 'audio' : 'shortcuts'} settings={settings} update={update} devices={devices} keys={keys} db={db} threshold={threshold} speaking={active && !testing ? snapshot.speaking : testSpeaking} active={active} busy={busy} testing={testing} testBusy={testBusy} ready={previewReady} native={native} keyError={keyError} onTest={() => void toggleTest()}/>}
+      {settingsPageId === 'system' && <section id="settings-anchor-updates" className="settings-section"><UpdateSettings/></section>}
+      {['audio', 'system'].includes(settingsPageId) && <footer className="settings-page-footer"><button type="button" className="quiet settings-reset" onClick={() => setSettings(current => settingsPageId === 'audio' ? resetSettingsTab(resetSettingsTab(current, 'voice'), 'sounds') : resetSettingsTab(current, 'shortcuts'))}>{t("Сбросить настройки вкладки")}</button></footer>}</SettingsShell></Modal>}
       {modal === 'settings' && avatarFile && <AvatarEditor file={avatarFile} onClose={() => setAvatarFile(undefined)} onSave={saveAvatar}/>}
+      {busy && <Modal title={t("Подключение к комнате")} className="connection-loading" onClose={() => {}}><div className="connection-progress" role="status" aria-live="polite" aria-busy="true"><span className="connection-spinner" aria-hidden="true"/><strong>{connectionStage === 'server' ? t("Связываемся с сервером…") : t("Подключаем голос и чат…")}</strong><p>{t("Это может занять несколько секунд.")}</p><progress aria-label={t("Подключение к комнате")}/></div></Modal>}
     </div>
     </main>
   </div>;

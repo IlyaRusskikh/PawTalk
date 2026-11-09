@@ -66,7 +66,8 @@ app.whenReady().then(async () => {
   assert.equal(await run(`document.querySelector('dialog h2').textContent`), 'Настройки');
   assert.equal(await run(`document.querySelector('dialog').textContent.includes('Test connection stopped before media')`), false, 'connection errors do not appear inside settings');
   assert.equal(await run(`document.querySelector('.connection-failure strong').textContent`), 'Подключение не удалось');
-  await run(`document.querySelector('#settings-tab-processing').click()`); await wait();
+  await run(`document.querySelector('#settings-tab-voice').click()`); await wait();
+  await run(`document.querySelector('.settings-advanced').open=true`);
   assert.equal(await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).querySelector('input').checked`),false);
   assert.equal(await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.querySelector('strong').textContent==='Эхоподавление').querySelector('input').checked`),true);
   await run(`Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.textContent.includes('Подавлять голос собеседника рядом')).querySelector('input').click()`);await wait();

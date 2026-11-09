@@ -345,7 +345,7 @@ app.on('browser-window-created',(_e,win)=>{
    await js('window.desktop.stopHost()');await delay(200);
    assert.equal(await js('document.querySelector("h1").textContent'),'VPS QA','stopping own host keeps remote voice session');
    await js(`document.querySelector('.rail-settings').click()`);
-   await js(`document.querySelector('#settings-tab-general').click()`);await delay(100);
+   await js(`document.querySelector('#settings-tab-language').click()`);await delay(100);
    await js(`(()=>{
      const select=document.querySelector('#settings-panel select');
      select.value='en'; select.dispatchEvent(new Event('change',{bubbles:true}));

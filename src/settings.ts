@@ -3,18 +3,19 @@ export interface Settings {
   inputMode: 'voice' | 'ptt'; autoSensitivity: boolean; threshold: number; pttKey: number; pttReleaseMs: number;
   echoCancellation: boolean; nearbyVoiceSuppression: boolean; noiseMode: 'off' | 'standard' | 'rnnoise'; autoGainControl: boolean;
   muteKey: string; deafenKey: string; duckOwn: boolean; duckOthers: boolean; duckAmount: number; sounds: boolean;
+  notificationVolume: number;
 }
 export const defaults: Settings = {
   inputDevice: 'default', outputDevice: 'default', inputGain: 1, outputVolume: 1,
   inputMode: 'voice', autoSensitivity: true, threshold: -48, pttKey: 5, pttReleaseMs: 160,
   echoCancellation: true, nearbyVoiceSuppression: false, noiseMode: 'rnnoise', autoGainControl: true,
   muteKey: 'Control+Shift+M', deafenKey: 'Control+Shift+D', duckOwn: false, duckOthers: false, duckAmount: 50, sounds: true,
+  notificationVolume: 1,
 };
 export const settingsTabs = {
-  voice: ['inputDevice', 'outputDevice', 'inputGain', 'outputVolume'],
-  input: ['inputMode', 'autoSensitivity', 'threshold', 'pttKey', 'pttReleaseMs'],
-  processing: ['noiseMode', 'echoCancellation', 'autoGainControl', 'nearbyVoiceSuppression'],
-  shortcuts: ['duckOwn', 'duckOthers', 'duckAmount', 'muteKey', 'deafenKey', 'sounds'],
+  voice: ['inputDevice', 'outputDevice', 'inputGain', 'outputVolume', 'inputMode', 'autoSensitivity', 'threshold', 'pttKey', 'pttReleaseMs', 'noiseMode', 'echoCancellation', 'autoGainControl', 'nearbyVoiceSuppression', 'duckOwn', 'duckOthers', 'duckAmount'],
+  sounds: ['sounds', 'notificationVolume'],
+  shortcuts: ['muteKey', 'deafenKey'],
 } as const satisfies Record<string, readonly (keyof Settings)[]>;
 export function resetSettingsTab(settings: Settings, tab: keyof typeof settingsTabs): Settings {
   return { ...settings, ...Object.fromEntries(settingsTabs[tab].map(key => [key, defaults[key]])) };
@@ -29,7 +30,7 @@ export function loadSettings(): Settings {
     }
     if (!['ptt', 'voice'].includes(result.inputMode)) result.inputMode = 'voice';
     if (!['off', 'standard', 'rnnoise'].includes(result.noiseMode)) result.noiseMode = 'rnnoise';
-    for (const [key, min, max] of [['inputGain', 0, 2], ['outputVolume', 0, 2], ['threshold', -80, -10], ['pttKey', 1, 254], ['pttReleaseMs', 0, 1000], ['duckAmount', 0, 100]] as const) {
+    for (const [key, min, max] of [['inputGain', 0, 2], ['outputVolume', 0, 2], ['notificationVolume', 0, 1], ['threshold', -80, -10], ['pttKey', 1, 254], ['pttReleaseMs', 0, 1000], ['duckAmount', 0, 100]] as const) {
       result[key] = Number.isFinite(result[key]) ? Math.min(max, Math.max(min, result[key])) : defaults[key];
     }
     result.pttKey = Math.round(result.pttKey);

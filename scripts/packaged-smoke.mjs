@@ -67,7 +67,7 @@ try {
     await new Promise(resolve=>setTimeout(resolve,100));
   }
   assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Проверка микрофона'&&!b.disabled)`),true,'packaged RNNoise model loads and microphone starts');
-  await evaluate(`document.querySelector('#settings-tab-processing').click()`);
+  await evaluate(`document.querySelector('#settings-tab-voice').click()`);
   await new Promise(resolve=>setTimeout(resolve,100));
   assert.equal(await evaluate(`document.querySelector('[aria-label="Режим шумоподавления"]').value`),'rnnoise');
   await assert.rejects(evaluate(`window.desktop.connect({address:'http://127.0.0.1:8080',nickname:'test',password:'test'})`));

@@ -18,6 +18,7 @@
     "test": "node --test tests/*.test.mjs",
     "smoke": "electron scripts/smoke.cjs",
     "test:chat-ui": "node scripts/chat-ui-smoke.mjs",
+    "test:chat-features": "node scripts/chat-features-smoke.mjs",
     "test:external-links": "node scripts/external-links-smoke.mjs",
     "test:chat-main": "node scripts/chat-main-smoke.mjs",
     "test:sounds": "node scripts/sounds-smoke.mjs",
