@@ -6,7 +6,7 @@
 
 PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
 
-**[Download PawTalk 0.7.1 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.7.1/PawTalk.Setup.0.7.1.exe)** · [Get started](#get-started) · [Linux server (Russian)](docs/SERVER.md) · [Persistent server on Windows (Russian)](docs/SERVER-WINDOWS.md)
+**[Download PawTalk 0.8.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.8.0/PawTalk.Setup.0.8.0.exe)** · [Get started](#get-started) · [Linux server (Russian)](docs/SERVER.md) · [Persistent server on Windows (Russian)](docs/SERVER-WINDOWS.md)
 
 ![PawTalk room with three participants, call controls and encrypted text chat](website/assets/room-chat-en.png)
 
@@ -50,7 +50,7 @@ PawTalk takes inspiration from **Discord** for easy-to-join voice rooms and indi
 
 ## Get started
 
-1. **Install PawTalk.** [Download the installer](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.7.1/PawTalk.Setup.0.7.1.exe) on each Windows PC. Choose English or Russian.
+1. **Install PawTalk.** [Download the installer](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.8.0/PawTalk.Setup.0.8.0.exe) on each Windows PC. Choose English or Russian.
 2. **Pick a nickname.** Open **Settings → About me** and enter a nickname. You can test your microphone under **Voice**.
 3. **Get your friends together.** Select **Create a room**, give the room a name, and choose a password of at least 8 characters. Share the full invitation privately. Your friend opens **Join a room** and pastes the link.
 
@@ -127,9 +127,9 @@ A [field-by-field server .env guide](docs/SERVER.md#разбор-env-что-и-�
 
 ## Project status
 
-**Current public preview: [PawTalk 0.7.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.7.1)** — Windows 10/11 x64 client and self-hosted Linux amd64/arm64 server, including a Linux VM on an always-on Windows PC. This is not a stable release.
+**Current public preview: [PawTalk 0.8.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.8.0)** — Windows 10/11 x64 client and self-hosted Linux amd64/arm64 server, including a Linux VM on an always-on Windows PC. This is not a stable release.
 
-### Available in 0.7.1
+### Available in 0.8.0
 
 - Voice rooms with invitations, nickname-only entry, Push-to-Talk, per-user volume, RNNoise noise suppression and audio device selection.
 - Text chat with replies, Markdown, editing/deleting your own messages on updated servers, typing indicators, room previews, unread counts and static PNG/JPEG/WebP attachments up to 2 MiB.

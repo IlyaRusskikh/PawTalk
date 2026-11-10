@@ -1,7 +1,7 @@
 # Application language and updates / Язык и обновления
 
-PawTalk 0.7.1 is the current public preview. For update fixes in previous releases, see the [changelog](../CHANGELOG.md).
-Актуальный предварительный выпуск — PawTalk 0.7.1. Исправления обновлятора в прошлых выпусках описаны в [CHANGELOG](../CHANGELOG.md).
+PawTalk 0.8.0 is the current public preview. For update fixes in previous releases, see the [changelog](../CHANGELOG.md).
+Актуальный предварительный выпуск — PawTalk 0.8.0. Исправления обновлятора в прошлых выпусках описаны в [CHANGELOG](../CHANGELOG.md).
 
 ## Русский
 

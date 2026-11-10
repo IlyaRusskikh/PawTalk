@@ -1,8 +1,8 @@
 # Разработка PawTalk / Local development
 
-Эта инструкция описывает текущий PawTalk 0.7.1. Для постоянного сервера на VPS используйте **только Docker Swarm** и [SERVER.md](SERVER.md), а не приведённый ниже локальный `docker run`.
+Эта инструкция описывает текущий PawTalk 0.8.0. Для постоянного сервера на VPS используйте **только Docker Swarm** и [SERVER.md](SERVER.md), а не приведённый ниже локальный `docker run`.
 
-This guide covers local development of PawTalk 0.7.1. Production VPS deployment uses **Docker Swarm only**; see [SERVER.md](SERVER.md).
+This guide covers local development of PawTalk 0.8.0. Production VPS deployment uses **Docker Swarm only**; see [SERVER.md](SERVER.md).
 
 ## Что нужно / Requirements
 

@@ -1,8 +1,8 @@
 # PawTalk — актуальная документация / Current documentation
 
-Документация ниже описывает **текущий предварительный выпуск 0.7.1**. Историю изменений между версиями смотрите в [CHANGELOG](../CHANGELOG.md), а не в руководствах по установке.
+Документация ниже описывает **текущий предварительный выпуск 0.8.0**. Историю изменений между версиями смотрите в [CHANGELOG](../CHANGELOG.md), а не в руководствах по установке.
 
-The guides below describe the **current 0.7.1 public preview**. For older releases, consult the [changelog](../CHANGELOG.md), not the installation guides.
+The guides below describe the **current 0.8.0 public preview**. For older releases, consult the [changelog](../CHANGELOG.md), not the installation guides.
 
 ## Пользователям / For users
 
