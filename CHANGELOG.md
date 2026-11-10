@@ -1,5 +1,12 @@
 # Changelog / История изменений
 
+## Unreleased — Deployment and documentation cleanup / Развёртывание и документация
+
+- Retire unsupported Docker Compose / Caddy developer and legacy LAN stacks. Persistent Linux VPS deployments continue to use **Docker Swarm only**; the Windows client already provides temporary LAN rooms. / Удалены неподдерживаемые Compose/Caddy-сценарии разработки и старой LAN-установки. Постоянный VPS по-прежнему использует **только Docker Swarm**; временные LAN-комнаты запускаются непосредственно из Windows-клиента.
+- Add a single-container local developer server via `npm run dev:server` (`-- --build` for current sources) and run integration containers through `docker run` instead of Compose. CI validates the Swarm stack. / Добавлена локальная команда `npm run dev:server` (`-- --build` для текущих исходников), интеграционные контейнеры запускаются через `docker run`, CI проверяет стек Swarm.
+- Reorganize current documentation into an index, architecture and development guides; preserve previous released features and deployment changes in this changelog. / Актуальная документация собрана в индекс, описание архитектуры и руководство разработчика. История старых релизов и способов развёртывания сохранена в этом файле.
+
+
 ## 0.7.1 — 2026-11-09 — Update discovery / Обнаружение обновлений
 
 - Fix update discovery when GitHub returns the repository name as PawTalk instead of pawtalk. Compare only owner/repository names without case sensitivity; keep strict host, protocol, credentials and release-tag checks. / Исправлено обнаружение обновлений при разном регистре имени репозитория GitHub. Только владелец и репозиторий сравниваются без учёта регистра; проверки хоста, протокола, реквизитов и тега сохраняются.
