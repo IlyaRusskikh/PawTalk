@@ -249,7 +249,7 @@
   "Для комнаты нужен ключ E2EE из приглашения.": "This room requires an E2EE key from the invitation.",
   "Приглашение требует E2EE, но сервер не подтвердил защищённый режим.": "The invitation requires E2EE, but the server did not confirm encryption.",
   "Неверный адрес голосового сервера": "Invalid voice server address",
-  "Для локального запуска выполните: npm run dev:server": "For local development, run: docker compose -f compose.dev.yaml up -d",
+  "Для локального запуска выполните: npm run dev:server": "For local development, run: npm run dev:server",
   "Проверьте запуск LiveKit и HTTPS-прокси на сервере.": "Check LiveKit and the HTTPS proxy on the server.",
   "Пароль принят, но голосовой сервер {0} недоступен. {1}": "Password accepted, but voice server {0} is unavailable. {1}",
   "Неверная клавиша PTT": "Invalid PTT key",
