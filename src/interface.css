@@ -334,3 +334,10 @@ button:hover:not(:disabled) { filter:none; }
 .chat-reply-text { min-width:0; }
 .chat-reply-text .chat-markdown-line, .chat-reply-text .chat-markdown-heading, .chat-reply-text .chat-markdown-quote, .chat-reply-text .chat-markdown-item, .chat-reply-text .chat-code-block { display:inline; margin:0; font-size:inherit; }
 .chat-reply-text .chat-markdown-line + .chat-markdown-line::before { content:' '; }
+.temporary-room { position:relative; flex:none; width:44px; height:44px; }
+.temporary-room-pin { position:absolute; left:-7px; top:-6px; display:grid; place-items:center; width:22px; height:22px; padding:0; margin:0; border:2px solid var(--app-bg); border-radius:50%; background:var(--raised); color:var(--muted); }
+.temporary-room-pin span { display:grid; place-items:center; }
+.temporary-room-pin .temporary-room-star { display:none; }
+.temporary-room-pin:hover, .temporary-room-pin:focus { color:var(--accent); }
+.temporary-room-pin:hover .temporary-room-timer, .temporary-room-pin:focus .temporary-room-timer { display:none; }
+.temporary-room-pin:hover .temporary-room-star, .temporary-room-pin:focus .temporary-room-star { display:grid; }

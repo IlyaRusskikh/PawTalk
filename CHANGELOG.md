@@ -2,6 +2,8 @@
 
 ## Unreleased — Deployment and documentation cleanup / Развёртывание и документация
 
+- Show the current unsaved room in the sidebar with a stopwatch badge that becomes a bookmark action on hover or focus. Keep temporary rooms out of saved-room drag ordering and test save/leave behavior in both languages and motion modes. / Текущая несохранённая комната показывается в сайдбаре со значком секундомера и сохранением в закладки при наведении или фокусе. Временная комната не участвует в перетаскивании сохранённых; добавлены проверки сохранения и выхода на двух языках и в обоих режимах анимации.
+
 - Add local two-minute WebRTC diagnostics: ping-only hover, connection summary with receiver-reported outgoing audio loss, Transport/Outbound charts and session/reconnect-aware history. Cover Russian/English UI, reduced motion and real Electron/WebRTC telemetry. / Добавлена локальная диагностика WebRTC за две минуты: пинг при наведении, сводка с потерями исходящих аудиопакетов по отчётам принимающей стороны, графики «Передача данных»/«Исходящие» и история с учётом переподключения и смены комнаты. Добавлены проверки русского/английского интерфейса, reduced motion и настоящей телеметрии Electron/WebRTC.
 
 - Preserve Markdown formatting and hidden spoilers in reply drafts and quotes without nesting links or buttons inside reply navigation. Treat missing packet-loss measurements as unavailable instead of zero, and make the self-host TLS regression change the actual certificate fingerprint. / В черновиках ответов и цитатах сохраняются Markdown и скрытые спойлеры без вложенных ссылок и кнопок. Отсутствие измерений потерь пакетов больше не подменяется нулём; регрессионная проверка TLS встроенной комнаты меняет сам отпечаток сертификата.

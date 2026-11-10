@@ -16,6 +16,35 @@ app.whenReady().then(async () => {
     await win.loadURL(process.env.PAWTALK_UI_TEST_URL + '/tests/chat-ui.html');
     await run(`window.sentAnimations=[];const originalAnimate=Element.prototype.animate;Element.prototype.animate=function(frames,options){if(this.matches('.chat-message-body p'))window.sentAnimations.push(options?.duration);return originalAnimate.call(this,frames,options)};undefined`);
     await until('window.ready && document.querySelectorAll(".chat-message").length===100', 'initial 100 messages');
+    for (const language of ['ru','en']) for (const reduced of [false,true]) {
+      await run(`window.changeLanguage('${language}'); window.setTemporary(true)`);
+      if (!win.webContents.debugger.isAttached()) win.webContents.debugger.attach('1.3');
+      await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:reduced?'reduce':'no-preference'}]});
+      await until('!!document.querySelector(".temporary-room-pin")', 'temporary room appears');
+      assert.equal(await run('document.querySelector(".temporary-room-pin").title'), language==='ru'?'Временная комната — добавить в закладки':'Temporary room — add to bookmarks');
+      await run('document.querySelector(".temporary-orb").click()');
+      assert.equal(await run('window.openedRoom'), 'https://temporary.invalid');
+      assert.equal(await run('getComputedStyle(document.querySelector(".temporary-room-star")).display'), 'none');
+      const pinPoint = await run('(()=>{const r=document.querySelector(".temporary-room-pin").getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})()');
+      win.webContents.sendInputEvent({type:'mouseMove',...pinPoint});
+      await delay(100);
+      assert.equal(await run('getComputedStyle(document.querySelector(".temporary-room-star")).display'), 'grid');
+      assert.ok(await run('(()=>{const pin=document.querySelector(".temporary-room-pin"),r=pin.getBoundingClientRect();return pin.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))})()'), 'badge is visible and clickable inside the scroll rail');
+      if (!reduced) await capture('temporary-room-'+language);
+      win.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,...pinPoint});
+      win.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,...pinPoint});
+      win.webContents.sendInputEvent({type:'mouseMove',x:400,y:400});
+      await until('!document.querySelector(".temporary-room")', 'saving removes temporary badge');
+      assert.equal(await run('[...document.querySelectorAll(".bookmark-orb")].filter(b=>b.getAttribute("aria-label")==="Temporary").length'), 1, 'saving leaves one room');
+      await run('window.setTemporary(false)');
+      assert.equal(await run('[...document.querySelectorAll(".bookmark-orb")].filter(b=>b.getAttribute("aria-label")==="Temporary").length'), 1, 'saved room survives leaving');
+      await run('window.resetTemporary(); window.setTemporary(true)');
+      await until('!!document.querySelector(".temporary-orb")', 'unsaved room returns');
+      await run('window.setTemporary(false)');
+      await until('!document.querySelector(".temporary-orb")', 'unsaved room disappears on leaving');
+    }
+    await run('window.resetTemporary(); window.changeLanguage("ru")');
+    win.webContents.debugger.detach();
     assert.equal(await run('!!document.querySelector(".chat-format-help, .chat-format-toolbar")'), false);
     const selectDraft = async (text, start, end) => {
       await run(`(()=>{const field=document.querySelector('.chat-compose textarea');field.focus();Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(field,${JSON.stringify(text)});field.dispatchEvent(new Event('input',{bubbles:true}));field.setSelectionRange(${start},${end});document.dispatchEvent(new Event('selectionchange'));})()`);
