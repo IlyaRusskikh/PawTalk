@@ -5,6 +5,8 @@ import { mediaKeyBytes } from '../shared/encryption.mjs';
 import { Microphone } from './audio';
 import { playSound } from './sounds';
 import type { Settings } from './settings';
+import { ConnectionHistory } from '../shared/connection-history.mjs';
+import { RtcDiagnosticsMeter } from '../shared/rtc-diagnostics.mjs';
 import { RttMeter } from '../shared/rtt.mjs';
 import { PacketLossMeter } from '../shared/packet-loss.mjs';
 import { avatarPayloadLimit, validAvatar } from './avatarImage';
@@ -17,7 +19,7 @@ const nicknameTopic = 'pawtalk.nickname.v1';
 const profileRequestTopic = 'pawtalk.profile-request.v1';
 const chatRefreshTopic = 'pawtalk.chat-refresh.v1';
 
-export interface Person { id: string; name: string; avatar?: string; speaking: boolean; muted: boolean; deafened?: boolean; local: boolean; rtt?: number; packetLoss?: number; }
+export interface Person { id: string; name: string; avatar?: string; speaking: boolean; muted: boolean; deafened?: boolean; local: boolean; rtt?: number; packetLoss?: number; diagnostics?: ConnectionHistory; }
 export interface Snapshot { state: string; people: Person[]; db: number; speaking: boolean; threshold?: number; rtt?: number; packetLoss?: number; e2ee?: boolean; }
 export class VoiceSession {
   room?: Room; mic?: Microphone; localTrack?: LocalAudioTrack;
@@ -36,6 +38,9 @@ export class VoiceSession {
   private queue = Promise.resolve(); private generation = 0; private stopped = false;
   private lastDuck = false; private rtt?: number; private packetLoss?: number;
   private rttMeter = new RttMeter();
+  readonly diagnostics = new ConnectionHistory();
+  private diagnosticsMeter = new RtcDiagnosticsMeter();
+  private statsEpoch = 0;
   private peerNetwork = new Map<string, { rtt?: number; packetLoss?: number; received: number }>();
   private peerAvatars = new Map<string, string>();
   private peerNicknames = new Map<string, string>();
@@ -72,6 +77,7 @@ export class VoiceSession {
         deafened: local ? this.deafened : this.peerDeafened.get(p.identity) === true,
         rtt: local ? this.rtt : fresh?.rtt,
         packetLoss: local ? this.packetLoss : fresh?.packetLoss,
+        diagnostics: local ? this.diagnostics : undefined,
       };
     }) : [];
     this.onUpdate({ state: this.state, people, db: this.db, speaking: this.speaking, threshold: this.threshold, rtt: this.rtt, packetLoss: this.packetLoss, e2ee: this.encrypted });
@@ -109,7 +115,7 @@ export class VoiceSession {
       publishDefaults: { audioPreset: AudioPresets.speech, dtx: true, red: true, stopMicTrackOnMute: false },
       ...(keyProvider && worker ? { encryption: { keyProvider, worker } } : {}),
     });
-    this.room = room; this.state = 'connecting'; this.emit();
+    this.room = room; this.state = 'connecting'; this.diagnostics.reset('connecting'); this.emit();
     const failEncryption = (message: string) => {
       if (generation !== this.generation || this.stopped) return;
       this.onError(message); void this.disconnect();
@@ -193,7 +199,7 @@ export class VoiceSession {
     room.on(RoomEvent.ParticipantDisconnected, () => { this.playRoomCue(false); this.emit(); });
     room.on(RoomEvent.TrackMuted, () => this.emit()); room.on(RoomEvent.TrackUnmuted, () => this.emit());
     room.on(RoomEvent.AudioPlaybackStatusChanged, () => { if (!room.canPlaybackAudio) this.onError(t("Не удалось включить воспроизведение. Переподключитесь к комнате.")); });
-    room.on(RoomEvent.ConnectionStateChanged, state => { this.state = state; if (state === 'connected') { this.publishAudioState(); this.syncProfile(); } else { this.rttMeter.reset(); this.lossMeter.reset(); this.packetLoss = undefined; this.peerNetwork.clear(); this.peerDeafened.clear(); } this.syncGate(); this.emit(); });
+    room.on(RoomEvent.ConnectionStateChanged, state => { this.state = state; ++this.statsEpoch; this.diagnostics.setState(state); if (state === 'connected') { this.publishAudioState(); this.syncProfile(); } else { this.rttMeter.reset(); this.lossMeter.reset(); this.diagnosticsMeter.reset(); this.packetLoss = undefined; this.peerNetwork.clear(); this.peerDeafened.clear(); } this.syncGate(); this.emit(); });
     room.on(RoomEvent.Disconnected, () => { if (!this.stopped) { this.onError(t("Соединение прервано. Подключитесь снова.")); void this.disconnect(); } });
     room.on(RoomEvent.MediaDevicesError, error => this.onError(t("Ошибка аудиоустройства: {0}", error.message)));
     try {
@@ -322,11 +328,12 @@ export class VoiceSession {
     if (this.collecting || this.state !== 'connected') return;
     this.collecting = true;
     const generation = this.generation;
+    const epoch = this.statsEpoch;
     try {
       const report = await this.localTrack?.getRTCStatsReport();
       let rttStat: any;
       report?.forEach(stat => { if (stat.type === 'remote-inbound-rtp' && stat.kind === 'audio') rttStat = stat; });
-      if (generation !== this.generation) return;
+      if (generation !== this.generation || epoch !== this.statsEpoch || this.state !== 'connected') return;
       const rtt = this.rttMeter.sample(rttStat);
       const streams: { id: string; received: number; lost: number }[] = [];
       for (const participant of this.room?.remoteParticipants.values() || []) {
@@ -334,14 +341,21 @@ export class VoiceSession {
         const inbound = await track?.getRTCStatsReport();
         inbound?.forEach(stat => { if (stat.type === 'inbound-rtp' && stat.kind === 'audio') streams.push({ id: participant.identity + ':' + stat.id, received: stat.packetsReceived, lost: stat.packetsLost }); });
       }
-      if (generation !== this.generation || this.state !== 'connected') return;
+      if (generation !== this.generation || epoch !== this.statsEpoch || this.state !== 'connected') return;
       this.rtt = rtt;
       const loss = this.lossMeter.sample(streams);
       this.packetLoss = streams.length ? loss : undefined;
+      this.diagnostics.sample({ rtt, rttAt: this.rttMeter.measuredAt, loss: this.packetLoss, details: this.diagnosticsMeter.sample(report) });
       const telemetry = { rtt: rtt ?? null, loss: this.packetLoss ?? null };
       void this.room?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(telemetry)), { reliable: false, topic: 'pawtalk.rtt.v1' }).catch(() => {});
       this.emit();
-    } catch { this.emit(); /* Existing measurements still expire if polling fails. */ }
+    } catch {
+      if (generation === this.generation && epoch === this.statsEpoch && this.state === 'connected') {
+        this.packetLoss = undefined;
+        this.diagnostics.sample();
+        this.emit();
+      }
+    }
     finally { this.collecting = false; }
   }
   async disconnect() {
@@ -356,6 +370,7 @@ export class VoiceSession {
     const playback = this.playback; this.playback = undefined;
     const worker = this.encryptionWorker; this.encryptionWorker = undefined; this.encrypted = false;
     this.peopleVolume.clear(); this.speakers.clear(); this.speaking = false; this.db = -100; this.ptt = false; this.state = 'disconnected';
+    ++this.statsEpoch; this.diagnostics.reset(); this.diagnosticsMeter.reset();
     void window.desktop?.duck({ active: false, factor: 1 }).catch(() => {});
     this.rtt = undefined; this.packetLoss = undefined; this.lossMeter.reset(); this.rttMeter.reset(); this.peerNetwork.clear(); this.peerDeafened.clear(); this.peerAvatars.clear(); this.peerNicknames.clear();
     if (wasConnected) this.playRoomCue(false);

@@ -276,6 +276,60 @@ button:hover:not(:disabled) { filter:none; }
 .shortcut-fields > label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 1fr); align-items: center; gap: 20px; padding-block: 12px; border-bottom: 1px solid var(--line); }
 @media (max-width: 760px) { .shortcut-fields > label { grid-template-columns: minmax(0, 1fr); } }
 
+/* Local diagnostics inherits all palette and radius settings from the active theme. */
+.connection-popover{pointer-events:auto;box-sizing:border-box;max-height:calc(100vh - 16px);overflow:auto}
+.connection-diagnostics{width:328px;padding:16px}
+.connection-quality{display:flex;align-items:center;gap:7px;font-size:12px;margin:14px 0}
+.connection-quality i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.connection-chart{position:relative;margin:16px 0 0;color:var(--accent)}
+.connection-chart figcaption{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:8px;font-size:10px;color:var(--muted)}
+.connection-chart figcaption span:first-child{color:var(--text)}
+.connection-chart figcaption span:last-child{white-space:nowrap;font-variant-numeric:tabular-nums}
+.connection-chart svg{display:block;width:100%;height:auto;overflow:visible;background:color-mix(in srgb,var(--accent) 3%,var(--surface));border-radius:calc(var(--ui-radius) / 3)}
+.connection-chart polyline{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.connection-chart circle{fill:currentColor}
+.connection-chart-grid{fill:none;stroke:var(--line);stroke-width:.6}
+.connection-chart-axis{display:flex;justify-content:space-between;margin-top:6px;color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums}
+.connection-chart-zero{position:absolute;right:3px;bottom:21px;font-size:9px;color:var(--muted)}
+.connection-chart-empty{position:absolute;inset:35px 0 auto;text-align:center;font-size:11px;color:var(--muted)}
+.connection-history-note{display:block;margin-top:14px;font-size:10px;line-height:1.5;color:var(--muted)}
+
+.connection-quality.ping-good{color:var(--success)}
+.connection-quality.ping-warning{color:var(--warning)}
+.connection-quality.ping-bad{color:var(--danger)}
+.connection-quality.ping-unknown{color:var(--muted)}
+
+.connection-ping-tooltip{width:max-content;padding:8px 11px;font-size:12px;font-weight:650;pointer-events:none}
+.connection-summary{width:300px;padding:16px}
+.connection-summary>.connection-chart{margin-top:16px}
+.connection-summary dl>div{margin-top:7px}
+.connection-summary-help{margin:14px 0;color:var(--muted);font-size:11px;line-height:1.6}
+.connection-debug-button{display:flex;align-items:center;justify-content:center;min-height:34px;width:100%;margin:0;border-radius:calc(var(--ui-radius) / 2);font-weight:600;font-size:12px}
+.connection-debug-modal{width:min(940px,calc(100vw - 32px));max-width:none;height:min(780px,calc(100vh - 32px));max-height:calc(100vh - 32px);padding:0;overflow:hidden}
+.connection-debug-modal>.modal-heading{padding:18px 24px;margin:0;border-bottom:1px solid var(--line)}
+.connection-debug-modal>.modal-body{height:calc(100% - 65px);padding:0;margin:0;overflow:hidden}
+.rtc-layout{display:grid;grid-template-columns:200px minmax(0,1fr);height:100%;min-height:0}
+.rtc-sidebar{background:var(--sidebar-bg);padding:24px 12px}
+.rtc-sidebar>strong{display:block;font-size:18px;margin:0 10px 8px}
+.rtc-sidebar>small{display:block;margin:0 10px 24px;color:var(--success)}
+.rtc-sidebar [role=tablist]{display:flex;flex-direction:column;gap:4px}
+.rtc-sidebar [role=tab]{padding:10px 12px;text-align:left;background:transparent;border-radius:calc(var(--ui-radius) / 2);font-size:12px;color:var(--muted)}
+.rtc-sidebar [aria-selected=true]{background:var(--raised);color:var(--text)}
+.rtc-content{overflow:auto;min-height:0;padding:26px 28px;background:var(--surface)}
+.rtc-content>h2{font-size:15px;margin:0 0 24px}
+.rtc-content>h2>span{display:block;width:max-content;font-size:12px;color:var(--accent);padding:14px 0 10px;border-bottom:2px solid var(--accent)}
+.rtc-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 24px}
+.rtc-metric{min-width:0;border-bottom:1px solid var(--line);padding-bottom:15px}
+.rtc-metric-value{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.rtc-metric-value h3{font-size:11px;font-weight:600;line-height:1.5}
+.rtc-metric-value>span{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;text-align:right}
+.rtc-metric>.connection-chart{margin:8px 0 0}
+.rtc-note{font-size:11px;color:var(--muted);line-height:1.6;margin:24px 0 0}
+@media(max-width:620px){.rtc-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}.rtc-sidebar{padding:10px 14px}.rtc-sidebar>strong,.rtc-sidebar>small{display:none}.rtc-sidebar [role=tablist]{flex-direction:row}.rtc-content{padding:20px}.rtc-metrics{gap:18px}}
+@media(max-width:400px){.rtc-metrics{grid-template-columns:minmax(0,1fr)}}
+.connection-popover[role=dialog]:focus{outline:none}
+.connection-popover[role=dialog]:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
+
 /* Reply previews retain inline formatting within a single truncated line. */
 .chat-reply-text { min-width:0; }
 .chat-reply-text .chat-markdown-line, .chat-reply-text .chat-markdown-heading, .chat-reply-text .chat-markdown-quote, .chat-reply-text .chat-markdown-item, .chat-reply-text .chat-code-block { display:inline; margin:0; font-size:inherit; }
