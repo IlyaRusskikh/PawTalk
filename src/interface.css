@@ -275,3 +275,26 @@ button:hover:not(:disabled) { filter:none; }
 .settings-nav .settings-nav-child { min-height: 36px; padding-block: 8px; }
 .shortcut-fields > label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 1fr); align-items: center; gap: 20px; padding-block: 12px; border-bottom: 1px solid var(--line); }
 @media (max-width: 760px) { .shortcut-fields > label { grid-template-columns: minmax(0, 1fr); } }
+
+/* Local diagnostics inherits all palette and radius settings from the active theme. */
+.connection-popover{pointer-events:auto;box-sizing:border-box;max-height:calc(100vh - 16px);overflow:auto}
+.connection-diagnostics{width:328px;padding:16px}
+.connection-quality{display:flex;align-items:center;gap:7px;font-size:12px;margin:14px 0}
+.connection-quality i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.connection-chart{position:relative;margin:16px 0 0;color:var(--accent)}
+.connection-chart figcaption{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:8px;font-size:10px;color:var(--muted)}
+.connection-chart figcaption span:first-child{color:var(--text)}
+.connection-chart figcaption span:last-child{white-space:nowrap;font-variant-numeric:tabular-nums}
+.connection-chart svg{display:block;width:100%;height:auto;overflow:visible;background:color-mix(in srgb,var(--accent) 3%,var(--surface));border-radius:calc(var(--ui-radius) / 3)}
+.connection-chart polyline{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.connection-chart circle{fill:currentColor}
+.connection-chart-grid{fill:none;stroke:var(--line);stroke-width:.6}
+.connection-chart-axis{display:flex;justify-content:space-between;margin-top:6px;color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums}
+.connection-chart-zero{position:absolute;right:3px;bottom:21px;font-size:9px;color:var(--muted)}
+.connection-chart-empty{position:absolute;inset:35px 0 auto;text-align:center;font-size:11px;color:var(--muted)}
+.connection-history-note{display:block;margin-top:14px;font-size:10px;line-height:1.5;color:var(--muted)}
+
+.connection-quality.ping-good{color:var(--success)}
+.connection-quality.ping-warning{color:var(--warning)}
+.connection-quality.ping-bad{color:var(--danger)}
+.connection-quality.ping-unknown{color:var(--muted)}

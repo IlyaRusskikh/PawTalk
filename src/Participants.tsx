@@ -50,7 +50,7 @@ export function Participants({ people, prefs, onChange }: { people: Person[]; pr
     <Avatar name={p.name} image={p.avatar}/>
     <span className="person-status-icons">{p.muted && <span title={t("Микрофон выключен")} aria-label={t("Микрофон выключен")}><Icon name="mic-off" size={15}/></span>}{(p.deafened || prefs[p.id]?.muted) && <span title={p.deafened ? t("Участник отключил звук") : t("Звук выключен у вас")} aria-label={p.deafened ? t("Участник отключил звук") : t("Звук выключен у вас")}><Icon name="headphones-off" size={15}/></span>}</span>
   </div>
-  <div className="person-details"><h3 title={p.name}>{p.name}</h3><ConnectionStatus name={p.name} delay={p.rtt} loss={p.packetLoss}/></div>
+  <div className="person-details"><h3 title={p.name}>{p.name}</h3><ConnectionStatus name={p.name} delay={p.rtt} loss={p.packetLoss} diagnostics={p.local ? p.diagnostics : undefined}/></div>
  </article>)}</div>
  {menu && selected && <div className="person-menu" role="dialog" aria-label={t("Громкость {0}", selected.name)} style={{ left: menu.x, top: menu.y }} onPointerDown={e => e.stopPropagation()}><strong>{selected.name}</strong><Slider label={t("Громкость")} value={pref.volume} min={0} max={2} step={0.05} format={`${Math.round(pref.volume * 100)}%`} onChange={value => onChange(selected.id, value, pref.muted)}/><label className="inline-check"><input type="checkbox" checked={pref.muted} onChange={e => onChange(selected.id, pref.volume, e.target.checked)}/>{t("Не слышать участника")}</label></div>}
  </>;
