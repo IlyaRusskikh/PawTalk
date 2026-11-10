@@ -19,12 +19,12 @@ jobs:
         working-directory: server
       - run: docker build -f server/Dockerfile -t pawtalk-api:test .
       - name: Validate Swarm stack without local secrets
-        env:
-          PAWTALK_IMAGE: ghcr.io/ilyarusskikh/pawtalk-server:0.7.1
-          PAWTALK_RELEASE: '0.7.1'
-          PAWTALK_PUBLIC_IP: 203.0.113.10
-          PAWTALK_DATA_VOLUME: pawtalk-server_server_data
-        run: docker stack config -c compose.server.swarm.yaml >/dev/null
+        run: |
+          export PAWTALK_RELEASE="$(node -p "require('./package.json').version")"
+          export PAWTALK_IMAGE="ghcr.io/ilyarusskikh/pawtalk-server:${PAWTALK_RELEASE}"
+          export PAWTALK_PUBLIC_IP=203.0.113.10
+          export PAWTALK_DATA_VOLUME=pawtalk-server_server_data
+          docker stack config -c compose.server.swarm.yaml >/dev/null
       - uses: actions/setup-node@v4
         with:
           node-version: '24.22.1'
