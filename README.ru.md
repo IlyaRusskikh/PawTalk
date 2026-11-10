@@ -102,7 +102,7 @@ npm run dev
 
 </details>
 
-[Участие в разработке](CONTRIBUTING.md) · [API](docs/API.md) · [Порядок выпуска](docs/RELEASING.md)
+[Все инструкции](docs/README.md) · [Разработка и локальный Docker](docs/DEVELOPMENT.md) · [Архитектура](docs/ARCHITECTURE.md) · [Участие в разработке](CONTRIBUTING.md) · [API](docs/API.md) · [Порядок выпуска](docs/RELEASING.md)
 
 Код PawTalk распространяется по лицензии [GNU AGPL-3.0-only](LICENSE). У сторонних компонентов свои условия. [Уведомления о лицензиях](THIRD_PARTY_NOTICES.md).
 
