@@ -51,8 +51,12 @@
    Откройте **Releases → Draft a new release**, выберите существующий тег,
    перенесите описание из CHANGELOG и приложите файлы из artifact. Укажите команду
    `docker pull ghcr.io/ilyarusskikh/pawtalk-server:X.Y.Z`, ссылку на исходный
-   тег и digest образа из Summary. Обновите пример версии в `.env.server.example`
-   перед выпуском, чтобы шаблон ссылался на этот же образ.
+   тег и digest образа из Summary. В release notes укажите digest в формате
+   `Published multi-platform server digest: \`ghcr.io/OWNER/REPO-server@sha256:<64 hex>\``
+   (замените OWNER/REPO-server на фактический путь образа); серверный обновлятор
+   проверяет путь образа и сравнивает digest с GHCR перед установкой.
+   Обновите пример версии в `.env.server.swarm.example` перед выпуском,
+   чтобы шаблон ссылался на этот же образ.
 7. Обновите в обоих README версию, прямую ссылку на фактическое имя установщика
    в assets и ссылку на описание релиза. Для pre-release используйте ссылку
    на конкретный тег: `/releases/latest` не выбирает предварительные выпуски.
@@ -140,7 +144,7 @@ also publishes `ghcr.io/<owner>/<repo>-server:X.Y.Z` and `:sha-<commit>` for
 Linux amd64 and arm64 under one multi-platform manifest. Server lifecycle checks
 run on native runners for both architectures. Make the GHCR package public once,
 and include its digest and source
-tag in release notes. Update `.env.server.example` to match each release.
+tag in release notes. Update `.env.server.swarm.example` to match each release.
 Publishing the GitHub Release itself is manual.
 
 After CI passes, draft a GitHub Release for the exact tag, attach the installer,
