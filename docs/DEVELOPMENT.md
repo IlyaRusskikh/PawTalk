@@ -71,6 +71,7 @@ go vet ./...
 | `npm run test:docker` | Изолированные Go API и LiveKit через `docker run`, Electron-интеграция |
 | `npm run test:docker -- --containers-only` | Реальный запуск двух Docker-контейнеров, HTTP LiveKit, авторизация Go API, подпись и права JWT; без Electron |
 | `npm run dev:server -- --smoke` | Временный запуск точно той же `docker run`-конфигурации dev-сервера из локального образа `pawtalk-server:local`; TLS fingerprint, HTTPS, ограничения контейнера, очистка ресурсов |
+| `node scripts/swarm-smoke.mjs` (только GitHub-hosted Linux CI) | Настоящий одноузловой Docker Swarm: `server-update.py deploy`, здоровье, внешний том, принудительный rollout, `server-update.py rollback` и сохранение сертификата/пароля |
 | `npm run check:public` | Эвристическая проверка случайной публикации секретов |
 | `node scripts/check-website.mjs` | Сайт, локальные ссылки, метаданные |
 | `python -m unittest discover -s tests -p server_update_test.py` | Тесты утилиты обновления Swarm |
@@ -79,7 +80,7 @@ go vet ./...
 
 `test:server` и `test:docker` запускают тестовые Docker-контейнеры; нужен Docker daemon и свободные порты, указанные в тестах. `test:docker` ориентирован на Linux Docker Engine. Режим `--containers-only` использует порты 8080/7880/7881/7882 и не требует Electron или `npm ci`; он не проверяет звук двух клиентов. `dev:server -- --smoke` использует порты 32443–32445 и образ `pawtalk-server:local`, который предварительно создаёт `node scripts/server-smoke.mjs` или команда `docker build -f server/standalone.Dockerfile -t pawtalk-server:local .`.
 
-В CI на Linux AMD64 и ARM64 выполняются **все три** контейнерных сценария: `scripts/server-smoke.mjs`, `scripts/dev-server.mjs --smoke` и `scripts/docker-smoke.mjs --containers-only`. Они проверяют настоящие Docker-контейнеры, но не заменяют измерения задержки голоса и работу с реальными микрофонами, внешними сетями, PTT в играх и нагрузкой. Эти сценарии нужно проверять отдельно по [ACCEPTANCE.md](ACCEPTANCE.md).
+В CI на Linux AMD64 и ARM64 выполняются **четыре** сценария: `scripts/server-smoke.mjs`, `scripts/dev-server.mjs --smoke`, `scripts/docker-smoke.mjs --containers-only` и `scripts/swarm-smoke.mjs`. Они проверяют настоящие Docker-контейнеры, но не заменяют измерения задержки голоса и работу с реальными микрофонами, внешними сетями, PTT в играх и нагрузкой. Эти сценарии нужно проверять отдельно по [ACCEPTANCE.md](ACCEPTANCE.md).
 
 ## Сервер на VPS / VPS
 
