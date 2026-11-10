@@ -29,7 +29,7 @@
     "bench:e2ee": "node scripts/e2ee-benchmark.mjs",
     "bench:latency": "node scripts/e2ee-benchmark.mjs --latency --contexts",
     "native:build": "node-gyp rebuild --directory native",
-    "configure": "node scripts/configure.mjs",
+    "dev:server": "node scripts/dev-server.mjs",
     "package": "npm run server:prepare && npm run build && electron-builder --win nsis --x64 --publish never",
     "package:dir": "npm run server:prepare && npm run build && electron-builder --win dir --x64 --publish never",
     "server:prepare": "node scripts/prepare-server.mjs",

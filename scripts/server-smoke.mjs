@@ -48,7 +48,6 @@ function request(endpoint, body) {
 let vite;
 try {
   await docker(['build', '-f', 'server/standalone.Dockerfile', '-t', 'pawtalk-server:local', '.']);
-  await docker(['compose', '-f', 'compose.server.yaml', 'config', '-q'], { childEnv: { ...env, PAWTALK_PUBLIC_IP: '203.0.113.10' } });
   // Bridge mode makes this test work on Docker Desktop without host-network opt-in.
   await docker(['run', '-d', '--name', name, '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges:true', '--tmpfs', '/tmp:uid=65532,gid=65532,mode=0700', '-v', `${volume}:/data`, '-e', 'PAWTALK_PUBLIC_IP=127.0.0.1', '-e', 'PAWTALK_PORT=31443', '-p', '127.0.0.1:31443:31443', '-p', '127.0.0.1:31444:31444', '-p', '127.0.0.1:31445:31445/udp', 'pawtalk-server:local'], { quiet: true });
   await until(async () => (await docker(['logs', name], { quiet: true })).includes('PawTalk ready'), 'server startup');
