@@ -254,7 +254,7 @@ function registerIPC() {
         if (!health.ok) throw new Error('LiveKit unavailable');
       } catch {
         const help = expected.hostname === '127.0.0.1' && !app.isPackaged
-          ? t("Для локального запуска выполните: docker compose -f compose.dev.yaml up -d")
+          ? t("Для локального запуска выполните: npm run dev:server")
           : t("Проверьте запуск LiveKit и HTTPS-прокси на сервере.");
         return { error: t("Пароль принят, но голосовой сервер {0} недоступен. {1}", mediaURL.host, help) };
       }
