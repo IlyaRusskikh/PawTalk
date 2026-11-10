@@ -71,6 +71,7 @@ go vet ./...
 | `npm run test:docker` | Изолированные Go API и LiveKit через `docker run`, Electron-интеграция |
 | `npm run test:docker -- --containers-only` | Реальный запуск двух Docker-контейнеров, HTTP LiveKit, авторизация Go API, подпись и права JWT; без Electron |
 | `npm run dev:server -- --smoke` | Временный запуск точно той же `docker run`-конфигурации dev-сервера из локального образа `pawtalk-server:local`; TLS fingerprint, HTTPS, ограничения контейнера, очистка ресурсов |
+| `node scripts/swarm-smoke.mjs` (только GitHub-hosted Linux CI) | Настоящий одноузловой Docker Swarm: `server-update.py deploy`, здоровье, внешний том, принудительный rollout, `server-update.py rollback` и сохранение сертификата/пароля |
 | `npm run check:public` | Эвристическая проверка случайной публикации секретов |
 | `node scripts/check-website.mjs` | Сайт, локальные ссылки, метаданные |
 | `python -m unittest discover -s tests -p server_update_test.py` | Тесты утилиты обновления Swarm |
