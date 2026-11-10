@@ -66,12 +66,12 @@ def release_digest(body, repository):
     return next(iter(digests)) if len(digests) == 1 else None
 
 
-def select_release(releases, channel, repository="IlyaRusskikh/pawtalk"):
+def select_release(releases, channel, repository="IlyaRusskikh/pawtalk", target_version=None):
     candidates = []
     for release in releases:
         match = VERSION.fullmatch(str(release.get("tag_name", "")))
         digest = release_digest(release.get("body") or "", repository)
-        if not match or not digest or release.get("draft") or (channel == "stable" and release.get("prerelease")):
+        if not match or not digest or (target_version is not None and release["tag_name"].removeprefix("v") != target_version) or release.get("draft") or (channel == "stable" and release.get("prerelease")):
             continue
         candidates.append((tuple(map(int, match.groups())), release["tag_name"].removeprefix("v"), digest))
     return max(candidates, default=None)
@@ -90,7 +90,9 @@ def registry_digest(repository, version):
     return digest
 
 
-def update(values, stack, check_only=False):
+def update(values, stack, check_only=False, target_version=None):
+    if target_version is not None and (not VERSION.fullmatch(target_version) or target_version.startswith("v")):
+        raise ValueError("Target version must be X.Y.Z (without v)")
     if not check_only and values.get("PAWTALK_AUTO_UPDATE", "false") != "true":
         print("Automatic server updates disabled; no network request or deployment performed.")
         return
@@ -107,8 +109,12 @@ def update(values, stack, check_only=False):
     releases, _ = get_json("https://api.github.com/repos/" + repository + "/releases?per_page=100", {"Accept": "application/vnd.github+json"})
     if not isinstance(releases, list):
         raise ValueError("Invalid release response")
-    selected = select_release(releases, values.get("PAWTALK_UPDATE_CHANNEL", "preview"), repository)
+    selected = select_release(releases, values.get("PAWTALK_UPDATE_CHANNEL", "preview"), repository, target_version)
+    if target_version is not None and selected is None:
+        raise ValueError("Target version has no matching published release and server image digest")
     if not selected or selected[0] <= tuple(map(int, current.groups())):
+        if target_version is not None and selected and selected[0] < tuple(map(int, current.groups())):
+            raise ValueError("Target version is older than the installed version; downgrade is not supported")
         print("Server is up to date: " + labels["io.pawtalk.version"])
         return
     _, version, digest = selected
@@ -135,7 +141,10 @@ def main():
     parser.add_argument("action", choices=("deploy", "update", "check", "rollback"))
     parser.add_argument("--config", type=Path, default=Path(".env"))
     parser.add_argument("--stack", default="pawtalk")
+    parser.add_argument("--target-version", default=None, help="Pin check/update to an exact published X.Y.Z release")
     arguments = parser.parse_args()
+    if arguments.target_version is not None and arguments.action not in ("check", "update"):
+        raise ValueError("--target-version is only supported with check or update")
     if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}", arguments.stack):
         raise ValueError("Invalid stack name")
     values = read_config(arguments.config)
@@ -148,9 +157,9 @@ def main():
     elif arguments.action == "rollback":
         print(docker("service", "update", "--rollback", "--detach=false", arguments.stack + "_server"))
     elif arguments.action == "check":
-        update(values, arguments.stack, check_only=True)
+        update(values, arguments.stack, check_only=True, target_version=arguments.target_version)
     elif values.get("PAWTALK_AUTO_UPDATE", "false") != "true":
-        update(values, arguments.stack)
+        update(values, arguments.stack, target_version=arguments.target_version)
     else:
         import fcntl
         with open("/run/pawtalk-update.lock", "w", encoding="utf-8") as lock:
@@ -158,7 +167,7 @@ def main():
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 print("Another server update is running"); return
-            update(values, arguments.stack)
+            update(values, arguments.stack, target_version=arguments.target_version)
 
 
 if __name__ == "__main__":
