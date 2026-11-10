@@ -8,8 +8,6 @@
 
 PawTalk находится в стадии **публичного предварительного выпуска**, а не стабильного релиза. На 10 ноября 2026 года актуальная версия — [0.7.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.7.1). Исправления безопасности, если они потребуются, выпускаются в новых версиях; исправление всех предыдущих версий отдельно **не гарантируется**.
 
-Старые выпуски Voicecord не совместимы с PawTalk и не получают автоматически его исправления. [Переход на PawTalk](docs/PAWTALK.md).
-
 ### Как сообщить об уязвимости
 
 Пожалуйста, **не создавайте публичный Issue с работающим эксплойтом, секретами или подробностями неисправленной уязвимости**.
@@ -32,8 +30,6 @@ PawTalk находится в стадии **публичного предвар
 ### Supported versions
 
 PawTalk is a **public preview**, not a stable release. As of November 10, 2026, the current release is [0.7.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.7.1). Security fixes, when necessary, are shipped in new releases; backports to every older version are **not guaranteed**.
-
-Legacy Voicecord releases are not compatible with PawTalk and do not automatically receive PawTalk fixes. See the [transition guide](docs/PAWTALK.md).
 
 ### Reporting a vulnerability
 

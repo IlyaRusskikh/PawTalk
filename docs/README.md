@@ -19,6 +19,7 @@ The guides below describe the **current 0.7.1 public preview**. For older releas
 
 | Раздел | Описание |
 | --- | --- |
+| [Постоянный сервер на Windows](SERVER-WINDOWS.md) | Docker Swarm в Linux VM: сеть, автозапуск и проверка / Always-on Windows PC with a Linux VM |
 | [Установка VPS](SERVER.md) | **Только Docker Swarm**: с нуля до рабочей комнаты, сеть, volume, резервное копирование |
 | [Swarm: обслуживание](SWARM.md) | Миграция, обновления, откат, systemd-таймер |
 | [Обновления клиента и язык](UPDATES.md) | Подписанные обновления клиента и резервная передача через комнаты |
@@ -38,6 +39,4 @@ New VPS installations use Docker Swarm only. The stack specification named `comp
 | [План аппаратной приёмки](ACCEPTANCE.md) | Что ещё не подтверждено на реальном оборудовании |
 | [Публикация релиза](RELEASING.md) | Версия, CI, GitHub Releases и GHCR |
 | [Подпись обновлений](UPDATE-SIGNING.md) | Ed25519-манифест и ключи |
-| [Переход с Voicecord](PAWTALK.md) | Несовместимость профилей, приглашений и настроек |
-
 Документы с историей старого процесса первой публикации не являются актуальными руководствами: изменения и номера выпусков сохранены в Git и [CHANGELOG](../CHANGELOG.md).

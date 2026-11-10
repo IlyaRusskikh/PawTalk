@@ -1,6 +1,8 @@
 # Changelog / История изменений
 
-## Unreleased — Deployment and documentation cleanup / Развёртывание и документация
+## Unreleased — Connection diagnostics and update caching / Диагностика соединения и кэш обновлений
+
+- Document an always-on Windows server using Docker Swarm in a Hyper-V Linux VM, synchronize both READMEs, expand the safety FAQ and describe installer caching. Remove obsolete migration/update warnings from current guides and website pages while retaining release history in this changelog; align generated notice headers and website checks with PawTalk branding. / Описан постоянный сервер на Windows через Docker Swarm в Linux VM Hyper-V, синхронизированы README, расширен раздел безопасности и описан кэш установщика. Устаревшие предупреждения о миграции и обновлениях убраны из актуальных руководств и сайта, история сохранена в CHANGELOG; заголовки генерируемых уведомлений и проверки сайта приведены к названию PawTalk.
 
 - Cache one complete Windows installer on self-host and persistent servers, reuse it across downloads/restarts and replace it only after a newer download completes. Remove the installer bandwidth cap while retaining request/concurrency limits and client signature/hash verification. Add cache regressions and a live Electron/self-host relay download check. / Встроенные и постоянные серверы сохраняют один полный Windows-установщик, повторно используют его после загрузок и перезапусков и заменяют только после полной загрузки новой версии. Снят лимит скорости установщика при сохранении ограничений запросов/параллелизма и клиентской проверки подписи/хэша. Добавлены регрессионные тесты кэша и проверка настоящей загрузки через Electron и встроенную комнату.
 

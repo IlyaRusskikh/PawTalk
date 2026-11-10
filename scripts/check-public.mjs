@@ -22,8 +22,8 @@ const secretPatterns = [
   ['GitHub token', /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b/],
   ['AWS access key', /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/],
   ['stored password hash', /pbkdf2-sha256\$\d+\$[A-Za-z0-9_-]{20,}\$[A-Za-z0-9_-]{30,}/],
-  ['concrete server secret', /^\s*(?:LIVEKIT_API_SECRET|(?:PAWTALK|VOICECORD)_PASSWORD(?:_HASH)?)\s*=\s*['"]?[A-Za-z0-9_-]{24,}/m],
-  ['live room invitation', /(?:pawtalk|voicecord):\/\/[^\s"'`]+\/[a-f0-9]{64}#[^\s"'`]*(?:password|e2ee)=[^\s"'`]+/i],
+  ['concrete server secret', /^\s*(?:LIVEKIT_API_SECRET|PAWTALK_PASSWORD(?:_HASH)?)\s*=\s*['"]?[A-Za-z0-9_-]{24,}/m],
+  ['live room invitation', /pawtalk:\/\/[^\s"'`]+\/[a-f0-9]{64}#[^\s"'`]*(?:password|e2ee)=[^\s"'`]+/i],
 ];
 const issues = new Set();
 function inspect(name, bytes, origin) {
