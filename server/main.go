@@ -30,6 +30,7 @@ const roomName = "common"
 var b64 = base64.RawURLEncoding
 
 type config struct {
+	UpdateCacheDir                                      string
 	PresenceURL                                         string
 	APIKey, APISecret, LivekitURL, PasswordHash, Listen string
 	RequireE2EE                                         bool
@@ -229,7 +230,7 @@ func (a *app) connect(w http.ResponseWriter, r *http.Request) {
 }
 func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/updates/", newUpdateRelay())
+	mux.Handle("GET /api/updates/", newUpdateRelay(a.cfg.UpdateCacheDir))
 	presence := a.presenceHandler()
 	mux.HandleFunc("GET /api/presence", presence)
 	if a.chat != nil {

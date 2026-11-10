@@ -175,6 +175,7 @@ func standaloneHandler(state serverState, chat *chatStore) http.Handler {
 	target, _ := url.Parse(mediaAddress)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	a.cfg.PresenceURL = mediaAddress
+	a.cfg.UpdateCacheDir = filepath.Join(stateDir(), "update-cache")
 	api := a.handler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// This listener is public; forwarding headers from callers are never trusted.

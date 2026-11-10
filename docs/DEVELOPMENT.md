@@ -1,8 +1,8 @@
 # Разработка PawTalk / Local development
 
-Эта инструкция описывает текущий PawTalk 0.7.1. Для постоянного сервера на VPS используйте **только Docker Swarm** и [SERVER.md](SERVER.md), а не приведённый ниже локальный `docker run`.
+Эта инструкция описывает текущий PawTalk 0.8.0. Для постоянного сервера на VPS используйте **только Docker Swarm** и [SERVER.md](SERVER.md), а не приведённый ниже локальный `docker run`.
 
-This guide covers local development of PawTalk 0.7.1. Production VPS deployment uses **Docker Swarm only**; see [SERVER.md](SERVER.md).
+This guide covers local development of PawTalk 0.8.0. Production VPS deployment uses **Docker Swarm only**; see [SERVER.md](SERVER.md).
 
 ## Что нужно / Requirements
 
@@ -66,6 +66,7 @@ go vet ./...
 | --- | --- |
 | `npm run build` | TypeScript, production-сборка интерфейса |
 | `npm test` | JS unit-тесты |
+| `npm run server:prepare`, затем `node scripts/update-relay-smoke.mjs` (Windows, доступ к GitHub) | Реальные Go self-host + LiveKit и Electron: клиенту запрещён прямой GitHub, обнаружение релиза через LAN-закладку, полная загрузка опубликованного EXE и проверка подписи/размера/SHA-256, собственная комната через loopback, отказ при устаревшем TLS-отпечатке. EXE не запускается. Использует временную комнату на портах 31443–31446 и штатный автопроброс роутера; проверка на одном компьютере не подтверждает доступность извне |
 | `npm run smoke` | Интерфейс и тестовый аудиотракт Electron |
 | `npm run test:server` | Изолированный Docker-сервер, аутентификация и голосовой smoke |
 | `npm run test:docker` | Изолированные Go API и LiveKit через `docker run`, Electron-интеграция |

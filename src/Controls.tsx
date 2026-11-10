@@ -19,6 +19,7 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
     send: <path d="m3 3 19 9-19 9 4-9zm4 9h15"/>,
     chat: <path d="M21 11a9 9 0 0 1-9 9H7l-5 2 2-5v-6a9 9 0 0 1 17 0Z"/>,
     download: <><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></>,
+    stopwatch: <><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2M9 2h6M12 2v4m6 1 2-2"/></>,
     star: <path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8l-6.2 3.2L7 14.2l-5-4.9 6.9-1z"/>,
     edit: <path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14z"/>,
     trash: <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></>,

@@ -1,7 +1,7 @@
 # Application language and updates / Язык и обновления
 
-The updater was introduced in 0.2.0. PawTalk 0.7.1 is the current public preview. Clients on 0.6.0 and 0.7.0 must install 0.7.1 manually because they cannot discover the repository-name capitalization fix; preferences remain intact.
-Обновлятор появился в 0.2.0. Актуальный предварительный выпуск — PawTalk 0.7.1. Клиентам 0.6.0 и 0.7.0 нужно установить 0.7.1 вручную: эти версии не находят исправление сравнения регистра имени репозитория. Настройки сохраняются.
+PawTalk 0.8.0 is the current public preview. For update fixes in previous releases, see the [changelog](../CHANGELOG.md).
+Актуальный предварительный выпуск — PawTalk 0.8.0. Исправления обновлятора в прошлых выпусках описаны в [CHANGELOG](../CHANGELOG.md).
 
 ## Русский
 
@@ -48,9 +48,30 @@ Windows x64 установщика и SHA-256 пропускаются. Пров
 прежний механизм проверки до обновления самого клиента. Автоматический откат
 после ошибки установки не реализован.
 
-Комнаты передают установщик потоком без записи на диск. Маленькие метаданные
-кешируются в памяти на минуту. Лимиты сервера: две передачи одновременно,
-до 1 МиБ/с на установщик, 20 запросов в минуту с IP. `PAWTALK_UPDATE_PROXY=false`
+Поддерживаются и встроенные self-host комнаты Windows, и серверы на VPS:
+добавьте комнату в закладки, оставьте её запущенной и обеспечьте серверу доступ
+к GitHub. Для self-host используется актуальное приглашение с TLS-отпечатком.
+Клиенту прямой доступ к GitHub при этом не нужен.
+
+При первой загрузке комната передаёт установщик потоком и записывает его во
+временный файл. Только полная успешная передача попадает в дисковый кэш;
+обрыв или ошибка не заменяют прежний установщик. Повторная загрузка того же
+EXE идёт с диска без запроса установщика к GitHub. Одновременно выполняется
+одно заполнение кэша; второй запрос использует результат первого после его
+завершения. При успешной загрузке более новой версии старый EXE автоматически
+удаляется. Запрос старой версии не вытесняет новую из кэша.
+
+Кэш сохраняется после перезапуска сервера и пересоздания self-host комнаты:
+на Windows это `%LOCALAPPDATA%\PawTalk\update-relay`, на VPS Swarm —
+`update-cache/` внутри постоянного каталога `PAWTALK_DATA_DIR` (обычно `/data`).
+Каталог кэша предназначен для одного процесса сервера. Хранится один завершённый
+EXE размером до 1 ГиБ; во время замены дополнительно нужен объём нового файла.
+После аварийного завершения оставшиеся временные и старые файлы очищаются при
+следующем запуске. Клиент по-прежнему проверяет подпись, размер и SHA-256.
+
+Маленькие метаданные кешируются в памяти на минуту, затем снова запрашиваются
+с GitHub. Ограничения скорости передачи установщика на сервере нет. Остаются
+лимиты: две передачи одновременно, 20 запросов в минуту с IP. `PAWTALK_UPDATE_PROXY=false`
 отключает прокси; для Docker передайте переменную в окружение контейнера.
 Прокси работает только с релизами PawTalk и проверяет перенаправления GitHub.
 Пароль комнаты и ключ E2EE для публичной раздачи обновления не передаются.
@@ -117,9 +138,30 @@ installation failure. The manifest has an independent signature; Windows
 Authenticode signing is not enabled. New clients require signed manifests;
 older clients keep their previous updater until upgraded.
 
-Rooms stream installer bytes without writing them to disk. Metadata is cached in
-memory for one minute. Limits: two upstream requests at once, 1 MiB/s per installer,
-20 requests per minute per IP. Set `PAWTALK_UPDATE_PROXY=false` in the server
+Both built-in Windows self-host rooms and VPS servers support this relay. Bookmark
+the room, keep it running and allow the server to reach GitHub. Self-host rooms
+require a current invitation with its TLS fingerprint. The client does not need
+direct GitHub access.
+
+On the first download, rooms stream installer bytes and write a temporary file.
+Only a complete successful transfer is committed to the disk cache. A failed or
+interrupted transfer preserves the previous installer. Repeat downloads of that
+EXE use disk without fetching the installer from GitHub again. One cache fill
+runs at a time; a second request reuses its result after completion. A successfully
+downloaded newer version automatically removes the older EXE. Requests for older
+versions do not evict a newer cached version.
+
+The cache survives server restarts and self-host room recreation. Windows uses
+`%LOCALAPPDATA%\PawTalk\update-relay`; Swarm VPS servers use `update-cache/` inside
+the persistent `PAWTALK_DATA_DIR` (normally `/data`). Each cache directory belongs
+to one server process. It holds one completed EXE up to 1 GiB; a replacement
+temporarily needs space for the new file as well. Orphaned temporary and old files
+are cleaned up on the next startup after a crash. Clients still verify the signed
+manifest, installer size and SHA-256.
+
+Metadata is cached in memory for one minute, then fetched from GitHub again.
+Installer transfers have no server bandwidth cap. Limits remain: two concurrent
+transfers and 20 requests per minute per IP. Set `PAWTALK_UPDATE_PROXY=false` in the server
 process/container environment to disable the relay. Only PawTalk release
 resources and approved GitHub redirects are accepted. Room passwords and E2EE
 keys are never sent to the update relay. Broken connections try another source;
@@ -152,6 +194,18 @@ Checks: `npm run build`, `npm test`, `node scripts/updates-ui-smoke.mjs`,
 synthetic data and never execute a downloaded binary. A real upgrade between
 two separately versioned releases, UAC and recovery after installer failure
 still require an isolated Windows acceptance check.
+
+For an opt-in live relay check on Windows, run `npm run server:prepare`, then
+`node scripts/update-relay-smoke.mjs`. This starts the actual embedded room on
+ports 31443–31446 (including its normal router-mapping attempt), blocks direct
+client GitHub access, checks LAN and owner-loopback update discovery, downloads
+the published installer through the relay and verifies its signed size/SHA-256.
+It also rejects a stale invitation fingerprint. The downloaded EXE is deleted
+without execution. This single-machine check does not verify access from another
+device or through an external network; it is separate from synthetic unit tests
+and is not an offline CI requirement.
+Use `node scripts/update-relay-smoke.mjs --metadata-only` to check discovery,
+signatures and invitation handling without downloading the installer.
 
 References: [NSIS integration](https://www.electron.build/v26/docs/nsis/),
 [GitHub release API and asset digests](https://docs.github.com/en/rest/releases/releases).

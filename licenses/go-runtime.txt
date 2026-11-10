@@ -1,4 +1,4 @@
-Voicecord Go dependency notices
+PawTalk Go dependency notices
 Versions from server/go.mod.
 
 ========================================================================

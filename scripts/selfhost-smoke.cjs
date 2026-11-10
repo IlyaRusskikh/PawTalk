@@ -33,7 +33,9 @@ function request(address, endpoint, body) {
     assert.equal(joined.status, 200);
     assert.equal(JSON.parse(joined.body).url, `wss://127.0.0.1:${port}/rtc`);
     assert.equal((await request(status.localAddress, '/rtc')).status, 200);
-    await assert.rejects(request(status.localAddress.replace(/.$/, status.localAddress.endsWith('a') ? 'b' : 'a'), '/healthz'));
+    const stale = new URL(status.localAddress);
+    stale.pathname = '/' + status.fingerprint.slice(0, -1) + (status.fingerprint.endsWith('a') ? 'b' : 'a');
+    await assert.rejects(request(stale.href, '/healthz'), /Certificate pin mismatch/);
     console.log(`PASS selfhost startup, pinned TLS, password rejection, token, LiveKit proxy (router mappings: ${status.mapped})`);
   } finally { await host.stop(); }
   for (const p of [port, port+1, port+3]) {

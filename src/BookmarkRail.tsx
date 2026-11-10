@@ -6,9 +6,10 @@ import { t } from './i18n';
 
 export type Bookmark = { address: string; name: string };
 export type RoomPreview = { status: 'online' | 'offline'; participants?: number; unread?: number; people?: { name: string; avatar?: string }[]; details?: boolean; feed?: string; ephemeral?: boolean };
-type Drag = { bookmarks: Bookmark[]; order: Bookmark[]; statuses: boolean[]; from: number; centers: number[]; offline: boolean };
+type Drag = { temporaryAddress?: string; bookmarks: Bookmark[]; order: Bookmark[]; statuses: boolean[]; from: number; centers: number[]; offline: boolean };
 
-export function BookmarkRail({ bookmarks, activeAddress, selected, people, livePeople = [], unread = 0, presence, disabled, onOpen, onMenu, onReorder }: {
+export function BookmarkRail({ bookmarks, temporaryRoom, onSaveTemporary, activeAddress, selected, people, livePeople = [], unread = 0, presence, disabled, onOpen, onMenu, onReorder }: {
+  temporaryRoom?: Bookmark; onSaveTemporary?(): void;
   bookmarks: Bookmark[]; activeAddress?: string; selected: boolean; people: number;
   livePeople?: { name: string; avatar?: string }[]; unread?: number;
   presence: Record<string, RoomPreview | number | null>; disabled: boolean;
@@ -33,7 +34,7 @@ export function BookmarkRail({ bookmarks, activeAddress, selected, people, liveP
     if (list.current) observer.observe(list.current);
     if (viewport.current) observer.observe(viewport.current);
     return () => observer.disconnect();
-  }, [bookmarks, presence, activeAddress]);
+  }, [bookmarks, presence, activeAddress, temporaryRoom?.address]);
   const drag = useRef<Drag | null>(null);
   const suppressClickUntil = useRef(0);
   const [preview, setPreview] = useState<{ drag: Drag; to: number } | null>(null);
@@ -44,21 +45,25 @@ export function BookmarkRail({ bookmarks, activeAddress, selected, people, liveP
     const value = presence[address];
     return typeof value === 'number' ? { status: 'online', participants: value, unread: 0, details: false } : value ?? undefined;
   };
+  function show(item: Bookmark, button: HTMLElement) {
+    const rect = button.getBoundingClientRect();
+    setHover({ item, x: rect.right + 14, y: Math.max(12, Math.min(rect.top - 10, window.innerHeight - 190)) });
+  }
   const shown = hover ? stateFor(hover.item.address) : undefined;
   const offline = (item: Bookmark) => stateFor(item.address)?.status === 'offline';
   // Keep the saved order intact: connection changes only affect the displayed groups.
   const ordered = [...bookmarks.filter(item => !offline(item)), ...bookmarks.filter(offline)];
-  const sameOrder = (current: Drag) => current.bookmarks === bookmarks && current.order.every((item, index) => ordered[index]?.address === item.address && current.statuses[index] === offline(item));
+  const sameOrder = (current: Drag) => current.temporaryAddress === temporaryRoom?.address && current.bookmarks === bookmarks && current.order.every((item, index) => ordered[index]?.address === item.address && current.statuses[index] === offline(item));
   const placement = preview && sameOrder(preview.drag) ? preview : null;
 
   function startDrag(event: DragEvent<HTMLButtonElement>, from: number) {
     const rail = list.current!;
     const top = rail.getBoundingClientRect().top - rail.scrollTop;
-    const centers = Array.from(rail.querySelectorAll('.bookmark-orb'), button => {
+    const centers = Array.from(rail.querySelectorAll('.bookmark-orb:not(.temporary-orb)'), button => {
       const rect = button.getBoundingClientRect();
       return rect.top + rect.height / 2 - top;
     });
-    drag.current = { bookmarks, order: ordered, statuses: ordered.map(offline), from, centers, offline: offline(ordered[from]) };
+    drag.current = { temporaryAddress: temporaryRoom?.address, bookmarks, order: ordered, statuses: ordered.map(offline), from, centers, offline: offline(ordered[from]) };
     setHover(undefined);
     suppressClickUntil.current = Infinity;
     event.dataTransfer.effectAllowed = 'move';
@@ -109,7 +114,17 @@ export function BookmarkRail({ bookmarks, activeAddress, selected, people, liveP
       let index = 0;
       onReorder(bookmarks.map(item => offline(item) === current.offline ? group[index++] : item));
     }}
-  >{ordered.map((item, index) => {
+  >{temporaryRoom && <div className="temporary-room">
+    <button type="button" className={`server-orb bookmark-orb temporary-orb${selected ? ' selected' : ''}`} aria-label={temporaryRoom.name} disabled={disabled}
+      onClick={() => onOpen(temporaryRoom)}
+      onMouseEnter={event => show(temporaryRoom, event.currentTarget)} onMouseLeave={() => setHover(undefined)}
+      onFocus={event => show(temporaryRoom, event.currentTarget)} onBlur={() => setHover(undefined)} onKeyDown={event => { if (event.key === 'Escape') setHover(undefined); }}>
+      {temporaryRoom.name.slice(0, 1).toUpperCase()}
+      <span className="participant-pin" title={t("Участников: {0}", people)}><Icon name="users" size={10}/>{people}</span>
+      {!!unread && <span className="unread-pin" title={t("Непрочитанных: {0}", unread)}><Icon name="chat" size={10}/>{unread > 99 ? '99+' : unread}</span>}
+    </button>
+    <button type="button" className="temporary-room-pin" disabled={disabled} title={t("Временная комната — добавить в закладки")} aria-label={t("Временная комната — добавить в закладки")} onClick={onSaveTemporary}><span className="temporary-room-timer"><Icon name="stopwatch" size={12}/></span><span className="temporary-room-star"><Icon name="star" size={12}/></span></button>
+  </div>}{ordered.map((item, index) => {
     const state = stateFor(item.address);
     const count = state?.participants;
     let offset = 0;
@@ -122,10 +137,9 @@ export function BookmarkRail({ bookmarks, activeAddress, selected, people, liveP
       else if (to <= index && index < from) slot++;
       offset = centers[slot] - centers[index];
     }
-    const show = (button: HTMLElement) => { const rect = button.getBoundingClientRect(); setHover({ item, x: rect.right + 14, y: Math.max(12, Math.min(rect.top - 10, window.innerHeight - 190)) }); };
     return <button key={item.address} className={`server-orb bookmark-orb ${selected && item.address === activeAddress ? 'selected' : ''} ${placeholder ? 'bookmark-placeholder' : ''}${state?.status === 'offline' ? ' server-offline' : ''}${index > 0 && offline(item) && !offline(ordered[index - 1]) ? ' bookmark-group-start' : ''}`}
       aria-label={item.name} aria-describedby={hover?.item.address === item.address ? id : undefined} disabled={disabled} draggable={!disabled}
-      onMouseEnter={event => show(event.currentTarget)} onMouseLeave={() => setHover(undefined)} onFocus={event => show(event.currentTarget)} onBlur={() => setHover(undefined)}
+      onMouseEnter={event => show(item, event.currentTarget)} onMouseLeave={() => setHover(undefined)} onFocus={event => show(item, event.currentTarget)} onBlur={() => setHover(undefined)}
       style={offset ? { transform: `translateY(${offset}px)` } : undefined}
       onDragStart={event => startDrag(event, index)}
       onDragEnd={endDrag}

@@ -13,5 +13,5 @@ test('late packets, counter resets, no traffic and reconnects never produce inva
  const meter=new PacketLossMeter();meter.sample([{id:'a',received:100,lost:5}]);
  assert.equal(meter.sample([{id:'a',received:105,lost:3}]),0);
  assert.equal(meter.sample([{id:'a',received:9,lost:1}]),10);
- assert.equal(meter.sample([]),0);meter.reset();assert.equal(meter.sample([{id:'b',received:0,lost:4}]),100);
+ assert.equal(meter.sample([]),undefined);meter.reset();assert.equal(meter.sample([{id:'b',received:0,lost:4}]),100);
 });

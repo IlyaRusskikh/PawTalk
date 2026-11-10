@@ -14,6 +14,6 @@ export class PacketLossMeter {
       next.set(stream.id, current);
     }
     this.previous = next;
-    return received + lost > 0 ? Math.min(100, lost / (received + lost) * 100) : 0;
+    return received + lost > 0 ? Math.min(100, lost / (received + lost) * 100) : undefined;
   }
 }

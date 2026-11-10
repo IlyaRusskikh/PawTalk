@@ -3,15 +3,16 @@ const assert=require('node:assert/strict');const path=require('node:path');const
 const {SelfHost}=require('../electron/selfhost.cjs');
 app.setPath('userData',path.join(os.tmpdir(),'pawtalk-realtime-'+process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');app.commandLine.appendSwitch('use-fake-device-for-media-stream');app.disableHardwareAcceleration();
+const testPort=Number(process.env.PAWTALK_REALTIME_PORT||31443);
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 app.whenReady().then(async()=>{
  const host=new SelfHost(path.resolve('resources/server'));const windows=[];
  let exitCode=0;
  try{
-  const password=randomBytes(16).toString('hex');const state=await host.start({port:31443,password,name:'Realtime QA'});console.log('Temporary voice server ready');
+  const password=randomBytes(16).toString('hex');const state=await host.start({port:testPort,password,name:'Realtime QA'});console.log('Temporary voice server ready');
   const partition=session.fromPartition('realtime-'+process.pid);partition.setPermissionRequestHandler((_w,_p,cb)=>cb(true));partition.setPermissionCheckHandler(()=>true);
   partition.setCertificateVerifyProc((_req,cb)=>cb(0));
-  const credentials=name=>new Promise((resolve,reject)=>{const request=https.request('https://127.0.0.1:31443/api/connect',{method:'POST',rejectUnauthorized:false,headers:{'Content-Type':'application/json'}},res=>{let data='';res.on('data',v=>data+=v);res.on('end',()=>resolve(JSON.parse(data)));});request.on('error',reject);request.end(JSON.stringify({nickname:name,password}));});
+  const credentials=name=>new Promise((resolve,reject)=>{const request=https.request(`https://127.0.0.1:${testPort}/api/connect`,{method:'POST',rejectUnauthorized:false,headers:{'Content-Type':'application/json'}},res=>{let data='';res.on('data',v=>data+=v);res.on('end',()=>resolve(JSON.parse(data)));});request.on('error',reject);request.end(JSON.stringify({nickname:name,password}));});
   const until=async(fn,label)=>{for(let i=0;i<250;i++){if(await fn())return;await delay(100);}throw Error('Timeout: '+label);};
   for(const name of ['QA A','QA B']){
    const win=new BrowserWindow({show:false,webPreferences:{session:partition,sandbox:true,contextIsolation:true,offscreen:true,backgroundThrottling:false}});windows.push(win);
@@ -48,8 +49,10 @@ app.whenReady().then(async()=>{
   await b(`window.expectedAvatar=${JSON.stringify(await a('window.testAvatar'))}`);
   await b('window.voice.setAvatar(window.expectedAvatar)');
   await a('window.voice.disconnect()');
+  assert.equal(await a('window.voice.diagnostics.getSnapshot().rtt.length+window.voice.diagnostics.getSnapshot().loss.length'),0,'full disconnect clears local history');
   await until(()=>b('window.snapshot.people.length===1'),'peer leaves');
   await a(`window.start(${JSON.stringify(await credentials('QA A'))})`);
+  assert.equal(await a('window.voice.diagnostics.getSnapshot().rtt.filter(p=>p.value!==undefined).length'),0,'new session starts without previous RTT points');
   await until(()=>b('window.snapshot.people.length===2'),'peer rejoins');
   await until(()=>b('window.snapshot.people.find(p=>!p.local)?.avatar===window.expectedAvatar'),'avatar after rejoin');
   await until(()=>a('window.snapshot.people.find(p=>!p.local)?.avatar===window.testAvatar'),'rejoining peer receives existing avatar');
@@ -101,6 +104,28 @@ app.whenReady().then(async()=>{
   await until(()=>b('window.snapshot.people.some(p=>!p.local && p.rtt!==undefined)'),'peer RTT delivered over actual data channel');
   await until(()=>b('window.snapshot.people.some(p=>!p.local && Number.isFinite(p.packetLoss))'),'peer packet loss delivered over actual data channel');
   assert.ok(await b('window.snapshot.people.find(p=>!p.local).rtt>=0'));
+  await until(()=>b('window.voice.diagnostics.getSnapshot().rtt.filter(p=>p.value!==undefined).length>=2 && window.voice.diagnostics.getSnapshot().loss.filter(p=>p.value!==undefined).length>=2'),'real RTC history accumulates both metrics');
+  await b('window.renderParticipants()');
+  await delay(100);
+  await b("document.querySelector('.person-network').click()");
+  await until(()=>b("document.querySelectorAll('.connection-summary .connection-chart polyline').length===1"),'local summary renders real RTT history');
+  assert.ok(await b("document.querySelector('.connection-popover dd').textContent.includes('мс') && Array.from(document.querySelectorAll('.connection-popover dd')).at(-1).textContent.includes('%')"),'local tooltip includes current real RTC measurements');
+  await delay(200); // Wait for the offscreen compositor before capturing the new portal.
+  await require('node:fs/promises').writeFile('release/qa/connection-real-rtc.png',(await windows[1].webContents.capturePage()).toPNG());
+  await b("document.querySelector('.connection-debug-button').click()");
+  await until(()=>b("!!document.querySelector('dialog.connection-debug-modal[open]')"),'debug opens a real modal');
+  await until(()=>b("document.querySelectorAll('.rtc-metric .connection-chart polyline').length>=2"),'debug has live RTT and loss histories');
+  await b("document.querySelectorAll('[role=tab]')[1].click()");
+  await until(()=>b("document.querySelector('[role=tabpanel]').textContent.includes('opus')"),'outbound tab exposes actual codec');
+  assert.ok(await b('Number.isFinite(window.voice.diagnostics.getSnapshot().current.bytesSent)'),'actual outgoing RTP counters');
+  assert.equal(await b("document.querySelectorAll('.rtc-metric figcaption').length"),0,'debug charts omit upper-bound labels');
+  assert.ok(await b("Array.from(document.querySelectorAll('.rtc-metric-value>span')).every(node=>node.textContent.trim() && !/Недоступно|Unavailable/.test(node.textContent))"),'each real debug chart has a current metric');
+  await delay(200);
+  await require('node:fs/promises').writeFile('release/qa/connection-outbound-real.png',(await windows[1].webContents.capturePage()).toPNG());
+  await b("document.querySelector('.connection-debug-modal .modal-heading button').click()");
+  await b("window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}))");
+  await until(()=>b("!document.querySelector('dialog[open]')"),'local diagnostics close');
+  await b("document.body.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))");
   for (const [rtt, level, token] of [[80,'good','success'],[180,'warning','warning'],[450,'bad','danger'],[null,'unknown','muted']]) {
    await b('window.snapshot.people.find(p=>!p.local).rtt='+rtt+';window.renderParticipants()');await delay(80);
    assert.ok(await b("document.querySelectorAll('.person-network')[1].classList.contains('ping-"+level+"')"),'card RTT color '+level);
@@ -110,7 +135,7 @@ app.whenReady().then(async()=>{
   for(const [language,expected] of [['ru','2,5 %'],['en','2.5 %']]) {
    await b('window.changeLanguage('+JSON.stringify(language)+')');
    await b('Object.assign(window.snapshot.people.find(p=>!p.local),{rtt:180,packetLoss:2.5});window.renderParticipants()');await delay(80);
-    await b("document.querySelectorAll('.person-network')[1].click()");
+    await b("document.body.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));document.querySelectorAll('.person-network')[1].click()");
     await until(()=>b("document.querySelectorAll('.connection-popover dd').length===2"),'connection tooltip opens');
    assert.equal(await b("document.querySelectorAll('.connection-popover dd')[1].textContent"),expected);
   }

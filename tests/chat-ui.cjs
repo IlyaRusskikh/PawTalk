@@ -16,6 +16,35 @@ app.whenReady().then(async () => {
     await win.loadURL(process.env.PAWTALK_UI_TEST_URL + '/tests/chat-ui.html');
     await run(`window.sentAnimations=[];const originalAnimate=Element.prototype.animate;Element.prototype.animate=function(frames,options){if(this.matches('.chat-message-body p'))window.sentAnimations.push(options?.duration);return originalAnimate.call(this,frames,options)};undefined`);
     await until('window.ready && document.querySelectorAll(".chat-message").length===100', 'initial 100 messages');
+    for (const language of ['ru','en']) for (const reduced of [false,true]) {
+      await run(`window.changeLanguage('${language}'); window.setTemporary(true)`);
+      if (!win.webContents.debugger.isAttached()) win.webContents.debugger.attach('1.3');
+      await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:reduced?'reduce':'no-preference'}]});
+      await until('!!document.querySelector(".temporary-room-pin")', 'temporary room appears');
+      assert.equal(await run('document.querySelector(".temporary-room-pin").title'), language==='ru'?'Временная комната — добавить в закладки':'Temporary room — add to bookmarks');
+      await run('document.querySelector(".temporary-orb").click()');
+      assert.equal(await run('window.openedRoom'), 'https://temporary.invalid');
+      assert.equal(await run('getComputedStyle(document.querySelector(".temporary-room-star")).display'), 'none');
+      const pinPoint = await run('(()=>{const r=document.querySelector(".temporary-room-pin").getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})()');
+      win.webContents.sendInputEvent({type:'mouseMove',...pinPoint});
+      await delay(100);
+      assert.equal(await run('getComputedStyle(document.querySelector(".temporary-room-star")).display'), 'grid');
+      assert.ok(await run('(()=>{const pin=document.querySelector(".temporary-room-pin"),r=pin.getBoundingClientRect();return pin.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))})()'), 'badge is visible and clickable inside the scroll rail');
+      if (!reduced) await capture('temporary-room-'+language);
+      win.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,...pinPoint});
+      win.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,...pinPoint});
+      win.webContents.sendInputEvent({type:'mouseMove',x:400,y:400});
+      await until('!document.querySelector(".temporary-room")', 'saving removes temporary badge');
+      assert.equal(await run('[...document.querySelectorAll(".bookmark-orb")].filter(b=>b.getAttribute("aria-label")==="Temporary").length'), 1, 'saving leaves one room');
+      await run('window.setTemporary(false)');
+      assert.equal(await run('[...document.querySelectorAll(".bookmark-orb")].filter(b=>b.getAttribute("aria-label")==="Temporary").length'), 1, 'saved room survives leaving');
+      await run('window.resetTemporary(); window.setTemporary(true)');
+      await until('!!document.querySelector(".temporary-orb")', 'unsaved room returns');
+      await run('window.setTemporary(false)');
+      await until('!document.querySelector(".temporary-orb")', 'unsaved room disappears on leaving');
+    }
+    await run('window.resetTemporary(); window.changeLanguage("ru")');
+    win.webContents.debugger.detach();
     assert.equal(await run('!!document.querySelector(".chat-format-help, .chat-format-toolbar")'), false);
     const selectDraft = async (text, start, end) => {
       await run(`(()=>{const field=document.querySelector('.chat-compose textarea');field.focus();Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(field,${JSON.stringify(text)});field.dispatchEvent(new Event('input',{bubbles:true}));field.setSelectionRange(${start},${end});document.dispatchEvent(new Event('selectionchange'));})()`);
@@ -107,7 +136,9 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('[data-message-row="${id}"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:300,clientY:380}))`);
     await until('!!document.querySelector(".chat-message-menu")', 'reply menu reopens');
     await run(`document.querySelector('.chat-message-menu button').click()`);
-    assert.ok(await run('!!document.querySelector(".chat-reply-draft")'));
+    assert.ok(await run('!!document.querySelector(".chat-reply-draft .chat-reply-text strong")'));
+    assert.ok(await run('!!document.querySelector(".chat-reply-draft .chat-reply-text em") && !!document.querySelector(".chat-reply-draft .chat-reply-text u") && !!document.querySelector(".chat-reply-draft .chat-reply-text s")'));
+    assert.equal(await run('document.querySelector(".chat-reply-text").textContent.includes("||")'),false,'reply draft hides raw spoiler markers');
     await run(`(()=>{const el=document.querySelector('.chat-compose textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'Ответ на сообщение');el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     console.log('System reduced motion:',await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`));
     win.webContents.debugger.attach('1.3');
@@ -127,6 +158,10 @@ app.whenReady().then(async () => {
     assert.ok(await run(`window.sentAnimations.includes(260)`), 'sent text animates from the composer');
     assert.equal(await run('window.lastSent.reply.id'), id);
     await until('!!document.querySelector(".chat-reply-quote")', 'reply quote rendered');
+    assert.ok(await run('!!document.querySelector(".chat-reply-quote .chat-reply-text strong") && !!document.querySelector(".chat-reply-quote .chat-reply-text em")'));
+    assert.equal(await run('!!document.querySelector(".chat-reply-quote button, .chat-reply-quote a")'),false,'preview does not nest interactive elements in its navigation button');
+    assert.equal(await run('getComputedStyle(document.querySelector(".chat-reply-quote .chat-spoiler")).color'),'rgba(0, 0, 0, 0)','quoted spoiler stays hidden');
+    await capture('formatted-reply-review');
     await run(`document.querySelector('.chat-reply-quote').click()`);
     await until(`!!document.querySelector('[data-message-row="${id}"]')`, 'original fetched by reply');
     await run(`document.querySelector('.chat-jump').click()`);
@@ -189,10 +224,40 @@ app.whenReady().then(async () => {
     await run('window.setRoomReachable(false)'); await delay(100);
     await run('window.setLightTheme(true)');
     await win.webContents.debugger.attach('1.3');
-    const rect = await run(`(()=>{const feed=document.querySelector('.chat-stream').getBoundingClientRect();const row=[...document.querySelectorAll('[data-message-row]')].find(el=>{const r=el.getBoundingClientRect();return r.top>=feed.top&&r.bottom<=feed.bottom});const r=row.getBoundingClientRect();row.id='hover-test';return {x:r.left+100,y:r.top+8}})()`);
-    const beforeHover = await run(`getComputedStyle(document.querySelector('#hover-test')).backgroundColor`);
-    await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',...rect}); await delay(180);
-    assert.notEqual(await run(`getComputedStyle(document.querySelector('#hover-test')).backgroundColor`), beforeHover, 'light theme hover is visible');
+    for (const language of ['ru','en']) for (const reduced of [false,true]) {
+      const context = `${language}, reduced motion=${reduced}`;
+      await run(`window.changeLanguage('${language}')`);
+      await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:reduced?'reduce':'no-preference'}]});
+      assert.equal(await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`), reduced, context);
+      const rect = await run(`(()=>{document.querySelector('#hover-test')?.removeAttribute('id');const feed=document.querySelector('.chat-stream').getBoundingClientRect();const row=[...document.querySelectorAll('[data-message-row]')].find(el=>{const r=el.getBoundingClientRect();return r.top>=feed.top&&r.bottom<=feed.bottom});const r=row.getBoundingClientRect();row.id='hover-test';return {x:r.left+100,y:r.top+r.height/2}})()`);
+      const background = `getComputedStyle(document.querySelector('#hover-test')).backgroundColor`;
+      const moveOutside = () => win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:4,y:4});
+      const moveInside = () => win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',...rect});
+
+      // Reproduce the CI precondition: previous input/layout can leave the row
+      // highlighted before the baseline. Both hover and focus-within must clear.
+      await moveInside();
+      await until(`document.querySelector('#hover-test').matches(':hover')`, 'pre-existing hover: '+context);
+      assert.ok(await run(`document.querySelector('#hover-test').contains(document.elementFromPoint(${rect.x},${rect.y}))`), 'pointer hits the tested row: '+context);
+      await run(`document.querySelector('#hover-test .chat-message-more').focus({preventScroll:true})`);
+      assert.ok(await run(`document.querySelector('#hover-test').matches(':focus-within')`), 'pre-existing focus: '+context);
+      await moveOutside();
+      await run('document.activeElement.blur()');
+      await until(`!document.querySelector('#hover-test').matches(':hover,:focus-within')`, 'neutral hover baseline: '+context);
+      const beforeHover = await run(background);
+      assert.equal(beforeHover, 'rgba(0, 0, 0, 0)', 'neutral row is unhighlighted: '+context);
+
+      await moveInside();
+      await until(`document.querySelector('#hover-test').matches(':hover') && ${background}!==${JSON.stringify(beforeHover)}`, 'light theme hover is visible: '+context);
+      const highlighted = await run(background);
+      await moveOutside();
+      await until(`!document.querySelector('#hover-test').matches(':hover') && ${background}===${JSON.stringify(beforeHover)}`, 'hover clears: '+context);
+      await run(`document.querySelector('#hover-test .chat-message-more').focus({preventScroll:true})`);
+      await until(`document.querySelector('#hover-test').matches(':focus-within') && ${background}===${JSON.stringify(highlighted)}`, 'keyboard focus highlights the row: '+context);
+      await run('document.activeElement.blur()');
+      await until(`${background}===${JSON.stringify(beforeHover)}`, 'focus highlight clears: '+context);
+    }
+    await run(`window.changeLanguage('ru')`);
     win.webContents.debugger.detach();
     // A tall viewport with a small window must retain visible text coordinates,
     // not just eventually reach the requested page.

@@ -12,7 +12,7 @@
   <link rel="alternate" hreflang="x-default" href="https://ilyarusskikh.github.io/PawTalk/">
   <meta property="og:type" content="website">
   <meta property="og:title" content="PawTalk — a voice room of your own">
-  <meta property="og:description" content="Open-source voice chat for Windows. No accounts. Host on your PC or a Linux VPS. PawTalk 0.7.1 public preview.">
+  <meta property="og:description" content="Open-source voice chat for Windows. No accounts. Host on your PC or a Linux VPS. PawTalk 0.8.0 public preview.">
   <meta property="og:url" content="https://ilyarusskikh.github.io/PawTalk/">
   <meta property="og:image" content="https://ilyarusskikh.github.io/PawTalk/assets/room-chat-en.png">
   <meta property="og:image:alt" content="PawTalk room with three participants, call controls and encrypted text chat">
@@ -32,12 +32,10 @@
     <div class="eyebrow">Open source · Self-hosted · Windows</div>
     <h1>Your friends.<br>Your server.<br><span>Your voice room.</span></h1>
     <p class="lead">Voice and text chat for a game night or a small community. Create a room on your PC or keep it running on a Linux VPS. Join with an invitation and a nickname. No accounts.</p>
-    <div class="actions"><a class="button" href="https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.7.1/PawTalk.Setup.0.7.1.exe">Download PawTalk for Windows x64 ↓</a><a class="button secondary" href="https://github.com/IlyaRusskikh/pawtalk/blob/main/docs/SERVER.md">Host a Linux server ↗</a></div>
-    <p class="fine">PawTalk 0.7.1 public preview · Windows 10/11 x64 · English / Русский interface</p>
-    <p class="fine">Fresh installation required; Voicecord profiles and invitations are not migrated.</p>
-    <p class="fine">Unsigned installer · Verified automatic updates · <a href="https://github.com/IlyaRusskikh/pawtalk/releases/tag/v0.7.1">Release notes, checksums and source</a></p>
+    <div class="actions"><a class="button" href="https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.8.0/PawTalk.Setup.0.8.0.exe">Download PawTalk for Windows x64 ↓</a><a class="button secondary" href="https://github.com/IlyaRusskikh/pawtalk/blob/main/docs/SERVER.md">Host a Linux server ↗</a></div>
+    <p class="fine">PawTalk 0.8.0 public preview · Windows 10/11 x64 · English / Русский interface</p>
+    <p class="fine">Unsigned installer · Verified automatic updates · <a href="https://github.com/IlyaRusskikh/pawtalk/releases/tag/v0.8.0">Release notes, checksums and source</a></p>
   </section>
-  <p class="fine">Updating from 0.6.0 or 0.7.0? Install 0.7.1 manually over your current PawTalk installation to repair update discovery. Your settings are preserved.</p>
   <figure class="hero-shot"><a href="assets/room-chat-en.png"><img src="assets/room-chat-en.png" width="1240" height="860" fetchpriority="high" alt="PawTalk room with three participants, call controls and encrypted text chat"></a><figcaption>PawTalk 0.7.1 with demo participants and messages.</figcaption></figure>
   <section class="section" aria-labelledby="features"><h2 id="features">A small room. The controls you need.</h2>
     <div class="features"><article><h3>Host it yourself</h3><p>Temporary rooms on a Windows PC, or a persistent Docker server on Linux amd64/arm64. Your guests just install the client.</p></article><article><h3>Keep the noise down</h3><p>Local RNNoise noise suppression, echo cancellation and automatic gain control. Adjust devices, sensitivity and volume.</p></article><article><h3>Speak your way</h3><p>Voice activation or push-to-talk, global shortcuts, mute/deafen and per-person volume. Keep the app in the tray.</p></article></div>
@@ -55,7 +53,7 @@
     <details><summary>Is this an alternative to Discord or TeamSpeak?</summary><p>For small, self-hosted voice rooms, that is the use case. PawTalk focuses on account-free conversations. It does not replace their broader community features.</p></details>
     <details><summary>Is voice peer-to-peer?</summary><p>Voice uses WebRTC through a LiveKit media server running on the host PC or your VPS. Guests need the Windows client, not their own server.</p></details>
     <details><summary>Why can my friend not connect?</summary><p>Check that the room is still running and the invitation is current. Use a LAN invitation on the same network. For internet access, check incoming ports, firewall, router forwarding and VPN. CGNAT may require a publicly reachable VPS. See <a href="https://github.com/IlyaRusskikh/pawtalk/blob/main/docs/SERVER.md">network troubleshooting (Russian)</a>.</p></details>
-    <details><summary>How do I update or report a problem?</summary><p>PawTalk checks for new releases at startup and verifies each installer before offering it. Voicecord 0.5.2 users must install PawTalk 0.7.1 separately; profiles, server settings and invitations are not migrated. Report bugs or ask setup questions in <a href="https://github.com/IlyaRusskikh/pawtalk/issues/new/choose">GitHub Issues</a>. Include the version and reproduction steps; remove passwords, invitations and private network information.</p></details>
+    <details><summary>How do I update or report a problem?</summary><p>PawTalk checks for new releases at startup and verifies each installer before offering it. Report bugs or ask setup questions in <a href="https://github.com/IlyaRusskikh/pawtalk/issues/new/choose">GitHub Issues</a>. Include the version and reproduction steps; remove passwords, invitations and private network information.</p></details>
     <details><summary>Can I modify and host it?</summary><p>The original code is licensed under GNU AGPL-3.0-only. Read the <a href="https://github.com/IlyaRusskikh/pawtalk/blob/main/LICENSE">license</a> and <a href="https://github.com/IlyaRusskikh/pawtalk/blob/main/THIRD_PARTY_NOTICES.md">third-party notices</a> for the terms that apply.</p></details>
   </section>
 </main>

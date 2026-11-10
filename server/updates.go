@@ -1,14 +1,16 @@
 package main
 
-// A narrowly scoped, streaming GitHub relay. Installer bytes are never cached.
+// A narrowly scoped GitHub relay with a persistent, single-installer cache.
 import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -25,12 +27,15 @@ type updateCache struct {
 	expires time.Time
 }
 type updateRelay struct {
-	client         *http.Client
-	slots          chan struct{}
-	mu             sync.Mutex
-	cache          map[string]updateCache
-	attempts       map[string]attempt
-	bytesPerSecond int64
+	client       *http.Client
+	slots        chan struct{}
+	mu           sync.Mutex
+	cache        map[string]updateCache
+	attempts     map[string]attempt
+	installerDir string
+	installerMu  sync.RWMutex
+	installer    string
+	fill         chan struct{}
 }
 
 func updateRedirect(req *http.Request, via []*http.Request) error {
@@ -50,12 +55,33 @@ func updateRedirect(req *http.Request, via []*http.Request) error {
 	return fmt.Errorf("update redirect host not allowed")
 }
 
-func newUpdateRelay() *updateRelay {
+func newUpdateRelay(directory string) *updateRelay {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = 15 * time.Second
 	transport.MaxIdleConnsPerHost = 2
-	return &updateRelay{client: &http.Client{Transport: transport, CheckRedirect: updateRedirect}, slots: make(chan struct{}, 2),
-		cache: make(map[string]updateCache), attempts: make(map[string]attempt), bytesPerSecond: 1024 * 1024}
+	if directory == "" {
+		if base, err := os.UserCacheDir(); err == nil {
+			directory = filepath.Join(base, "PawTalk", "update-relay")
+		}
+	}
+	p := &updateRelay{client: &http.Client{Transport: transport, CheckRedirect: updateRedirect}, slots: make(chan struct{}, 2),
+		cache: make(map[string]updateCache), attempts: make(map[string]attempt), installerDir: directory, fill: make(chan struct{}, 1)}
+	// Completed files are atomically renamed into place; partials are never served.
+	entries, _ := os.ReadDir(directory)
+	for _, entry := range entries {
+		if !entry.IsDir() && installerVersion(entry.Name()) != "" && (p.installer == "" || newerInstaller(entry.Name(), p.installer)) {
+			p.installer = entry.Name()
+		}
+	}
+	// This directory belongs to one running relay. Recover from interrupted fills
+	// and from a crash between publishing the new file and removing the old one.
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() && ((installerVersion(name) != "" && name != p.installer) || (strings.HasPrefix(name, ".installer-") && strings.HasSuffix(name, ".part"))) {
+			_ = os.Remove(filepath.Join(directory, name))
+		}
+	}
+	return p
 }
 
 // No caller-provided destination, credentials, cookies, forwarding headers or query URLs.
@@ -154,6 +180,35 @@ func (p *updateRelay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
 	defer cancel()
+	var partial *os.File
+	if !metadata {
+		name := filepath.Base(r.URL.Path)
+		if p.serveInstaller(w, r, name) {
+			return
+		}
+		// One cache fill at a time. A second client reuses the completed result
+		// instead of opening another GitHub download for the same installer.
+		select {
+		case p.fill <- struct{}{}:
+			defer func() { <-p.fill }()
+		case <-ctx.Done():
+			return
+		}
+		if p.serveInstaller(w, r, name) {
+			return
+		}
+		if p.installerDir == "" || os.MkdirAll(p.installerDir, 0700) != nil {
+			fail(w, 503, "Update cache unavailable")
+			return
+		}
+		partial, err = os.CreateTemp(p.installerDir, ".installer-*.part")
+		if err != nil {
+			fail(w, 503, "Update cache unavailable")
+			return
+		}
+		defer func() { _ = partial.Close(); _ = os.Remove(partial.Name()) }()
+		w.Header().Set("X-PawTalk-Update-Cache", "miss")
+	}
 	upstream, _ := http.NewRequestWithContext(ctx, "GET", target, nil)
 	upstream.Header.Set("User-Agent", "PawTalk-update-relay")
 	upstream.Header.Set("Accept", "application/vnd.github+json")
@@ -189,45 +244,55 @@ func (p *updateRelay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(data)
 		return
 	}
+	if err := streamInstaller(w, io.TeeReader(res.Body, partial), res.ContentLength, limit); err != nil {
+		panic(http.ErrAbortHandler)
+	}
+	if err := partial.Sync(); err != nil {
+		log.Printf("update cache sync: %v", err)
+		return // The client received the bytes, but this cache fill is unusable.
+	}
+	if err := partial.Close(); err != nil {
+		log.Printf("update cache close: %v", err)
+		return
+	}
+	p.publishInstaller(partial.Name(), filepath.Base(r.URL.Path))
+}
+
+// Refresh write deadlines for every chunk, including cached transfers. There is
+// no bandwidth throttle; network and disk throughput determine transfer speed.
+func streamInstaller(w http.ResponseWriter, body io.Reader, length, limit int64) error {
+	controller := http.NewResponseController(w)
 	w.Header().Set("Content-Type", "application/octet-stream")
-	if res.ContentLength >= 0 {
-		w.Header().Set("Content-Length", strconv.FormatInt(res.ContentLength, 10))
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if length >= 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(length, 10))
 	}
 	buf := make([]byte, 32*1024)
 	var total int64
-	started := time.Now()
 	for {
-		n, readErr := res.Body.Read(buf)
+		n, readErr := body.Read(buf)
 		if n > 0 {
 			total += int64(n)
 			if total > limit {
-				panic(http.ErrAbortHandler)
+				return fmt.Errorf("installer too large")
 			}
 			_ = controller.SetWriteDeadline(time.Now().Add(30 * time.Second))
 			if _, err := w.Write(buf[:n]); err != nil {
-				return
+				return err
 			}
 			if err := controller.Flush(); err != nil {
-				return
-			}
-			if p.bytesPerSecond > 0 {
-				delay := time.Duration(float64(total)/float64(p.bytesPerSecond)*float64(time.Second)) - time.Since(started)
-				if delay > 0 {
-					timer := time.NewTimer(delay)
-					select {
-					case <-timer.C:
-					case <-ctx.Done():
-						timer.Stop()
-						return
-					}
-				}
+				return err
 			}
 		}
 		if readErr == io.EOF {
-			return
+			if total == 0 || (length >= 0 && total != length) {
+				return io.ErrUnexpectedEOF
+			}
+			return nil
 		}
 		if readErr != nil {
-			panic(http.ErrAbortHandler)
+			return readErr
 		}
 	}
 }

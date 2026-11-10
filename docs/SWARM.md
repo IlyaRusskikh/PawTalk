@@ -155,22 +155,22 @@ python3 scripts/server-update.py check --config .env --stack pawtalk
 обновлением всегда сделайте резервную копию тома:
 
 ```sh
-python3 scripts/server-update.py check --config .env --stack pawtalk --target-version 0.7.1
+python3 scripts/server-update.py check --config .env --stack pawtalk --target-version 0.8.0
 # Только если текущая версия старше, том сохранён, а PAWTALK_AUTO_UPDATE=true:
-python3 scripts/server-update.py update --config .env --stack pawtalk --target-version 0.7.1
+python3 scripts/server-update.py update --config .env --stack pawtalk --target-version 0.8.0
 ```
 
 Команда с закреплённой версией предназначена также для воспроизводимых CI-тестов
 при появлении более новых релизов. Нельзя использовать её для отката к более
 старой версии: для отката служит `rollback`, а состояние тома она не меняет.
 
-На VPS с systemd скачайте unit-файлы той же версии, что скрипт (ниже `0.7.1`),
+На VPS с systemd скачайте unit-файлы той же версии, что скрипт (ниже `0.8.0`),
 и установите их. Они рассчитаны на `/opt/pawtalk`, `/usr/bin/python3`
 и стек `pawtalk`:
 
 ```sh
 cd /opt/pawtalk
-PAWTALK_RELEASE=0.7.1
+PAWTALK_RELEASE=0.8.0
 curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/deploy/pawtalk-update.service" -o deploy/pawtalk-update.service
 curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/deploy/pawtalk-update.timer" -o deploy/pawtalk-update.timer
 install -m 644 deploy/pawtalk-update.service /etc/systemd/system/
