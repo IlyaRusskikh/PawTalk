@@ -2,6 +2,8 @@
 
 [Русский](README.ru.md) · English
 
+[![Verify and package](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)
+
 PawTalk is the new name of Voicecord. The PawTalk 0.7.1 public preview is now available. Install it separately from Voicecord and create new `pawtalk://` invitations; profiles, server configuration and old invitations are not migrated. See [transition notes](docs/PAWTALK.md).
 
 PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
@@ -74,10 +76,9 @@ You can enable experimental E2EE when creating a room. With E2EE off, voice is e
 <details>
 <summary>How do I update or get help?</summary>
 
-Starting with 0.2.0, PawTalk offers new releases at startup. The installer download is verified and your profile is preserved. If you're on 0.1.0, update manually once. [How updates work](docs/UPDATES.md).
+Current PawTalk builds check GitHub releases at startup and verify the signed update manifest and the installer checksum before installing. If GitHub is unavailable, the updater can use a compatible bookmarked room as a download relay. The room streams the installer without keeping a copy.
 
-Upcoming client builds can check/download updates through favorite rooms if GitHub is blocked or slow. Rooms stream installers without disk storage; clients verify signed manifests and installer hashes. For a manual upgrade, exit PawTalk and run the new EXE using the same directory and installation scope; no manual uninstall is needed. [Update details](docs/UPDATES.md).
-
+**Important:** versions 0.6.0 and 0.7.0 cannot discover 0.7.1 because of a repository-name capitalization bug. [Download 0.7.1 manually](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.7.1) and install it over the existing PawTalk installation; settings are preserved. For manual installation, fully quit PawTalk from the tray first. [Update details](docs/UPDATES.md).
 For setup or connection issues, see the [troubleshooting guide (Russian)](docs/GUIDE.ru.md). Ask questions or suggest changes in [GitHub Issues](https://github.com/IlyaRusskikh/pawtalk/issues/new/choose). Include your version and steps to reproduce the issue. Remove live invitations, passwords, keys, and personal network details.
 
 </details>
@@ -109,43 +110,23 @@ A [field-by-field server .env guide](docs/SERVER.md#разбор-env-что-и-�
 
 ## Project status
 
-Version 0.5.2 includes: a redesigned home screen, settings navigation,
-a detailed color palette with a light preset, configurable chat windows (25–500 messages; default 100), replies,
-and static PNG/JPEG/WebP attachments up to 2 MiB. Updated servers provide paged
-history and password-protected room previews with participants and unread counts.
-Images load on demand and are released outside the viewport. E2EE rooms encrypt
-messages and images; without E2EE the server can read retained content. These
-changes are included in **0.5.2**. Run `review.cmd` for an isolated local profile.
-Docker Swarm is the only supported VPS deployment method. Migration and opt-in server updates: [SWARM.md](docs/SWARM.md).
-Client startup update checks can be disabled under Settings → System → Updates. App language
-is under Settings → Language. The voice/chat room retains its original layout.
-The chat field has a “+ → Send file” menu; Enter sends and Shift+Enter adds a line.
-Settings → System → Updates also shows the current application version.
-Reachable rooms stay above offline rooms without changing the saved order.
-Images have a fitted viewer with zoom and pan, plus Save/Copy actions on right-click.
-All interface colors, status colors, shadows and corner sizes follow Appearance.
-Notifications float above the page, and call controls appear only inside a room.
-Toasts fade after five seconds of inactivity; hover or keyboard focus pauses the timer.
-Reset affects only the current settings tab. Chat paging preserves the viewport even
-with a 25-message window, and image copying uses Electron's asynchronous clipboard API.
-Paging anchors visible text and keeps predecessor metadata so grouping stays stable
-when messages enter or leave the window.
-Message menus include **Copy text**. The room rail hides its scrollbar and shows
-`+N` for rooms below the visible area. VPS history uses `PAWTALK_CHAT_MAX_MB`
-(128 MiB by default, `0` unlimited), including messages, images, profiles and SQLite
-indexes. Oldest messages are evicted and disk pages reclaimed; 0.5.2
-has no seven-day or 500-message VPS retention cap. Embedded rooms keep 500 messages.
+**Current public preview: [PawTalk 0.7.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.7.1)** — Windows 10/11 x64 client and self-hosted Linux amd64/arm64 server. This is not a stable release.
 
-**0.7.1 is a public pre-release.** It fixes update discovery after GitHub changes repository capitalization. It includes the chat and settings improvements from 0.7.0. Upgrade the server to enable message changes. Voicecord users still need a separate PawTalk installation. [Release notes and source](https://github.com/IlyaRusskikh/pawtalk/releases/tag/v0.7.1). [Changelog](CHANGELOG.md).
+### Available in 0.7.1
 
-Voicecord 0.5.2 was the previous public pre-release; its [release notes and source](https://github.com/IlyaRusskikh/pawtalk/releases/tag/v0.5.2) remain available.
+- Voice rooms with invitations, nickname-only entry, Push-to-Talk, per-user volume, RNNoise noise suppression and audio device selection.
+- Text chat with replies, Markdown, editing/deleting your own messages on updated servers, typing indicators, room previews, unread counts and static PNG/JPEG/WebP attachments up to 2 MiB.
+- Profiles and avatars, bookmarked rooms, light/dark/custom themes and Russian/English interfaces.
+- Notification sounds for joining, leaving and messages; adjustable shared notification volume and previews.
+- Optional experimental E2EE for voice and chat; a separate encrypted key is shared via the invitation. [Security model](docs/E2EE.md).
+- Host a temporary room on Windows or a persistent room on Linux via Docker Swarm; persistent chat storage defaults to 128 MiB and evicts the oldest content when full. [Server guide](docs/SERVER.md).
+- Update checks and downloads with signed manifests, SHA-256 verification and fallback relays through compatible bookmarked rooms. [Update details](docs/UPDATES.md).
 
-Connection attempts show an animated loading dialog with server and voice/chat stages. Message menus let you edit and delete your own messages on updated servers; changes sync to other participants. Select text in the composer or message editor to open the formatting toolbar. Chat supports Discord-style Markdown (bold, italic, underline, strikethrough, spoilers, code, quotes, headings, lists and links). Settings → Audio and devices → Sounds has one shared notification volume slider for all meows and purrs, plus sound previews.
+### Important limitations
 
-Settings group devices, input and processing under **Audio and devices → Voice**, with advanced processing and attenuation in a collapsible section. Notification cues have their own **Sounds** subsection. Startup and shortcuts are grouped under **System**. [Full settings map](docs/SETTINGS.md).
+- The Windows installer is **not Authenticode-signed**. Release assets include SHA-256 checksums; they do not replace an OS publisher signature.
+- Hardware acceptance remains outstanding for real microphones, games/global PTT and UAC, external-network calls, packet loss, and large groups. Automated tests use synthetic devices where indicated. [Acceptance checklist](docs/ACCEPTANCE.md) · [Verification history](docs/VERIFICATION.md).
+- E2EE is **off by default and experimental**. Without it the media server can access voice, and the server can read stored chat content. E2EE currently has no automatic key rotation or forward secrecy. Share complete invitations privately. [Details](docs/E2EE.md).
+- PawTalk is a separate installation from Voicecord; old profiles, server configurations and invitations are not migrated. [Transition guide](docs/PAWTALK.md).
 
-Web links in messages open in your default browser. Edit messages directly in the chat (Enter to save, Shift+Enter for a new line, Esc to cancel). The deletion dialog previews the author and message; hold Shift while choosing Delete message to skip confirmation.
-
-Nested items under Audio and devices and System smoothly scroll to sections on one continuous page per group. All settings use a shared content width and spacing.
-
-Reset controls appear once at the end of the settings page, outside its anchor subsections.
+See the [changelog](CHANGELOG.md) for previous versions, [settings reference](docs/SETTINGS.md) for all controls, and [security policy](SECURITY.md) for reporting vulnerabilities.
