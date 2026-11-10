@@ -24,6 +24,42 @@ class ServerUpdateTests(unittest.TestCase):
         self.assertIsNone(updater.select_release([{**self.release(), "draft": True}], "preview"))
         self.assertIsNone(updater.select_release([{**self.release(), "tag_name": "v0.5.0;bad"}], "preview"))
 
+    def test_target_version_pins_selection_even_with_newer_release(self):
+        releases = [self.release("0.7.0", True), self.release("0.7.1", True), self.release("0.8.0", True)]
+        selected = updater.select_release(releases, "preview", target_version="0.7.1")
+        self.assertEqual(selected, ((0, 7, 1), "0.7.1", DIGEST))
+        self.assertEqual(updater.select_release(releases, "preview")[1], "0.8.0")
+        self.assertIsNone(updater.select_release(releases, "stable", target_version="0.7.1"))
+        self.assertIsNone(updater.select_release(releases, "preview", target_version="0.7.2"))
+
+    def test_target_version_rejects_invalid_missing_and_downgrade_without_pulling(self):
+        current = {"Spec": {"Labels": {"io.pawtalk.managed": "true", "io.pawtalk.version": "0.7.1"},
+                           "TaskTemplate": {"ContainerSpec": {"Image": "ghcr.io/ilyarusskikh/pawtalk-server:0.7.1"}}}}
+        for invalid in ("v0.7.1", "0.7", "0.7.1;bad", "latest"):
+            with self.subTest(invalid=invalid), patch.object(updater, "docker") as docker:
+                with self.assertRaises(ValueError):
+                    updater.update({"PAWTALK_AUTO_UPDATE": "true"}, "pawtalk", target_version=invalid)
+                docker.assert_not_called()
+        for target in ("0.7.0", "0.7.2"):
+            with self.subTest(target=target), patch.object(updater, "docker", return_value=json.dumps([current])) as docker, patch.object(updater, "get_json", return_value=([self.release("0.7.0", True)], {})):
+                with self.assertRaises(ValueError):
+                    updater.update({"PAWTALK_AUTO_UPDATE": "true"}, "pawtalk", target_version=target)
+                docker.assert_called_once_with("service", "inspect", "pawtalk_server")
+
+    def test_explicit_target_is_digest_pinned_and_does_not_select_newer_release(self):
+        image = "ghcr.io/ilyarusskikh/pawtalk-server"
+        initial = {"Spec": {"Labels": {"io.pawtalk.managed": "true", "io.pawtalk.version": "0.7.0"},
+                            "TaskTemplate": {"ContainerSpec": {"Image": image + ":0.7.0"}}}}
+        final = {"Spec": {"TaskTemplate": {"ContainerSpec": {"Image": image + "@" + PUBLISHED_DIGEST}},
+                          "Labels": {"io.pawtalk.version": "0.7.1"}}, "UpdateStatus": {"State": "completed"}}
+        notes = "Published multi-platform server digest: `" + image + "@" + PUBLISHED_DIGEST + "`."
+        releases = [self.release("0.9.0", True), {"tag_name": "v0.7.1", "body": notes, "prerelease": True, "draft": False}]
+        with patch.object(updater, "docker", side_effect=[json.dumps([initial]), "pulled", "updated", json.dumps([final])]) as docker, patch.object(updater, "get_json", return_value=(releases, {})), patch.object(updater, "registry_digest", return_value=PUBLISHED_DIGEST):
+            updater.update({"PAWTALK_AUTO_UPDATE": "true"}, "pawtalk", target_version="0.7.1")
+            args = docker.call_args_list[2].args
+            self.assertIn(image + "@" + PUBLISHED_DIGEST, args)
+            self.assertIn("io.pawtalk.version=0.7.1", args)
+
     def test_published_release_note_digest_is_selected(self):
         notes = (
             "Server: docker pull ghcr.io/ilyarusskikh/pawtalk-server:0.7.1 (linux/amd64, linux/arm64).\n\n"
