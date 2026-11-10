@@ -224,10 +224,40 @@ app.whenReady().then(async () => {
     await run('window.setRoomReachable(false)'); await delay(100);
     await run('window.setLightTheme(true)');
     await win.webContents.debugger.attach('1.3');
-    const rect = await run(`(()=>{const feed=document.querySelector('.chat-stream').getBoundingClientRect();const row=[...document.querySelectorAll('[data-message-row]')].find(el=>{const r=el.getBoundingClientRect();return r.top>=feed.top&&r.bottom<=feed.bottom});const r=row.getBoundingClientRect();row.id='hover-test';return {x:r.left+100,y:r.top+8}})()`);
-    const beforeHover = await run(`getComputedStyle(document.querySelector('#hover-test')).backgroundColor`);
-    await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',...rect}); await delay(180);
-    assert.notEqual(await run(`getComputedStyle(document.querySelector('#hover-test')).backgroundColor`), beforeHover, 'light theme hover is visible');
+    for (const language of ['ru','en']) for (const reduced of [false,true]) {
+      const context = `${language}, reduced motion=${reduced}`;
+      await run(`window.changeLanguage('${language}')`);
+      await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:reduced?'reduce':'no-preference'}]});
+      assert.equal(await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`), reduced, context);
+      const rect = await run(`(()=>{document.querySelector('#hover-test')?.removeAttribute('id');const feed=document.querySelector('.chat-stream').getBoundingClientRect();const row=[...document.querySelectorAll('[data-message-row]')].find(el=>{const r=el.getBoundingClientRect();return r.top>=feed.top&&r.bottom<=feed.bottom});const r=row.getBoundingClientRect();row.id='hover-test';return {x:r.left+100,y:r.top+r.height/2}})()`);
+      const background = `getComputedStyle(document.querySelector('#hover-test')).backgroundColor`;
+      const moveOutside = () => win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:4,y:4});
+      const moveInside = () => win.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',...rect});
+
+      // Reproduce the CI precondition: previous input/layout can leave the row
+      // highlighted before the baseline. Both hover and focus-within must clear.
+      await moveInside();
+      await until(`document.querySelector('#hover-test').matches(':hover')`, 'pre-existing hover: '+context);
+      assert.ok(await run(`document.querySelector('#hover-test').contains(document.elementFromPoint(${rect.x},${rect.y}))`), 'pointer hits the tested row: '+context);
+      await run(`document.querySelector('#hover-test .chat-message-more').focus({preventScroll:true})`);
+      assert.ok(await run(`document.querySelector('#hover-test').matches(':focus-within')`), 'pre-existing focus: '+context);
+      await moveOutside();
+      await run('document.activeElement.blur()');
+      await until(`!document.querySelector('#hover-test').matches(':hover,:focus-within')`, 'neutral hover baseline: '+context);
+      const beforeHover = await run(background);
+      assert.equal(beforeHover, 'rgba(0, 0, 0, 0)', 'neutral row is unhighlighted: '+context);
+
+      await moveInside();
+      await until(`document.querySelector('#hover-test').matches(':hover') && ${background}!==${JSON.stringify(beforeHover)}`, 'light theme hover is visible: '+context);
+      const highlighted = await run(background);
+      await moveOutside();
+      await until(`!document.querySelector('#hover-test').matches(':hover') && ${background}===${JSON.stringify(beforeHover)}`, 'hover clears: '+context);
+      await run(`document.querySelector('#hover-test .chat-message-more').focus({preventScroll:true})`);
+      await until(`document.querySelector('#hover-test').matches(':focus-within') && ${background}===${JSON.stringify(highlighted)}`, 'keyboard focus highlights the row: '+context);
+      await run('document.activeElement.blur()');
+      await until(`${background}===${JSON.stringify(beforeHover)}`, 'focus highlight clears: '+context);
+    }
+    await run(`window.changeLanguage('ru')`);
     win.webContents.debugger.detach();
     // A tall viewport with a small window must retain visible text coordinates,
     // not just eventually reach the requested page.
