@@ -18,11 +18,13 @@ jobs:
       - run: go test -race ./... && go vet ./...
         working-directory: server
       - run: docker build -f server/Dockerfile -t pawtalk-api:test .
-      - name: Validate legacy Compose without local secrets
-        run: |
-          mkdir -p deploy/generated
-          touch deploy/generated/api.env deploy/generated/proxy.env
-          docker compose -f compose.yaml config -q
+      - name: Validate Swarm stack without local secrets
+        env:
+          PAWTALK_IMAGE: ghcr.io/ilyarusskikh/pawtalk-server:0.7.1
+          PAWTALK_RELEASE: '0.7.1'
+          PAWTALK_PUBLIC_IP: 203.0.113.10
+          PAWTALK_DATA_VOLUME: pawtalk-server_server_data
+        run: docker stack config -c compose.server.swarm.yaml >/dev/null
       - uses: actions/setup-node@v4
         with:
           node-version: '24.22.1'
