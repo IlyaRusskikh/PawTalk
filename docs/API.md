@@ -107,6 +107,10 @@ HTTP 200: `{"status":"ok"}`. Проверяет процесс API; не про�
 
 - `GET /api/updates/releases?per_page=100&page=1` forwards the fixed PawTalk GitHub releases endpoint (pages 1–10).
 - `GET /api/updates/assets/vX.Y.Z/update-manifest.json` forwards the signed manifest.
-- `GET /api/updates/assets/vX.Y.Z/PawTalk.Setup.X.Y.Z.exe` streams that installer without disk storage.
+- `GET /api/updates/assets/vX.Y.Z/PawTalk.Setup.X.Y.Z.exe` streams that installer and retains one complete installer in the disk cache.
 
-Public, read-only, no room password/E2EE key. Arbitrary destinations and caller credentials are rejected/not forwarded. Metadata is cached in memory for 60 seconds; installers are not cached. Two upstream requests at once, 1 MiB/s per installer, 20 requests/minute/IP; 429/503 indicate throttling/busy/disabled. Set `PAWTALK_UPDATE_PROXY=false` to disable. The client must independently authenticate manifests and verify installer bytes. See [UPDATES.md](UPDATES.md) and [UPDATE-SIGNING.md](UPDATE-SIGNING.md).
+Public, read-only, no room password/E2EE key. Arbitrary destinations and caller credentials are rejected/not forwarded. Metadata is cached in memory for 60 seconds. One complete installer is cached on disk across restarts; repeated downloads use the cached EXE without an upstream installer request. Concurrent cache misses share one fill. A newer successfully downloaded installer replaces and removes the older one; interrupted downloads preserve the old cache. Older-version requests do not evict a newer cached installer. There is no installer bandwidth cap. Two concurrent transfers and 20 requests/minute/IP remain; 429/503 indicate rate limits/busy/disabled/unavailable cache. Set `PAWTALK_UPDATE_PROXY=false` to disable. The client must independently authenticate manifests and verify installer bytes. Cache locations and disk requirements: [UPDATES.md](UPDATES.md). See also [UPDATE-SIGNING.md](UPDATE-SIGNING.md).
+
+Successful installer responses include `X-PawTalk-Update-Cache: hit` for a disk-cache
+response or `miss` for an upstream transfer. This header is diagnostic only; it
+does not replace client signature/hash verification.
