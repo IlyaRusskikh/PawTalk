@@ -2,13 +2,13 @@
 
 [Русский](README.ru.md) · English
 
-Development: Client **0.8.1** prepares the automatic transition from legacy `v*` to `client-v*` releases. It has not been published; the download below remains the public 0.8.0 release. VPS Server versions are independent.
+Development: **Client 0.9.0 / Server 0.9.0 / Deploy 0.1.0**, unreleased. A separate Client-only `v0.8.1` bridge prepares automatic discovery of `client-v0.9.0`. New VPS installations use Compose and signed independent updates. The download below remains public 0.8.0. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
 
 [![Verify and package](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)
 
 PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
 
-**[Download PawTalk 0.8.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.8.0/PawTalk.Setup.0.8.0.exe)** · [Get started](#get-started) · [Linux server (Russian)](docs/SERVER.md) · [Persistent server on Windows (Russian)](docs/SERVER-WINDOWS.md)
+**[Download PawTalk 0.8.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.8.0/PawTalk.Setup.0.8.0.exe)** · [Get started](#get-started) · [Linux server](docs/SERVER.md)
 
 ![PawTalk room with three participants, call controls and encrypted text chat](website/assets/room-chat-en.png)
 
@@ -16,7 +16,7 @@ PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows
 
 - **Get friends together for a game night.** Start a room on your PC and send an invitation. The room stays available while PawTalk runs, including in the system tray.
 - **Talk on your local network.** Share a LAN invitation when everyone is on the same network, whether you're at a LAN party or playing at home.
-- **Give your team a permanent room.** Run a server on a Linux VPS or an always-on Windows PC using Docker Swarm in a Linux VM. The room runs independently of the PawTalk app; with a VPS, friends can also talk while your home PC is off. [Windows guide (Russian)](docs/SERVER-WINDOWS.md).
+- **Give your team a permanent room.** The upcoming release runs on a Linux VPS through Docker Compose, independently of the PawTalk app. Friends can talk while your home PC is off. [Server guide](docs/SERVER.md).
 
 ## Feature comparison
 
@@ -63,7 +63,7 @@ Already have an invitation? Open **Join a room** after installing. [First call o
 <details>
 <summary>How do I invite a friend?</summary>
 
-In the room creation dialog, choose **Check** next to **Can I host over the internet?**. Internet hosting uses incoming TCP 18443, TCP 18444, and UDP 18445 by default. If your router or ISP restricts inbound connections, you can host on a Linux VPS with a public IP. For a persistent server on your home Windows PC, use [Docker Swarm in a Linux VM (Russian)](docs/SERVER-WINDOWS.md); internet access also requires a public IP and port forwarding.
+In the room creation dialog, choose **Check** next to **Can I host over the internet?**. Internet hosting uses incoming TCP 18443, TCP 18444, and UDP 18445 by default. If your router or ISP restricts inbound connections, you can host on a Linux VPS with a public IP. Permanent Windows hosting is no longer supported; temporary rooms inside the Windows app remain available.
 To check whether you can self-host, copy this command into **Windows PowerShell**:
 
 ```powershell
@@ -77,7 +77,7 @@ $code = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/I
 <details>
 <summary>Which devices can run PawTalk?</summary>
 
-The desktop client runs on Windows 10/11 x64. You can deploy the persistent server with Docker Swarm on Linux amd64 or arm64, including a [Linux VM on an always-on Windows PC (Russian)](docs/SERVER-WINDOWS.md). Voice travels through a LiveKit media server over WebRTC. [Server guide (Russian)](docs/SERVER.md).
+The desktop client runs on Windows 10/11 x64. The upcoming persistent server uses Docker Compose on Debian 12 / Ubuntu 24.04 amd64/arm64. Voice travels through a LiveKit media server over WebRTC. [Server guide](docs/SERVER.md).
 
 </details>
 
@@ -125,11 +125,11 @@ Use `npm run build`, `npm test`, `npm run smoke`, and `npm run check:public` whe
 
 PawTalk is licensed under [GNU AGPL-3.0-only](LICENSE). Third-party components retain their own licenses. [Third-party notices](THIRD_PARTY_NOTICES.md).
 
-A [field-by-field server .env guide](docs/SERVER.md#разбор-env-что-и-как-заполнять) covers allowed values, storage budgets, Swarm updates and applying changes.
+The [server configuration guide](docs/SERVER.md#конфигурация) covers allowed values, storage budgets, independent updates and applying changes.
 
 ## Project status
 
-**Current public preview: [PawTalk 0.8.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.8.0)** — Windows 10/11 x64 client and self-hosted Linux amd64/arm64 server, including a Linux VM on an always-on Windows PC. This is not a stable release.
+**Current public preview: [PawTalk 0.8.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.8.0)** — historical combined Client/Server release. Unreleased 0.9.0 separates Client, Server and Deploy. This is not a stable release.
 
 ### Available in 0.8.0
 
@@ -138,7 +138,7 @@ A [field-by-field server .env guide](docs/SERVER.md#разбор-env-что-и-�
 - Profiles and avatars, bookmarked rooms, light/dark/custom themes and Russian/English interfaces.
 - Notification sounds for joining, leaving and messages; adjustable shared notification volume and previews.
 - Optional experimental E2EE for voice and chat; the secret key is shared with participants via the invitation. [Security model](docs/E2EE.md).
-- Host a temporary room in the Windows app or a persistent room via Docker Swarm on Linux, including a [Linux VM on Windows (Russian)](docs/SERVER-WINDOWS.md); persistent chat storage defaults to 128 MiB and evicts the oldest content when full. [Server guide](docs/SERVER.md).
+- Host a temporary room in the Windows app; the upcoming persistent Linux room uses Docker Compose. Persistent chat storage defaults to 128 MiB and evicts the oldest content when full. [Server guide](docs/SERVER.md).
 - Update checks and downloads with signed manifests, SHA-256 verification and fallback relays through compatible bookmarked rooms. [Update details](docs/UPDATES.md).
 
 ### Important limitations

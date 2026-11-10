@@ -1,5 +1,13 @@
 # Changelog / История изменений
 
+## 0.9.0 — Unreleased / Не выпущено
+
+- **Client:** independent `client-v*` release discovery, strict family/channel selection and API protocol 1 compatibility with legacy Server 0.8.0. Keep temporary Windows rooms; pin bundled Go/LiveKit source and record binary hashes. / Независимое обнаружение `client-v*`, фильтрация семейства/канала и API protocol 1 со старым сервером 0.8.0. Временные Windows-комнаты сохранены; исходники Go/LiveKit закреплены, хэши бинарников записываются.
+- **Server:** independent `server/VERSION`, signed Server metadata and multi-platform GHCR publication. Compose-only single-room runtime; first password is retrieved once through an admin command rather than written to logs. / Независимая версия сервера, подписанные metadata и GHCR amd64/arm64. Одна комната через Compose; первый пароль выдаётся отдельной одноразовой командой администратора.
+- **Deploy 0.1.0:** signed, versioned host installer/controller; strict config, opt-in independent update channels, stopped consistent backup, transactional rollout and data/image recovery, crash journal, safe Deploy switching and bounded watchdog. / Подписанный версионированный установщик/контроллер, строгая конфигурация, отдельные opt-in обновления, согласованный backup, транзакционный rollout и восстановление данных с образом, аварийный журнал, переключение Deploy и ограниченный watchdog.
+- Remove supported Swarm deployment and permanent Windows hosting without a migration path. Preserve third-party notices and historical releases. / Удалены поддерживаемые Swarm-развёртывания и постоянное размещение на Windows без миграционного пути. Лицензии и исторические релизы сохранены.
+- Add local-registry Compose integration, actual controller SIGKILL recovery, signature/route/archive fault tests and same-window decoded gain measurements. Real VPS, external networks and physical devices remain unverified. / Добавлены интеграция Compose с локальным registry, реальный SIGKILL контроллера, проверки подписей/маршрутов/архивов и одновременные измерения усиления декодированного звука. Реальные VPS, внешняя сеть и физические устройства не проверены.
+
 ## 0.8.1 — Unreleased / Не выпущено — Client transition / Переход клиента
 
 - Prepare automatic discovery of `client-v*` releases while retaining legacy `v*` discovery for the one-time bridge. Preserve the selected tag for signed-manifest and installer downloads; reject Server/Deploy families. / Добавлена поддержка `client-v*` с сохранением legacy `v*` для переходного выпуска. Манифест и установщик скачиваются по выбранному тегу; Server/Deploy исключены.

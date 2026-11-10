@@ -8,6 +8,7 @@ const REPOSITORY = 'IlyaRusskikh/PawTalk';
 const { verifyManifest, UpdateSecurityError } = require('./update-manifest.cjs');
 const { metadata, download } = require('./update-transport.cjs');
 const MAX_SIZE = 1024 * 1024 * 1024;
+const { parseTag } = require('../shared/release.cjs');
 function version(value) {
   const m = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value);
   return m ? { numbers: m.slice(1, 4).map(Number), pre: m[4]?.split('.') } : null;
@@ -28,9 +29,10 @@ function compare(a, b) {
   }
   return 0;
 }
-function selectRelease(releases, current) {
-  const releaseVersion = r => /^(?:client-v|v)/.test(r.tag_name || '') ? r.tag_name.replace(/^(?:client-v|v)/, '') : '';
-  return releases.filter(r => !r.draft && version(releaseVersion(r)) && compare(releaseVersion(r), current) > 0)
+function selectRelease(releases, current, channel = 'preview') {
+  if (!['stable', 'preview'].includes(channel)) throw Error('Invalid update channel');
+  const releaseVersion = r => { const parsed = parseTag(r.tag_name, true); return parsed?.component === 'client' ? parsed.version : ''; };
+  return releases.filter(r => !r.draft && version(releaseVersion(r)) && (channel === 'preview' || (!r.prerelease && !version(releaseVersion(r)).pre)) && compare(releaseVersion(r), current) > 0)
     .sort((a, b) => compare(releaseVersion(b), releaseVersion(a))).flatMap(r => {
       const v = releaseVersion(r);
       const asset = r.assets?.find(a => [ `PawTalk Setup ${v}.exe`, `PawTalk.Setup.${v}.exe` ].includes(a.name)
@@ -52,8 +54,8 @@ function validAssetURL(value, tag) {
   } catch { return false; }
 }
 class Updater {
-  constructor({ current, directory, script, installDirectory, executable = path.join(installDirectory || '', 'PawTalk.exe'), language = () => 'ru', fetcher = fetch, launch = spawn, onState = () => {}, rooms = () => [], roomFetcher = fetcher, keys, downloadPolicy }) {
-    Object.assign(this, { current, directory, script, installDirectory, executable, language, fetcher, launch, onState, rooms, roomFetcher, keys, downloadPolicy });
+  constructor({ current, directory, script, installDirectory, executable = path.join(installDirectory || '', 'PawTalk.exe'), language = () => 'ru', fetcher = fetch, launch = spawn, onState = () => {}, rooms = () => [], roomFetcher = fetcher, keys, downloadPolicy, channel = 'preview' }) {
+    Object.assign(this, { current, directory, script, installDirectory, executable, language, fetcher, launch, onState, rooms, roomFetcher, keys, downloadPolicy, channel });
     this.state = { status: 'idle' }; this.release = null; this.busy = false;
   }
   set(value) { this.state = value; this.onState(value); return value; }
@@ -75,8 +77,9 @@ class Updater {
       const batch = JSON.parse(await metadata(this.fetchFor(source), source, 'releases?per_page=100&page=' + page));
       if (!Array.isArray(batch)) throw Error('Invalid releases');
       releases.push(...batch); if (batch.length < 100) break;
+      if (page === 10) throw Error('Release pagination limit exceeded');
     }
-    const release = selectRelease(releases, this.current);
+    const release = selectRelease(releases, this.current, this.channel);
     if (!release) return null;
     const raw = await metadata(this.fetchFor(source), source, 'assets/' + release.tag + '/update-manifest.json', 16384);
     let manifest;
@@ -86,9 +89,14 @@ class Updater {
         || 'sha256:' + manifest.sha256 !== release.asset.digest.toLowerCase() || manifest.prerelease !== release.prerelease) throw Error();
     } catch { throw new UpdateSecurityError(source?.name || 'GitHub'); }
     if (this.directory) {
-      const trustFile = path.join(this.directory, 'trusted-manifest.json');
+      const trustFile = path.join(this.directory, `trusted-manifest.${this.channel}.json`);
       let previous;
-      try { previous = await fs.readFile(trustFile, 'utf8'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      try { previous = await fs.readFile(trustFile, 'utf8'); } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        // Previous clients only had preview semantics. Preserve that trust floor.
+        if (this.channel === 'preview') try { previous = await fs.readFile(path.join(this.directory, 'trusted-manifest.json'), 'utf8'); }
+        catch (legacyError) { if (legacyError.code !== 'ENOENT') throw legacyError; }
+      }
       if (previous) {
         // Authenticate saved metadata even after its freshness deadline.
         const envelope = JSON.parse(previous);

@@ -33,6 +33,7 @@ async function verifyInvitation(address, timeout = 5000) {
 }
 
 function connectionError(error) {
+  if (error.code === 'PAWTALK_PROTOCOL') return t("Версия API сервера не поддерживается. Обновите клиент или обратитесь к владельцу сервера.");
   // Node/Electron fetch wraps DNS and TCP failures in a TypeError with a cause.
   if (error?.cause?.code && !error.code) error = error.cause;
   if (['ENOTFOUND', 'EAI_AGAIN', 'ERR_NAME_NOT_RESOLVED'].includes(error.code)) return t("Не удалось найти сервер по имени. Проверьте адрес, подключение к интернету и DNS. Попросите владельца прислать актуальное приглашение.");

@@ -31,8 +31,9 @@ test('generated command verifies real TLS pin, endpoints, TCP, and rejects wrong
   await writeFile(file, `package main
 import("crypto/rand";"crypto/rsa";"crypto/x509";"encoding/json";"encoding/pem";"math/big";"os";"time")
 func main(){k,_:=rsa.GenerateKey(rand.Reader,2048);c:=&x509.Certificate{SerialNumber:big.NewInt(1),NotBefore:time.Now().Add(-time.Hour),NotAfter:time.Now().Add(time.Hour),KeyUsage:x509.KeyUsageDigitalSignature|x509.KeyUsageKeyEncipherment,ExtKeyUsage:[]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}};der,e:=x509.CreateCertificate(rand.Reader,c,c,&k.PublicKey,k);if e!=nil{panic(e)};json.NewEncoder(os.Stdout).Encode(map[string]string{"cert":string(pem.EncodeToMemory(&pem.Block{Type:"CERTIFICATE",Bytes:der})),"key":string(pem.EncodeToMemory(&pem.Block{Type:"RSA PRIVATE KEY",Bytes:x509.MarshalPKCS1PrivateKey(k)}))})}`);
-  const made = spawnSync(go, ['run', file], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
-  assert.equal(made.status, 0, made.stderr);
+  // A clean Windows runner must compile Go's TLS/RSA dependencies first.
+  const made = spawnSync(go, ['run', file], { encoding: 'utf8', windowsHide: true, timeout: 120000 });
+  assert.equal(made.status, 0, made.stderr || made.error?.message);
   const cert = JSON.parse(made.stdout);
   const actualPin = new X509Certificate(cert.cert).fingerprint256.replaceAll(':', '').toLowerCase();
   const requests = [];

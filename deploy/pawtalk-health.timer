@@ -1,0 +1,11 @@
+[Unit]
+Description=Check PawTalk room health
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+RandomizedDelaySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

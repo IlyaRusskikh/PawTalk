@@ -1,8 +1,8 @@
 # Разработка PawTalk / Local development
 
-Эта инструкция описывает текущий PawTalk 0.8.0. Для постоянного сервера на VPS используйте **только Docker Swarm** и [SERVER.md](SERVER.md), а не приведённый ниже локальный `docker run`.
+Эта инструкция описывает разработку PawTalk 0.9.0 (ещё не выпущен). Постоянный VPS использует Docker Compose и [SERVER.md](SERVER.md); приведённый ниже `docker run` предназначен для локального тестирования.
 
-This guide covers local development of PawTalk 0.8.0. Production VPS deployment uses **Docker Swarm only**; see [SERVER.md](SERVER.md).
+This guide covers unreleased PawTalk 0.9.0 development. Production VPS deployment uses Docker Compose; see [SERVER.md](SERVER.md).
 
 ## Что нужно / Requirements
 
@@ -58,7 +58,7 @@ go test ./...
 go vet ./...
 ```
 
-**Ограничение локального режима:** он не предназначен для приглашений через интернет и не заменяет Swarm. Чтобы проверить LAN-разговор, создайте комнату прямо в Windows-клиенте и передайте LAN-приглашение второму ПК ([первый разговор](FIRST-CALL.ru.md)). Отдельный Caddy/CA и Docker Compose для этого не нужны.
+**Ограничение локального режима:** он не предназначен для приглашений через интернет и не заменяет production Compose. Чтобы проверить LAN-разговор, создайте комнату прямо в Windows-клиенте и передайте LAN-приглашение второму ПК ([первый разговор](FIRST-CALL.ru.md)). Отдельный Caddy/CA и Docker Compose для этого не нужны.
 
 ## Проверки / Tests
 
@@ -72,27 +72,26 @@ go vet ./...
 | `npm run test:docker` | Изолированные Go API и LiveKit через `docker run`, Electron-интеграция |
 | `npm run test:docker -- --containers-only` | Реальный запуск двух Docker-контейнеров, HTTP LiveKit, авторизация Go API, подпись и права JWT; без Electron |
 | `npm run dev:server -- --smoke` | Временный запуск точно той же `docker run`-конфигурации dev-сервера из локального образа `pawtalk-server:local`; TLS fingerprint, HTTPS, ограничения контейнера, очистка ресурсов |
-| `node scripts/swarm-smoke.mjs` (только GitHub-hosted Linux CI) | Настоящий одноузловой Docker Swarm: `server-update.py deploy`, здоровье, внешний том, принудительный rollout, `server-update.py rollback` и сохранение сертификата/пароля |
-| `node scripts/swarm-smoke.mjs --cross-version` (только GitHub-hosted Linux CI) | Развёртывание опубликованного образа 0.7.0, проверка реального релиза и GHCR digest, обновление до 0.7.1 через `server-update.py update --target-version 0.7.1`, откат до 0.7.0 и проверка SQLite-чата, пароля и TLS |
+| `python3 tests/compose_integration.py` (Linux) | Настоящие Compose, локальный registry, install/reinstall, SQLite backup, Server rollout, неисправный образ, SIGKILL, Deploy update без рестарта и fresh restore |
 | `npm run check:public` | Эвристическая проверка случайной публикации секретов |
 | `node scripts/check-website.mjs` | Сайт, локальные ссылки, метаданные |
-| `python -m unittest discover -s tests -p server_update_test.py` | Тесты утилиты обновления Swarm |
+| `python3 -m unittest discover -s tests -p '*_test.py'` (Linux) | Подписи, семейства релизов, конфигурация, backup/rollback, аварии, архивы и launcher fallback |
 | `go test -race ./...` (в `server`) | Go-тесты с race detector |
 | `go vet ./...` (в `server`) | Go static analysis |
 
 `test:server` и `test:docker` запускают тестовые Docker-контейнеры; нужен Docker daemon и свободные порты, указанные в тестах. `test:docker` ориентирован на Linux Docker Engine. Режим `--containers-only` использует порты 8080/7880/7881/7882 и не требует Electron или `npm ci`; он не проверяет звук двух клиентов. `dev:server -- --smoke` использует порты 32443–32445 и образ `pawtalk-server:local`, который предварительно создаёт `node scripts/server-smoke.mjs` или команда `docker build -f server/standalone.Dockerfile -t pawtalk-server:local .`.
 
-В CI на Linux AMD64 и ARM64 выполняются **пять** сценариев: `scripts/server-smoke.mjs`, `scripts/dev-server.mjs --smoke`, `scripts/docker-smoke.mjs --containers-only`, `scripts/swarm-smoke.mjs` и `scripts/swarm-smoke.mjs --cross-version`. Они проверяют настоящие Docker-контейнеры, но не заменяют измерения задержки голоса и работу с реальными микрофонами, внешними сетями, PTT в играх и нагрузкой. Эти сценарии нужно проверять отдельно по [ACCEPTANCE.md](ACCEPTANCE.md).
+CI на Linux AMD64 и ARM64 проверяет Go/race/vet, Docker lifecycle, Compose install/update/backup/restore/SIGKILL и контракт с опубликованным сервером 0.8.0. Это локальные контейнерные сценарии; реальные микрофоны и внешние сети остаются в ACCEPTANCE.md.
 
 ## Сервер на VPS / VPS
 
-Для VPS не используйте команды `npm run dev:server` или `docker run`. Используется **`compose.server.swarm.yaml` исключительно как Swarm stack specification**, внешний Docker volume и `scripts/server-update.py` с действиями `deploy`, `check`, `update`, `rollback`:
+Для VPS используйте проверенный установщик и Compose-шаблон `deploy/compose.server.yaml`. Локальный `docker run` не заменяет production lifecycle:
 
 ```sh
-python3 scripts/server-update.py deploy --config .env --stack pawtalk
+sudo python3 deploy/pawtalkctl install
 ```
 
-Подробные инструкции с правилами firewall, бэкапом, миграцией и обновлениями: [SERVER.md](SERVER.md) и [SWARM.md](SWARM.md).
+Подробные инструкции с правилами firewall, backup и независимыми обновлениями: [SERVER.md](SERVER.md). Миграция старых установок не предусмотрена.
 
 ## Предосторожности / Safety
 

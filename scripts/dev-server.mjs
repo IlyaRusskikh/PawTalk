@@ -1,4 +1,4 @@
-// One bundled Go/LiveKit container for localhost development; VPS uses Docker Swarm.
+// One bundled Go/LiveKit container for localhost development; VPS uses Compose.
 // --smoke exercises this exact docker run configuration with a temporary volume and port.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';

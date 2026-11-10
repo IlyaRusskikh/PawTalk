@@ -17,6 +17,17 @@ First publish the Client-only `v0.8.1` bridge, then `client-v0.9.0`. The bridge
 discovers the new family automatically and retains the normal installation prompt.
 Old 0.8.0 rooms cannot relay new tag assets; direct GitHub downloads remain available.
 
+В 0.9.0 «Настройки → Система → Обновления» содержит сохраняемый канал:
+«Стабильные версии» исключает prerelease, «Предварительные версии» включает их.
+Клиент принимает только `client-v*` и исторические legacy-теги не выше `v0.8.1`;
+Server/Deploy и будущие общие `v*` отвергаются. Сохранённые подписанные предложения
+защищены от отката отдельно по каналу. Если лимит пагинации исчерпан, показывается
+ошибка проверки, а не ложное сообщение «последняя версия».
+
+In 0.9.0, **Settings → System → Updates** persists Stable/Preview channel selection.
+Only `client-v*` and historical legacy tags up to `v0.8.1` are accepted. Authenticated
+offer floors are channel-specific; an exhausted pagination bound is a check failure.
+
 Установщик предлагает English или Русский. Выбор применяется к установщику и
 первому запуску приложения. Его можно изменить в «Настройки → Язык» без перезапуска. При обновлении сохраняется язык профиля пользователя.
 
@@ -74,7 +85,7 @@ EXE идёт с диска без запроса установщика к GitHu
 удаляется. Запрос старой версии не вытесняет новую из кэша.
 
 Кэш сохраняется после перезапуска сервера и пересоздания self-host комнаты:
-на Windows это `%LOCALAPPDATA%\PawTalk\update-relay`, на VPS Swarm —
+на Windows это `%LOCALAPPDATA%\PawTalk\update-relay`, на VPS Compose —
 `update-cache/` внутри постоянного каталога `PAWTALK_DATA_DIR` (обычно `/data`).
 Каталог кэша предназначен для одного процесса сервера. Хранится один завершённый
 EXE размером до 1 ГиБ; во время замены дополнительно нужен объём нового файла.
@@ -164,7 +175,7 @@ downloaded newer version automatically removes the older EXE. Requests for older
 versions do not evict a newer cached version.
 
 The cache survives server restarts and self-host room recreation. Windows uses
-`%LOCALAPPDATA%\PawTalk\update-relay`; Swarm VPS servers use `update-cache/` inside
+`%LOCALAPPDATA%\PawTalk\update-relay`; Compose VPS servers use `update-cache/` inside
 the persistent `PAWTALK_DATA_DIR` (normally `/data`). Each cache directory belongs
 to one server process. It holds one completed EXE up to 1 GiB; a replacement
 temporarily needs space for the new file as well. Orphaned temporary and old files

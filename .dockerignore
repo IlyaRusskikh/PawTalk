@@ -8,6 +8,8 @@ deploy/generated
 resources/server
 src/generated
 CONTINUE.md
+plans
+**/__pycache__
 **/connection-report*.json
 **/*.log
 **/.env

@@ -1,12 +1,12 @@
 [Unit]
-Description=Check and update PawTalk Swarm service when enabled
+Description=PawTalk verified Server and Deploy updates (opt-in)
 After=docker.service network-online.target
 Wants=network-online.target
 Requires=docker.service
 
 [Service]
 Type=oneshot
-WorkingDirectory=/opt/pawtalk
-ExecStart=/usr/bin/python3 /opt/pawtalk/scripts/server-update.py update --config /opt/pawtalk/.env --stack pawtalk
-TimeoutStartSec=15min
+ExecStart=/opt/pawtalk-agent/launcher periodic
+TimeoutStartSec=20min
 UMask=0077
+PrivateTmp=true

@@ -1,4 +1,8 @@
 {
+  "Канал обновлений": "Update channel",
+  "Стабильные версии": "Stable releases",
+  "Предварительные версии": "Preview releases",
+  "Версия API сервера не поддерживается. Обновите клиент или обратитесь к владельцу сервера.": "The server API version is unsupported. Update the client or contact the server owner.",
   "Временная комната — добавить в закладки": "Temporary room — add to bookmarks",
   "Не подключено": "Not connected",
   "Подключение…": "Connecting…",

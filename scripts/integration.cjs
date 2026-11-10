@@ -72,12 +72,12 @@ app.whenReady().then(async () => {
     // LiveKit smooths gain with a 100 ms time constant. Wait on the audio
     // clock so a busy/offscreen renderer cannot measure the transition.
     await b.executeJavaScript(`new Promise(resolve=>{const end=window.voice.playback.currentTime+1.2;const timer=setInterval(()=>{if(window.voice.playback.currentTime>=end){clearInterval(timer);resolve();}},20);})`);
-    return b.executeJavaScript('window.outputRMS()');
+    return b.executeJavaScript('window.outputGain()');
   };
   const full = await level(1), quarter = await level(0.25), double = await level(2), silent = await level(0);
-  assert.ok(full > 0.001);
-  assert.ok(quarter/full > 0.15 && quarter/full < 0.4, `25% output ratio ${quarter/full}`);
-  assert.ok(double/full > 1.5 && double/full < 2.5, `200% output ratio ${double/full}`);
+  assert.ok(full > 0.9 && full < 1.1, `100% output ratio ${full}`);
+  assert.ok(quarter > 0.2 && quarter < 0.3, `25% output ratio ${quarter}`);
+  assert.ok(double > 1.8 && double < 2.2, `200% output ratio ${double}`);
   assert.ok(silent < full * 0.001, `0% output ${silent}`);
   await level(1);
   record('PASS actual decoded playback samples at 0%, 25%, 100%, 200%; no HTML playback bypass');

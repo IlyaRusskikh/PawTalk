@@ -1,50 +1,80 @@
-# Архитектура PawTalk / Architecture
+# Архитектура / Architecture — 0.9.0 (unreleased)
 
-Это описание **текущей реализации 0.8.0**, а не проект старых выпусков. Детальный API находится в [API.md](API.md); изменения между версиями — в [CHANGELOG.md](../CHANGELOG.md).
+Один монорепозиторий, три независимых выпуска:
 
-## Компоненты
+| Линия | Версия | Обновлятор | Доверие |
+|---|---|---|---|
+| Client | package manifests | Electron, `client-v*` + ограниченный legacy bridge | Существующий Client Ed25519 key, signed manifest + EXE hash |
+| Server | `server/VERSION` | Host controller, только `server-v*` | Отдельный Server key + GHCR digest |
+| Deploy | `deploy/VERSION` | Stable launcher/controller, только `deploy-v*` | Отдельный Deploy key + signed bundle hash |
 
-| Компонент | Где в исходниках | Назначение |
-| --- | --- | --- |
-| Windows desktop | `electron/main.cjs`, `electron/preload.cjs` | Electron main process, изолированный renderer, разрешённые IPC-операции, сохранение ключей и системные функции |
-| UI | `src/`, `shared/` | React + TypeScript, экраны комнаты, голосовые настройки, профили, уведомления и чат |
-| Голос | `livekit-client`, `src/` | WebRTC через LiveKit; микрофон, Push-to-Talk, выбор устройств, обработка звука |
-| Нативные функции Windows | `native/` | Глобальные клавиши и интеграция с системным аудио |
-| Серверное API | `server/` | Go: проверка доступа по паролю, выдача токенов, API чата и профилей, диагностика |
-| Медиа-сервер | LiveKit | WebRTC-сигнализация и пересылка голоса |
-| История | `server/chat*.go` | SQLite с ограничением объёма на постоянном сервере; встроенная комната может хранить историю в памяти |
-| Обновления клиента | `electron/updater.cjs`, `electron/update-manifest.cjs` | Поиск GitHub Release, Ed25519-подпись манифеста, проверка SHA-256 установщика |
-| Обновления VPS | `scripts/server-update.py`, `compose.server.swarm.yaml` | Docker Swarm: новый сервис, обновление по digest, проверка, откат |
+Общий GitHub `/releases/latest` не используется. Client-only не публикует Server,
+Server-only не пакует EXE, Deploy-only не меняет Server digest и не перезапускает
+голос, если эффективная runtime-конфигурация не меняется.
 
-## Два способа размещения комнаты
+## Комната
 
-**Встроенная комната Windows:** клиент создаёт временную комнату и запускает локальные серверные компоненты. Комната работает, пока приложение/хост её поддерживает; после пересоздания нужен новый инвайт. Для первого LAN-разговора не требуется Docker ([первый звонок](FIRST-CALL.ru.md)).
+Windows: Electron/React UI, LiveKit client, локальные обработчики микрофона,
+native PTT/audio. Встроенная временная комната запускает Go API/LiveKit из pin
+`bundled-server.json`; текущий pin совместим по API protocol 1. Постоянное размещение
+на Windows удалено из поддерживаемых сценариев.
 
-**Постоянная комната Linux VPS:** готовый Docker-образ содержит Go API и LiveKit в одном контейнере. Docker Swarm управляет одной репликой с постоянным volume и закреплённым узлом. Релиз публикуется для linux/amd64 и linux/arm64. [SERVER.md](SERVER.md) · [SWARM.md](SWARM.md).
+VPS: один Debian 12 / Ubuntu 24.04 amd64/arm64 host, Docker Engine + Compose v2+,
+одна реплика Go API + LiveKit в одном контейнере, host networking. UID/GID 65532,
+read-only rootfs, cap_drop ALL, no-new-privileges, tmpfs и постоянный volume `/data`.
+Нет центральной панели, привилегированного приложения или Docker socket в сервере.
+Production Compose: `deploy/compose.server.yaml`. Swarm и его миграция не поддерживаются.
 
-Файл `compose.server.swarm.yaml` — **спецификация стека Swarm**, используемая `docker stack deploy`. Для VPS не нужен Docker Compose plugin, нет поддерживаемой альтернативной установки через `docker compose up`.
+## Управление и состояние
 
-**Локальная разработка:** этот же серверный образ можно запустить через `docker run` на localhost; это отдельный dev-сценарий, не способ развёртывания VPS. [DEVELOPMENT.md](DEVELOPMENT.md).
+`deploy/pawtalk_agent/` — host-only Python/OpenSSL CLI и oneshot controller.
+systemd update/health timers вызывают стабильный launcher. Нет постоянно
+работающего updater-контейнера; неисправность агента не останавливает здоровый голос.
 
-## Соединение и безопасность
+- User config `/etc/pawtalk/config.env` отделён от `installed.json`: config не
+  содержит digest/version и никогда не выполняется как shell.
+- Managed state/journal хранит фактически установленный образ, Server/Deploy
+  версии, project/volume и хэш идентичности. Atomic write + fsync, общий flock.
+- Volume сохраняет сертификат/ключ, пароль-хеш и SQLite. Новый deploy создаёт
+  новую комнату. Reinstall/update не пересоздаёт её идентичность.
+- Backup останавливает комнату и архивирует все данные, config, template и
+  image reference; завершённая копия публикуется только после checksum.
+- Rollout failure или crash после применения восстанавливает согласованную
+  пару «данные+образ» в новый том, сохраняя исходный том. Image-only rollback не применяется.
+- Deploy bundle распаковывается по строгому allowlist без ссылок/обхода путей,
+  проверяется self-test, затем атомарно меняется `current`. Launcher проверяет
+  controller и возвращает `previous` при отказе, отменяя текущую операцию.
 
-- Клиент получает приглашение `pawtalk://` с отпечатком сертификата и проверяет TLS fingerprint до передачи пароля. Старое приглашение после пересоздания встроенной комнаты может перестать работать.
-- Серверное API проверяет пароль PBKDF2, ограничивает попытки подключения и выдаёт краткоживущие токены LiveKit.
-- E2EE **не включается автоматически**. В экспериментальном режиме используется общий случайный 256-битный ключ; для голосовых кадров и данных чата применяются механизмы шифрования клиента. Сервер видит сетевые метаданные; при выключенном E2EE он может читать историю чата. Нет автоматической смены ключа при уходе участника или forward secrecy. [E2EE.md](E2EE.md).
-- Electron использует изолированный контекст renderer и проверку IPC; защищённые учётные данные сохраняются с помощью ОС.
-- Установщик Windows пока не подписан Authenticode. Обновлятор проверяет манифест Ed25519 и SHA-256, но это не заменяет цифровую подпись издателя. [UPDATES.md](UPDATES.md).
+Restart policy восстанавливает завершившийся процесс; unhealthy требует отдельного
+watchdog с ограничением попыток/backoff. Контроллеры используют общий lock,
+поэтому watchdog не конкурирует с backup/update. Выключенные auto-update линии
+не делают плановых исходящих запросов. Явные `install`/`doctor`/update-команды
+могут выполнять соответствующие загрузки и диагностику.
 
-## Хранение и эксплуатация
+## Протокол и безопасность
 
-- Docker Swarm сервер использует внешний volume `/data`; он содержит секреты, TLS-идентичность и SQLite. Не удаляйте его при обновлении; создавайте резервные копии до изменений.
-- Сетевые TCP/UDP-порты, host networking, ограничения контейнера и контроль работоспособности описаны в [SERVER.md](SERVER.md).
-- Перед обновлением соблюдайте совместимость версий клиента и сервера. Релизные артефакты не перезаписываются.
-- Автоматическая проверка обновлений клиента и отдельное opt-in обновление Swarm описаны в [UPDATES.md](UPDATES.md) и [SWARM.md](SWARM.md).
+API protocol 1 и capabilities объявляются через `/api/config`. Отсутствие поля
+означает legacy protocol 1. [Совместимость](COMPATIBILITY.md), [API](API.md).
+Release numbers не сравниваются для определения API-совместимости.
 
-## Статус проверки
+Приглашение закрепляет TLS fingerprint; пароль передаётся после pin check.
+E2EE остаётся opt-in экспериментальным режимом; VPS хранит только SHA-256 key ID,
+не секретный client key. [Ограничения E2EE](E2EE.md). Updater signatures не заменяют
+Authenticode-подпись Windows installer. Trust roots и ротация: [RELEASING](RELEASING.md).
 
-Unit, container и synthetic audio tests не заменяют проверку настоящих микрофонов, долгих разговоров, PTT в играх, потерь пакетов и разных сетей. Неотмеченные проверки перечислены в [ACCEPTANCE.md](ACCEPTANCE.md). Технический журнал тестов — [VERIFICATION.md](VERIFICATION.md).
+Серверный update допускает краткий обрыв звонка. Неподдерживаемые схемы данных
+блокируются; zero downtime, кластеры, импорт старых VPS и IPv6 не входят в контракт.
+Локальные/контейнерные проверки не подтверждают внешний UDP и реальные устройства.
+[Приёмка](ACCEPTANCE.md), [проверки разработки](VERIFICATION.md).
 
----
+## English
 
-**English summary:** PawTalk uses an Electron/React/TypeScript Windows client, a Go API, LiveKit for WebRTC, and SQLite for retained chat. A temporary room can run inside the Windows client. A persistent Linux room runs as one stateful Docker Swarm service using the bundled Go/LiveKit image; local development may use `docker run`. E2EE is optional and experimental, and the Windows installer is not yet Authenticode-signed. See the linked guides for exact setup, security limitations, and acceptance tests.
+PawTalk keeps one monorepo with independent Client, Server and Deploy releases.
+Windows temporary rooms remain pinned and bundled; permanent Windows hosting is
+removed. Linux uses one non-root Go/LiveKit container under Compose, a persistent
+volume, host-only signed update tools and systemd timers. User config, managed
+state and room data are separate. Transactional updates use stopped consistent
+backups and restore the image/data pair after failure. Deploy has versioned code,
+atomic switching and a stable fallback launcher; unchanged runtime means no Server
+restart. API protocol 1 is independent of release numbers. No real VPS or external
+network/device acceptance is claimed by local Docker tests.

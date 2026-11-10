@@ -1,0 +1,144 @@
+name: Publish component release
+on:
+  push:
+    tags: ['client-v*', 'server-v*', 'deploy-v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      component: ${{ steps.route.outputs.component }}
+      version: ${{ steps.route.outputs.version }}
+      channel: ${{ steps.route.outputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+      - id: route
+        env:
+          PAWTALK_CLIENT_CHANNEL: ${{ vars.PAWTALK_CLIENT_CHANNEL || 'preview' }}
+          PAWTALK_SERVER_CHANNEL: ${{ vars.PAWTALK_SERVER_CHANNEL || 'preview' }}
+          PAWTALK_DEPLOY_CHANNEL: ${{ vars.PAWTALK_DEPLOY_CHANNEL || 'preview' }}
+        run: |
+          node scripts/release-contract.mjs "$GITHUB_REF_NAME" > /tmp/route.json
+          node --input-type=module -e "import fs from 'node:fs'; const p=JSON.parse(fs.readFileSync('/tmp/route.json')); fs.appendFileSync(process.env.GITHUB_OUTPUT, 'component='+p.component+'\nversion='+p.version+'\nchannel='+p.channel+'\n');"
+      - name: Refuse replacing a published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A non-404 API error must fail rather than imply the release is absent.
+          code=$(curl -sS -o /tmp/existing.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME")
+          test "$code" = 404
+  verify:
+    needs: plan
+    uses: ./.github/workflows/check.yml
+    with:
+      client-prerelease: ${{ needs.plan.outputs.channel == 'preview' }}
+    secrets: inherit
+  client:
+    if: needs.plan.outputs.component == 'client'
+    needs: [plan, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pawtalk-windows
+          path: release
+      - name: Publish Client assets only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ needs.plan.outputs.channel }}
+        run: |
+          flags=(--latest=true)
+          if [ "$CHANNEL" = preview ]; then flags=(--prerelease --latest=false); fi
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "Client ${{ needs.plan.outputs.version }}" --generate-notes release/PawTalk.Setup.*.exe release/PawTalk.Licenses.*.zip release/SHA256SUMS.txt release/update-manifest.json
+  server:
+    if: needs.plan.outputs.component == 'server'
+    needs: [plan, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Validate Server signing key before publishing any image
+        env:
+          PAWTALK_SERVER_PRIVATE_KEY: ${{ secrets.PAWTALK_SERVER_PRIVATE_KEY }}
+        run: node scripts/release-metadata.mjs --check-key
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refuse replacing image version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          # Query the authenticated registry; distinguish missing from authorization/network errors.
+          token=$(curl --fail -sS -u "$GITHUB_ACTOR:$GH_TOKEN" 'https://ghcr.io/token?service=ghcr.io&scope=repository:ilyarusskikh/pawtalk-server:pull' | node -pe 'JSON.parse(fs.readFileSync(0)).token')
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $token" -H 'Accept: application/vnd.oci.image.index.v1+json' "https://ghcr.io/v2/ilyarusskikh/pawtalk-server/manifests/$VERSION")
+          test "$code" = 404
+      - uses: docker/build-push-action@v7
+        id: image
+        with:
+          context: .
+          file: server/standalone.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/ilyarusskikh/pawtalk-server:${{ needs.plan.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/IlyaRusskikh/PawTalk
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.plan.outputs.version }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+      - name: Sign server metadata
+        env:
+          PAWTALK_SERVER_PRIVATE_KEY: ${{ secrets.PAWTALK_SERVER_PRIVATE_KEY }}
+          PAWTALK_IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          PAWTALK_PRERELEASE: ${{ needs.plan.outputs.channel == 'preview' && 'true' || 'false' }}
+        run: node scripts/release-metadata.mjs
+      - name: Publish Server metadata only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ needs.plan.outputs.channel }}
+        run: |
+          flags=(--latest=false)
+          if [ "$CHANNEL" = preview ]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "Server ${{ needs.plan.outputs.version }}" --generate-notes release/server/server-manifest.json
+  deploy:
+    if: needs.plan.outputs.component == 'deploy'
+    needs: [plan, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+      - name: Sign complete Deploy bundle
+        env:
+          PAWTALK_DEPLOY_PRIVATE_KEY: ${{ secrets.PAWTALK_DEPLOY_PRIVATE_KEY }}
+          PAWTALK_PRERELEASE: ${{ needs.plan.outputs.channel == 'preview' && 'true' || 'false' }}
+        run: node scripts/release-metadata.mjs
+      - name: Publish Deploy assets only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ needs.plan.outputs.channel }}
+        run: |
+          flags=(--latest=false)
+          if [ "$CHANNEL" = preview ]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "Deploy ${{ needs.plan.outputs.version }}" --generate-notes release/deploy/PawTalk.Deploy.*.tar.gz release/deploy/deploy-manifest.json

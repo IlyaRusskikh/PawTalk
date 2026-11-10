@@ -61,6 +61,25 @@ test('version ordering includes prereleases without downgrading stable versions'
   assert.equal(selectRelease([release('0.1.0'), release('0.2.0-beta.1')], '0.1.0').version, '0.2.0-beta.1');
   assert.equal(selectRelease([release('0.2.0-beta.1')], '0.2.0'), null);
 });
+test('Client channels reject foreign and future legacy tags and keep separate authenticated offer floors', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-channels-'));
+  try {
+    const candidates = [release('0.99.0'), familyRelease('0.10.0-beta.1','client'), familyRelease('0.9.0','client')];
+    assert.equal(selectRelease(candidates,'0.8.1','stable').version,'0.9.0');
+    assert.equal(selectRelease(candidates,'0.8.1','preview').version,'0.10.0-beta.1');
+    assert.throws(() => selectRelease(candidates,'0.8.1','invalid'));
+    let channel = 'preview';
+    const fetcher = async url => url.includes('api.github.com') ? Response.json(candidates)
+      : new Response(manifest(channel === 'preview' ? '0.10.0-beta.1' : '0.9.0'));
+    assert.equal((await new Updater({keys,directory,current:'0.8.1',channel,fetcher}).check()).status,'available');
+    channel = 'stable';
+    assert.equal((await new Updater({keys,directory,current:'0.8.1',channel,fetcher}).check()).status,'available');
+    await writeFile(path.join(directory,'trusted-manifest.json'),manifest('0.11.0'));
+    await rm(path.join(directory,'trusted-manifest.preview.json'));
+    channel = 'preview';
+    assert.equal((await new Updater({keys,directory,current:'0.8.1',channel,fetcher}).check()).status,'security-failed');
+  } finally { await rm(directory,{recursive:true,force:true}); }
+});
 test('only complete, verifiable installers from this repository are offered', () => {
   const invalid = release('0.2.0'); invalid.assets[0].digest = null;
   const external = release('0.3.0'); external.assets[0].browser_download_url = 'https://evil.example/setup.exe';
@@ -131,6 +150,12 @@ test('corrupt and truncated downloads never launch and can be retried', async ()
 test('network failures leave the installed app alone', async () => {
   const updater = new Updater({ keys, current: '0.1.0', fetcher: async () => { throw new Error('offline'); } });
   assert.equal((await updater.check()).status, 'check-failed');
+});
+test('a full pagination bound reports check failure instead of a false up-to-date result', async () => {
+  let pages = 0;
+  const updater = new Updater({current:'0.8.1',fetcher:async () => { pages++; return Response.json(Array.from({length:100},()=>familyRelease('9.0.0','server'))); }});
+  assert.equal((await updater.check()).status,'check-failed');
+  assert.equal(pages,10);
 });
 
 test('signed manifests reject tampering, foreign keys, expiration and invalid artifact bindings', () => {

@@ -31,8 +31,10 @@
   Y for substantial changes and X for very large changes. Reset lower components.
   Update both package manifests, CHANGELOG, and version-specific documentation.
   Start at 0.1.0. Do not bump versions for every work-in-progress edit.
-- Local builds must not automatically publish. Release tags are `vX.Y.Z` and
-  must match package metadata. Never replace published tags or binaries.
+- Local builds must not automatically publish. Component tags are `client-vX.Y.Z`,
+  `server-vX.Y.Z`, `deploy-vX.Y.Z` and must match their own version sources.
+  The one-time Client bridge uses `v0.8.1` from commit 3747a0d; historical tags
+  remain immutable. Never replace published tags or binaries.
 - Keep release assets compact: `PawTalk.Setup.X.Y.Z.exe`, `SHA256SUMS.txt`,
   and one `PawTalk.Licenses.X.Y.Z.zip` containing `LICENSE`,
   `THIRD_PARTY_NOTICES.md`, and `licenses/` from that release. Do not attach

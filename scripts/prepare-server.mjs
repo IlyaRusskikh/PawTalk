@@ -1,4 +1,4 @@
-import { mkdir, writeFile, access, unlink, copyFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile, access, unlink, copyFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -7,7 +7,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'resources/server');
-const version = '1.13.11';
+const bundled = JSON.parse(await readFile(path.join(root, 'bundled-server.json'), 'utf8'));
+if (!/^[a-f0-9]{40}$/.test(bundled.commit) || !/^\d+\.\d+\.\d+$/.test(bundled.version)) throw Error('Invalid pinned bundled server source');
+const version = bundled.livekitVersion;
 function run(command, args, options = {}) {
   const r = spawnSync(command, args, { cwd: root, stdio: 'inherit', windowsHide: true, ...options });
   if (r.error || r.status !== 0) throw r.error || new Error(`${command} failed (${r.status})`);
@@ -34,10 +36,23 @@ async function download(url, headers = {}) {
 }
 await mkdir(output, { recursive: true });
 const go = process.env.PAWTALK_GO || (await access(path.join(tmpdir(), 'pawtalk-tools/go/bin/go.exe')).then(() => path.join(tmpdir(), 'pawtalk-tools/go/bin/go.exe')).catch(() => 'go'));
-run(go, ['build', '-trimpath', '-o', path.join(output, 'pawtalk-api.exe'), '.'], { cwd: path.join(root, 'server'), env: { ...process.env, GOOS: 'windows', GOARCH: 'amd64' } });
-const goRoot = spawnSync(go, ['env', 'GOROOT'], { encoding: 'utf8', windowsHide: true });
-if (goRoot.status !== 0) throw new Error('Could not locate Go license');
-await copyFile(path.join(goRoot.stdout.trim(), 'LICENSE'), path.join(output, 'GO-LICENSE'));
+const source = await mkdtemp(path.join(tmpdir(), 'pawtalk-bundled-source-'));
+try {
+  const archive = path.join(source, 'server.tar');
+  run('git', ['archive', '--format=tar', '-o', archive, bundled.commit, 'server']);
+  run('tar', ['-xf', archive, '-C', source]);
+  if ((await readFile(path.join(source, 'server/VERSION'), 'utf8')).trim() !== bundled.version) throw Error('Pinned server version mismatch');
+  const goRoot = spawnSync(go, ['env', 'GOROOT'], { encoding: 'utf8', windowsHide: true });
+  if (goRoot.status === 0) {
+    const actualGo = spawnSync(go, ['version'], {encoding:'utf8',windowsHide:true});
+    if (actualGo.status !== 0 || !actualGo.stdout.includes(`go${bundled.goVersion} `)) throw Error('Bundled server requires pinned Go '+bundled.goVersion);
+    run(go, ['build', '-trimpath', '-o', path.join(output, 'pawtalk-api.exe'), '.'], { cwd: path.join(source, 'server'), env: { ...process.env, GOOS: 'windows', GOARCH: 'amd64' } });
+    await copyFile(path.join(goRoot.stdout.trim(), 'LICENSE'), path.join(output, 'GO-LICENSE'));
+  } else {
+    // Optional Docker fallback on developer PCs without a Go installation.
+    run('docker', ['run', '--rm', '--mount', `type=bind,source=${path.join(source,'server')},target=/src`, '--mount', `type=bind,source=${output},target=/out`, '-w', '/src', '-e', 'GOOS=windows', '-e', 'GOARCH=amd64', `golang:${bundled.goVersion}-alpine`, 'sh', '-c', 'go build -trimpath -o /out/pawtalk-api.exe . && cp /usr/local/go/LICENSE /out/GO-LICENSE']);
+  }
+} finally { await rm(source, {recursive:true,force:true}); }
 const binary = path.join(output, 'livekit-server.exe');
 const installed = spawnSync(binary, ['--version'], { encoding: 'utf8', windowsHide: true });
 if (installed.status !== 0 || !installed.stdout.includes(`version ${version}`)) {
@@ -60,4 +75,6 @@ if (installed.status !== 0 || !installed.stdout.includes(`version ${version}`)) 
 }
 const license = path.join(output, 'LIVEKIT-LICENSE');
 try { await access(license); } catch { await writeFile(license, await download(`https://raw.githubusercontent.com/livekit/livekit/v${version}/LICENSE`)); }
+const binaryHash = async name => createHash('sha256').update(await readFile(path.join(output, name))).digest('hex');
+await writeFile(path.join(output, 'bundled-server.json'), JSON.stringify({...bundled, apiSha256:await binaryHash('pawtalk-api.exe'),livekitSha256:await binaryHash('livekit-server.exe')})+'\n');
 console.log('Bundled API and LiveKit are ready.');

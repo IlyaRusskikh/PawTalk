@@ -19,7 +19,7 @@ const installer = path.join(directory, name);
 const hash = createHash('sha256');
 for await (const chunk of createReadStream(installer)) hash.update(chunk);
 const publishedAt = Date.now();
-const payload = Buffer.from(JSON.stringify({ schema: 1, version, name, size: (await stat(installer)).size,
+const payload = Buffer.from(JSON.stringify({ schema: 1, component: 'client', version, name, size: (await stat(installer)).size,
   sha256: hash.digest('hex'), prerelease: version.includes('-') || process.env.PAWTALK_PRERELEASE === 'true',
   publishedAt, expiresAt: publishedAt + 365 * 86400000 }));
 await writeFile(path.join(directory, 'update-manifest.json'), JSON.stringify({ keyId, payload: payload.toString('base64'), signature: sign(null, payload, key).toString('base64') }) + '\n');

@@ -85,4 +85,31 @@ window.outputRMS = async () => {
   return Math.sqrt(energy / 30);
  } finally { gain.disconnect(analyser); analyser.disconnect(); }
 };
+// Compare both sides of the real playback gain in the same audio windows.
+// Chromium's synthetic microphone is not stationary between separate samples.
+window.outputGain = async () => {
+ const mixer = [...c.mixers.values()][0];
+ const gain = mixer.track.gainNode;
+ const source = mixer.track.connectedNodes?.at(-2);
+ if (!gain || !source || mixer.track.attachedElements.some(el => !el.muted)) throw new Error('Playback bypasses WebAudio');
+ const input = c.playback.createAnalyser(), output = c.playback.createAnalyser();
+ input.fftSize = output.fftSize = 2048;
+ source.connect(input); gain.connect(output);
+ const before = new Float32Array(2048), after = new Float32Array(2048);
+ let inputEnergy = 0, outputEnergy = 0, lastTime = -1;
+ try {
+  const end = performance.now()+5000;
+  for(let samples=0;samples<60 && performance.now()<end;) {
+   await new Promise(resolve=>setTimeout(resolve,20));
+   if(c.playback.currentTime===lastTime) continue;
+   lastTime=c.playback.currentTime;
+   input.getFloatTimeDomainData(before); output.getFloatTimeDomainData(after);
+   inputEnergy += before.reduce((sum,x)=>sum+x*x,0);
+   outputEnergy += after.reduce((sum,x)=>sum+x*x,0);
+   samples++;
+  }
+  if(inputEnergy<0.001) throw new Error('No decoded audio during gain measurement');
+  return Math.sqrt(outputEnergy/inputEnergy);
+ } finally {source.disconnect(input);gain.disconnect(output);input.disconnect();output.disconnect();}
+};
 </script></body></html>
