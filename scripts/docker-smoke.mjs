@@ -65,7 +65,8 @@ try {
   await docker(['network', 'create', network]);
   networkCreated = true;
   await docker(['run', '-d', '--name', mediaName, '--network', network, '--read-only', '--cap-drop=ALL',
-    '--security-opt=no-new-privileges:true', '-v', `${mediaConfig}:/etc/livekit.yaml:ro`,
+    '--security-opt=no-new-privileges:true', '--user', `${process.getuid()}:${process.getgid()}`,
+    '-v', `${mediaConfig}:/etc/livekit.yaml:ro`,
     '-p', '127.0.0.1:7880:7880', '-p', '127.0.0.1:7881:7881/tcp', '-p', '127.0.0.1:7882:7882/udp',
     'livekit/livekit-server:v1.13.11', '--config', '/etc/livekit.yaml']);
   await docker(['run', '-d', '--name', apiName, '--network', network, '--read-only', '--cap-drop=ALL',
