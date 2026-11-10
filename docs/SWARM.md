@@ -141,13 +141,13 @@ PAWTALK_UPDATE_REPOSITORY=IlyaRusskikh/pawtalk
 python3 scripts/server-update.py check --config .env --stack pawtalk
 ```
 
-На VPS с systemd скачайте unit-файлы той же версии, что скрипт (ниже `0.5.2`),
+На VPS с systemd скачайте unit-файлы той же версии, что скрипт (ниже `0.7.1`),
 и установите их. Они рассчитаны на `/opt/pawtalk`, `/usr/bin/python3`
 и стек `pawtalk`:
 
 ```sh
 cd /opt/pawtalk
-PAWTALK_RELEASE=0.5.2
+PAWTALK_RELEASE=0.7.1
 curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/deploy/pawtalk-update.service" -o deploy/pawtalk-update.service
 curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/deploy/pawtalk-update.timer" -o deploy/pawtalk-update.timer
 install -m 644 deploy/pawtalk-update.service /etc/systemd/system/
