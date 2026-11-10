@@ -208,6 +208,14 @@ try {
   console.log('PASS real Swarm deployment: one healthy service, managed label, mounted external volume, pinned invitation');
 
   if (crossVersion) {
+    // reset-password updates state.json; the running process keeps the old
+    // password in memory until its task is replaced. Start with a healthy
+    // 0.7.0 task using the new password before testing the version upgrade.
+    await docker(['service', 'update', '--force', '--detach=false', service], { timeoutMs: 210000 });
+    const baseline = await readyContainer();
+    assert.notEqual(baseline, original, 'password rotation must replace the initial task');
+    assert.equal(await invitation(baseline), fingerprint);
+    await markerExists(baseline);
     // The test exercises the real host updater, published GitHub release metadata
     // and the GHCR index digest, not a simulated Docker image replacement.
     const initialConnection = await connect(fingerprint, password);
@@ -235,7 +243,7 @@ try {
       { timeoutMs: 240000 });
     assert.ok(updatedText.includes('Server updated to 0.7.1'), 'the real updater must finish successfully');
     const updated = await readyContainer();
-    assert.notEqual(updated, original, 'real cross-version rollout must replace the previous task');
+    assert.notEqual(updated, baseline, 'real cross-version rollout must replace the previous 0.7.0 task');
     const updatedSpec = await inspectService();
     assert.equal(updatedSpec.Spec.Labels['io.pawtalk.version'], targetVersion);
     assert.equal(updatedSpec.Spec.TaskTemplate.ContainerSpec.Image, `${imageRepository}@${targetDigest}`);
