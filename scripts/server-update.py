@@ -50,14 +50,30 @@ def get_json(url, headers=None):
         return json.loads(raw), response.headers
 
 
-def select_release(releases, channel):
+def release_digest(body, repository):
+    """Recognize both published GHCR release-note format and older digest-only notes.
+
+    A fully qualified digest must belong to the configured PawTalk server image.
+    Reject conflicting digest declarations rather than selecting one arbitrarily.
+    The selected digest is also compared with GHCR before any update.
+    """
+    image = "ghcr.io/" + repository.lower() + "-server"
+    formats = (
+        rf"(?m)^Published multi-platform server digest:[ \t]*`?{re.escape(image)}@(sha256:[a-f0-9]{{64}})`?(?=[. \t]|$)",
+        r"(?m)^Server image digest:[ \t]*`?(sha256:[a-f0-9]{64})`?(?=[. \t]|$)",
+    )
+    digests = {found.group(1) for pattern in formats for found in re.finditer(pattern, body)}
+    return next(iter(digests)) if len(digests) == 1 else None
+
+
+def select_release(releases, channel, repository="IlyaRusskikh/pawtalk"):
     candidates = []
     for release in releases:
         match = VERSION.fullmatch(str(release.get("tag_name", "")))
-        digest = re.search(r"Server image digest:\s*`?(sha256:[a-f0-9]{64})`?", release.get("body") or "")
+        digest = release_digest(release.get("body") or "", repository)
         if not match or not digest or release.get("draft") or (channel == "stable" and release.get("prerelease")):
             continue
-        candidates.append((tuple(map(int, match.groups())), release["tag_name"].removeprefix("v"), digest.group(1)))
+        candidates.append((tuple(map(int, match.groups())), release["tag_name"].removeprefix("v"), digest))
     return max(candidates, default=None)
 
 
@@ -91,7 +107,7 @@ def update(values, stack, check_only=False):
     releases, _ = get_json("https://api.github.com/repos/" + repository + "/releases?per_page=100", {"Accept": "application/vnd.github+json"})
     if not isinstance(releases, list):
         raise ValueError("Invalid release response")
-    selected = select_release(releases, values.get("PAWTALK_UPDATE_CHANNEL", "preview"))
+    selected = select_release(releases, values.get("PAWTALK_UPDATE_CHANNEL", "preview"), repository)
     if not selected or selected[0] <= tuple(map(int, current.groups())):
         print("Server is up to date: " + labels["io.pawtalk.version"])
         return
