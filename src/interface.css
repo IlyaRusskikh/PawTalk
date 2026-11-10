@@ -45,10 +45,10 @@ input, select, textarea { background: var(--surface); color: var(--text); border
 .chat-message-menu, .failure-popover, .server-preview { position: fixed; z-index: 90; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius:calc(var(--ui-radius) * 1); box-shadow: 0 12px 40px color-mix(in srgb, var(--shadow) 40%, transparent); }
 .chat-message-menu { padding: 5px; min-width: 180px; }.chat-message-menu button { display: flex; gap: 10px; align-items: center; background: transparent; color: var(--text); border-radius:calc(var(--ui-radius) * 0.5833); padding: 11px 14px; font-size: 12px; width: 100%; }.chat-message-menu button:hover { background: var(--raised); }
 .chat-reply-quote { display: flex; align-items: center; gap: 7px; max-width: 100%; border-left: 2px solid var(--accent); padding: 4px 9px; margin: 3px 0 5px; background: var(--surface); color: var(--muted); font-size: 11px; border-radius:0 calc(var(--ui-radius) * 0.4167) calc(var(--ui-radius) * 0.4167) 0; }
-.chat-reply-quote strong { color: var(--accent); flex: none; font-weight: 550; }.chat-reply-quote span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-reply-quote > strong { color: var(--accent); flex: none; font-weight: 550; }.chat-reply-quote > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-page-loader, .chat-history-error { background: transparent; color: var(--accent); font-size: 11px; padding: 10px 12px; display: block; margin: 0 auto; }.chat-page-loader:disabled { opacity: .5; }
 .chat-reply-draft, .chat-attachment-draft { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); padding: 10px 13px; color: var(--accent); font-size: 11px; }
-.chat-reply-draft > div, .chat-attachment-draft > div { flex: 1; min-width: 0; display: grid; gap: 4px; }.chat-reply-draft span, .chat-attachment-draft span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-reply-draft > div, .chat-attachment-draft > div { flex: 1; min-width: 0; display: grid; gap: 4px; }.chat-reply-draft > div > span, .chat-attachment-draft span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-reply-draft button, .chat-attachment-draft button, .chat-inline-notice button { background: transparent; color: var(--muted); font-size: 20px; width: 26px; height: 26px; }
 .chat-attachment-draft img { width: 44px; height: 44px; object-fit: cover; border-radius:calc(var(--ui-radius) * 0.5833); }.chat-attachment-draft strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .chat-inline-notice { display: flex; align-items: center; justify-content: space-between; color: var(--warning); font-size: 11px; padding: 6px 10px; background: var(--panel); border-radius:calc(var(--ui-radius) * 0.6667); margin-top: 8px; }
@@ -275,3 +275,8 @@ button:hover:not(:disabled) { filter:none; }
 .settings-nav .settings-nav-child { min-height: 36px; padding-block: 8px; }
 .shortcut-fields > label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 1fr); align-items: center; gap: 20px; padding-block: 12px; border-bottom: 1px solid var(--line); }
 @media (max-width: 760px) { .shortcut-fields > label { grid-template-columns: minmax(0, 1fr); } }
+
+/* Reply previews retain inline formatting within a single truncated line. */
+.chat-reply-text { min-width:0; }
+.chat-reply-text .chat-markdown-line, .chat-reply-text .chat-markdown-heading, .chat-reply-text .chat-markdown-quote, .chat-reply-text .chat-markdown-item, .chat-reply-text .chat-code-block { display:inline; margin:0; font-size:inherit; }
+.chat-reply-text .chat-markdown-line + .chat-markdown-line::before { content:' '; }

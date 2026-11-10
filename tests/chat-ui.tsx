@@ -31,7 +31,7 @@ test.makeImage = async (width = 480, height = 240, mime = 'image/png') => {
 };
 for (let id = 1; id <= 250; id++) {
   const author = id % 7 === 0 ? 'Мария' : 'Алексей';
-  records.push({ ...await encryptChat(undefined, id === 250 ? 'Здесь можно обсудить планы, поделиться картинкой или ответить на сообщение.' : `Сообщение ${id} · ${id % 7 === 0 ? 'Буду через несколько минут.' : 'Давайте соберёмся вечером.'}`), id, author, authorId: (id % 7 === 0 ? 'c' : 'b').repeat(64), sent: Date.now() - (251 - id) * 15000 });
+  records.push({ ...await encryptChat(undefined, id === 250 ? 'Здесь можно обсудить планы, поделиться картинкой или ответить на сообщение.' : `Сообщение **${id}** *курсив* __линия__ ~~удалено~~ ||секрет|| · ${id % 7 === 0 ? 'Буду через несколько минут.' : 'Давайте соберёмся вечером.'}`), id, author, authorId: (id % 7 === 0 ? 'c' : 'b').repeat(64), sent: Date.now() - (251 - id) * 15000 });
 }
 const session: any = { publishChatRefresh() {}, publishTyping() {}, sendChat: async () => {} };
 test.emitTyping = (active: boolean) => session.onTyping?.('1', active);

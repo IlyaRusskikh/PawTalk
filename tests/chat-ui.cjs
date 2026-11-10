@@ -107,7 +107,9 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('[data-message-row="${id}"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:300,clientY:380}))`);
     await until('!!document.querySelector(".chat-message-menu")', 'reply menu reopens');
     await run(`document.querySelector('.chat-message-menu button').click()`);
-    assert.ok(await run('!!document.querySelector(".chat-reply-draft")'));
+    assert.ok(await run('!!document.querySelector(".chat-reply-draft .chat-reply-text strong")'));
+    assert.ok(await run('!!document.querySelector(".chat-reply-draft .chat-reply-text em") && !!document.querySelector(".chat-reply-draft .chat-reply-text u") && !!document.querySelector(".chat-reply-draft .chat-reply-text s")'));
+    assert.equal(await run('document.querySelector(".chat-reply-text").textContent.includes("||")'),false,'reply draft hides raw spoiler markers');
     await run(`(()=>{const el=document.querySelector('.chat-compose textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'Ответ на сообщение');el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     console.log('System reduced motion:',await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`));
     win.webContents.debugger.attach('1.3');
@@ -127,6 +129,10 @@ app.whenReady().then(async () => {
     assert.ok(await run(`window.sentAnimations.includes(260)`), 'sent text animates from the composer');
     assert.equal(await run('window.lastSent.reply.id'), id);
     await until('!!document.querySelector(".chat-reply-quote")', 'reply quote rendered');
+    assert.ok(await run('!!document.querySelector(".chat-reply-quote .chat-reply-text strong") && !!document.querySelector(".chat-reply-quote .chat-reply-text em")'));
+    assert.equal(await run('!!document.querySelector(".chat-reply-quote button, .chat-reply-quote a")'),false,'preview does not nest interactive elements in its navigation button');
+    assert.equal(await run('getComputedStyle(document.querySelector(".chat-reply-quote .chat-spoiler")).color'),'rgba(0, 0, 0, 0)','quoted spoiler stays hidden');
+    await capture('formatted-reply-review');
     await run(`document.querySelector('.chat-reply-quote').click()`);
     await until(`!!document.querySelector('[data-message-row="${id}"]')`, 'original fetched by reply');
     await run(`document.querySelector('.chat-jump').click()`);

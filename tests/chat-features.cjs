@@ -54,6 +54,12 @@ app.whenReady().then(async () => {
    assert.equal(await run(`document.querySelector('[data-message-row="121"] p strong').textContent`),'bold');
    await run(`document.querySelector('.chat-spoiler').click()`);
    assert.equal(await run(`document.querySelector('.chat-spoiler').getAttribute('aria-expanded')`),'true');
+   await menu(121); await click(language==='ru'?'Ответить':'Reply');
+   await until('!!document.querySelector(".chat-reply-draft .chat-reply-text strong")');
+   assert.ok(await run('!!document.querySelector(".chat-reply-draft .chat-reply-text em") && !!document.querySelector(".chat-reply-draft .chat-reply-text u") && !!document.querySelector(".chat-reply-draft .chat-reply-text s")'));
+   assert.equal(await run('getComputedStyle(document.querySelector(".chat-reply-draft .chat-spoiler")).color'),'rgba(0, 0, 0, 0)','reply preview keeps spoiler hidden even when original was revealed');
+   assert.equal(await run('document.querySelector(".chat-reply-draft .chat-reply-text").textContent.includes("||")'),false);
+   await run('document.querySelector(".chat-reply-draft > button").click()');
    await run(`window.remoteEdit(120,'Remote **edited**')`);
    await until(`document.querySelector('[data-message-row="120"] p strong')?.textContent==='edited'`);
    await run(`window.remoteEdit(120)`); await until(`!document.querySelector('[data-message-row="120"]')`);
