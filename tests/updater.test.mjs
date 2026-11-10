@@ -20,6 +20,41 @@ function release(v, extra = {}) {
   return { tag_name: `v${v}`, prerelease: v.includes('-'), assets: [{ name: `PawTalk.Setup.${v}.exe`, state: 'uploaded', size: bytes.length,
     digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}`, browser_download_url: `https://github.com/IlyaRusskikh/pawtalk/releases/download/v${v}/PawTalk.Setup.${v}.exe` }], ...extra };
 }
+function familyRelease(v, family) {
+  const candidate = release(v);
+  candidate.tag_name = `${family}-v${v}`;
+  candidate.assets[0].browser_download_url = candidate.assets[0].browser_download_url.replace(`/v${v}/`, `/${candidate.tag_name}/`);
+  return candidate;
+}
+test('bridge discovers client tags, rejects other families and downloads from the selected tag', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-bridge-'));
+  const requests = [];
+  try {
+    const candidates = [familyRelease('8.0.0', 'server'), familyRelease('9.0.0', 'deploy'), release('0.8.1'), familyRelease('0.9.0', 'client')];
+    assert.equal(selectRelease(candidates, '0.8.1').tag, 'client-v0.9.0');
+    assert.equal(selectRelease(candidates.slice(0, 2), '0.8.1'), null);
+    const updater = new Updater({ keys, current: '0.8.1', directory,
+      script: path.join(directory, 'helper.ps1'), installDirectory: directory,
+      fetcher: async url => {
+        requests.push(url);
+        if (url.includes('api.github.com')) return Response.json(candidates);
+        assert.ok(url.includes('/client-v0.9.0/'), url);
+        return new Response(url.endsWith('update-manifest.json') ? manifest('0.9.0') : bytes);
+      }, launch: () => { throw Error('stop before running synthetic installer'); } });
+    await writeFile(updater.script, '# synthetic');
+    assert.equal((await updater.check()).status, 'available');
+    await updater.install();
+    assert.deepEqual(await readFile(path.join(directory, 'PawTalk-0.9.0.exe')), bytes);
+    assert.ok(requests.some(url => url.endsWith('/client-v0.9.0/PawTalk.Setup.0.9.0.exe')));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+test('published 0.8.0 selector discovers the legacy bridge, then bridge discovers Client 0.9.0', () => {
+  const legacy = createRequire(import.meta.url)('./legacy-update-selector.cjs');
+  const releases = [release('0.8.1'), familyRelease('0.9.0', 'client'), familyRelease('0.9.0', 'server')];
+  assert.equal(legacy.selectRelease(releases, '0.8.0').version, '0.8.1');
+  assert.equal(legacy.selectRelease(releases.slice(1), '0.8.0'), null);
+  assert.equal(selectRelease(releases, '0.8.1').version, '0.9.0');
+});
 test('version ordering includes prereleases without downgrading stable versions', () => {
   for (const [a, b] of [['0.2.0', '0.1.9'], ['0.2.0-beta.10', '0.2.0-beta.2'], ['0.2.0', '0.2.0-rc.1'], ['0.2.0-alpha', '0.2.0-1']]) assert.ok(compare(a, b) > 0);
   assert.equal(compare('v0.2.0', '0.2.0'), 0);

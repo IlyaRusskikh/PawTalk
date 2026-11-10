@@ -1,5 +1,10 @@
 # Changelog / История изменений
 
+## 0.8.1 — Unreleased / Не выпущено — Client transition / Переход клиента
+
+- Prepare automatic discovery of `client-v*` releases while retaining legacy `v*` discovery for the one-time bridge. Preserve the selected tag for signed-manifest and installer downloads; reject Server/Deploy families. / Добавлена поддержка `client-v*` с сохранением legacy `v*` для переходного выпуска. Манифест и установщик скачиваются по выбранному тегу; Server/Deploy исключены.
+- Extend the bundled room update relay to Client tags. This Client-only bridge does not publish a new VPS image. / Relay встроенной комнаты поддерживает клиентские теги. Переходный выпуск клиента не публикует новый VPS-образ.
+
 ## 0.8.0 — 2026-11-10 — Connection diagnostics and update caching / Диагностика соединения и кэш обновлений
 
 - Make the light-theme chat hover smoke check independent of prior pointer/focus state. Reproduce an already highlighted row, clear hover and focus before measuring, and verify mouse/keyboard highlighting in Russian/English with normal/reduced motion. / Проверка наведения в светлом чате больше не зависит от прежнего положения курсора и фокуса. Тест воспроизводит уже подсвеченную строку, очищает hover и фокус перед замером и проверяет подсветку мышью/клавиатурой на русском и английском при обычной и уменьшенной анимации.

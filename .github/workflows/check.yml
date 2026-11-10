@@ -23,7 +23,7 @@ jobs:
           node-version: '24.22.1'
       - name: Validate Swarm stack without local secrets
         run: |
-          export PAWTALK_RELEASE="$(node -p "require('./package.json').version")"
+          export PAWTALK_RELEASE="$(cat server/VERSION)"
           export PAWTALK_IMAGE="ghcr.io/ilyarusskikh/pawtalk-server:${PAWTALK_RELEASE}"
           export PAWTALK_PUBLIC_IP=203.0.113.10
           export PAWTALK_DATA_VOLUME=pawtalk-server_server_data
@@ -135,7 +135,7 @@ jobs:
             release/update-manifest.json
   publish-server:
     name: Publish server image to GHCR
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.8.1'
     needs: [server, windows]
     runs-on: ubuntu-latest
     permissions:

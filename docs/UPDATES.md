@@ -5,6 +5,18 @@ PawTalk 0.8.0 is the current public preview. For update fixes in previous releas
 
 ## Русский
 
+### Подготовка перехода 0.8.1 → 0.9.0 (ещё не опубликовано)
+
+Сначала выпускается клиентский bridge `v0.8.1`, который виден обновляторам 0.8.0.
+Он понимает `client-v*` и затем предложит `client-v0.9.0` через обычное подтверждение
+установки. Старые теги и ассеты не изменяются. Server/Deploy теги не принимаются
+клиентом. Старые серверы 0.8.0 не умеют relay новых тегов: для этого маршрута нужен
+обновлённый сервер; прямое получение через GitHub работает независимо от него.
+
+First publish the Client-only `v0.8.1` bridge, then `client-v0.9.0`. The bridge
+discovers the new family automatically and retains the normal installation prompt.
+Old 0.8.0 rooms cannot relay new tag assets; direct GitHub downloads remain available.
+
 Установщик предлагает English или Русский. Выбор применяется к установщику и
 первому запуску приложения. Его можно изменить в «Настройки → Язык» без перезапуска. При обновлении сохраняется язык профиля пользователя.
 

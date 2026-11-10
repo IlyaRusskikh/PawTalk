@@ -54,13 +54,14 @@ const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'ut
 if (pkg.version !== lock.version || pkg.version !== lock.packages[''].version) issues.add('Package and lockfile versions differ');
 if (pkg.license !== 'AGPL-3.0-only' || lock.packages[''].license !== pkg.license) issues.add('Expected consistent AGPL-3.0-only metadata');
 if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) issues.add('Expected X.Y.Z version');
+const serverVersion = (await readFile(path.join(root, 'server/VERSION'), 'utf8')).trim();
 const serverExample = await readFile(path.join(root, '.env.server.swarm.example'), 'utf8');
 const serverLines = serverExample.split(/\r?\n/);
-if (!serverLines.some(line => /^PAWTALK_IMAGE=/.test(line) && line.endsWith(`:${pkg.version}`))) {
-  issues.add('Swarm server image example must match package version');
+if (!serverLines.some(line => /^PAWTALK_IMAGE=/.test(line) && line.endsWith(`:${serverVersion}`))) {
+  issues.add('Swarm server image example must match server version');
 }
-if (!serverLines.includes(`PAWTALK_RELEASE=${pkg.version}`)) {
-  issues.add('Swarm release label example must match package version');
+if (!serverLines.includes(`PAWTALK_RELEASE=${serverVersion}`)) {
+  issues.add('Swarm release label example must match server version');
 }
 if (process.env.GITHUB_REF_TYPE === 'tag' && process.env.GITHUB_REF_NAME !== `v${pkg.version}`) issues.add('Release tag must match package version');
 for (const required of ['LICENSE', 'README.md', 'README.ru.md', 'CHANGELOG.md', 'CONTRIBUTING.md']) {

@@ -2,6 +2,8 @@
 
 [Русский](README.ru.md) · English
 
+Development: Client **0.8.1** prepares the automatic transition from legacy `v*` to `client-v*` releases. It has not been published; the download below remains the public 0.8.0 release. VPS Server versions are independent.
+
 [![Verify and package](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)
 
 PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.

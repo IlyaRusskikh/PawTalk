@@ -28,6 +28,7 @@ __pycache__/
 
 # Local handoff notes and network reports
 /CONTINUE.md
+/plans/
 connection-report*.json
 
 # Editor and OS state
