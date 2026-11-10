@@ -31,7 +31,12 @@ jobs:
       - run: node scripts/check-public.mjs
       - run: node scripts/check-website.mjs
       - run: node --check scripts/dev-server.mjs && node --check scripts/docker-smoke.mjs
-      - run: node scripts/server-smoke.mjs
+      - name: Verify bundled server lifecycle and authentication with real Docker
+        run: node scripts/server-smoke.mjs
+      - name: Verify actual developer Docker launch and TLS pinning
+        run: node scripts/dev-server.mjs --smoke
+      - name: Verify API + LiveKit containers and tokens without Compose
+        run: node scripts/docker-smoke.mjs --containers-only
   windows:
     runs-on: windows-latest
     steps:
