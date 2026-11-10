@@ -7,7 +7,7 @@
 Нужны Linux amd64 или arm64, постоянный публичный IP, Docker Engine, Python 3.9+
 и `curl`. Compose plugin, исходники, Node.js, Go и компилятор на VPS не нужны.
 Домен и публичный TLS-сертификат также не требуются. Готовый публичный образ:
-`ghcr.io/ilyarusskikh/pawtalk-server:0.5.2`.
+`ghcr.io/ilyarusskikh/pawtalk-server:0.7.1`.
 
 Ниже описана новая установка. Для существующей комнаты сначала выполните
 [миграцию с Compose](SWARM.md#переход-с-compose), сохранив прежний volume.
@@ -155,7 +155,7 @@ python3 --version
 ```sh
 install -d -m 755 /opt/pawtalk/scripts /opt/pawtalk/deploy
 cd /opt/pawtalk
-PAWTALK_RELEASE=0.5.2
+PAWTALK_RELEASE=0.7.1
 curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/compose.server.swarm.yaml" -o compose.server.swarm.yaml
 curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/scripts/server-update.py" -o scripts/server-update.py
 curl -fL "https://raw.githubusercontent.com/IlyaRusskikh/pawtalk/v${PAWTALK_RELEASE}/.env.server.swarm.example" -o .env.server.swarm.example
@@ -168,8 +168,8 @@ nano .env
 Для новой установки замените пример IP на публичный IP VPS. Основные строки:
 
 ```dotenv
-PAWTALK_IMAGE=ghcr.io/ilyarusskikh/pawtalk-server:0.5.2
-PAWTALK_RELEASE=0.5.2
+PAWTALK_IMAGE=ghcr.io/ilyarusskikh/pawtalk-server:0.7.1
+PAWTALK_RELEASE=0.7.1
 PAWTALK_PUBLIC_IP=203.0.113.10
 PAWTALK_PORT=18443
 PAWTALK_E2EE=false
@@ -195,7 +195,7 @@ IPv6 указывайте без квадратных скобок; он дол�
 
 | Параметр | Допустимое значение и что поставить |
 | --- | --- |
-| `PAWTALK_IMAGE` | Полное имя опубликованного образа: `ghcr.io/ilyarusskikh/pawtalk-server:0.5.2`. Число после `:` — версия сервера. Для обновления укажите новую опубликованную версию. Не добавляйте `v` перед номером и не используйте тег неудачного CI. Это параметр Swarm-стека, а не настройка внутри приложения. |
+| `PAWTALK_IMAGE` | Полное имя опубликованного образа: `ghcr.io/ilyarusskikh/pawtalk-server:0.7.1`. Число после `:` — версия сервера. Для обновления укажите новую опубликованную версию. Не добавляйте `v` перед номером и не используйте тег неудачного CI. Это параметр Swarm-стека, а не настройка внутри приложения. |
 | `PAWTALK_PUBLIC_IP` | Публичный IP вашего VPS из панели хостинга, **без** `https://`, порта и пути. IPv4: `203.0.113.10` (замените на свой); IPv6 — без `[]`. Для нового сервера значение обязательно. После первого запуска адрес сохранён в volume: другой IP в `.env` вызовет ошибку несовпадения. Простым редактированием этой строки перенести существующий сервер на другой IP нельзя. |
 | `PAWTALK_PORT` | Целое число `1024–65532`; по умолчанию `18443`. Это основной TCP-порт. Дополнительно откройте TCP `PORT+1` и UDP `PORT+2`. Например, при `20000` нужны TCP `20000`, TCP `20001`, UDP `20002`. Внутренний TCP `PORT+3` не открывайте в интернете. При смене порта обновите firewall и раздайте новое приглашение. |
 | `PAWTALK_E2EE` | `false` или `true`, по умолчанию `false`. `true` требует сквозного шифрования у всех участников; это экспериментальный режим. Без E2EE сервер может читать текст и картинки. |
@@ -225,10 +225,10 @@ IPv6 указывайте без квадратных скобок; он дол�
 
 | Параметр | Что поставить |
 | --- | --- |
-| `PAWTALK_RELEASE` | Номер версии образа **без `v`**, например `0.5.2`. При ручном развёртывании должен соответствовать тегу `PAWTALK_IMAGE`; записывается в метку сервиса, по которой обновлятор определяет текущую версию. Не оставляйте старый номер при смене образа. |
+| `PAWTALK_RELEASE` | Номер версии образа **без `v`**, например `0.7.1`. При ручном развёртывании должен соответствовать тегу `PAWTALK_IMAGE`; записывается в метку сервиса, по которой обновлятор определяет текущую версию. Не оставляйте старый номер при смене образа. |
 | `PAWTALK_DATA_VOLUME` | Точное имя существующего Docker volume с `/data`, например `pawtalk-server_server_data`. Найдите его через `docker volume ls` и проверьте подключение текущего контейнера. Не подставляйте случайное имя: другой volume означает другой сервер, пароль и историю. Для новой установки создайте volume по инструкции Swarm. |
 | `PAWTALK_AUTO_UPDATE` | `false` по умолчанию — таймер не проверяет и не обновляет сервер. `true` разрешает автоматическое обновление настроенному таймеру. Одна строка без установки таймера ничего не запускает. Ручная команда `check` работает и при `false`. |
-| `PAWTALK_UPDATE_CHANNEL` | `preview` или `stable`. `preview` учитывает и предварительные выпуски; для `0.5.2`, опубликованной как pre-release, нужен `preview`. `stable` исключает все pre-release и может не находить новых версий. |
+| `PAWTALK_UPDATE_CHANNEL` | `preview` или `stable`. `preview` учитывает и предварительные выпуски; для `0.7.1`, опубликованной как pre-release, нужен `preview`. `stable` исключает все pre-release и может не находить новых версий. |
 | `PAWTALK_UPDATE_REPOSITORY` | Оставьте `IlyaRusskikh/pawtalk`. Для своего форка — `владелец/репозиторий`, без URL и `.git`; образ должен находиться в соответствующем `ghcr.io/владелец/репозиторий-server`. Обычно менять не нужно. |
 
 `PAWTALK_UPDATE_PROXY` — `true` по умолчанию; `false` отключает передачу

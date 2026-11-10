@@ -30,7 +30,7 @@ services:
       replicas: 1
       labels:
         io.pawtalk.managed: 'true'
-        io.pawtalk.version: ${PAWTALK_RELEASE:-0.4.1}
+        io.pawtalk.version: ${PAWTALK_RELEASE:?Set PAWTALK_RELEASE to the exact published image version}
       placement:
         constraints: [node.labels.pawtalk.data == true]
       update_config:

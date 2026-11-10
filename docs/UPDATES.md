@@ -1,13 +1,12 @@
 # Application language and updates / Язык и обновления
 
-Available starting with PawTalk 0.2.0. Published 0.1.0 needs one manual upgrade.
-Доступно с PawTalk 0.2.0. С версии 0.1.0 нужно один раз обновиться вручную.
+The updater was introduced in 0.2.0. PawTalk 0.7.1 is the current public preview. Clients on 0.6.0 and 0.7.0 must install 0.7.1 manually because they cannot discover the repository-name capitalization fix; preferences remain intact.
+Обновлятор появился в 0.2.0. Актуальный предварительный выпуск — PawTalk 0.7.1. Клиентам 0.6.0 и 0.7.0 нужно установить 0.7.1 вручную: эти версии не находят исправление сравнения регистра имени репозитория. Настройки сохраняются.
 
 ## Русский
 
 Установщик предлагает English или Русский. Выбор применяется к установщику и
-первому запуску приложения. Его можно изменить в «Настройки → Обо мне → Язык
-приложения» без перезапуска. При обновлении сохраняется язык профиля пользователя.
+первому запуску приложения. Его можно изменить в «Настройки → Язык» без перезапуска. При обновлении сохраняется язык профиля пользователя.
 
 Установленное Windows-приложение при запуске проверяет публичные релизы
 `IlyaRusskikh/pawtalk` через GitHub API, включая pre-release. Выбирается наибольшая
@@ -78,7 +77,7 @@ Windows x64 установщика и SHA-256 пропускаются. Пров
 ## English
 
 The installer offers English and Russian. Its choice is used on the first app
-launch; change it later in **Settings → About me → App language** without a
+launch; change it later in **Settings → Language** without a
 restart. Updates preserve the profile's language.
 
 At startup, the installed Windows app checks public GitHub releases, including
