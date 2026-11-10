@@ -30,7 +30,7 @@ jobs:
           node-version: '24.22.1'
       - run: node scripts/check-public.mjs
       - run: node scripts/check-website.mjs
-      - run: docker compose --env-file .env.server.example -f compose.server.ghcr.yaml config -q
+      - run: node --check scripts/dev-server.mjs && node --check scripts/docker-smoke.mjs
       - run: node scripts/server-smoke.mjs
   windows:
     runs-on: windows-latest
