@@ -99,12 +99,17 @@ async function markerExists(id) {
   const found = await docker(['exec', id, 'cat', '/data/swarm-ci-marker']);
   assert.equal(found, marker, 'the external Docker volume must survive the task replacement');
 }
-async function connect(fingerprint, pass) {
+async function pinnedRequest(fingerprint, endpoint, { method = 'GET', jsonBody, token } = {}) {
   return new Promise((resolve, reject) => {
-    const body = JSON.stringify({ nickname: 'Swarm smoke', password: pass });
-    const req = https.request(`https://127.0.0.1:${port}/api/connect`, {
-      method: 'POST', agent: false, rejectUnauthorized: false, timeout: 7000,
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    const body = jsonBody === undefined ? undefined : JSON.stringify(jsonBody);
+    const headers = {};
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(body);
+    }
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const req = https.request(`https://127.0.0.1:${port}${endpoint}`, {
+      method, agent: false, rejectUnauthorized: false, timeout: 7000, headers,
     }, response => {
       try {
         const cert = response.socket.getPeerCertificate();
@@ -118,11 +123,32 @@ async function connect(fingerprint, pass) {
       let text = '';
       response.on('data', data => { text += data; });
       response.on('end', () => resolve({ status: response.statusCode, body: text }));
+      response.on('error', reject);
     });
     req.on('timeout', () => req.destroy(new Error('HTTPS timeout')));
     req.on('error', reject);
     req.end(body);
   });
+}
+function connect(fingerprint, pass) {
+  return pinnedRequest(fingerprint, '/api/connect', {
+    method: 'POST', jsonBody: { nickname: 'Swarm smoke', password: pass },
+  });
+}
+async function postChat(fingerprint, token, message) {
+  const reply = await pinnedRequest(fingerprint, '/api/chat', {
+    method: 'POST', token, jsonBody: message,
+  });
+  assert.equal(reply.status, 200, 'chat message must be saved in SQLite before upgrade');
+  assert.ok(JSON.parse(reply.body).id > 0);
+}
+async function assertChat(fingerprint, token, feed, message) {
+  const reply = await pinnedRequest(fingerprint, '/api/chat?after=0', { token });
+  assert.equal(reply.status, 200, 'existing chat history must remain readable');
+  const parsed = JSON.parse(reply.body);
+  const found = parsed.messages.find(item => item.requestId === message.requestId);
+  assert.ok(found, 'original chat message ID must survive replacement');
+  assert.equal(found.ciphertext, message.ciphertext, 'original chat bytes must not be modified');
 }
 async function assertState(id, expectedFingerprint) {
   assert.equal(await invitation(id), expectedFingerprint);
@@ -133,6 +159,7 @@ async function assertState(id, expectedFingerprint) {
   const response = JSON.parse(ok.body);
   assert.equal(response.url, `wss://127.0.0.1:${port}/rtc`);
   assert.equal(response.expiresIn, 300);
+  return response;
 }
 
 function firstIPv4() {
