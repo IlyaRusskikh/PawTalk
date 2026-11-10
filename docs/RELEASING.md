@@ -12,8 +12,8 @@
 
 При увеличении старшего разряда младшие обнуляются. Это не обещание полной
 совместимости по SemVer: до 1.0 проект экспериментальный, несовместимости
-явно описываются в CHANGELOG. Первая версия **0.1.0** уже опубликована как
-предварительный выпуск. Не меняйте версию на каждый рабочий коммит.
+явно описываются в CHANGELOG. Актуальный публичный предварительный выпуск на
+10 ноября 2026 года — **0.7.1**. Не меняйте версию на каждый рабочий коммит.
 
 1. Внесите изменения, обновите подходящие тесты и оба README, запишите результат
    в `CHANGELOG.md` в раздел Unreleased.
@@ -25,14 +25,19 @@
    `.\build.cmd -InstallDependencies` и `node scripts/packaged-smoke.mjs`.
    Для звука/сети выполните подходящие проверки из `ACCEPTANCE.md` и укажите
    непроверенные сценарии. Сборка должна быть из тех же исходников, что и тег.
-5. Проверьте `git diff` и `git diff --cached`. Создайте коммит, например
-   `Release 0.1.0`, затем аннотированный тег (подставьте текущую версию):
+5. Проверьте `git diff` и `git diff --cached`. Создайте коммит новой версии,
+   затем аннотированный тег. Команды ниже используют версию из `package.json`,
+   чтобы случайно не переиспользовать уже опубликованный тег:
 
    ```sh
-   git tag -a v0.1.0 -m "PawTalk 0.1.0"
+   VERSION=$(node -p "require('./package.json').version")
+   git tag -a "v${VERSION}" -m "PawTalk ${VERSION}"
    git push origin main
-   git push origin v0.1.0
+   git push origin "v${VERSION}"
    ```
+
+   Перед созданием тега убедитесь, что изменения версии уже закоммичены;
+   существующие теги переписывать нельзя.
 
 6. Дождитесь успешного GitHub Actions для этого тега, включая **Publish server
    image to GHCR**. Серверный образ получает теги `X.Y.Z` и `sha-<commit>`;
@@ -86,7 +91,7 @@ GitHub автоматически добавляет **Source code (zip)** и **
 `SHA256SUMS.txt` и ссылки в описании. Готовый архив с правильным содержимым
 можно переименовать через метаданные GitHub, сохраняя его байты и digest.
 
-### Первая публикация образа для владельца репозитория
+### Первая публикация GHCR-пакета для нового форка
 
 Workflow `.github/workflows/check.yml` публикует образ после push тега `vX.Y.Z`,
 **только если прошли проверки server и windows**. Серверные Go/Docker lifecycle
@@ -95,8 +100,9 @@ Workflow `.github/workflows/check.yml` публикует образ после 
 с `package.json` и `package-lock.json`. Обычный push в `main` только проверяет
 проект; образ не публикуется.
 
-1. Отправьте коммит с workflow и этими файлами на GitHub. Для первого выпуска
-   создайте и отправьте `v0.1.0` по порядку выпуска выше.
+1. Для нового форка отправьте коммит с workflow и файлами на GitHub, создайте
+   собственный первый тег `vX.Y.Z` по порядку выпуска выше. Основной PawTalk
+   уже публикует `ghcr.io/ilyarusskikh/pawtalk-server:0.7.1`.
 2. Дождитесь зелёного **Verify and package → Publish server image to GHCR**.
    В Summary появятся имя, версия и digest образа. Для публикации используется
    `GITHUB_TOKEN` с `packages: write`; личный PAT в Secrets не нужен.
@@ -104,11 +110,12 @@ Workflow `.github/workflows/check.yml` публикует образ после 
    В разделе видимости выберите **Change visibility → Public** и подтвердите.
    Публичность репозитория сама по себе не делает новый пакет публичным.
 4. Проверьте скачивание на машине без GitHub-логина:
-   `docker pull ghcr.io/ilyarusskikh/pawtalk-server:0.1.0`.
+   `docker pull ghcr.io/ilyarusskikh/pawtalk-server:0.7.1`
+   (для форка подставьте собственное имя образа и опубликованную версию).
    После этого инструкция для VPS готова к использованию без авторизации.
 
 Проверьте общий manifest командой
-`docker buildx imagetools inspect ghcr.io/ilyarusskikh/pawtalk-server:0.1.0`:
+`docker buildx imagetools inspect ghcr.io/ilyarusskikh/pawtalk-server:0.7.1`:
 в нём должны присутствовать `linux/amd64` и `linux/arm64`.
 
 При форке имя образа вычисляется из `<владелец>/<репозиторий>-server` в нижнем
@@ -121,7 +128,8 @@ Workflow `.github/workflows/check.yml` публикует образ после 
 Versions use **X.Y.Z**: small fixes increment Z (`patch`), substantial changes Y
 (`minor`), and major product/architecture changes X (`major`). Incrementing a
 component resets all components to its right. This is a project change-size
-policy, not a strict compatibility guarantee. Initial version: **0.1.0**.
+policy, not a strict compatibility guarantee. The current public preview as of
+2026-11-10 is **0.7.1**.
 
 Use `npm version patch|minor|major --no-git-tag-version --ignore-scripts`
 (choose one keyword) to update both manifests. Update CHANGELOG and both READMEs,
