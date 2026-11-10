@@ -83,10 +83,12 @@ async function inspectService() {
 }
 async function invitation(id) {
   const invite = await docker(['exec', id, '/pawtalk', 'serve', 'info']);
-  const pattern = new RegExp(`^pawtalk:\\/\\/127\\.0\\.0\\.1:${port}\\/([a-f0-9]{64})$`);
-  const fingerprint = invite.match(pattern)?.[1];
-  assert.ok(fingerprint, 'Swarm container must return a pinned localhost invitation');
-  return fingerprint;
+  const parsed = new URL(invite);
+  assert.equal(parsed.protocol, 'pawtalk:');
+  assert.equal(parsed.hostname, '127.0.0.1');
+  assert.equal(parsed.port, String(port));
+  assert.match(parsed.pathname, /^\/[a-f0-9]{64}$/);
+  return parsed.pathname.slice(1);
 }
 async function markerExists(id) {
   const found = await docker(['exec', id, 'cat', '/data/swarm-ci-marker']);
