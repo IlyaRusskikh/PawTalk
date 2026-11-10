@@ -18,6 +18,9 @@ jobs:
       - run: go test -race ./... && go vet ./...
         working-directory: server
       - run: docker build -f server/Dockerfile -t pawtalk-api:test .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
       - name: Validate Swarm stack without local secrets
         run: |
           export PAWTALK_RELEASE="$(node -p "require('./package.json').version")"
@@ -25,9 +28,6 @@ jobs:
           export PAWTALK_PUBLIC_IP=203.0.113.10
           export PAWTALK_DATA_VOLUME=pawtalk-server_server_data
           docker stack config -c compose.server.swarm.yaml >/dev/null
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24.22.1'
       - run: node scripts/check-public.mjs
       - run: node scripts/check-website.mjs
       - run: node --check scripts/dev-server.mjs && node --check scripts/docker-smoke.mjs
