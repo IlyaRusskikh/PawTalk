@@ -80,7 +80,7 @@ go vet ./...
 
 `test:server` и `test:docker` запускают тестовые Docker-контейнеры; нужен Docker daemon и свободные порты, указанные в тестах. `test:docker` ориентирован на Linux Docker Engine. Режим `--containers-only` использует порты 8080/7880/7881/7882 и не требует Electron или `npm ci`; он не проверяет звук двух клиентов. `dev:server -- --smoke` использует порты 32443–32445 и образ `pawtalk-server:local`, который предварительно создаёт `node scripts/server-smoke.mjs` или команда `docker build -f server/standalone.Dockerfile -t pawtalk-server:local .`.
 
-В CI на Linux AMD64 и ARM64 выполняются **все три** контейнерных сценария: `scripts/server-smoke.mjs`, `scripts/dev-server.mjs --smoke` и `scripts/docker-smoke.mjs --containers-only`. Они проверяют настоящие Docker-контейнеры, но не заменяют измерения задержки голоса и работу с реальными микрофонами, внешними сетями, PTT в играх и нагрузкой. Эти сценарии нужно проверять отдельно по [ACCEPTANCE.md](ACCEPTANCE.md).
+В CI на Linux AMD64 и ARM64 выполняются **четыре** сценария: `scripts/server-smoke.mjs`, `scripts/dev-server.mjs --smoke`, `scripts/docker-smoke.mjs --containers-only` и `scripts/swarm-smoke.mjs`. Они проверяют настоящие Docker-контейнеры, но не заменяют измерения задержки голоса и работу с реальными микрофонами, внешними сетями, PTT в играх и нагрузкой. Эти сценарии нужно проверять отдельно по [ACCEPTANCE.md](ACCEPTANCE.md).
 
 ## Сервер на VPS / VPS
 
