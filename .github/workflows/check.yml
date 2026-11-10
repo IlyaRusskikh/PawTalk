@@ -30,13 +30,16 @@ jobs:
           docker stack config -c compose.server.swarm.yaml >/dev/null
       - run: node scripts/check-public.mjs
       - run: node scripts/check-website.mjs
-      - run: node --check scripts/dev-server.mjs && node --check scripts/docker-smoke.mjs
+      - run: node --check scripts/dev-server.mjs && node --check scripts/docker-smoke.mjs && node --check scripts/swarm-smoke.mjs
       - name: Verify bundled server lifecycle and authentication with real Docker
         run: node scripts/server-smoke.mjs
       - name: Verify actual developer Docker launch and TLS pinning
         run: node scripts/dev-server.mjs --smoke
       - name: Verify API + LiveKit containers and tokens without Compose
         run: node scripts/docker-smoke.mjs --containers-only
+      - name: Deploy, roll forward and roll back a disposable single-node Swarm
+        run: node scripts/swarm-smoke.mjs
+        timeout-minutes: 25
   windows:
     runs-on: windows-latest
     steps:
