@@ -102,7 +102,7 @@ Use `npm run build`, `npm test`, `npm run smoke`, and `npm run check:public` whe
 
 </details>
 
-[Contributing](CONTRIBUTING.md) · [API](docs/API.md) · [Release process](docs/RELEASING.md)
+[Documentation index](docs/README.md) · [Development and local Docker](docs/DEVELOPMENT.md) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [API](docs/API.md) · [Release process](docs/RELEASING.md)
 
 PawTalk is licensed under [GNU AGPL-3.0-only](LICENSE). Third-party components retain their own licenses. [Third-party notices](THIRD_PARTY_NOTICES.md).
 
