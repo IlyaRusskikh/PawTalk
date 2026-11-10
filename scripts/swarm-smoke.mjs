@@ -1,4 +1,4 @@
-// Disposable Swarm acceptance: real stack deploy, force-rollout, manual rollback.
+// Disposable Swarm acceptance: same-image rollout or pinned 0.7.0 -> 0.7.1 -> rollback.
 // Only runs on a clean GitHub-hosted runner, NEVER on an existing Swarm/VPS.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -11,7 +11,8 @@ import { checkServerIdentity } from 'node:tls';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
-if (process.argv.length !== 2 || process.platform !== 'linux' ||
+const crossVersion = process.argv.length === 3 && process.argv[2] === '--cross-version';
+if (process.argv.length !== 2 && !crossVersion || process.platform !== 'linux' ||
     process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_ENVIRONMENT !== 'github-hosted') {
   throw new Error('Swarm smoke is restricted to disposable GitHub-hosted Linux runners');
 }
@@ -20,7 +21,11 @@ const stack = `pawtalkci${process.pid}`;
 const service = `${stack}_server`;
 const volume = `${stack}_data`;
 const port = 35443;
-const image = 'ghcr.io/ilyarusskikh/pawtalk-server:0.7.1'; // Already published: test the supported VPS image.
+const sourceVersion = crossVersion ? '0.7.0' : '0.7.1';
+const imageRepository = 'ghcr.io/ilyarusskikh/pawtalk-server';
+const image = `${imageRepository}:${sourceVersion}`; // Both historical tags are immutable and published.
+const targetVersion = '0.7.1';
+const targetDigest = 'sha256:f125d309b2a64d0504b7aa70c8a84047271a8d672fc912f4a65cd18bfcdec667';
 const folder = await mkdtemp(path.join(tmpdir(), 'pawtalk-swarm-ci-'));
 const configPath = path.join(folder, 'swarm.env');
 const marker = randomBytes(24).toString('hex');
@@ -151,10 +156,11 @@ try {
 
   // Real entrypoint in the server guide: scripts/server-update.py deploy calls docker stack deploy.
   await writeFile(configPath, [
-    `PAWTALK_IMAGE=${image}`, 'PAWTALK_RELEASE=0.7.1',
+    `PAWTALK_IMAGE=${image}`, `PAWTALK_RELEASE=${sourceVersion}`,
     'PAWTALK_PUBLIC_IP=127.0.0.1', `PAWTALK_PORT=${port}`,
     `PAWTALK_DATA_VOLUME=${volume}`, 'PAWTALK_E2EE=false',
-    'PAWTALK_CHAT_MAX_MB=8', 'PAWTALK_AUTO_UPDATE=false',
+    'PAWTALK_CHAT_MAX_MB=8', `PAWTALK_AUTO_UPDATE=${crossVersion ? 'true' : 'false'}`,
+    'PAWTALK_UPDATE_CHANNEL=preview',
     'PAWTALK_UPDATE_PROXY=false',
     '',
   ].join('\n'), { mode: 0o600 });
@@ -165,7 +171,7 @@ try {
   const firstSpec = await inspectService();
   assert.equal(firstSpec.Spec.Mode.Replicated.Replicas, 1);
   assert.equal(firstSpec.Spec.Labels['io.pawtalk.managed'], 'true');
-  assert.equal(firstSpec.Spec.Labels['io.pawtalk.version'], '0.7.1');
+  assert.equal(firstSpec.Spec.Labels['io.pawtalk.version'], sourceVersion);
   assert.ok(firstSpec.Spec.TaskTemplate.ContainerSpec.Mounts.some(m =>
     m.Type.toLowerCase() === 'volume' && m.Source === volume && m.Target === '/data'));
   const fingerprint = await invitation(original);
@@ -174,27 +180,77 @@ try {
   await docker(['exec', '-i', original, '/pawtalk', 'serve', 'reset-password'], { input: password });
   console.log('PASS real Swarm deployment: one healthy service, managed label, mounted external volume, pinned invitation');
 
-  // Same published image + forced task replacement simulates a healthy rollout.
-  // This checks task orchestration/persistence, not compatibility with a different binary.
-  await docker(['service', 'update', '--force',
-    '--label-add', 'io.pawtalk.version=0.7.2',
-    '--update-order', 'stop-first', '--update-parallelism', '1',
-    '--update-failure-action', 'rollback', '--update-monitor', '20s',
-    '--detach=false', service], { timeoutMs: 210000 });
-  const updated = await readyContainer();
-  assert.notEqual(updated, original, 'rollout must replace the original task');
-  assert.equal((await inspectService()).Spec.Labels['io.pawtalk.version'], '0.7.2');
-  await assertState(updated, fingerprint);
-  console.log('PASS Swarm force-rollout: replaced task, persistent password, state, volume and TLS identity');
+  if (crossVersion) {
+    // The test exercises the real host updater, published GitHub release metadata
+    // and the GHCR index digest, not a simulated Docker image replacement.
+    const initialConnection = await connect(fingerprint, password);
+    assert.equal(initialConnection.status, 200, '0.7.0 must authenticate with the retained password');
+    const initialSession = JSON.parse(initialConnection.body);
+    assert.ok(initialSession.chatToken && initialSession.chatFeed, '0.7.0 must expose persistent chat');
+    const message = {
+      requestId: randomBytes(16).toString('hex'),
+      nonce: '',
+      ciphertext: Buffer.from('PawTalk cross-version Swarm persistence check').toString('base64'),
+    };
+    await postChat(fingerprint, initialSession.chatToken, message);
+    await assertChat(fingerprint, initialSession.chatToken, initialSession.chatFeed, message);
 
-  // Use the real rollback wrapper; image and labels come from the previous service spec.
-  await command('python3', ['scripts/server-update.py', 'rollback', '--config', configPath, '--stack', stack],
-    { timeoutMs: 210000 });
-  const restored = await readyContainer();
-  assert.notEqual(restored, updated, 'rollback must replace the updated task');
-  assert.equal((await inspectService()).Spec.Labels['io.pawtalk.version'], '0.7.1');
-  await assertState(restored, fingerprint);
-  console.log('PASS Swarm rollback: previous service spec restored with unchanged state and password');
+    const preview = await command('python3', [
+      'scripts/server-update.py', 'check', '--config', configPath,
+      '--stack', stack, '--target-version', targetVersion,
+    ], { timeoutMs: 60000 });
+    assert.ok(preview.includes('Available server update: 0.7.1'), 'read-only check must discover the pinned release');
+
+    // The production opt-in update creates a lock in /run; hosted runner's sudo
+    // is used only inside this disposable CI environment.
+    const updatedText = await command('sudo', ['-n', 'python3', 'scripts/server-update.py', 'update',
+      '--config', configPath, '--stack', stack, '--target-version', targetVersion],
+      { timeoutMs: 240000 });
+    assert.ok(updatedText.includes('Server updated to 0.7.1'), 'the real updater must finish successfully');
+    const updated = await readyContainer();
+    assert.notEqual(updated, original, 'real cross-version rollout must replace the previous task');
+    const updatedSpec = await inspectService();
+    assert.equal(updatedSpec.Spec.Labels['io.pawtalk.version'], targetVersion);
+    assert.equal(updatedSpec.Spec.TaskTemplate.ContainerSpec.Image, `${imageRepository}@${targetDigest}`);
+    const nextSession = await assertState(updated, fingerprint);
+    assert.equal(nextSession.chatFeed, initialSession.chatFeed, 'SQLite chat feed must not reset during upgrade');
+    await assertChat(fingerprint, nextSession.chatToken, initialSession.chatFeed, message);
+    console.log('PASS real 0.7.0 -> 0.7.1 GHCR digest-pinned upgrade: new binary, retained TLS, password, SQLite message and volume');
+
+    await command('python3', ['scripts/server-update.py', 'rollback',
+      '--config', configPath, '--stack', stack], { timeoutMs: 210000 });
+    const restored = await readyContainer();
+    assert.notEqual(restored, updated, 'real rollback must replace the 0.7.1 task');
+    const restoredSpec = await inspectService();
+    assert.equal(restoredSpec.Spec.Labels['io.pawtalk.version'], sourceVersion);
+    assert.match(restoredSpec.Spec.TaskTemplate.ContainerSpec.Image, /pawtalk-server:0\.7\.0(?:@sha256:[a-f0-9]{64})?$/);
+    const oldSession = await assertState(restored, fingerprint);
+    assert.equal(oldSession.chatFeed, initialSession.chatFeed);
+    await assertChat(fingerprint, oldSession.chatToken, initialSession.chatFeed, message);
+    console.log('PASS real 0.7.1 -> 0.7.0 rollback: original image and chat message, password, volume and TLS retained');
+  } else {
+    // Same published image + forced task replacement simulates a healthy rollout.
+    // This checks task orchestration/persistence, not compatibility with a different binary.
+    await docker(['service', 'update', '--force',
+      '--label-add', 'io.pawtalk.version=0.7.2',
+      '--update-order', 'stop-first', '--update-parallelism', '1',
+      '--update-failure-action', 'rollback', '--update-monitor', '20s',
+      '--detach=false', service], { timeoutMs: 210000 });
+    const updated = await readyContainer();
+    assert.notEqual(updated, original, 'rollout must replace the original task');
+    assert.equal((await inspectService()).Spec.Labels['io.pawtalk.version'], '0.7.2');
+    await assertState(updated, fingerprint);
+    console.log('PASS Swarm force-rollout: replaced task, persistent password, state, volume and TLS identity');
+
+    // Use the real rollback wrapper; image and labels come from the previous service spec.
+    await command('python3', ['scripts/server-update.py', 'rollback', '--config', configPath, '--stack', stack],
+      { timeoutMs: 210000 });
+    const restored = await readyContainer();
+    assert.notEqual(restored, updated, 'rollback must replace the updated task');
+    assert.equal((await inspectService()).Spec.Labels['io.pawtalk.version'], '0.7.1');
+    await assertState(restored, fingerprint);
+    console.log('PASS Swarm rollback: previous service spec restored with unchanged state and password');
+  }
 } catch (error) {
   console.error(error.message);
   if (initiated && stackCreated) {
