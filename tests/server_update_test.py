@@ -26,9 +26,9 @@ class ServerUpdateTests(unittest.TestCase):
 
     def test_published_release_note_digest_is_selected(self):
         notes = (
-            "Server: docker pull ghcr.io/ilyarusskikh/pawtalk-server:0.7.1 (linux/amd64, linux/arm64).\\n\\n"
+            "Server: docker pull ghcr.io/ilyarusskikh/pawtalk-server:0.7.1 (linux/amd64, linux/arm64).\n\n"
             "Published multi-platform server digest: `ghcr.io/ilyarusskikh/pawtalk-server@"
-            + PUBLISHED_DIGEST + "`.\\n"
+            + PUBLISHED_DIGEST + "`.\n"
         )
         release = {"tag_name": "v0.7.1", "draft": False, "prerelease": True, "body": notes}
         self.assertEqual(updater.release_digest(notes, "IlyaRusskikh/pawtalk"), PUBLISHED_DIGEST)
@@ -42,7 +42,7 @@ class ServerUpdateTests(unittest.TestCase):
         self.assertIsNone(updater.release_digest(foreign, "IlyaRusskikh/pawtalk"))
         self.assertIsNone(updater.release_digest(canonical, "different-owner/pawtalk"))
         self.assertIsNone(updater.release_digest(canonical.replace("sha256:", "sha256:ZZ"), "IlyaRusskikh/pawtalk"))
-        self.assertIsNone(updater.release_digest(canonical + "\\nServer image digest: `" + DIGEST + "`.", "IlyaRusskikh/pawtalk"))
+        self.assertIsNone(updater.release_digest(canonical + "\nServer image digest: `" + DIGEST + "`.", "IlyaRusskikh/pawtalk"))
         self.assertEqual(updater.release_digest("Server image digest: `" + DIGEST + "`.", "IlyaRusskikh/pawtalk"), DIGEST)
 
     def test_live_release_format_can_pass_read_only_check(self):
@@ -57,9 +57,7 @@ class ServerUpdateTests(unittest.TestCase):
                 "TaskTemplate": {"ContainerSpec": {"Image": "ghcr.io/ilyarusskikh/pawtalk-server:0.7.0"}},
             },
         }
-        with patch.object(updater, "docker", return_value=json.dumps([service])) as docker, \\
-                patch.object(updater, "get_json", return_value=([release], {})), \\
-                patch.object(updater, "registry_digest", return_value=PUBLISHED_DIGEST) as registry:
+        with patch.object(updater, "docker", return_value=json.dumps([service])) as docker, patch.object(updater, "get_json", return_value=([release], {})), patch.object(updater, "registry_digest", return_value=PUBLISHED_DIGEST) as registry:
             updater.update({"PAWTALK_AUTO_UPDATE": "false"}, "pawtalk", check_only=True)
             registry.assert_called_once_with("IlyaRusskikh/pawtalk", "0.7.1")
             docker.assert_called_once_with("service", "inspect", "pawtalk_server")
