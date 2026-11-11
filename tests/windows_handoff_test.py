@@ -1,7 +1,9 @@
 """Actual Windows process/NTFS regressions; no administrator token needed."""
 import os
+from contextlib import closing
 from pathlib import Path
 import stat
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -44,6 +46,19 @@ class WindowsHandoffTests(unittest.TestCase):
             other=Path(parent)/'unowned';other.mkdir()
             with self.assertRaises(ValueError):remove_owned_tree(other,Path(parent),'owned-')
             self.assertTrue(other.exists())
+
+    def test_sqlite_transaction_scope_needs_explicit_connection_close(self):
+        with tempfile.TemporaryDirectory(prefix='pawtalk-sqlite-cleanup-') as parent:
+            root=Path(parent)/'owned-room';root.mkdir()
+            database=root/'chat.sqlite'
+            with closing(sqlite3.connect(database)) as db:
+                with db:
+                    db.execute('CREATE TABLE probe(value TEXT)')
+                # A transaction context commits but retains the Windows file handle.
+                with self.assertRaises(PermissionError):database.unlink()
+            # Keep the db reference alive: cleanup must not depend on Python GC.
+            remove_owned_tree(root,Path(parent),'owned-')
+            self.assertFalse(root.exists())
 
 
 if __name__=='__main__':unittest.main()

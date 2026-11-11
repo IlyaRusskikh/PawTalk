@@ -1,5 +1,6 @@
 """Disposable native lifecycle; --scm uses real Windows SCM, otherwise console SCM protocol."""
 import ctypes
+from contextlib import closing
 import hashlib
 import http.client
 import json
@@ -156,9 +157,9 @@ try:
         assert c.state()==before
         print('PASS native install, E2EE health, identity, one-time password, reinstall and cross-process lock')
         def probe():
-            with sqlite3.connect(runtime.data(c.state())/'chat.sqlite') as db:
+            with closing(sqlite3.connect(runtime.data(c.state())/'chat.sqlite')) as db:
                 return db.execute('SELECT value FROM manager_smoke_probe').fetchone()[0]
-        with sqlite3.connect(runtime.data(c.state())/'chat.sqlite') as db:
+        with closing(sqlite3.connect(runtime.data(c.state())/'chat.sqlite')) as db, db:
             db.execute('CREATE TABLE manager_smoke_probe(value TEXT)')
             db.execute('INSERT INTO manager_smoke_probe VALUES (?)',('original',))
         backup=c.create_backup()
@@ -332,7 +333,8 @@ finally:
             if target.parent.resolve()!=Path(os.environ['ProgramData']).resolve() or not target.name.startswith('PawTalk-CI-'):
                 raise RuntimeError('Unsafe SCM test cleanup path')
             try:remove_owned_tree(target,Path(os.environ['ProgramData']),'PawTalk-CI-')
-            except OSError as error:cleanup_errors.append(type(error).__name__)
+            except OSError as error:
+                cleanup_errors.append(f'{type(error).__name__}: {target.name}; operation={error.filename}; winerror={getattr(error,"winerror",None)}')
     if not clean:
         cleanup_errors.append('service cleanup failed; test root retained')
     if cleanup_errors:
