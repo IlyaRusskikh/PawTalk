@@ -22,7 +22,7 @@ try{
   await writeFile(path.join(directory,`${component}-${version}.json`),JSON.stringify({keyId:'test',payload:payload.toString('base64'),signature:sign(null,payload,privateKeys[component]).toString('base64')}));
  }
  const version=(await readFile(path.join(root,'server/VERSION'),'utf8')).trim();
- const archive=await readFile(path.join(root,`release/server/PawTalk.Server.${version}.windows-x64.zip`));
+ const archive=await readFile(process.env.PAWTALK_WINDOWS_SERVER_ZIP || path.join(root,`release/server/PawTalk.Server.${version}.windows-x64.zip`));
  for(const v of ['0.9.0','0.9.1','0.9.2']){
   const name=`PawTalk.Server.${v}.windows-x64.zip`;
   await writeFile(path.join(directory,name),archive);

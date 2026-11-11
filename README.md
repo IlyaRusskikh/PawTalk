@@ -121,6 +121,8 @@ npm run dev
 
 Run `.\build.cmd -InstallDependencies` to build a Windows installer. The first development launch builds the bundled API and downloads LiveKit with checksum verification. [Build guide (Russian)](docs/GUIDE.ru.md).
 
+Branch and PR checks cover all components. Release tags build and upload their own packages: Client EXE, Server ZIP/image, or Manager EXE/bundle. Compatibility tests can use a published signed Server or prepare a minimal test host. Manual verification offers `all`, `client`, `server`, and `manager` scopes and does not publish.
+
 Use `npm run build`, `npm test`, `npm run smoke`, and `npm run check:public` when changing the client. Run `go test ./...` and `go vet ./...` in `server` for server changes. [GitHub Actions](https://github.com/IlyaRusskikh/pawtalk/actions/workflows/check.yml).
 
 </details>

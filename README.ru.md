@@ -121,6 +121,8 @@ npm run dev
 
 Для сборки установщика запустите `.\build.cmd -InstallDependencies`. Первый запуск для разработки собирает встроенный API и загружает LiveKit с проверкой контрольной суммы. [Руководство по сборке](docs/GUIDE.ru.md).
 
+Ветки и PR проверяют все компоненты. Тег выпуска собирает и загружает только свои пакеты: Client EXE, Server ZIP/образ или Manager EXE/bundle. Для тестов совместимости используются опубликованный подписанный Server или минимальный тестовый host. Ручная проверка поддерживает режимы `all`, `client`, `server` и `manager` без публикации.
+
 При изменениях клиента запустите `npm run build`, `npm test`, `npm run smoke` и `npm run check:public`. Для сервера запустите `go test ./...` и `go vet ./...` в каталоге `server`. [GitHub Actions](https://github.com/IlyaRusskikh/pawtalk/actions/workflows/check.yml).
 
 </details>

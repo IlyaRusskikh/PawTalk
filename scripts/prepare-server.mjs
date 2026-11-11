@@ -6,6 +6,8 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+if (process.argv.slice(2).some(arg => arg !== '--livekit-only')) throw Error('Supported option: --livekit-only');
+const livekitOnly = process.argv.includes('--livekit-only');
 const output = path.join(root, 'resources/server');
 const bundled = JSON.parse(await readFile(path.join(root, 'bundled-server.json'), 'utf8'));
 if (!/^[a-f0-9]{40}$/.test(bundled.commit) || !/^\d+\.\d+\.\d+$/.test(bundled.version)) throw Error('Invalid pinned bundled server source');
@@ -36,6 +38,7 @@ async function download(url, headers = {}) {
 }
 await mkdir(output, { recursive: true });
 const go = process.env.PAWTALK_GO || (await access(path.join(tmpdir(), 'pawtalk-tools/go/bin/go.exe')).then(() => path.join(tmpdir(), 'pawtalk-tools/go/bin/go.exe')).catch(() => 'go'));
+if (!livekitOnly) {
 const source = await mkdtemp(path.join(tmpdir(), 'pawtalk-bundled-source-'));
 try {
   const archive = path.join(source, 'server.tar');
@@ -53,6 +56,7 @@ try {
     run('docker', ['run', '--rm', '--mount', `type=bind,source=${path.join(source,'server')},target=/src`, '--mount', `type=bind,source=${output},target=/out`, '-w', '/src', '-e', 'GOOS=windows', '-e', 'GOARCH=amd64', `golang:${bundled.goVersion}-alpine`, 'sh', '-c', 'go build -trimpath -o /out/pawtalk-api.exe . && cp /usr/local/go/LICENSE /out/GO-LICENSE']);
   }
 } finally { await rm(source, {recursive:true,force:true}); }
+}
 const binary = path.join(output, 'livekit-server.exe');
 const installed = spawnSync(binary, ['--version'], { encoding: 'utf8', windowsHide: true });
 if (installed.status !== 0 || !installed.stdout.includes(`version ${version}`)) {
@@ -76,5 +80,12 @@ if (installed.status !== 0 || !installed.stdout.includes(`version ${version}`)) 
 const license = path.join(output, 'LIVEKIT-LICENSE');
 try { await access(license); } catch { await writeFile(license, await download(`https://raw.githubusercontent.com/livekit/livekit/v${version}/LICENSE`)); }
 const binaryHash = async name => createHash('sha256').update(await readFile(path.join(output, name))).digest('hex');
+if (livekitOnly) {
+  const goRoot = spawnSync(go, ['env', 'GOROOT'], { encoding: 'utf8', windowsHide: true });
+  if (goRoot.status !== 0) throw Error('Go toolchain is required for Server license notices');
+  await copyFile(path.join(goRoot.stdout.trim(), 'LICENSE'), path.join(output, 'GO-LICENSE'));
+  console.log('LiveKit prepared for permanent Server tests; bundled Client API not built.');
+  process.exit(0);
+}
 await writeFile(path.join(output, 'bundled-server.json'), JSON.stringify({...bundled, apiSha256:await binaryHash('pawtalk-api.exe'),livekitSha256:await binaryHash('livekit-server.exe')})+'\n');
 console.log('Bundled API and LiveKit are ready.');

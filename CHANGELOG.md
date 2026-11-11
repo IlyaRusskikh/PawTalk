@@ -1,5 +1,9 @@
 # Changelog / История изменений
 
+## Unreleased / Не выпущено
+
+- Scope release builds and artifacts to Client, Server or Manager while retaining full branch/PR verification. Use a signed published Server for independent Client/Manager compatibility tests; Server tests prepare only the Manager host/runtime without its installer. / Сборки и artifacts выпуска разделены по Client, Server и Manager; полный набор проверок веток/PR сохранён. Совместимость Client/Manager проверяется с подписанным опубликованным Server; для тестов Server готовится только Manager host/runtime без его установщика.
+
 ## 0.9.0 — Unreleased / Не выпущено
 
 - Place the available-update button above Settings in the sidebar without shifting page content; verify geometry in Russian/English and both motion modes. / Кнопка доступного обновления перенесена над настройками в сайдбар без сдвига страницы; геометрия проверяется на русском/английском и в обоих режимах движения.

@@ -44,6 +44,25 @@ minor — существенные функции, major — очень круп
 один** компонент по тегу через `scripts/release-contract.mjs`, проверяет его версию,
 запускает проверки и только затем публикует свои артефакты.
 
+Release workflow передаёт выбранный компонент в reusable `check.yml`. Ветки и PR
+по умолчанию используют `all`; ручной `workflow_dispatch` позволяет проверить
+`all`, `client`, `server` или `manager` без публикации.
+
+| Scope | Выпускные сборки и загружаемые CI artifacts | Зависимости интеграционных тестов |
+|---|---|---|
+| `client` | Только Client EXE, лицензии, checksum и подписанный манифест при tag push | Опубликованный подписанный Server; закреплённый встроенный сервер клиента |
+| `server` | Только Server ZIP; release job публикует Linux image и манифест | Минимальный Manager host/runtime без NSIS-установщика; полный серверный lifecycle |
+| `manager` | Только Manager EXE; release job собирает bundle и подписывает metadata | Опубликованный подписанный Server ZIP/image, без пересборки Server; SCM/EXE и Compose lifecycle |
+| `all` | Все три пакета | Полные исходники и полный набор проверок ветки/PR |
+
+Windows artifacts разделены: `pawtalk-windows`, `pawtalk-server-windows` и
+`pawtalk-manager-windows`. Каждый publisher скачивает только свой artifact в
+соответствующий каталог. Зависимости тестов не загружаются как чужие release assets.
+Server dependency выбирается по подписанному опубликованному манифесту и digest,
+а не по потенциально ещё не выпущенному `server/VERSION` из дерева Manager/Client.
+Подмена ZIP, неверный hash/size или отсутствие доверенного Server прерывают проверку.
+Уже опубликованные теги и их workflow не изменяются.
+
 - Client tag публикует только клиентские assets.
 - Server tag публикует GHCR image, Windows Server ZIP и server metadata; клиентский установщик не публикуется.
 - Manager tag публикует общий bundle, Windows EXE и metadata; пустого фиктивного релиза нет.
@@ -154,6 +173,15 @@ Never replace historical tags or assets. The component release workflow validate
 its own source, runs verification and publishes only its component's assets.
 Stable/preview flags must match signed metadata. Keep current public 0.8.0 links
 until new artifacts actually exist. No publication is authorized in this task.
+
+Release verification receives the selected component scope; branch/PR checks
+default to `all`. Client tags package only the Client, Server tags package only
+the Server, and Manager tags package only the Manager. Windows artifacts and
+publisher extraction paths are separate. Integration tests retain required test
+hosts or use a published signed Server ZIP/image by immutable digest instead of
+rebuilding another component. Missing trusted releases and corrupt downloads fail
+closed. Manual component verification does not publish; historical tags remain
+immutable.
 
 Client retains its existing key; Server and Manager have separate provisioned
 Ed25519 roots and CI secrets. Empty roots fail closed. Bootstrap trusts a reviewed

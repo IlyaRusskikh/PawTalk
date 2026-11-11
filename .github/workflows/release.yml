@@ -38,6 +38,7 @@ jobs:
     needs: plan
     uses: ./.github/workflows/check.yml
     with:
+      component: ${{ needs.plan.outputs.component }}
       client-prerelease: ${{ needs.plan.outputs.channel == 'preview' }}
     secrets: inherit
   client:
@@ -74,8 +75,8 @@ jobs:
       - uses: docker/setup-qemu-action@v4
       - uses: actions/download-artifact@v4
         with:
-          name: pawtalk-server-manager-windows
-          path: release
+          name: pawtalk-server-windows
+          path: release/server
       - uses: docker/setup-buildx-action@v4
       - name: Validate Server signing key before publishing any image
         env:
@@ -135,8 +136,8 @@ jobs:
           node-version: '24.22.1'
       - uses: actions/download-artifact@v4
         with:
-          name: pawtalk-server-manager-windows
-          path: release
+          name: pawtalk-manager-windows
+          path: release/manager
       - name: Sign complete Manager bundle
         env:
           PAWTALK_MANAGER_PRIVATE_KEY: ${{ secrets.PAWTALK_MANAGER_PRIVATE_KEY }}
