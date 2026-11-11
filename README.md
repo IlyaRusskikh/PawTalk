@@ -2,13 +2,13 @@
 
 [Русский](README.ru.md) · English
 
-Development: **Client 0.9.0 / Server 0.9.0 / Manager 0.1.0**, unreleased. A separate Client-only `v0.8.1` bridge prepares automatic discovery of `client-v0.9.0`. New VPS installations use Compose and signed independent updates. The download below remains public 0.8.0. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
+Released: **Client 0.9.0 / Server 0.9.0 / Manager 0.1.0**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v0.9.0`. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
 
 [![Verify and package](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)
 
 PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
 
-**[Download PawTalk 0.8.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.8.0/PawTalk.Setup.0.8.0.exe)** · [Get started](#get-started) · [Linux server](docs/SERVER.md)
+**[Download PawTalk 0.9.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.9.0/PawTalk.Setup.0.9.0.exe)** · [Get started](#get-started) · [Linux server](docs/SERVER.md)
 
 ![PawTalk room with three participants, call controls and encrypted text chat](website/assets/room-chat-en.png)
 
@@ -52,7 +52,7 @@ PawTalk takes inspiration from **Discord** for easy-to-join voice rooms and indi
 
 ## Get started
 
-1. **Install PawTalk.** [Download the installer](https://github.com/IlyaRusskikh/pawtalk/releases/download/v0.8.0/PawTalk.Setup.0.8.0.exe) on each Windows PC. Choose English or Russian.
+1. **Install PawTalk.** [Download the installer](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.9.0/PawTalk.Setup.0.9.0.exe) on each Windows PC. Choose English or Russian.
 2. **Pick a nickname.** Open **Settings → About me** and enter a nickname. You can test your microphone under **Voice**.
 3. **Get your friends together.** Select **Create a room**, give the room a name, and choose a password of at least 8 characters. Share the full invitation privately. Your friend opens **Join a room** and pastes the link.
 
@@ -90,7 +90,7 @@ You can enable **experimental end-to-end encryption (E2EE)** for voice and chat.
 
 PawTalk is still a public preview. Updates are verified using a signed manifest and SHA-256, but the Windows installer is not yet Authenticode-signed. [E2EE security model and setup](docs/E2EE.md) · [Security policy and vulnerability reporting](SECURITY.md).
 
-For the upcoming VPS installer, the key generator shows a shared participant secret and a separate SHA-256 key ID to paste into the wizard, without `.env` entries. On Windows, `scripts\e2ee-key.cmd` runs without installing PawTalk or Node.js. The VPS wizard defaults to enabling encryption and automatic updates; one update question covers both the server and its maintenance tool. VPS updates select the latest published version for each component tag family, with no channel setting.
+For the Server Manager installer, the key generator shows a shared participant secret and a separate SHA-256 key ID to paste into the wizard, without `.env` entries. On Windows, `scripts\e2ee-key.cmd` runs without installing PawTalk or Node.js. The VPS wizard defaults to enabling encryption and automatic updates; one update question covers both the server and its maintenance tool. VPS updates select the latest published version for each component tag family, with no channel setting.
 
 </details>
 
@@ -121,6 +121,8 @@ npm run dev
 
 Run `.\build.cmd -InstallDependencies` to build a Windows installer. The first development launch builds the bundled API and downloads LiveKit with checksum verification. [Build guide (Russian)](docs/GUIDE.ru.md).
 
+Branch and PR checks cover all components. Release tags build and upload their own packages: Client EXE, Server ZIP/image, or Manager EXE/bundle. Compatibility tests can use a published signed Server or prepare a minimal test host. Manual verification offers `all`, `client`, `server`, and `manager` scopes and does not publish.
+
 Use `npm run build`, `npm test`, `npm run smoke`, and `npm run check:public` when changing the client. Run `go test ./...` and `go vet ./...` in `server` for server changes. [GitHub Actions](https://github.com/IlyaRusskikh/pawtalk/actions/workflows/check.yml).
 
 </details>
@@ -133,9 +135,9 @@ The [server configuration guide](docs/SERVER.md#конфигурация) covers
 
 ## Project status
 
-**Current public preview: [PawTalk 0.8.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.8.0)** — historical combined Client/Server release. Unreleased 0.9.0 separates Client, Server and Manager. This is not a stable release.
+**Current public preview: [PawTalk Client 0.9.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.9.0)**. [Server 0.9.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.9.0) and [Manager 0.1.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.1.0) are released separately. This is not a stable release.
 
-### Available in 0.8.0
+### Available in 0.9.0
 
 - Voice rooms with invitations, nickname-only entry, Push-to-Talk, per-user volume, RNNoise noise suppression and audio device selection.
 - Text chat with replies, Markdown, editing/deleting your own messages on updated servers, typing indicators, room previews, unread counts and static PNG/JPEG/WebP attachments up to 2 MiB.

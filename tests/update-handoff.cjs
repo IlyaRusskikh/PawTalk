@@ -14,7 +14,8 @@ app.whenReady().then(async () => {
     { detached: false, windowsHide: true, stdio: 'ignore' });
   try {
     await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
-    await waitForHelper(ready, 'test-token', child, 5000);
+    // Exercise the production readiness budget, including cold Windows COM startup.
+    await waitForHelper(ready, 'test-token', child);
     child.unref(); app.quit();
   } catch (error) { console.error(error); child.kill(); app.exit(1); }
 });

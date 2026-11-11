@@ -6,6 +6,8 @@ import {createRequire} from 'node:module';
 import path from 'node:path';
 import os from 'node:os';
 const root=path.resolve(import.meta.dirname,'..');
+if(process.argv.slice(2).some(arg=>arg!=='--runtime-only'))throw Error('Supported option: --runtime-only');
+const runtimeOnly=process.argv.includes('--runtime-only');
 if(process.platform!=='win32')throw Error('Build Windows Manager on Windows');
 const output=path.join(root,'release/manager');
 const stage=path.join(output,'windows');
@@ -39,6 +41,10 @@ await cp(path.join(modCache,'golang.org/x/sys@v0.49.0/LICENSE'),path.join(stage,
 // installer. Keep the copied notice removable during explicit maintenance/QA.
 await chmod(path.join(stage,'X-SYS-LICENSE'),0o644);
 const version=(await readFile(path.join(root,'manager/VERSION'),'utf8')).trim();
+if(runtimeOnly){
+ console.log('Windows Manager test host/runtime prepared; no installer built.');
+ process.exit(0);
+}
 const {getMakeNsisPath}=createRequire(import.meta.url)('app-builder-lib/out/toolsets/windows.js');
 const makensis=process.env.PAWTALK_MAKENSIS?{path:process.env.PAWTALK_MAKENSIS}:await getMakeNsisPath();
 execFileSync(makensis.path,['/INPUTCHARSET','UTF8',`/DVERSION=${version}`,`/DSTAGE=${stage}`,`/DOUTPUT=${path.join(output,`PawTalk.Server.Manager.Setup.${version}.exe`)}`,path.join(root,'manager/windows/installer.nsi')],{cwd:root,stdio:'inherit',windowsHide:true,env:{...process.env,...makensis.env}});

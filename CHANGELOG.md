@@ -1,6 +1,10 @@
 # Changelog / История изменений
 
-## 0.9.0 — Unreleased / Не выпущено
+## Unreleased / Не выпущено
+
+- Scope release builds and artifacts to Client, Server or Manager while retaining full branch/PR verification. Use a signed published Server for independent Client/Manager compatibility tests; Server tests prepare only the Manager host/runtime without its installer. / Сборки и artifacts выпуска разделены по Client, Server и Manager; полный набор проверок веток/PR сохранён. Совместимость Client/Manager проверяется с подписанным опубликованным Server; для тестов Server готовится только Manager host/runtime без его установщика.
+
+## 0.9.0 — 2026-11-11
 
 - Place the available-update button above Settings in the sidebar without shifting page content; verify geometry in Russian/English and both motion modes. / Кнопка доступного обновления перенесена над настройками в сайдбар без сдвига страницы; геометрия проверяется на русском/английском и в обоих режимах движения.
 - Configure independent production Ed25519 trust roots for Server and Manager; preserve the existing Client signing key. / Настроены независимые production-корни доверия Ed25519 для Server и Manager; существующий ключ подписи клиента сохранён.
@@ -21,7 +25,7 @@
 - Remove supported Swarm deployment without a migration path; replace permanent Windows hosting with native managed services. Preserve third-party notices and historical releases. / Удалены поддерживаемые Swarm-развёртывания без миграционного пути; постоянный Windows-сервер заменён нативными управляемыми службами. Лицензии и исторические релизы сохранены.
 - Add local-registry Compose integration, actual controller SIGKILL recovery, signature/route/archive fault tests and same-window decoded gain measurements. Real VPS, external networks and physical devices remain unverified. / Добавлены интеграция Compose с локальным registry, реальный SIGKILL контроллера, проверки подписей/маршрутов/архивов и одновременные измерения усиления декодированного звука. Реальные VPS, внешняя сеть и физические устройства не проверены.
 
-## 0.8.1 — Unreleased / Не выпущено — Client transition / Переход клиента
+## 0.8.1 — 2026-11-11 — Client transition / Переход клиента
 
 - Prepare automatic discovery of `client-v*` releases while retaining legacy `v*` discovery for the one-time bridge. Preserve the selected tag for signed-manifest and installer downloads; reject Server/Manager families. / Добавлена поддержка `client-v*` с сохранением legacy `v*` для переходного выпуска. Манифест и установщик скачиваются по выбранному тегу; Server/Manager исключены.
 - Extend the bundled room update relay to Client tags. This Client-only bridge does not publish a new VPS image. / Relay встроенной комнаты поддерживает клиентские теги. Переходный выпуск клиента не публикует новый VPS-образ.

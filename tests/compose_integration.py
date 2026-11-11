@@ -110,16 +110,17 @@ def main():
             digests = []
             for version in ['0.9.0','0.9.1','0.9.2','0.9.3']:
                 tag = repository+':'+version
-                if version == '0.9.0':
-                    docker('tag',base,tag)
-                else:
-                    definition = f'FROM {base}\nLABEL io.pawtalk.test.revision={version}\n'
-                    if version == '0.9.2':
-                        definition += 'ENV PAWTALK_LIVEKIT_EXECUTABLE=/missing\nENTRYPOINT ["sh","-c","touch /data/failed-rollout; exec /pawtalk serve"]\n'
-                    docker('build','-t',tag,'-',input=definition.encode())
+                # A published multiarch index can reference platforms not pulled
+                # locally. Materialize this runner's test image, reusing binaries
+                # unchanged instead of retagging the remote index into our registry.
+                definition = f'FROM {base}\nLABEL io.pawtalk.test.revision={version}\n'
+                if version == '0.9.2':
+                    definition += 'ENV PAWTALK_LIVEKIT_EXECUTABLE=/missing\nENTRYPOINT ["sh","-c","touch /data/failed-rollout; exec /pawtalk serve"]\n'
+                docker('build','-t',tag,'-',input=definition.encode())
                 docker('push',tag)
                 values = json.loads(docker('image','inspect',tag))[0]['RepoDigests']
                 digests.append(next(v.split('@')[1] for v in values if v.startswith(repository+'@')))
+                docker('pull',repository+'@'+digests[-1])
             print('PASS disposable registry and four distinct real image digests')
             unowned = 'pawtalk-'+uuid.uuid4().hex[:12]
             docker('volume','create',unowned)
