@@ -15,8 +15,8 @@ await mkdir(path.join(stage,'runtime'),{recursive:true});
 const run=(cmd,args,cwd=root)=>execFileSync(cmd,args,{cwd,stdio:'inherit',windowsHide:true});
 const go=process.env.PAWTALK_GO||'go';
 run(go,['build','-trimpath','-o',path.join(stage,'pawtalkctl.exe'),'.'],path.join(root,'manager/windows'));
-const pythonVersion='3.13.9';
-const expected='91d828c2da3a029b41699e918674a0cb379c02cf20dab9c501306885f837402a';
+const pythonVersion='3.14.10';
+const expected='90905e64a840557d8c1bc4f5b74db3d7ee85e3ffb217611cac1c7813acea4159';
 const archive=path.join(os.tmpdir(),`pawtalk-python-${pythonVersion}-embed-amd64.zip`);
 let bytes=await readFile(archive).catch(()=>null);
 if(!bytes||createHash('sha256').update(bytes).digest('hex')!==expected){
