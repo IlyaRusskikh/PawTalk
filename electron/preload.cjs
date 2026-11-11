@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('desktop', {
   setUpdateRooms: rooms => ipcRenderer.invoke('update-rooms-set', rooms),
   getAutoUpdate: () => ipcRenderer.invoke('update-preference-get'),
   setAutoUpdate: value => ipcRenderer.invoke('update-preference-set', value),
+  getUpdateChannel: () => ipcRenderer.invoke('update-channel-get'),
+  setUpdateChannel: value => ipcRenderer.invoke('update-channel-set', value),
   checkUpdate: () => ipcRenderer.invoke('update-check'),
   installUpdate: () => ipcRenderer.invoke('update-install'),
   onUpdate: (fn) => listen('update-changed', fn),

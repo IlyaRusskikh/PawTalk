@@ -1,7 +1,9 @@
-param([string]$Invitation)
+﻿param([string]$Invitation)
 
 # Run on a trusted participant's computer, not on the relay VPS.
 $ErrorActionPreference = 'Stop'
+# Keep Cyrillic output readable when invoked through CMD or captured by tooling.
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 
 try {
     $uri = $null
@@ -32,9 +34,8 @@ try {
         $invitationWithKey = $parts[0] + '#' + ($fields -join '&')
     }
 
-    Write-Output "Client key (SECRET): $key"
-    Write-Output 'PAWTALK_E2EE=true'
-    Write-Output "PAWTALK_E2EE_KEY_ID=$keyId"
+    Write-Output "Секретный ключ (не публикуйте; только для участников комнаты): $key"
+    Write-Output "Публичный отпечаток (SHA-256 key ID, для сервера): $keyId"
     if ($invitationWithKey) { Write-Output "Invitation with key (SECRET): $invitationWithKey" }
 } catch {
     [Console]::Error.WriteLine($_.Exception.Message)

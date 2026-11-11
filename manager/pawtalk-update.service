@@ -1,0 +1,12 @@
+[Unit]
+Description=PawTalk verified Server and Manager updates (opt-in)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/pawtalk-manager/launcher periodic
+TimeoutStartSec=20min
+UMask=0077
+PrivateTmp=true

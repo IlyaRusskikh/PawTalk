@@ -4,10 +4,12 @@ release
 native/build
 .git
 .env
-deploy/generated
+manager/generated
 resources/server
 src/generated
 CONTINUE.md
+plans
+**/__pycache__
 **/connection-report*.json
 **/*.log
 **/.env

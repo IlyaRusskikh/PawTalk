@@ -22,7 +22,8 @@ async function metadata(fetcher, source, pathname, max = 8 * 1024 * 1024) {
   return readBounded(await fetcher(endpoint(source, pathname), { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'PawTalk' },
     redirect: source ? 'error' : 'follow', signal: AbortSignal.timeout(15000) }), max);
 }
-async function download({ fetcher, source, manifest, partial, onProgress, policy = {} }) {
+async function download({ fetcher, source, manifest, tag = `v${manifest.version}`, partial, onProgress, policy = {} }) {
+  if (tag !== `v${manifest.version}` && tag !== `client-v${manifest.version}`) throw new UpdateSecurityError(source?.name || 'GitHub');
   const { idleMs = 20000, windowMs = 30000, minBytesPerSecond = 64 * 1024, totalMs = 15 * 60 * 1000 } = policy;
   const abort = new AbortController();
   const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(totalMs)]);
@@ -31,7 +32,7 @@ async function download({ fetcher, source, manifest, partial, onProgress, policy
   const resetIdle = () => { clearTimeout(idle); idle = setTimeout(() => abort.abort(Error('Update download stalled')), idleMs); };
   try {
     resetIdle();
-    const response = await fetcher(endpoint(source, `assets/v${manifest.version}/${manifest.name}`), { redirect: source ? 'error' : 'follow', signal });
+    const response = await fetcher(endpoint(source, `assets/${tag}/${manifest.name}`), { redirect: source ? 'error' : 'follow', signal });
     if (!response.ok || !response.body) { await response.body?.cancel(); throw Error('Download HTTP ' + response.status); }
     file = await fs.open(partial, 'w', 0o600);
     reader = response.body.getReader(); const hash = createHash('sha256'); let progress = -1;

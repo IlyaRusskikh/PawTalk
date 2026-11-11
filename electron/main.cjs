@@ -126,7 +126,7 @@ function registerIPC() {
   });
   ipcMain.handle('server-key-copy', (event, value) => {
     authorized(event);
-    if (typeof value !== 'string' || !/^(?:[a-f0-9]{64}|PAWTALK_E2EE=true\nPAWTALK_E2EE_KEY_ID=[a-f0-9]{64})$/.test(value)) throw new Error('Invalid encryption key field');
+    if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) throw new Error('Invalid encryption key field');
     clipboard.writeText(value);
   });
   ipcMain.handle('language-get', event => { authorized(event); return language; });
@@ -140,6 +140,14 @@ function registerIPC() {
   ipcMain.handle('update-rooms-set', (event, rooms) => { authorized(event); updateRooms.set(rooms); });
   ipcMain.handle('update-preference-get', event => { authorized(event); return updatePreferences.enabled; });
   ipcMain.handle('update-preference-set', (event, value) => { authorized(event); return updatePreferences.setEnabled(value); });
+  ipcMain.handle('update-channel-get', event => { authorized(event); return updatePreferences.channel; });
+  ipcMain.handle('update-channel-set', (event, value) => {
+    authorized(event);
+    if (updater?.busy) throw Error('Updater is busy');
+    const channel = updatePreferences.setChannel(value);
+    if (updater) { updater.channel = channel; updater.release = null; updater.set({ status: 'idle' }); }
+    return channel;
+  });
   ipcMain.handle('update-check', async event => { authorized(event); if (!updater) throw new Error('Updates require Windows'); return { ...await updater.check(), installable: app.isPackaged }; });
   ipcMain.handle('update-install', async event => {
     authorized(event);
@@ -225,8 +233,11 @@ function registerIPC() {
           const policy = await net.fetch(`${base}/api/config`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
           if (policy.ok) {
             const config = await policy.text();
+            if (config.length > 1024) throw Error(t("Некорректный ответ сервера"));
             if (config.length <= 1024) {
-              const challenge = JSON.parse(config).profileChallenge;
+              const policyConfig = JSON.parse(config);
+              require('../shared/protocol.cjs').protocol(policyConfig);
+              const challenge = policyConfig.profileChallenge;
               if (typeof challenge === 'string') profile = await signProfile(scope, challenge, input.nickname);
             }
           } else await policy.body?.cancel();
@@ -323,6 +334,7 @@ else {
     fs.writeFileSync(path.join(app.getPath('userData'), 'language.json'), JSON.stringify({ language }));
     setLanguage(language);
     if (process.platform === 'win32') updater = new Updater({ current: app.getVersion(),
+      channel: updatePreferences.channel,
       directory: path.join(app.getPath('userData'), 'updates'), script: app.isPackaged ? path.join(process.resourcesPath, 'updates/install-update.ps1') : path.join(__dirname, '../scripts/install-update.ps1'),
       installDirectory: path.dirname(app.getPath('exe')), executable: app.getPath('exe'), language: () => language,
       rooms: () => updateRooms.sources(), roomFetcher: (...args) => net.fetch(...args),

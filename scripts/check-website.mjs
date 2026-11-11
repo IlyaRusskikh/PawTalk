@@ -19,7 +19,7 @@ for (const file of files.filter(file => file.endsWith('.html'))) {
   assert.match(html, /<html lang="(?:en|ru)">/, `${file}: page language`);
   assert.match(html, /rel="canonical" href="https:\/\/ilyarusskikh.github.io\/PawTalk\/(?:ru\/)?"/, `${file}: expected Pages URL`);
   for (const locale of ['en', 'ru', 'x-default']) assert.ok(html.includes(`hreflang="${locale}"`), `${file}: ${locale} alternate`);
-  assert.match(html, /releases\/download\/v(\d+\.\d+\.\d+)\/PawTalk\.Setup\.\1\.exe/, `${file}: installer URL`);
+  assert.match(html, /releases\/download\/(?:client-)?v(\d+\.\d+\.\d+)\/PawTalk\.Setup\.\1\.exe/, `${file}: Client installer URL`);
   for (const [, raw] of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
     if (/^(?:https?:|mailto:)/.test(raw)) continue;
     const [urlPath, anchor] = raw.split('#');

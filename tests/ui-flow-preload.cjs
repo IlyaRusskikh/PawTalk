@@ -4,6 +4,7 @@ const noop = () => () => {};
 let cancelCheck;
 let active = true, activeListener, presenceReads = 0, autoStart = false, inTray = false;
 let autoUpdate = true;
+let updateChannel = 'preview';
 contextBridge.exposeInMainWorld('desktop', {
  windowActive: async () => active,
  onWindowActive: fn => { activeListener = fn; return () => { activeListener = null; }; },
@@ -14,6 +15,8 @@ contextBridge.exposeInMainWorld('desktop', {
  setStartInTray: async value => { inTray = value; return value; },
  getAutoUpdate: async () => autoUpdate,
  setAutoUpdate: async value => { autoUpdate = value; calls.push(['auto-update', value]); return value; },
+ getUpdateChannel: async () => updateChannel,
+ setUpdateChannel: async value => { updateChannel = value; calls.push(['update-channel', value]); return value; },
  checkUpdate: async () => { calls.push(['check-update', autoUpdate]); return { status: 'idle' }; },
  copyServerKey: async value => { calls.push(['copy-server-key', value]); },
  duck: async () => {},

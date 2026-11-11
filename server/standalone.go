@@ -254,6 +254,19 @@ func standalone(args []string) error {
 		case "info":
 			fmt.Println(invitation(state))
 			return nil
+		case "initial-password":
+			file := filepath.Join(dir, "initial-password")
+			claimed := filepath.Join(dir, fmt.Sprintf(".claimed-password-%d", os.Getpid()))
+			if err := os.Rename(file, claimed); err != nil {
+				return errors.New("initial password already consumed or unavailable; use reset-password")
+			}
+			defer os.Remove(claimed)
+			password, err := os.ReadFile(claimed)
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(password))
+			return nil
 		case "reset-password":
 			raw, err := io.ReadAll(io.LimitReader(os.Stdin, 1026))
 			if err != nil {
@@ -266,10 +279,11 @@ func standalone(args []string) error {
 			if err = saveState(dir, state); err != nil {
 				return err
 			}
+			_ = os.Remove(filepath.Join(dir, "initial-password"))
 			fmt.Println("Password updated. Restart the container to apply it.")
 			return nil
 		default:
-			return errors.New("usage: serve [info|healthcheck|reset-password]")
+			return errors.New("usage: serve [info|healthcheck|initial-password|reset-password]")
 		}
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -282,10 +296,13 @@ func standalone(args []string) error {
 		if err != nil {
 			return err
 		}
+		if err = os.WriteFile(filepath.Join(dir, "initial-password"), []byte(password), 0600); err != nil {
+			return err
+		}
 		if err = saveState(dir, state); err != nil {
 			return err
 		}
-		log.Printf("Initial room password (shown only on first start): %s", password)
+		log.Print("Initial password is ready for one-time retrieval with serve initial-password")
 	} else if err != nil {
 		return err
 	}
@@ -331,6 +348,11 @@ func standalone(args []string) error {
 	}()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// The native Windows service closes stdin for a graceful shutdown before
+	// its job object enforces a process-tree timeout. Containers keep signal handling.
+	if os.Getenv("PAWTALK_MANAGED_STDIN") == "true" {
+		go func() { _, _ = io.Copy(io.Discard, os.Stdin); stop() }()
+	}
 	for deadline := time.Now().Add(20 * time.Second); ; {
 		if mediaReady() {
 			break
@@ -360,7 +382,7 @@ func standalone(args []string) error {
 	srv := &http.Server{Handler: standaloneHandler(state, chat), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}}
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(tls.NewListener(listener, srv.TLSConfig)) }()
-	log.Printf("PawTalk ready. Invitation: %s", invitation(state))
+	log.Print("PawTalk ready.")
 	select {
 	case <-ctx.Done():
 	case err = <-done:

@@ -7,6 +7,14 @@ their original license files are installed by `npm ci`.
 
 ## Desktop and UI
 
+The Windows Server Manager bundles the official CPython 3.14.10 embeddable
+runtime under the Python Software Foundation License and included third-party
+terms. Its original `runtime/LICENSE.txt` is distributed unchanged. Source:
+https://www.python.org/downloads/release/python-31410/.
+The native Manager host uses Go and golang.org/x/sys (BSD-style licenses);
+the installer includes `GO-LICENSE` and `X-SYS-LICENSE`. Server archives retain
+Go/LiveKit notices separately from the desktop Client.
+
 - Electron: MIT, plus Chromium and other component licenses. Packaged builds
   include `LICENSE.electron.txt` and `LICENSES.chromium.html` alongside the app.
   Source: https://github.com/electron/electron (version in `package-lock.json`).

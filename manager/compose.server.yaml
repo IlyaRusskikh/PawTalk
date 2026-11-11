@@ -1,0 +1,35 @@
+# Production runtime: one Linux host, one room, exact verified Server digest.
+services:
+  server:
+    image: ${PAWTALK_IMAGE:?Exact verified Server image digest required}
+    network_mode: host
+    user: '65532:65532'
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    environment:
+      PAWTALK_PUBLIC_IP: ${PAWTALK_PUBLIC_IP:?Public IP required}
+      PAWTALK_PORT: ${PAWTALK_PORT:-18443}
+      PAWTALK_E2EE: ${PAWTALK_E2EE:-false}
+      PAWTALK_E2EE_KEY_ID: ${PAWTALK_E2EE_KEY_ID:-}
+      PAWTALK_CHAT_MAX_MB: ${PAWTALK_CHAT_MAX_MB:-128}
+      PAWTALK_UPDATE_PROXY: ${PAWTALK_UPDATE_PROXY:-true}
+    volumes: ['room:/data']
+    tmpfs: ['/tmp:uid=65532,gid=65532,mode=0700,size=67108864']
+    stop_grace_period: 20s
+    healthcheck:
+      test: [CMD, /pawtalk, serve, healthcheck]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    labels:
+      io.pawtalk.managed: 'compose-v1'
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+volumes:
+  room:
+    external: true
+    name: ${PAWTALK_DATA_VOLUME:?Managed room volume required}

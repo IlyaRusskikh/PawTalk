@@ -1,6 +1,6 @@
 {
   "name": "pawtalk",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Private, self-hosted voice room for Windows",
   "author": "PawTalk contributors",
@@ -94,8 +94,11 @@
         "from": "resources/server",
         "to": "server",
         "filter": [
-          "*.exe",
-          "*LICENSE*"
+          "pawtalk-api.exe",
+          "livekit-server.exe",
+          "bundled-server.json",
+          "GO-LICENSE",
+          "LIVEKIT-LICENSE"
         ]
       },
       {

@@ -14,7 +14,7 @@ function verifyManifest(raw, keys = trustedKeys, now = Date.now()) {
     const key = createPublicKey(keys[envelope.keyId]);
     if (key.asymmetricKeyType !== 'ed25519' || signature.length !== 64 || !verify(null, payload, key, signature)) throw Error();
     const value = JSON.parse(payload.toString('utf8'));
-    if (value.schema !== 1 || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/.test(value.version)
+    if (value.schema !== 1 || (value.component !== undefined && value.component !== 'client') || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/.test(value.version)
       || value.name !== `PawTalk.Setup.${value.version}.exe` || typeof value.prerelease !== 'boolean'
       || !Number.isSafeInteger(value.size) || value.size < 1 || value.size > MAX_SIZE || !/^[a-f0-9]{64}$/.test(value.sha256)
       || !Number.isSafeInteger(value.publishedAt) || !Number.isSafeInteger(value.expiresAt)

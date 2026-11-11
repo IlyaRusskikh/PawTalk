@@ -20,11 +20,65 @@ function release(v, extra = {}) {
   return { tag_name: `v${v}`, prerelease: v.includes('-'), assets: [{ name: `PawTalk.Setup.${v}.exe`, state: 'uploaded', size: bytes.length,
     digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}`, browser_download_url: `https://github.com/IlyaRusskikh/pawtalk/releases/download/v${v}/PawTalk.Setup.${v}.exe` }], ...extra };
 }
+function familyRelease(v, family) {
+  const candidate = release(v);
+  candidate.tag_name = `${family}-v${v}`;
+  candidate.assets[0].browser_download_url = candidate.assets[0].browser_download_url.replace(`/v${v}/`, `/${candidate.tag_name}/`);
+  return candidate;
+}
+test('bridge discovers client tags, rejects other families and downloads from the selected tag', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-bridge-'));
+  const requests = [];
+  try {
+    const candidates = [familyRelease('8.0.0', 'server'), familyRelease('9.0.0', 'manager'), release('0.8.1'), familyRelease('0.9.0', 'client')];
+    assert.equal(selectRelease(candidates, '0.8.1').tag, 'client-v0.9.0');
+    assert.equal(selectRelease(candidates.slice(0, 2), '0.8.1'), null);
+    const updater = new Updater({ keys, current: '0.8.1', directory,
+      script: path.join(directory, 'helper.ps1'), installDirectory: directory,
+      fetcher: async url => {
+        requests.push(url);
+        if (url.includes('api.github.com')) return Response.json(candidates);
+        assert.ok(url.includes('/client-v0.9.0/'), url);
+        return new Response(url.endsWith('update-manifest.json') ? manifest('0.9.0') : bytes);
+      }, launch: () => { throw Error('stop before running synthetic installer'); } });
+    await writeFile(updater.script, '# synthetic');
+    assert.equal((await updater.check()).status, 'available');
+    await updater.install();
+    assert.deepEqual(await readFile(path.join(directory, 'PawTalk-0.9.0.exe')), bytes);
+    assert.ok(requests.some(url => url.endsWith('/client-v0.9.0/PawTalk.Setup.0.9.0.exe')));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+test('published 0.8.0 selector discovers the legacy bridge, then bridge discovers Client 0.9.0', () => {
+  const legacy = createRequire(import.meta.url)('./legacy-update-selector.cjs');
+  const releases = [release('0.8.1'), familyRelease('0.9.0', 'client'), familyRelease('0.9.0', 'server')];
+  assert.equal(legacy.selectRelease(releases, '0.8.0').version, '0.8.1');
+  assert.equal(legacy.selectRelease(releases.slice(1), '0.8.0'), null);
+  assert.equal(selectRelease(releases, '0.8.1').version, '0.9.0');
+});
 test('version ordering includes prereleases without downgrading stable versions', () => {
   for (const [a, b] of [['0.2.0', '0.1.9'], ['0.2.0-beta.10', '0.2.0-beta.2'], ['0.2.0', '0.2.0-rc.1'], ['0.2.0-alpha', '0.2.0-1']]) assert.ok(compare(a, b) > 0);
   assert.equal(compare('v0.2.0', '0.2.0'), 0);
   assert.equal(selectRelease([release('0.1.0'), release('0.2.0-beta.1')], '0.1.0').version, '0.2.0-beta.1');
   assert.equal(selectRelease([release('0.2.0-beta.1')], '0.2.0'), null);
+});
+test('Client channels reject foreign and future legacy tags and keep separate authenticated offer floors', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-channels-'));
+  try {
+    const candidates = [release('0.99.0'), familyRelease('0.10.0-beta.1','client'), familyRelease('0.9.0','client')];
+    assert.equal(selectRelease(candidates,'0.8.1','stable').version,'0.9.0');
+    assert.equal(selectRelease(candidates,'0.8.1','preview').version,'0.10.0-beta.1');
+    assert.throws(() => selectRelease(candidates,'0.8.1','invalid'));
+    let channel = 'preview';
+    const fetcher = async url => url.includes('api.github.com') ? Response.json(candidates)
+      : new Response(manifest(channel === 'preview' ? '0.10.0-beta.1' : '0.9.0'));
+    assert.equal((await new Updater({keys,directory,current:'0.8.1',channel,fetcher}).check()).status,'available');
+    channel = 'stable';
+    assert.equal((await new Updater({keys,directory,current:'0.8.1',channel,fetcher}).check()).status,'available');
+    await writeFile(path.join(directory,'trusted-manifest.json'),manifest('0.11.0'));
+    await rm(path.join(directory,'trusted-manifest.preview.json'));
+    channel = 'preview';
+    assert.equal((await new Updater({keys,directory,current:'0.8.1',channel,fetcher}).check()).status,'security-failed');
+  } finally { await rm(directory,{recursive:true,force:true}); }
 });
 test('only complete, verifiable installers from this repository are offered', () => {
   const invalid = release('0.2.0'); invalid.assets[0].digest = null;
@@ -96,6 +150,12 @@ test('corrupt and truncated downloads never launch and can be retried', async ()
 test('network failures leave the installed app alone', async () => {
   const updater = new Updater({ keys, current: '0.1.0', fetcher: async () => { throw new Error('offline'); } });
   assert.equal((await updater.check()).status, 'check-failed');
+});
+test('a full pagination bound reports check failure instead of a false up-to-date result', async () => {
+  let pages = 0;
+  const updater = new Updater({current:'0.8.1',fetcher:async () => { pages++; return Response.json(Array.from({length:100},()=>familyRelease('9.0.0','server'))); }});
+  assert.equal((await updater.check()).status,'check-failed');
+  assert.equal(pages,10);
 });
 
 test('signed manifests reject tampering, foreign keys, expiration and invalid artifact bindings', () => {

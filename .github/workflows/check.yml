@@ -1,5 +1,15 @@
 name: Verify and package
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: ['**']
+    tags: ['v0.8.1']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      client-prerelease:
+        type: boolean
+        default: true
 permissions:
   contents: read
 jobs:
@@ -7,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-latest, ubuntu-24.04-arm]
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -21,32 +31,52 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24.22.1'
-      - name: Validate Swarm stack without local secrets
-        run: |
-          export PAWTALK_RELEASE="$(node -p "require('./package.json').version")"
-          export PAWTALK_IMAGE="ghcr.io/ilyarusskikh/pawtalk-server:${PAWTALK_RELEASE}"
-          export PAWTALK_PUBLIC_IP=203.0.113.10
-          export PAWTALK_DATA_VOLUME=pawtalk-server_server_data
-          docker stack config -c compose.server.swarm.yaml >/dev/null
       - run: node scripts/check-public.mjs
       - run: node scripts/check-website.mjs
-      - run: node --check scripts/dev-server.mjs && node --check scripts/docker-smoke.mjs && node --check scripts/swarm-smoke.mjs
+      - run: node --check scripts/dev-server.mjs && node --check scripts/docker-smoke.mjs
       - name: Verify bundled server lifecycle and authentication with real Docker
         run: node scripts/server-smoke.mjs
       - name: Verify actual developer Docker launch and TLS pinning
         run: node scripts/dev-server.mjs --smoke
       - name: Verify API + LiveKit containers and tokens without Compose
         run: node scripts/docker-smoke.mjs --containers-only
-      - name: Deploy, roll forward and roll back a disposable single-node Swarm
-        run: node scripts/swarm-smoke.mjs
+      - name: Host tools and signed release contracts
+        run: sudo python3 -m unittest discover -s tests -p '*_test.py'
+      - name: Verify actual systemd units and oneshot execution
+        run: |
+          sudo install -D -m 0755 manager/launcher /opt/pawtalk-manager/launcher
+          systemd-analyze verify manager/pawtalk-update.service manager/pawtalk-update.timer manager/pawtalk-health.service manager/pawtalk-health.timer
+          sudo systemd-run --wait --collect --unit="pawtalk-ci-selftest-${GITHUB_RUN_ID}" /usr/bin/python3 "$GITHUB_WORKSPACE/manager/pawtalkctl" --self-test
+      - name: Real Compose install, backup, upgrade, restore and crash recovery
+        run: sudo python3 tests/compose_integration.py
         timeout-minutes: 25
-      - name: Upgrade published 0.7.0 to 0.7.1 via GHCR, then roll back Swarm
-        run: node scripts/swarm-smoke.mjs --cross-version
+      - name: Compose E2EE policy and opaque-history persistence across the full lifecycle
+        env:
+          PAWTALK_COMPOSE_TEST_E2EE: 'true'
+        run: sudo --preserve-env=PAWTALK_COMPOSE_TEST_E2EE python3 tests/compose_integration.py
         timeout-minutes: 25
+      - name: Debian 12 userspace install and recovery with the real Docker engine
+        run: |
+          docker build -f tests/vps.Dockerfile -t pawtalk-vps-test:debian12 .
+          docker run --rm --network host --mount "type=bind,source=$GITHUB_WORKSPACE,target=/work" --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -e PYTHONUNBUFFERED=1 pawtalk-vps-test:debian12 python3 tests/compose_integration.py
+        timeout-minutes: 25
+      - name: Verify new Client API against published Server 0.8.0
+        env:
+          PAWTALK_TEST_IMAGE: ghcr.io/ilyarusskikh/pawtalk-server@sha256:601bd68f577c63a98b3dfec040b01379467576dfc6d16c15f2bf7501ac86b8f0
+        run: node scripts/server-smoke.mjs
   windows:
-    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24.22.1'
@@ -75,12 +105,41 @@ jobs:
       - run: node scripts/native-smoke.cjs
       - run: npm run build
       - run: npm run test:sounds
-      - run: npm test
-      - run: python -m unittest discover -s tests -p server_update_test.py
+      - name: Test Client including real Windows TLS diagnostics
+        run: |
+          $env:PAWTALK_GO = (Get-Command go -ErrorAction Stop).Source
+          npm test
+      - run: npm run server:prepare
+      - name: Verify native Manager host safeguards
+        working-directory: manager/windows
+        run: |
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
+      - name: Verify Windows handoff completion and read-only cleanup
+        run: python -m unittest discover -s tests -p windows_handoff_test.py
+      - name: Build permanent Windows Server and Manager installer
+        run: |
+          node scripts/build-windows-server.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/build-manager-windows.mjs
+      - name: Verify native Windows lifecycle with actual SCM services
+        run: node scripts/windows-manager-smoke.mjs --scm --installer
+      - name: Upload permanent Windows components
+        if: matrix.runner == 'windows-2025'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pawtalk-server-manager-windows
+          if-no-files-found: error
+          path: |
+            release/server/PawTalk.Server.*.windows-x64.zip
+            release/manager/PawTalk.Server.Manager.Setup.*.exe
       - run: npm run smoke
       - run: node scripts/ui-flow-smoke.mjs --built
       - run: npm run test:connection-ui
       - run: node scripts/updates-ui-smoke.mjs
+      - name: Verify update button geometry in Russian and English
+        run: node scripts/update-layout-smoke.mjs
       - run: node scripts/fixes-main-smoke.mjs
       - name: Cache LiveKit server
         uses: actions/cache@v4
@@ -97,14 +156,19 @@ jobs:
           restore-keys: |
             electron-builder-${{ runner.os }}-${{ runner.arch }}-
       - name: Package PawTalk
+        if: ${{ !startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/tags/client-v') || github.ref == 'refs/tags/v0.8.1' }}
         env:
           ELECTRON_BUILDER_CACHE: ${{ runner.temp }}\electron-builder-cache
           ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
         run: npm run package
+      - name: Verify packaged Client, pinned binaries and receipt
+        if: ${{ !startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/tags/client-v') || github.ref == 'refs/tags/v0.8.1' }}
+        run: node scripts/packaged-smoke.mjs
       - run: node scripts/realtime-smoke.mjs
       - run: node scripts/chat-ui-smoke.mjs
       - run: node scripts/chat-main-smoke.mjs
       - name: Prepare release files
+        if: ${{ !startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/tags/client-v') || github.ref == 'refs/tags/v0.8.1' }}
         shell: pwsh
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
@@ -118,13 +182,13 @@ jobs:
           $licenseFiles = @((Resolve-Path release/LICENSE).Path, (Resolve-Path release/THIRD_PARTY_NOTICES.md).Path, (Resolve-Path release/licenses).Path)
           Compress-Archive -LiteralPath $licenseFiles -DestinationPath "release/PawTalk.Licenses.$version.zip" -CompressionLevel Optimal
       - name: Sign release update manifest
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/client-v') || github.ref == 'refs/tags/v0.8.1')
         env:
           PAWTALK_UPDATE_PRIVATE_KEY: ${{ secrets.PAWTALK_UPDATE_PRIVATE_KEY }}
-          # Releases are currently published as previews; keep this in sync with GitHub Release metadata.
-          PAWTALK_PRERELEASE: 'true'
+          PAWTALK_PRERELEASE: ${{ inputs.client-prerelease && 'true' || 'false' }}
         run: node scripts/sign-update.mjs
       - uses: actions/upload-artifact@v4
+        if: ${{ matrix.runner == 'windows-2025' && (!startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/tags/client-v') || github.ref == 'refs/tags/v0.8.1') }}
         with:
           name: pawtalk-windows
           if-no-files-found: error
@@ -133,71 +197,3 @@ jobs:
             release/SHA256SUMS.txt
             release/PawTalk.Licenses.*.zip
             release/update-manifest.json
-  publish-server:
-    name: Publish server image to GHCR
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [server, windows]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    concurrency:
-      group: publish-server-${{ github.ref }}
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24.22.1'
-      - name: Validate release and select image name
-        id: image
-        shell: bash
-        run: |
-          node scripts/check-public.mjs
-          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}-server" >> "$GITHUB_OUTPUT"
-          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-qemu-action@v4
-        with:
-          platforms: arm64
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Prevent replacing an existing release image
-        env:
-          IMAGE_NAME: ${{ steps.image.outputs.name }}
-          IMAGE_VERSION: ${{ steps.image.outputs.version }}
-        run: |
-          if docker manifest inspect "${IMAGE_NAME}:${IMAGE_VERSION}" >/dev/null 2>&1; then
-            echo "::error::Image version already exists. Publish a new version instead of replacing it."
-            exit 1
-          fi
-      - name: Build and publish tested server
-        id: publish
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: server/standalone.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ steps.image.outputs.name }}:${{ steps.image.outputs.version }}
-            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.image.outputs.version }}
-            org.opencontainers.image.licenses=AGPL-3.0-only
-            org.opencontainers.image.description=Self-hosted PawTalk voice room server
-      - name: Record image and digest
-        env:
-          IMAGE_NAME: ${{ steps.image.outputs.name }}
-          IMAGE_VERSION: ${{ steps.image.outputs.version }}
-          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
-        run: |
-          echo "Published: ${IMAGE_NAME}:${IMAGE_VERSION}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Immutable reference: ${IMAGE_NAME}@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Platforms: linux/amd64, linux/arm64 (automatic selection on pull)." >> "$GITHUB_STEP_SUMMARY"
-          echo "First publication: make the GHCR package public to allow anonymous pulls." >> "$GITHUB_STEP_SUMMARY"

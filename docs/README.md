@@ -1,8 +1,8 @@
 # PawTalk — актуальная документация / Current documentation
 
-Документация ниже описывает **текущий предварительный выпуск 0.8.0**. Историю изменений между версиями смотрите в [CHANGELOG](../CHANGELOG.md), а не в руководствах по установке.
+Клиентские руководства относятся к публичной 0.8.0; Server/Architecture/Releasing описывают **разработку 0.9.0, ещё не выпущенную**. История — в [CHANGELOG](../CHANGELOG.md).
 
-The guides below describe the **current 0.8.0 public preview**. For older releases, consult the [changelog](../CHANGELOG.md), not the installation guides.
+Client guides cover public 0.8.0; Server/Architecture/Releasing describe **unreleased 0.9.0 development**. See the [changelog](../CHANGELOG.md) for history.
 
 ## Пользователям / For users
 
@@ -19,14 +19,13 @@ The guides below describe the **current 0.8.0 public preview**. For older releas
 
 | Раздел | Описание |
 | --- | --- |
-| [Постоянный сервер на Windows](SERVER-WINDOWS.md) | Docker Swarm в Linux VM: сеть, автозапуск и проверка / Always-on Windows PC with a Linux VM |
-| [Установка VPS](SERVER.md) | **Только Docker Swarm**: с нуля до рабочей комнаты, сеть, volume, резервное копирование |
-| [Swarm: обслуживание](SWARM.md) | Миграция, обновления, откат, systemd-таймер |
+| [Установка VPS](SERVER.md) | Docker Compose, мастер, отдельные подписанные обновления, backup/restore |
+| [Совместимость](COMPATIBILITY.md) | API protocol, Client ↔ Server, переход 0.8.1 и Windows self-host |
 | [Обновления клиента и язык](UPDATES.md) | Подписанные обновления клиента и резервная передача через комнаты |
 
-Для нового VPS **не используется Docker Compose**. Единственная спецификация для постоянного VPS — [`compose.server.swarm.yaml`](../compose.server.swarm.yaml). Её читает `docker stack deploy`, а не `docker compose up`.
+Новый VPS использует [`manager/compose.server.yaml`](../manager/compose.server.yaml) через проверенный host controller. Постоянный Windows-сервер использует нативные службы и общий Manager: [WINDOWS-SERVER.md](WINDOWS-SERVER.md). Встроенные временные Windows-комнаты сохранены.
 
-New VPS installations use Docker Swarm only. The stack specification named `compose.server.swarm.yaml` is consumed by `docker stack deploy`; the Docker Compose plugin is not required.
+New VPS installations use Docker Compose through the verified host controller. Permanent Windows hosting uses native services and the shared Manager; see [WINDOWS-SERVER.md](WINDOWS-SERVER.md). Temporary Windows rooms remain.
 
 ## Разработчикам / For developers
 

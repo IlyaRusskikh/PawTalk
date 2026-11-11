@@ -1,5 +1,16 @@
 # Проверки
 
+## 0.9.0 — локальная подготовка к ревью, 11 ноября 2026
+
+135 JS tests без пропусков, 22 Python tests, TypeScript/Vite, Go test/vet/race,
+native/Electron/UI, NSIS и packaged smoke прошли локально. Compose проверен в
+Debian 12 / Ubuntu 24.04 userspace с настоящим Docker, локальным registry и
+временными ключами: backup/restore, неисправный rollout, настоящий SIGKILL,
+Manager-only без рестарта и сохранение E2EE policy/opaque history.
+Карта файлов, методы проверки и ограничения: [IMPLEMENTATION-0.9.0](IMPLEMENTATION-0.9.0.md).
+GitHub Actions, native arm64, настоящий VPS/внешние сети и физические устройства
+не объявляются проверенными. Push, release tags и публикации не выполнялись.
+
 ## PawTalk 0.7.1 — 9 ноября 2026
 
 - Added mixed-case GitHub owner/repository regression coverage in the updater and server redirect allowlist. Foreign repositories, changed tags, credentials and unsupported URLs remain rejected.

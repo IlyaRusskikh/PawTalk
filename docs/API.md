@@ -1,5 +1,14 @@
 # API v0.1
 
+## Независимые версии компонентов (0.9.0, unreleased)
+
+`GET /api/config` дополнен `apiProtocolVersion: 1` и массивом `capabilities`
+(`voice-v1`, `chat-v2`, `profiles-v1`). Legacy 0.8.0 не содержит поля
+версии; клиент трактует отсутствие как protocol 1. Неизвестный явный протокол
+отклоняется до передачи пароля. Номера Client/Server релизов не задают API-совместимость.
+Существующие поля/форматы подключения и chat negotiation сохранены.
+[Матрица совместимости](COMPATIBILITY.md).
+
 ## Изменения 0.5.0
 
 Новый сервер возвращает `chatProtocol: 2`, `chatFeed`, `chatToken`, `chatEphemeral`

@@ -1,0 +1,10 @@
+[Unit]
+Description=PawTalk bounded unhealthy-room recovery
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/pawtalk-manager/launcher health
+TimeoutStartSec=20min
+UMask=0077

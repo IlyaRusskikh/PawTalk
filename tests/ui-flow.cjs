@@ -23,7 +23,8 @@ app.whenReady().then(async () => {
   const serverKey = await run(`document.querySelector('#server-key-secret').value`);
   const serverHash = require('node:crypto').createHash('sha256').update(Buffer.from(serverKey, 'hex')).digest('hex');
   assert.match(serverKey, /^[a-f0-9]{64}$/);
-  assert.equal(await run(`document.querySelector('#server-key-env').value`), `PAWTALK_E2EE=true\nPAWTALK_E2EE_KEY_ID=${serverHash}`);
+  assert.equal(await run(`document.querySelector('#server-key-id').value`), serverHash);
+  assert.equal(await run(`document.querySelector('.server-key-modal').textContent.includes('.env')`),false);
   assert.equal(await run(`window.testCalls().length`), 0, 'key generation needs no server');
   assert.equal(await run(`JSON.stringify(localStorage).includes(${JSON.stringify(serverKey)})`), false);
   const output = path.resolve('release/qa'); await require('node:fs/promises').mkdir(output,{recursive:true});

@@ -20,7 +20,7 @@ import (
 
 const updateRepo = "/IlyaRusskikh/PawTalk"
 
-var updateTag = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$`)
+var updateTag = regexp.MustCompile(`^(client-v|v)(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$`)
 
 type updateCache struct {
 	data    []byte
@@ -101,7 +101,7 @@ func updateTarget(r *http.Request) (string, int64, bool) {
 	name := parts[1]
 	limit := int64(16384)
 	if name != "update-manifest.json" {
-		if name != "PawTalk.Setup."+strings.TrimPrefix(parts[0], "v")+".exe" {
+		if name != "PawTalk.Setup."+strings.TrimPrefix(strings.TrimPrefix(parts[0], "client-"), "v")+".exe" {
 			return "", 0, false
 		}
 		limit = 1024 * 1024 * 1024

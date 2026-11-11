@@ -4,7 +4,7 @@
   setup or user-visible features. Detailed existing documentation is in `docs/`.
 - The original project is licensed `AGPL-3.0-only`. Preserve third-party notices.
 - Do not commit secrets, real room invitations, local network reports, personal
-  recordings, `CONTINUE.md`, `deploy/generated/`, downloaded tools or build output.
+  recordings, `CONTINUE.md`, `manager/generated/`, downloaded tools or build output.
 - Before publication run `npm run check:public` and review staged content.
   The guard is heuristic and does not replace reviewing the diff.
 - Run checks appropriate to the change. Client baseline: `npm run build`,
@@ -31,8 +31,10 @@
   Y for substantial changes and X for very large changes. Reset lower components.
   Update both package manifests, CHANGELOG, and version-specific documentation.
   Start at 0.1.0. Do not bump versions for every work-in-progress edit.
-- Local builds must not automatically publish. Release tags are `vX.Y.Z` and
-  must match package metadata. Never replace published tags or binaries.
+- Local builds must not automatically publish. Component tags are `client-vX.Y.Z`,
+  `server-vX.Y.Z`, `manager-vX.Y.Z` and must match their own version sources.
+  The one-time Client bridge uses `v0.8.1` from commit 3747a0d; historical tags
+  remain immutable. Never replace published tags or binaries.
 - Keep release assets compact: `PawTalk.Setup.X.Y.Z.exe`, `SHA256SUMS.txt`,
   and one `PawTalk.Licenses.X.Y.Z.zip` containing `LICENSE`,
   `THIRD_PARTY_NOTICES.md`, and `licenses/` from that release. Do not attach

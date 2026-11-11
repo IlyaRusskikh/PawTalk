@@ -6,6 +6,7 @@ import { UpdateSecurityError } from './UpdateSecurityError';
 
 export function UpdateSettings() {
   const [enabled, setEnabled] = useState(true);
+  const [channel, setChannel] = useState<'stable' | 'preview'>('preview');
   const [state, setState] = useState<UpdateState>({ status: 'idle' });
   const [busy, setBusy] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -13,6 +14,7 @@ export function UpdateSettings() {
   useEffect(() => {
     let active = true;
     void window.desktop?.getAutoUpdate?.().then(value => { if (active) setEnabled(value); }).catch(() => { if (active) setError(true); });
+    void window.desktop?.getUpdateChannel?.().then(value => { if (active) setChannel(value); }).catch(() => { if (active) setError(true); });
     void window.desktop?.updateState?.().then(value => { if (active) setState(value); }).catch(() => {});
     const off = window.desktop?.onUpdate?.(value => { if (active) setState(value); });
     return () => { active = false; off?.(); };
@@ -20,10 +22,17 @@ export function UpdateSettings() {
   const supported = !!window.desktop?.checkUpdate;
   return <section className="settings-card update-settings"><h1>{t("Обновления")}</h1><p className="settings-description">{t("Новые возможности и исправления PawTalk.")}</p>
     <p className="current-version">{t("Текущая версия: {0}", version)}</p>
+    <div className="form-fields">
+    <label>{t("Канал обновлений")}<select value={channel} disabled={!window.desktop?.setUpdateChannel || busy || ['checking', 'downloading', 'installing'].includes(state.status)} onChange={event => {
+      const next = event.target.value as 'stable' | 'preview';
+      setBusy(true); setError(false); setChecked(false);
+      void window.desktop!.setUpdateChannel!(next).then(value => { setChannel(value); setState({ status: 'idle' }); }).catch(() => setError(true)).finally(() => setBusy(false));
+    }}><option value="stable">{t("Стабильные версии")}</option><option value="preview">{t("Предварительные версии")}</option></select></label>
     <Toggle label={t("Автообновление")} detail={t("Проверять новые версии при запуске. Установка — после вашего подтверждения.")} checked={enabled} disabled={!supported || busy} onChange={value => {
       setBusy(true); setError(false);
       void window.desktop!.setAutoUpdate!(value).then(setEnabled).catch(() => setError(true)).finally(() => setBusy(false));
     }}/>
+    </div>
     <div className="update-check-card"><span className="update-check-icon"><Icon name="download" size={25}/></span><div><strong>{state.version ? t("Доступна версия {0}", state.version) : t("Проверка обновлений")}</strong><p role="status">{busy || state.status === 'checking' ? t("Проверяем обновления…") : state.status === 'check-failed' ? t("Не удалось проверить обновления. Попробуйте снова.") : checked && state.status === 'idle' && !state.version ? t("У вас последняя версия.") : t("Можно проверить вручную, даже если автообновление выключено.")}</p></div></div>
     <button type="button" className="primary" disabled={!supported || busy || ['checking', 'downloading', 'installing'].includes(state.status)} onClick={() => {
       setBusy(true); setError(false);

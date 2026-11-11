@@ -1,0 +1,47 @@
+#!/usr/bin/python3
+"""Stable launcher protocol 1. Controller failure cannot stop the voice container."""
+import argparse
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+if '--self-test' in sys.argv:
+    print('PawTalk launcher protocol 1 OK')
+    raise SystemExit(0)
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument('--root',default='/')
+args,remaining = parser.parse_known_args()
+agent = Path(args.root).resolve()/'opt/pawtalk-manager'
+
+
+def selected(pointer):
+    link = agent/pointer
+    target = os.readlink(link)
+    if not re.fullmatch(r'versions/[0-9A-Za-z.-]+',target):
+        raise ValueError('Unsafe controller pointer')
+    directory = link.resolve(strict=True)
+    if directory.parent != (agent/'versions').resolve():
+        raise ValueError('Controller escapes version directory')
+    script = directory/'manager/pawtalkctl'
+    result = subprocess.run([sys.executable,'-I',str(script),'--self-test'],capture_output=True,timeout=15)
+    if result.returncode or result.stdout.strip() != b'PawTalk manager protocol 1 OK':
+        raise ValueError('Controller self-test failed')
+    return script,target
+
+
+try:
+    script,_ = selected('current')
+except Exception:
+    try:
+        _,target = selected('previous')
+        temporary = agent/'.fallback'
+        temporary.unlink(missing_ok=True)
+        temporary.symlink_to(target)
+        os.replace(temporary,agent/'current')
+        print('Previous controller restored; current operation cancelled',file=sys.stderr)
+    except Exception:
+        print('Controller unavailable; voice container remains independent. Repair Manager from a verified bundle.',file=sys.stderr)
+    raise SystemExit(1)
+os.execv(sys.executable,[sys.executable,'-I',str(script),'--root',str(Path(args.root).resolve()),*remaining])

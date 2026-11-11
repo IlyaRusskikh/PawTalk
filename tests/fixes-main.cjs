@@ -20,16 +20,24 @@ app.on('browser-window-created', (_event, win) => {
   win.webContents.once('did-finish-load', async () => {
     try {
       await until(`!!document.querySelector('.home-actions')`);
+      assert.equal(await js('window.desktop.getUpdateChannel()'),'preview');
+      assert.equal(await js("window.desktop.setUpdateChannel('stable')"),'stable');
+      assert.equal(await js("window.desktop.setUpdateChannel('invalid').then(()=>false,()=>true)"),true);
+      assert.equal(await js('window.desktop.getUpdateChannel()'),'stable');
+      await js('window.desktop.setAutoUpdate(false)');
+      assert.equal(await js('window.desktop.getAutoUpdate()'),false);
       await js(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Browser clipboard unavailable'); } } })`);
       await js(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Сгенерировать ключ шифрования').click()`);
-      await until(`!!document.querySelector('#server-key-env')`);
-      for (const name of ['secret', 'env']) {
+      await until(`!!document.querySelector('#server-key-id')`);
+      for (const name of ['secret', 'id']) {
         const value = await js(`document.querySelector('#server-key-${name}').value`);
         await js(`document.querySelector('#server-key-${name}').parentElement.querySelector('button').click()`);
         await until(`document.querySelector('#server-key-${name}').parentElement.querySelector('button').textContent==='Скопировано'`);
         assert.equal(copied, value, name + ' reaches Electron clipboard');
       }
       assert.equal(await js(`window.desktop.copyServerKey('not a key').then(()=>false,()=>true)`), true);
+      const legacyEnv = 'PAWTALK_E2EE=true\nPAWTALK_E2EE_KEY_ID='+'a'.repeat(64);
+      assert.equal(await js(`window.desktop.copyServerKey(${JSON.stringify(legacyEnv)}).then(()=>false,()=>true)`),true);
       const chatText = 'Сообщение\nSecond line';
       await js(`window.desktop.copyChatText(${JSON.stringify(chatText)})`);
       assert.equal(copied,chatText,'chat text reaches the current Electron clipboard API unchanged');
@@ -40,7 +48,42 @@ app.on('browser-window-created', (_event, win) => {
       assert.ok(gap >= 20, 'profile fields have a 20px gap');
       await wait(200);
       await fs.mkdir('release/qa', { recursive: true });
-      await fs.writeFile('release/qa/profile-field-spacing.png', (await win.webContents.capturePage()).toPNG());
+      win.webContents.invalidate();
+      await wait(200);
+      await fs.writeFile('release/qa/profile-field-spacing.png', (await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
+      win.webContents.debugger.attach('1.3');
+      for (const motion of ['reduce','no-preference']) {
+        await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:motion}]});
+        for (const language of ['ru','en']) {
+          await js("document.querySelector('#settings-tab-language').click()");
+          await wait(80);
+          await js(`(()=>{const s=document.querySelector('.settings-modal select');s.value=${JSON.stringify(language)};s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+          await until(`document.documentElement.lang===${JSON.stringify(language)}`);
+          await js("document.querySelector('#settings-tab-updates').click()");
+          await until("document.querySelector('.update-settings select')?.value === 'stable'");
+          assert.equal(await js("document.querySelector('.update-settings select').value"),'stable');
+          assert.equal(await js("document.querySelector('.update-settings select option').textContent"),language === 'en' ? 'Stable releases' : 'Стабильные версии');
+          const geometry = await js(`(()=>{const f=document.querySelector('.update-settings .form-fields'),[a,b]=f.children;return {gap:b.getBoundingClientRect().top-a.getBoundingClientRect().bottom,overflow:f.scrollWidth>f.clientWidth}})()`);
+          assert.ok(Math.abs(geometry.gap-20)<=1,'actual update field gap: '+geometry.gap);
+          assert.equal(geometry.overflow,false);
+          await js(`document.querySelector('dialog [aria-label=${JSON.stringify(language === 'ru' ? 'Закрыть' : 'Close')} ]').click()`);
+          await js(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent===${JSON.stringify(language === 'ru' ? 'Сгенерировать ключ шифрования' : 'Generate an encryption key')}).click()`);
+          await until("!!document.querySelector('#server-key-id')");
+          const fields = await js(`(()=>{const m=document.querySelector('.server-key-modal'),f=m.querySelector('.form-fields'),[a,b]=f.children;return {secret:m.querySelector('#server-key-secret').value,id:m.querySelector('#server-key-id').value,label:m.querySelector('label[for="server-key-id"]').textContent,gap:b.getBoundingClientRect().top-a.getBoundingClientRect().bottom,env:m.textContent.includes('.env'),overflow:f.scrollWidth>f.clientWidth}})()`);
+          assert.equal(fields.id,require('node:crypto').createHash('sha256').update(Buffer.from(fields.secret,'hex')).digest('hex'));
+          assert.equal(fields.label,language === 'ru' ? 'Отпечаток для мастера (SHA-256 key ID)' : 'Installer fingerprint (SHA-256 key ID)');
+          assert.equal(fields.env,false);
+          assert.ok(Math.abs(fields.gap-20)<=1,'actual key field gap: '+fields.gap);
+          assert.equal(fields.overflow,false);
+          await js("document.querySelector('#server-key-id').parentElement.querySelector('button').click()");
+          await until(`document.querySelector('#server-key-id').parentElement.querySelector('button').textContent===${JSON.stringify(language === 'ru' ? 'Скопировано' : 'Copied')}`);
+          assert.equal(copied,fields.id);
+          await js(`document.querySelector('dialog [aria-label=${JSON.stringify(language === 'ru' ? 'Закрыть' : 'Close')} ]').click();document.querySelector('[title=${JSON.stringify(language === 'ru' ? 'Настройки' : 'Settings')} ]').click()`);
+          await until("!!document.querySelector('.settings-modal')");
+        }
+      }
+      win.webContents.debugger.detach();
+      console.log('PASS actual Electron update-channel IPC, validation, persistence and localized field geometry in both motion modes');
       if (process.env.PAWTALK_VERIFY_HOST_CHECK === '1') {
         const result = await js('window.desktop.checkHost(18443)');
         console.log('Real Electron IPC network result: ' + JSON.stringify(result));

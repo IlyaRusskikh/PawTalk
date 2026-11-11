@@ -1,10 +1,19 @@
 import { spawn, spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, mkdir, readFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir, readFile, readdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import tls from 'node:tls';
 const profile = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-packaged-'));
+const packagedServer = path.resolve(process.env.PAWTALK_PACKAGED_DIR || 'release/win-unpacked','resources/server');
+const receipt = JSON.parse(await readFile(path.join(packagedServer,'bundled-server.json'),'utf8'));
+const pinned = JSON.parse(await readFile('bundled-server.json','utf8'));
+for (const field of ['version','commit','livekitVersion','goVersion']) assert.equal(receipt[field],pinned[field],'packaged server pin: '+field);
+for (const [name,field] of [['pawtalk-api.exe','apiSha256'],['livekit-server.exe','livekitSha256']]) {
+  assert.equal(createHash('sha256').update(await readFile(path.join(packagedServer,name))).digest('hex'),receipt[field],'packaged binary hash: '+name);
+}
+assert.deepEqual((await readdir(packagedServer)).sort(),['GO-LICENSE','LIVEKIT-LICENSE','bundled-server.json','livekit-server.exe','pawtalk-api.exe'].sort(),'only pinned binaries and required receipts/licenses are packaged');
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.PAWTALK_DEV_URL;
 const invite = `pawtalk://127.0.0.1:32443/${'a'.repeat(64)}`;
 const child = spawn(path.resolve(process.env.PAWTALK_PACKAGED_DIR || 'release/win-unpacked', 'PawTalk.exe'), ['--smoke', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=19337', `--user-data-dir=${profile}`, invite], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });

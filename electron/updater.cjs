@@ -8,6 +8,7 @@ const REPOSITORY = 'IlyaRusskikh/PawTalk';
 const { verifyManifest, UpdateSecurityError } = require('./update-manifest.cjs');
 const { metadata, download } = require('./update-transport.cjs');
 const MAX_SIZE = 1024 * 1024 * 1024;
+const { parseTag } = require('../shared/release.cjs');
 function version(value) {
   const m = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z.-]+)?$/.exec(value);
   return m ? { numbers: m.slice(1, 4).map(Number), pre: m[4]?.split('.') } : null;
@@ -28,15 +29,17 @@ function compare(a, b) {
   }
   return 0;
 }
-function selectRelease(releases, current) {
-  return releases.filter(r => !r.draft && version(r.tag_name || '') && compare(r.tag_name, current) > 0)
-    .sort((a, b) => compare(b.tag_name, a.tag_name)).flatMap(r => {
-      const v = r.tag_name.replace(/^v/, '');
+function selectRelease(releases, current, channel = 'preview') {
+  if (!['stable', 'preview'].includes(channel)) throw Error('Invalid update channel');
+  const releaseVersion = r => { const parsed = parseTag(r.tag_name, true); return parsed?.component === 'client' ? parsed.version : ''; };
+  return releases.filter(r => !r.draft && version(releaseVersion(r)) && (channel === 'preview' || (!r.prerelease && !version(releaseVersion(r)).pre)) && compare(releaseVersion(r), current) > 0)
+    .sort((a, b) => compare(releaseVersion(b), releaseVersion(a))).flatMap(r => {
+      const v = releaseVersion(r);
       const asset = r.assets?.find(a => [ `PawTalk Setup ${v}.exe`, `PawTalk.Setup.${v}.exe` ].includes(a.name)
         && a.state === 'uploaded' && Number.isSafeInteger(a.size) && a.size > 0 && a.size <= MAX_SIZE
         && /^sha256:[a-f0-9]{64}$/i.test(a.digest || '')
         && validAssetURL(a.browser_download_url, r.tag_name));
-      return asset ? [{ version: v, prerelease: !!r.prerelease, asset }] : [];
+      return asset ? [{ version: v, tag: r.tag_name, prerelease: !!r.prerelease, asset }] : [];
     })[0] || null;
 }
 function validAssetURL(value, tag) {
@@ -51,8 +54,8 @@ function validAssetURL(value, tag) {
   } catch { return false; }
 }
 class Updater {
-  constructor({ current, directory, script, installDirectory, executable = path.join(installDirectory || '', 'PawTalk.exe'), language = () => 'ru', fetcher = fetch, launch = spawn, onState = () => {}, rooms = () => [], roomFetcher = fetcher, keys, downloadPolicy }) {
-    Object.assign(this, { current, directory, script, installDirectory, executable, language, fetcher, launch, onState, rooms, roomFetcher, keys, downloadPolicy });
+  constructor({ current, directory, script, installDirectory, executable = path.join(installDirectory || '', 'PawTalk.exe'), language = () => 'ru', fetcher = fetch, launch = spawn, onState = () => {}, rooms = () => [], roomFetcher = fetcher, keys, downloadPolicy, channel = 'preview' }) {
+    Object.assign(this, { current, directory, script, installDirectory, executable, language, fetcher, launch, onState, rooms, roomFetcher, keys, downloadPolicy, channel });
     this.state = { status: 'idle' }; this.release = null; this.busy = false;
   }
   set(value) { this.state = value; this.onState(value); return value; }
@@ -74,10 +77,11 @@ class Updater {
       const batch = JSON.parse(await metadata(this.fetchFor(source), source, 'releases?per_page=100&page=' + page));
       if (!Array.isArray(batch)) throw Error('Invalid releases');
       releases.push(...batch); if (batch.length < 100) break;
+      if (page === 10) throw Error('Release pagination limit exceeded');
     }
-    const release = selectRelease(releases, this.current);
+    const release = selectRelease(releases, this.current, this.channel);
     if (!release) return null;
-    const raw = await metadata(this.fetchFor(source), source, 'assets/v' + release.version + '/update-manifest.json', 16384);
+    const raw = await metadata(this.fetchFor(source), source, 'assets/' + release.tag + '/update-manifest.json', 16384);
     let manifest;
     try {
       manifest = verifyManifest(raw, this.keys);
@@ -85,9 +89,14 @@ class Updater {
         || 'sha256:' + manifest.sha256 !== release.asset.digest.toLowerCase() || manifest.prerelease !== release.prerelease) throw Error();
     } catch { throw new UpdateSecurityError(source?.name || 'GitHub'); }
     if (this.directory) {
-      const trustFile = path.join(this.directory, 'trusted-manifest.json');
+      const trustFile = path.join(this.directory, `trusted-manifest.${this.channel}.json`);
       let previous;
-      try { previous = await fs.readFile(trustFile, 'utf8'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      try { previous = await fs.readFile(trustFile, 'utf8'); } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        // Previous clients only had preview semantics. Preserve that trust floor.
+        if (this.channel === 'preview') try { previous = await fs.readFile(path.join(this.directory, 'trusted-manifest.json'), 'utf8'); }
+        catch (legacyError) { if (legacyError.code !== 'ENOENT') throw legacyError; }
+      }
       if (previous) {
         // Authenticate saved metadata even after its freshness deadline.
         const envelope = JSON.parse(previous);
@@ -131,7 +140,7 @@ class Updater {
       for await (const source of this.sources()) {
         try {
           this.set({ status: 'downloading', version: next, prerelease, progress: 0, source: source?.name || 'GitHub' });
-          await download({ fetcher: this.fetchFor(source), source, manifest, partial, policy: this.downloadPolicy,
+          await download({ fetcher: this.fetchFor(source), source, manifest, tag: this.release.tag, partial, policy: this.downloadPolicy,
             onProgress: progress => this.set({ status: 'downloading', version: next, prerelease, progress, source: source?.name || 'GitHub' }) });
           downloaded = true; break;
         } catch (error) {

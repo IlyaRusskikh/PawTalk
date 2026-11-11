@@ -23,6 +23,8 @@ interface Window {
     setUpdateRooms?(rooms: { address: string; name: string }[]): Promise<void>;
     getAutoUpdate?(): Promise<boolean>;
     setAutoUpdate?(value: boolean): Promise<boolean>;
+    getUpdateChannel?(): Promise<'stable' | 'preview'>;
+    setUpdateChannel?(value: 'stable' | 'preview'): Promise<'stable' | 'preview'>;
     checkUpdate?(): Promise<UpdateState>;
     installUpdate?(): Promise<UpdateState>;
     onUpdate?(callback: (state: UpdateState) => void): () => void;
