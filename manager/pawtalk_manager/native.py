@@ -8,6 +8,8 @@ import subprocess
 import tarfile
 import time
 import zipfile
+import secrets
+import urllib.parse
 from pathlib import Path
 from .config import atomic, save
 from .platforms import host, admin, protect, secure
@@ -42,6 +44,54 @@ class NativeRuntime:
         if result.returncode:
             raise RuntimeError('Server command failed; run pawtalkctl doctor')
         return result.stdout
+
+    def invitation(self,state,config,reset=False):
+        """Keep a recoverable Windows-only receipt, encrypted by user DPAPI.
+
+        Bind it to the actual password hash so an old backup or an external
+        reset never silently returns a stale password. Do not store E2EE keys.
+        """
+        bare = self.command(state,config,'info').decode().strip()
+        if not re.fullmatch(r'pawtalk://[^/\s]+/[a-f0-9]{64}',bare):
+            raise ValueError('Invalid room identity')
+        receipt = self.control/'invitation.dpapi'
+        initial = self.data(state)/'initial-password'
+        def binding():
+            saved = json.loads((self.data(state)/'state.json').read_text())
+            return hashlib.sha256(saved['PasswordHash'].encode()).hexdigest()
+        def remember(password):
+            encrypted = host('seal-credential',input=json.dumps(dict(password=password,binding=binding())).encode())
+            if encrypted.returncode:
+                raise RuntimeError('Unable to protect invitation with Windows DPAPI')
+            atomic(receipt,encrypted.stdout)
+            return dict(url=bare+'#password='+urllib.parse.quote(password,safe=''),password=password)
+        if reset:
+            password = secrets.token_urlsafe(18)
+            was_running = host('status-server',self.root).returncode == 0
+            self.stop(state,config)
+            try:
+                changed = subprocess.run([str(self.binary(state)),'serve','reset-password'],env=self.env(state,config),input=password.encode(),capture_output=True,timeout=15)
+                if changed.returncode:
+                    raise RuntimeError('Unable to reset server password')
+                result = remember(password)
+            finally:
+                if was_running:
+                    self.start(state,config)
+            if was_running:
+                self.healthy(state,config)
+            return result
+        if initial.is_file():
+            result = remember(initial.read_text().strip())
+            self.command(state,config,'initial-password')
+            return result
+        if receipt.is_file():
+            decrypted = host('unseal-credential',input=receipt.read_bytes())
+            if decrypted.returncode:
+                return None
+            saved = json.loads(decrypted.stdout)
+            if saved.get('binding') == binding() and isinstance(saved.get('password'),str):
+                return dict(url=bare+'#password='+urllib.parse.quote(saved['password'],safe=''),password=saved['password'])
+        return None
 
     def pull(self,state):
         artifact = state.get('windows')
@@ -122,6 +172,13 @@ class NativeRuntime:
     def stop(self,state,config):
         if host('stop-server',self.root).returncode:
             raise RuntimeError('Unable to stop PawTalk Windows service')
+
+    def reconfigure_network(self,state,old,new):
+        # Controller has stopped the service and made a restorable snapshot.
+        # Older signed Servers reject rebind; the transaction then rolls back.
+        if old['PAWTALK_PUBLIC_IP'] != new['PAWTALK_PUBLIC_IP']:
+            self.command(state,new,'rebind')
+        return self.identity(state,new)
 
     def container(self,state,config):
         running = host('status-server',self.root).returncode == 0

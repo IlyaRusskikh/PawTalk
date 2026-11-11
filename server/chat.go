@@ -218,7 +218,7 @@ type chatClaims struct {
 
 func (a *app) signChat(payload string) []byte {
 	mac := hmac.New(sha256.New, []byte(a.cfg.APISecret))
-	mac.Write([]byte("pawtalk-chat-v1:" + a.cfg.PasswordHash + ":" + payload))
+	mac.Write([]byte("pawtalk-chat-v2:" + a.cfg.PasswordHash + ":" + strconv.FormatBool(a.cfg.RequireE2EE) + ":" + a.cfg.E2EEKeyID + ":" + payload))
 	return mac.Sum(nil)
 }
 

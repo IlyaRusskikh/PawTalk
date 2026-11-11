@@ -5,11 +5,12 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import tls from 'node:tls';
+import https from 'node:https';
 const profile = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-packaged-'));
 const packagedServer = path.resolve(process.env.PAWTALK_PACKAGED_DIR || 'release/win-unpacked','resources/server');
 const receipt = JSON.parse(await readFile(path.join(packagedServer,'bundled-server.json'),'utf8'));
 const pinned = JSON.parse(await readFile('bundled-server.json','utf8'));
-for (const field of ['version','commit','livekitVersion','goVersion']) assert.equal(receipt[field],pinned[field],'packaged server pin: '+field);
+for (const field of ['version','commit','livekitVersion','goVersion','securityPatch','securityPatchSha256']) assert.equal(receipt[field],pinned[field],'packaged server pin: '+field);
 for (const [name,field] of [['pawtalk-api.exe','apiSha256'],['livekit-server.exe','livekitSha256']]) {
   assert.equal(createHash('sha256').update(await readFile(path.join(packagedServer,name))).digest('hex'),receipt[field],'packaged binary hash: '+name);
 }
@@ -127,6 +128,14 @@ try {
   for (const address of [hostStatus.localAddress, ...hostStatus.invitations]) {
     assert.equal(tls.checkServerIdentity(new URL(address).hostname, certificate), undefined, 'packaged certificate covers every invitation IP');
   }
+  const anonymousPresence=await new Promise((resolve,reject)=>{
+    const request=https.get({hostname:'127.0.0.1',port:32443,path:'/api/presence',rejectUnauthorized:false,timeout:5000},response=>{
+      assert.deepEqual(response.socket.getPeerCertificate().raw,certificate.raw,'same verified embedded host certificate');
+      let raw='';response.on('data',data=>raw+=data);response.on('end',()=>resolve({status:response.statusCode,raw}));
+    });request.once('timeout',()=>request.destroy(Error('Presence check timed out')));request.once('error',reject);
+  });
+  assert.equal(anonymousPresence.status,401,'packaged temporary room does not expose anonymous occupancy');
+  assert.doesNotMatch(anonymousPresence.raw,/participants/);
   const localDiagnosis = await evaluate('window.desktop.hostStatus().then(s=>window.desktop.diagnose(s.localAddress))');
   assert.equal(localDiagnosis.ok, true, localDiagnosis.message);
   const ownDiagnosis = await evaluate('window.desktop.hostStatus().then(s=>window.desktop.diagnose(s.invitations[0]))');

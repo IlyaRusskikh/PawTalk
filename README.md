@@ -4,6 +4,8 @@
 
 Released: **Client 0.9.0 / Server 0.9.0 / Manager 0.1.0**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v0.9.0`. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
 
+In development on `0.10.0`: **Client 0.10.0 / Server 0.10.0 / Manager 0.2.0**. These versions are not published; download links below still point to the released builds. [Planned changes and upgrade order](docs/RELEASE-NOTES-0.10.0.md).
+
 [![Verify and package](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)
 
 PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
@@ -63,7 +65,7 @@ Already have an invitation? Open **Join a room** after installing. [First call o
 <details>
 <summary>How do I invite a friend?</summary>
 
-In the room creation dialog, choose **Check** next to **Can I host over the internet?**. Internet hosting uses incoming TCP 18443, TCP 18444, and UDP 18445 by default. If your router or ISP restricts inbound connections, you can host on a Linux VPS with a public IP. The upcoming permanent Windows server uses a separate Server Manager installer; temporary rooms inside the Windows app remain available.
+In the room creation dialog, choose **Check** next to **Can I host over the internet?**. Internet hosting uses incoming TCP 18443, TCP 18444, and UDP 18445 by default. If your router or ISP restricts inbound connections, you can host on a Linux VPS with a public IP. A permanent Windows server uses the separate Server Manager installer; temporary rooms inside the Windows app remain available.
 To check whether you can self-host, copy this command into **Windows PowerShell**:
 
 ```powershell
@@ -106,7 +108,21 @@ For setup or connection issues, see the [troubleshooting guide (Russian)](docs/G
 
 </details>
 
+Server Manager setup downloads signed releases from GitHub. Temporary connection resets, timeouts and incomplete downloads are retried up to three attempts. If setup still fails with a download error (including Windows error 10054), check access to `api.github.com`, `github.com` and `release-assets.githubusercontent.com` through your network/VPN, then run setup again.
+
+On Windows, Server Manager installs a separate **PawTalk Server** tray icon with a small server badge in the upper-right corner. Right-click it to start or stop the server. **Stop server and exit** stops the server and closes the icon; **Close tray** keeps the Windows service running. The installer offers desktop and sign-in startup shortcuts; the Start menu shortcut is always installed. Starting or stopping the service may request administrator approval.
+
+**Server settings…** in the tray opens a window with the current IPv4 address, port, E2EE/key ID, history limit, Server/Manager automatic updates and language. Applying runtime changes creates a backup, restarts the room and checks its health; failures restore the previous configuration/data. Changing IP or port requires a new invitation and updated forwarding/firewall rules; IP changes require the updated Server with `serve rebind` support. A window opened before another configuration change must be reopened before saving.
+
+Windows Manager shows a copyable invitation with its password (`#password=…`) on a separate setup page. The tray can copy it again or explicitly reset a forgotten password; resetting interrupts active calls and invalidates old password-bearing invitations. A local copy is protected with Windows DPAPI and the private data-root permissions. Older installations without a saved password require a reset. If E2EE is enabled, the client asks for the shared secret separately; the installer’s key ID is not that secret. The client also separates the old Manager’s two unlabelled lines when pasted together.
+
+The Windows program is installed in `%ProgramData%\PawTalk Server Manager`, with room settings, history and backups in `%ProgramData%\PawTalk`. It remains a service that runs before user sign-in. Reinstallation reuses an existing config and skips the settings form; it preserves the room identity. The EXE uninstaller always removes program files and services. Its **Delete settings and data** checkbox is off by default; enabling it also removes the room, keys, history and backups. For scripted full removal, use `Uninstall.exe /S /DELETE-DATA`. The Manager installer and uninstaller use the server badge too. LAN clients use the authenticated server’s `/rtc` proxy even if a published standalone server advertises its public IP.
+
 ## For developers
+
+The next Server build requires current room authorization for occupancy and participant previews, including aggregate counts. Password reset revokes old preview/chat tokens and rotates the voice signing secret on restart. The updated Client never falls back to an anonymous count after access is denied; it shows **Sign in again**. Bookmarks identify the verified room independently of its password, so sharing a link or entering a new password updates one bookmark after successful login. The server-side protection requires updating Server as well as Client; it does not change an already installed published binary.
+
+The Client's embedded temporary-room API retains its pinned base commit with a reviewed security backport. The patch and its SHA-256 are recorded in `bundled-server.json`; both the patched source and the packaged anonymous-presence denial are tested. Historical source commits and published binaries remain unchanged.
 
 <details>
 <summary>Build and run checks on Windows x64</summary>

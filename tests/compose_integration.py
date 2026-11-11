@@ -165,10 +165,14 @@ def main():
             command = ['--root',str(c.root),'--lang','en','--no-systemd','install','--config',str(config_file),
                        '--trust',str(trust),'--server-manifest',str(server_manifest),'--manager-manifest',str(initial_manifest),'--bundle',str(initial_bundle)]
             install = subprocess.run([sys.executable,__file__,'--install-worker',repository,*command],capture_output=True,text=True,timeout=180)
+            # Installation can fail after creating the labelled room. Preserve
+            # its ownership identity so finally still removes this test fixture.
+            if c.state_file.exists():
+                project = c.state()['project']
             assert install.returncode == 0,install.stderr
             lines = install.stdout.splitlines()
             invitation = next(line for line in lines if line.startswith('pawtalk://'))
-            password = lines[lines.index(invitation)+1]
+            password = lines[lines.index(cli.text('initial_password','en'))+1]
             fingerprint = invitation.rsplit('/',1)[1]
             project = c.state()['project']
             container = c.runtime.container(c.state(),c.config())

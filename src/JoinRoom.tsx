@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ConnectionFailure } from './ConnectionFailure';
 import { Modal } from './Modal';
 import { validMediaKey } from '../shared/encryption.mjs';
+import { managerInvitation } from '../shared/manager-invitation.mjs';
 export function validAddress(value: string) {
   try {
     const url = new URL(value.includes('://') ? value.trim() : `https://${value.trim()}`);
@@ -25,15 +26,16 @@ export function JoinRoom({ address, setAddress, nickname, busy, error, onConnect
   const [e2eeRequired, setE2EERequired] = useState(false);
   const [e2eeKey, setE2EEKey] = useState('');
   const revision = useRef(0);
+  const pastedInvitation = useRef<{ address: string; password: string } | null>(null);
   useEffect(() => () => { revision.current++; }, []);
   async function submit() {
     if (!validAddress(address) || checking || busy) return;
     const target = address.trim();
     setFailure('');
+    let embeddedPassword: string | null = null;
     if (target.startsWith('pawtalk://')) {
       try {
-        const embedded = new URLSearchParams(new URL(target).hash.slice(1)).get('password');
-        if (embedded !== null) { await onConnect({ address: target, nickname, password: embedded }); return; }
+        embeddedPassword = new URLSearchParams(new URL(target).hash.slice(1)).get('password');
       } catch { setFailure(t("Проверьте приглашение.")); return; }
     }
     const id = ++revision.current; setChecking(true);
@@ -42,15 +44,20 @@ export function JoinRoom({ address, setAddress, nickname, busy, error, onConnect
       const result = await window.desktop.diagnose(target);
       if (id !== revision.current) return;
       if (!result.ok) throw new Error(result.message);
-      setE2EERequired(result.e2eeRequired === true); setE2EEKey(target.startsWith('pawtalk://') ? new URLSearchParams(new URL(target).hash.slice(1)).get('e2ee') ?? '' : '');
-      setPassword(''); setAskPassword(true);
+      const embeddedKey = target.startsWith('pawtalk://') ? new URLSearchParams(new URL(target).hash.slice(1)).get('e2ee') ?? '' : '';
+      if (embeddedPassword !== null && (!result.e2eeRequired || validMediaKey(embeddedKey))) {
+        await onConnect({ address: target, nickname, password: embeddedPassword, ...(embeddedKey ? { e2eeKey: embeddedKey } : {}) });
+        return;
+      }
+      setE2EERequired(result.e2eeRequired === true); setE2EEKey(embeddedKey);
+      setPassword(embeddedPassword ?? (pastedInvitation.current?.address === target ? pastedInvitation.current.password : '')); pastedInvitation.current = null; setAskPassword(true);
     } catch (e) { if (id === revision.current) setFailure(e instanceof Error ? e.message : String(e)); }
     finally { if (id === revision.current) setChecking(false); }
   }
   return <><Modal title={t("Присоединиться к комнате")} onClose={onClose}><form onSubmit={e => { e.preventDefault(); void submit(); }}>
     {(failure || error) && <ConnectionFailure detail={failure || error}/>}
     {checking && <div className="connection-progress" role="status" aria-busy="true"><span className="connection-spinner" aria-hidden="true"/>{t("Проверяем соединение…")}</div>}
-    <label>{t("Приглашение или адрес сервера")}<input autoFocus placeholder={t("pawtalk://… или server.example.com")} value={address} disabled={busy || checking} aria-describedby="join-address-hint" aria-invalid={!!address.trim() && !validAddress(address)} onChange={e => { revision.current++; setAddress(e.target.value); setFailure(''); }} autoComplete="off" spellCheck={false}/></label>
+    <label>{t("Приглашение или адрес сервера")}<input autoFocus placeholder={t("pawtalk://… или server.example.com")} value={address} disabled={busy || checking} aria-describedby="join-address-hint" aria-invalid={!!address.trim() && !validAddress(address)} onPaste={e => { const copied = managerInvitation(e.clipboardData.getData('text/plain')); if (copied) { e.preventDefault(); revision.current++; setAddress(copied.address); pastedInvitation.current = copied; setFailure(''); } }} onChange={e => { revision.current++; pastedInvitation.current = null; setAddress(e.target.value); setFailure(''); }} autoComplete="off" spellCheck={false}/></label>
     <p id="join-address-hint" className="host-hint" aria-live="polite">{address.trim() && !validAddress(address) ? t("Адрес не распознан. Вставьте полное приглашение pawtalk://… или HTTPS-адрес сервера без пути. Ссылка на GitHub или файл установщика не подходит.") : t("Попросите владельца прислать приглашение из работающей комнаты. В одной локальной сети используйте LAN-приглашение. Ссылка может содержать пароль — не публикуйте её.")}</p>
     <button className="primary join-submit" disabled={!validAddress(address) || !nickname.trim() || busy || checking}>{checking ? t("Проверяем соединение…") : busy ? t("Подключение…") : t("Присоединиться")}</button>
   </form></Modal>

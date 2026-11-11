@@ -1,8 +1,8 @@
 # PawTalk — актуальная документация / Current documentation
 
-Клиентские руководства относятся к публичной 0.8.0; Server/Architecture/Releasing описывают **разработку 0.9.0, ещё не выпущенную**. История — в [CHANGELOG](../CHANGELOG.md).
+Опубликованы Client/Server 0.9.0 и Manager 0.1.0. Ветка `0.10.0` готовит Client/Server 0.10.0 и Manager 0.2.0. Новые возможности и миграция описаны в [плане выпуска](RELEASE-NOTES-0.10.0.md); исторические карты изменений сохраняются. История — в [CHANGELOG](../CHANGELOG.md).
 
-Client guides cover public 0.8.0; Server/Architecture/Releasing describe **unreleased 0.9.0 development**. See the [changelog](../CHANGELOG.md) for history.
+Client/Server 0.9.0 and Manager 0.1.0 are published. Branch `0.10.0` prepares Client/Server 0.10.0 and Manager 0.2.0. See the [release plan](RELEASE-NOTES-0.10.0.md) for new behavior and migration; historical change maps remain available. See the [changelog](../CHANGELOG.md) for history.
 
 ## Пользователям / For users
 

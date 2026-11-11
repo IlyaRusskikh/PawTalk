@@ -43,6 +43,9 @@ try{
  vite=await createServer({server:{host:'127.0.0.1',port:0,strictPort:false}});await vite.listen();
  const uiAddress=`http://127.0.0.1:${vite.httpServer.address().port}`;
  const env={...process.env,PAWTALK_MANAGER_HOST:path.join(stage,'pawtalkctl.exe'),PAWTALK_UI_TEST_URL:uiAddress,PAWTALK_ELECTRON:createRequire(import.meta.url)('electron')};delete env.ELECTRON_RUN_AS_NODE;
+ execFileSync(process.env.PAWTALK_GO||'go',['test','-c','-o',path.join(directory,'clipboard-test.exe')],{cwd:path.join(root,'manager/windows'),stdio:'inherit',windowsHide:true});
+ await writeFile(path.join(directory,'clipboard.html'),'<!doctype html><meta charset="utf-8"><title>PawTalk clipboard fixture</title>');
+ execFileSync(env.PAWTALK_ELECTRON,[path.join(root,'tests/windows-clipboard.cjs'),directory],{cwd:root,env,stdio:'inherit',windowsHide:true,timeout:30000});
  await new Promise((resolve,reject)=>{
   const child=spawn(path.join(stage,'runtime/python.exe'),['-B','-X','utf8','-I',path.join(root,'tests/windows_manager_smoke.py'),directory,stage,...process.argv.slice(2)],{cwd:root,stdio:'inherit',windowsHide:true,env});
   child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(Error('Windows Manager smoke failed: '+code)));

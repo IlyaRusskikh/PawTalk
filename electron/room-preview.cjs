@@ -24,7 +24,7 @@ class RoomPreviews {
       let access = this.access.get(address);
       if (!access || access.expires < Date.now()) {
         access = await this.login(address, base) ?? {};
-        access.expires = Date.now() + (access.token ? 11 * 60 : 5) * 60 * 1000;
+        access.expires = Date.now() + (access.token ? 10 * 60 * 1000 : 60000);
         if (this.access.size >= 50) this.access.delete(this.access.keys().next().value);
         this.access.set(address, access);
       }
@@ -32,7 +32,11 @@ class RoomPreviews {
         const after = Number.isSafeInteger(cursor.after) && cursor.after >= 0 ? cursor.after : 0;
         const feed = /^[a-f0-9]{32}$/.test(cursor.feed || '') ? cursor.feed : '';
         const response = await request(`/api/preview?readAfter=${after}&readFeed=${feed}`, { headers: { Authorization: 'Bearer ' + access.token } });
-        if (response.status === 401) this.access.delete(address);
+        if (response.status === 401 || response.status === 403) {
+          this.access.set(address,{expires:Date.now()+60000});
+          await response.body?.cancel();
+          return { status: 'locked' };
+        }
         if (response.ok) {
           const raw = await response.text(); if (raw.length > 60000) throw Error('Preview too large');
           const body = JSON.parse(raw);
@@ -41,17 +45,10 @@ class RoomPreviews {
         }
         await response.body?.cancel();
       }
-      const response = await request('/api/presence');
-      if (response.status === 404) {
-        await response.body?.cancel();
-        const health = await request('/healthz'); const online = health.ok; await health.body?.cancel();
-        return online ? { status: 'online', people: [], details: false } : { status: 'offline' };
-      }
-      if (!response.ok) { await response.body?.cancel(); return { status: 'offline' }; }
-      const raw = await response.text(); if (raw.length > 1024) throw Error('Invalid presence');
-      const body = JSON.parse(raw);
-      if (!Number.isSafeInteger(body.participants) || body.participants < 0) throw Error('Invalid presence');
-      return { status: 'online', participants: body.participants, unread: 0, people: [], details: false };
+      // Legacy public presence is never a fallback for failed authentication.
+      // Health can indicate reachability, but conveys no room activity.
+      const health = await request('/healthz'); const online = health.ok; await health.body?.cancel();
+      return online ? { status: 'locked' } : { status: 'offline' };
     } catch { return { status: 'offline' }; }
   }
 }

@@ -19,6 +19,7 @@ import { VoiceSettings } from './VoiceSettings';
 import { Modal } from './Modal';
 import { JoinRoom } from './JoinRoom';
 import { GuestShare } from './GuestShare';
+import { bookmarkAddress, sameBookmark, reconcileBookmarks, loadBookmarks } from '../shared/room-bookmarks.mjs';
 import { Participants } from './Participants';
 import { Avatar } from './Avatar';
 import { AvatarEditor } from './AvatarEditor';
@@ -31,7 +32,7 @@ import { ServerKey } from './ServerKey';
 import { UpdateNotice } from './UpdateNotice';
 import { useLanguage, changeLanguage } from './i18n';
 
-type JoinTarget = { address: string; nickname: string; password: string; e2eeKey?: string };
+type JoinTarget = { address: string; nickname: string; password: string; e2eeKey?: string; roomId?: string };
 const initial: Snapshot = { state: 'disconnected', people: [], db: -100, speaking: false };
 function stored(key: string) { try { return localStorage.getItem(key) || ''; } catch { return ''; } }
 
@@ -108,7 +109,7 @@ export function App() {
   const currentTarget = useRef<JoinTarget | null>(null);
   const [bookmarkBusy, setBookmarkBusy] = useState(false);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>(() => {
-    try { const data = JSON.parse(stored('pawtalk.bookmarks') || '[]'); return Array.isArray(data) ? data.filter(v => v && typeof v.address === 'string' && typeof v.name === 'string' && !v.address.includes('#')).slice(0, 50) : []; } catch { return []; }
+    try { return loadBookmarks(JSON.parse(stored('pawtalk.bookmarks') || '[]')); } catch { return []; }
   });
   const [menu, setMenu] = useState<{ address: string; x: number; y: number } | null>(null);
   const [presence, setPresence] = useState<Record<string, RoomPreview>>({});
@@ -124,7 +125,7 @@ export function App() {
               let saved: { feed?: string; ephemeral?: boolean } = {};
               try { saved = JSON.parse(localStorage.getItem('pawtalk.chat.feed.' + item.address) ?? '{}'); } catch {}
               const after = saved.feed ? readChatCursor({ handle: '', feed: saved.feed, ephemeral: !!saved.ephemeral }) : 0;
-              const preview = window.desktop?.roomPreview ? await window.desktop.roomPreview(item.address, { feed: saved.feed, after }) : undefined;
+              const preview = window.desktop?.roomPreview ? await window.desktop.roomPreview(item.address, { feed: saved.feed, after, roomId: item.roomId }) : undefined;
               const count = preview ? undefined : await window.desktop?.roomPresence?.(item.address);
               result[item.address] = preview ?? (typeof count === 'number' ? { status: 'online', participants: count, unread: 0, details: false } : { status: 'offline' });
               if (preview?.feed) try { localStorage.setItem('pawtalk.chat.feed.' + item.address, JSON.stringify({ feed: preview.feed, ephemeral: preview.ephemeral })); } catch {}
@@ -164,26 +165,27 @@ export function App() {
     if (currentTarget.current?.address.split('#')[0] === address) setRoomName(clean);
     setRenaming(null);
   }
-  const isBookmarked = bookmarks.some(item => item.address === currentTarget.current?.address.split('#')[0]);
+  const isBookmarked = bookmarks.some(item => sameBookmark(item,currentTarget.current));
   async function toggleBookmark() {
     const target = currentTarget.current;
     if (!target || !window.desktop || bookmarkBusy) return;
     setBookmarkBusy(true);
     try {
-      const clean = target.address.split('#')[0];
-      if (isBookmarked) { await window.desktop.savePassword({ address: clean, password: null }); setBookmarks(prev => prev.filter(item => item.address !== clean)); return; }
+      const clean = bookmarkAddress(target.address);
+      if (isBookmarked) { for(const item of bookmarks.filter(item=>sameBookmark(item,target)))await window.desktop.savePassword({address:item.address,password:null}); setBookmarks(prev => prev.filter(item => !sameBookmark(item,target))); return; }
       let secret = target.password;
       if (target.address.startsWith('pawtalk://')) secret = new URLSearchParams(new URL(target.address).hash.slice(1)).get('password') ?? secret;
       await window.desktop.savePassword({ address: clean, password: secret, e2eeKey: target.e2eeKey ?? null });
-      setBookmarks(prev => [...prev.filter(v => v.address !== clean), { address: clean, name: roomName || t("Комната") }]);
+      setBookmarks(prev => [...prev.filter(v => v.address!==clean && !sameBookmark(v,target)), { address: clean, name: roomName || t("Комната"), ...(target.roomId?{roomId:target.roomId}:{}) }]);
     } catch { setError(t("Не удалось изменить закладку в защищённом хранилище.")); }
     finally { setBookmarkBusy(false); }
   }
   async function openBookmark(item: Bookmark) {
-    if (active && item.address === currentTarget.current?.address.split('#')[0]) { setPage('room'); setModal(null); setMenu(null); return; }
+    if (active && sameBookmark(item,currentTarget.current)) { setPage('room'); setModal(null); setMenu(null); return; }
     if (!window.desktop || busy || hostBusy || bookmarkBusy) return;
     setMenu(null); setBookmarkBusy(true); setError('');
     try {
+      if(presence[item.address]?.status==='locked') { setAddress(item.address); setModal('join'); return; }
       const saved = await window.desktop.loadPassword(item.address);
       if (saved.password === null) { setAddress(item.address); setModal('join'); setError(t("Пароль закладки недоступен. Подключитесь заново.")); return; }
       await connect({ address: item.address, nickname, password: saved.password, e2eeKey: saved.e2eeKey ?? undefined }, false, item.name);
@@ -263,7 +265,6 @@ export function App() {
     if (mic) void mic.configure(settings).catch(error => { if (testMic.current === mic) setSettingsError(t("Не удалось применить настройки микрофона: {0}", error.message)); });
   }, [settings]);
   async function connect(target: JoinTarget, hosting = false, displayName?: string) {
-    if (active && target.address.split('#')[0] === currentTarget.current?.address.split('#')[0]) { setPage('room'); setModal(null); return; }
     if (!window.desktop) { setError(t("Подключение доступно в десктопном приложении. Эта страница — предпросмотр интерфейса.")); return; }
     if (settings.inputMode === 'ptt' && !native) { setError(t("Для Push-to-Talk нужно собрать нативный модуль Windows.")); return; }
     const id = ++attempt.current; setBusy(true); setConnectionStage('server'); setError(''); setConnectionError(''); stopPreview();
@@ -273,6 +274,15 @@ export function App() {
       unusedChat = result.chat?.handle;
       if (id !== attempt.current) return;
       if (result.error) throw new Error(result.error);
+      const password=target.password || (target.address.startsWith('pawtalk://') ? new URLSearchParams(new URL(target.address).hash.slice(1)).get('password') : '') || '';
+      const verified = { ...target, password, address: result.bookmarkAddress || bookmarkAddress(target.address), roomId: result.roomId, e2eeKey: result.e2eeKey };
+      const matches=bookmarks.filter(item=>sameBookmark(item,verified));
+      if(matches.length) {
+        await window.desktop.savePassword({address:verified.address,password:verified.password,e2eeKey:result.e2eeKey??null});
+        for(const item of matches)if(bookmarkAddress(item.address)!==verified.address)await window.desktop.savePassword({address:item.address,password:null});
+        setBookmarks(prev=>reconcileBookmarks(prev,verified));
+        setPresence({});
+      }
       if (!hosting) localStorage.setItem('pawtalk.address', target.address.split('#')[0]);
       localStorage.setItem('pawtalk.nickname', target.nickname);
       setChatRoom(null);
@@ -282,9 +292,9 @@ export function App() {
       await controller.current!.connect(result.url, result.token, { required: result.e2eeRequired, key: result.e2eeKey });
       if (id !== attempt.current) return;
       joinedOwnHost.current = result.ownHost ?? hosting;
-      currentTarget.current = { ...target, e2eeKey: result.e2eeKey };
+      currentTarget.current = verified;
       setActiveUnread(0);
-      if (result.chat) try { localStorage.setItem('pawtalk.chat.feed.' + target.address.split('#')[0], JSON.stringify({ feed: result.chat.feed, ephemeral: result.chat.ephemeral })); } catch {}
+      if (result.chat) try { localStorage.setItem('pawtalk.chat.feed.' + verified.address, JSON.stringify({ feed: result.chat.feed, ephemeral: result.chat.ephemeral })); } catch {}
       setChatRoom({ identity: result.identity, nickname: target.nickname.trim(), access: result.chat, key: result.e2eeKey });
       unusedChat = undefined;
       if (hosting && savedNames()[target.address.split('#')[0]]) setRoomName(savedNames()[target.address.split('#')[0]]);
@@ -330,7 +340,7 @@ export function App() {
     <button className="icon-button call-leave" title={t("Отключиться")} onClick={() => void disconnect()}><Icon name="exit"/></button>
   </div>;
   return <div className="app">
-    <aside className="rail"><button className={`server-orb home-orb ${!showRoom ? 'selected' : ''}`} title={t("Главная")} onClick={() => { setPage('home'); setModal(null); }}><img src="./pawtalk-mark.svg" width="44" height="44" alt="PawTalk"/></button><div className="rail-line"/><BookmarkRail bookmarks={bookmarks} temporaryRoom={inRoom && !isBookmarked && currentTarget.current ? { address: currentTarget.current.address.split('#')[0], name: roomName || t("Комната") } : undefined} onSaveTemporary={() => void toggleBookmark()} activeAddress={inRoom ? currentTarget.current?.address.split('#')[0] : undefined} selected={showRoom} people={snapshot.people.length} livePeople={snapshot.people} unread={activeUnread} presence={presence} disabled={busy || hostBusy || bookmarkBusy} onOpen={item => void openBookmark(item)} onReorder={setBookmarks} onMenu={(address, x, y) => setMenu({ address, x: Math.max(8, Math.min(x, window.innerWidth - 210)), y: Math.max(8, Math.min(y, window.innerHeight - 120)) })}/><div className="rail-actions"><UpdateNotice blocked={modal !== null || renaming !== null} active={active || busy} hosting={hostRunning}/><button className="icon-button rail-settings" title={t("Настройки")} onClick={() => setModal('settings')}><Icon name="settings"/></button></div></aside>
+    <aside className="rail"><button className={`server-orb home-orb ${!showRoom ? 'selected' : ''}`} title={t("Главная")} onClick={() => { setPage('home'); setModal(null); }}><img src="./pawtalk-mark.svg" width="44" height="44" alt="PawTalk"/></button><div className="rail-line"/><BookmarkRail bookmarks={bookmarks} temporaryRoom={inRoom && !isBookmarked && currentTarget.current ? { address: currentTarget.current.address.split('#')[0], name: roomName || t("Комната") } : undefined} onSaveTemporary={() => void toggleBookmark()} activeAddress={inRoom ? currentTarget.current?.address.split('#')[0] : undefined} activeRoomId={currentTarget.current?.roomId} selected={showRoom} people={snapshot.people.length} livePeople={snapshot.people} unread={activeUnread} presence={presence} disabled={busy || hostBusy || bookmarkBusy} onOpen={item => void openBookmark(item)} onReorder={setBookmarks} onMenu={(address, x, y) => setMenu({ address, x: Math.max(8, Math.min(x, window.innerWidth - 210)), y: Math.max(8, Math.min(y, window.innerHeight - 120)) })}/><div className="rail-actions"><UpdateNotice blocked={modal !== null || renaming !== null} active={active || busy} hosting={hostRunning}/><button className="icon-button rail-settings" title={t("Настройки")} onClick={() => setModal('settings')}><Icon name="settings"/></button></div></aside>
     {menu && <div className="bookmark-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={e => e.stopPropagation()}><button autoFocus role="menuitem" onClick={() => { const item = bookmarks.find(b => b.address === menu.address); if (item) setRenaming(item); setMenu(null); }}>{t("Переименовать")}</button><button role="menuitem" onClick={() => void removeBookmark(menu.address)}>{t("Удалить закладку")}</button></div>}
     <main>
     <div className={`content${showRoom ? ' room-content' : ''}`}>

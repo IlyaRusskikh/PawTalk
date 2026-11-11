@@ -11,6 +11,7 @@ const livekitOnly = process.argv.includes('--livekit-only');
 const output = path.join(root, 'resources/server');
 const bundled = JSON.parse(await readFile(path.join(root, 'bundled-server.json'), 'utf8'));
 if (!/^[a-f0-9]{40}$/.test(bundled.commit) || !/^\d+\.\d+\.\d+$/.test(bundled.version)) throw Error('Invalid pinned bundled server source');
+if (bundled.securityPatch !== 'build/bundled-server-security.patch' || !/^[a-f0-9]{64}$/.test(bundled.securityPatchSha256 || '')) throw Error('Missing pinned bundled Server security patch');
 const version = bundled.livekitVersion;
 function run(command, args, options = {}) {
   const r = spawnSync(command, args, { cwd: root, stdio: 'inherit', windowsHide: true, ...options });
@@ -45,10 +46,15 @@ try {
   run('git', ['archive', '--format=tar', '-o', archive, bundled.commit, 'server']);
   run('tar', ['-xf', archive, '-C', source]);
   if ((await readFile(path.join(source, 'server/VERSION'), 'utf8')).trim() !== bundled.version) throw Error('Pinned server version mismatch');
+  const securityPatch=path.join(root,bundled.securityPatch);
+  if(createHash('sha256').update(await readFile(securityPatch)).digest('hex')!==bundled.securityPatchSha256)throw Error('Bundled Server security patch hash mismatch');
+  run('git',['apply','--check',securityPatch],{cwd:source});
+  run('git',['apply',securityPatch],{cwd:source});
   const goRoot = spawnSync(go, ['env', 'GOROOT'], { encoding: 'utf8', windowsHide: true });
   if (goRoot.status === 0) {
     const actualGo = spawnSync(go, ['version'], {encoding:'utf8',windowsHide:true});
     if (actualGo.status !== 0 || !actualGo.stdout.includes(`go${bundled.goVersion} `)) throw Error('Bundled server requires pinned Go '+bundled.goVersion);
+    run(go,['test','./...'],{cwd:path.join(source,'server')});
     run(go, ['build', '-trimpath', '-o', path.join(output, 'pawtalk-api.exe'), '.'], { cwd: path.join(source, 'server'), env: { ...process.env, GOOS: 'windows', GOARCH: 'amd64' } });
     await copyFile(path.join(goRoot.stdout.trim(), 'LICENSE'), path.join(output, 'GO-LICENSE'));
   } else {

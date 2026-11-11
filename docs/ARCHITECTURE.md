@@ -1,4 +1,4 @@
-# Архитектура / Architecture — 0.9.0 (unreleased)
+# Архитектура / Architecture — 0.10.0 (unreleased)
 
 Один монорепозиторий, три независимых выпуска:
 

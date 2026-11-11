@@ -1,5 +1,45 @@
 # Проверки
 
+## Client/Server 0.10.0, Manager 0.2.0 — подготовка ветки, 12 ноября 2026
+
+Первый PR CI подтвердил Linux amd64/arm64 и Windows 2025 SCM/EXE lifecycle,
+но выявил предположение о системных анимациях в bookmark smoke и гонку
+переустановки на Windows 2022. Регрессии: CDP явно задаёт оба motion-режима;
+переустановка ждёт выхода процесса и освобождения имени SCM, включая состояние
+marked-for-delete. Диагностика installer записывает только фиксированный этап
+и код выхода, без приглашений/паролей. Финальный статус определяется новым CI.
+
+- Windows x64: TypeScript/Vite build, 159 Node tests без пропусков, native input
+  smoke и Go tests/vet. Собраны все три пакета с новыми версиями; packaged Client
+  проверен вместе с receipt и запретом анонимного счётчика встроенного API.
+- Electron: sounds, UI flow, legacy Manager paste, bookmark identity/privacy,
+  connection UI, updates/layout, restricted main/preload, realtime и chat UI/main.
+  Проверки включают RU/EN, normal/reduced motion и пустой/заполненный clipboard.
+- Windows native lifecycle: реальный Go/LiveKit, два Electron-клиента с
+  синтетическим аудио, DPAPI, неверные/устаревшие данные доступа, отзыв токенов,
+  backup/update/restore, смена IP/порта/E2EE/key ID и откат после реального rebind.
+  Проверен console service/job protocol; SCM registration/NSIS с правами
+  администратора на этой машине не выполнялись.
+- Python: Linux Debian 12 userspace на реальном Docker Engine — 44 теста,
+  41 pass и 3 Windows-only skip; Windows handoff — 3 pass. На Windows отдельно
+  прошли controller (15), download faults (5) и signed release contracts (5).
+- Go Server: Windows test/vet и Linux amd64 `go test -race ./...`, `go vet ./...`.
+  Actionlint и website guard прошли. Docker standalone lifecycle и developer
+  launch проверили TLS/auth, read-only/non-root, перезапуск и готовность media.
+  Отдельные API/LiveKit-контейнеры проверены Linux Node-клиентом: health, неверный
+  и верный пароль, подпись/права voice JWT, non-root/read-only API и cleanup.
+- Compose на свежем Server: подписанная установка, one-time password без утечки
+  в логи, backup/restore, обновление с сохранением SQLite/TLS/пароля, неисправный
+  rollout, настоящий SIGKILL, Manager-only без рестарта. Повторено с E2EE и
+  проверкой opaque history. Исправлен parser новой подписанной строки пароля
+  в тесте, а cleanup теперь учитывает частично установленную тестовую комнату.
+
+Локальные логи/сборки находятся только в игнорируемом `release/qa`/`release` и не
+коммитятся. Native Linux/arm64, GitHub runner matrix, systemd на настоящем хосте,
+SCM/UAC installer, физические микрофоны и две внешние сети остаются отдельными
+проверками. Локальный успех не гарантирует GitHub CI. Ветка не является выпуском:
+merge, component tags, подпись production assets и публикация выполняются отдельно.
+
 ## 0.9.0 — локальная подготовка к ревью, 11 ноября 2026
 
 135 JS tests без пропусков, 22 Python tests, TypeScript/Vite, Go test/vet/race,

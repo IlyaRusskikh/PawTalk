@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// Only aggregate occupancy is public. Participant names and identities stay private.
+// Occupancy, names and unread counts all require current room authorization.
 func (a *app) presenceHandler() http.HandlerFunc {
 	var mu sync.Mutex
 	var expires time.Time
@@ -23,10 +23,12 @@ func (a *app) presenceHandler() http.HandlerFunc {
 	var members []previewPerson
 	return func(w http.ResponseWriter, r *http.Request) {
 		private := r.URL.Path == "/api/preview"
-		if private {
-			if _, ok := a.authorizeChat(w, r); !ok {
-				return
-			}
+		if a.chat == nil {
+			fail(w, http.StatusUnauthorized, "Room authorization required")
+			return
+		}
+		if _, ok := a.authorizeChat(w, r); !ok {
+			return
 		}
 		mu.Lock()
 		defer mu.Unlock()

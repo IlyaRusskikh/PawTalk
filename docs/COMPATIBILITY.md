@@ -12,6 +12,14 @@ message before login. Existing chat feature negotiation remains authoritative.
 | 0.9.0 | 0.8.0 | Supported protocol 1 voice/auth/chat; new-tag relay is unavailable on old VPS |
 | 0.9.0 | 0.9.0 | Protocol 1 + Client-family relay; persistent Compose lifecycle |
 | 0.9.0 self-host | pinned Go 0.8.0 + commit in `bundled-server.json` | Temporary room; pinned LiveKit; new Client-tag relay present in pin |
+| 0.10.0 (planned) | 0.9.0 | Protocol 1 login/voice; Client hides anonymous activity, but old Server still exposes its public counter |
+| 0.10.0 (planned) | 0.10.0 (planned) | Authorized activity only; password reset revokes native voice/chat/preview tokens; stable verified-room bookmarks |
+| 0.10.0 self-host (planned) | pinned Go 0.8.0 + hashed security backport | Anonymous occupancy denied by the embedded API as well as the Client |
+
+Manager 0.2.0 retains signed Server/Manager verification. Existing Server 0.9.0
+supports native port changes; IP rebinding requires Server 0.10.0's `serve rebind`.
+Upgrade Server first, then Manager and Client; a new Manager EXE alone does not
+replace an installed Server or silently accept an unsigned ZIP.
 
 `shared/protocol.cjs` covers legacy/new/unsupported protocol negotiation.
 The frozen published selector fixture tests 0.8.0 → 0.8.1 → Client 0.9.0 discovery.

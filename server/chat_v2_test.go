@@ -93,6 +93,8 @@ func TestChatPagesAndAttachmentLifecycle(t *testing.T) {
 	a.cfg.RequireE2EE = true
 	packet.RequestID = strings.Repeat("c", 32)
 	raw, _ = json.Marshal(packet)
+	call("POST", "/api/chat", alice, raw, 401)
+	alice = a.chatToken("Alice", "alice")
 	call("POST", "/api/chat", alice, raw, 400)
 	now = now.Add(30 * 24 * time.Hour)
 	if err := a.chat.expire(context.Background(), now); err != nil {
@@ -128,8 +130,8 @@ func TestPreviewRequiresRoomAccessAndCountsUnread(t *testing.T) {
 	}
 	public := httptest.NewRecorder()
 	handler.ServeHTTP(public, httptest.NewRequest("GET", "/api/presence", nil))
-	if strings.Contains(public.Body.String(), "Alice") {
-		t.Fatal("names leaked through public presence")
+	if public.Code != 401 || strings.Contains(public.Body.String(), "Alice") || strings.Contains(public.Body.String(), "participants") {
+		t.Fatal("unauthenticated presence leaked activity")
 	}
 	request := httptest.NewRequest("GET", "/api/preview?readAfter=1&readFeed="+a.chat.feed, nil)
 	request.Header.Set("Authorization", "Bearer "+a.chatToken("Bob", "bob"))

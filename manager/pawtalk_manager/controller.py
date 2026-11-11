@@ -284,9 +284,10 @@ class Controller:
         self.recover()
         state,old = self.state(),self.config()
         new = validate({**old,**changes})
-        if new['PAWTALK_PUBLIC_IP'] != old['PAWTALK_PUBLIC_IP'] or new['PAWTALK_PORT'] != old['PAWTALK_PORT']:
-            raise ValueError('Address/port changes alter invitations; create a separate new room instead')
-        runtime_keys = ['PAWTALK_E2EE','PAWTALK_E2EE_KEY_ID','PAWTALK_CHAT_MAX_MB','PAWTALK_UPDATE_PROXY']
+        network_changed = any(new[key] != old[key] for key in ('PAWTALK_PUBLIC_IP','PAWTALK_PORT'))
+        if network_changed and not hasattr(self.runtime,'reconfigure_network'):
+            raise ValueError('Address/port changes are supported by the native Windows runtime only')
+        runtime_keys = ['PAWTALK_PUBLIC_IP','PAWTALK_PORT','PAWTALK_E2EE','PAWTALK_E2EE_KEY_ID','PAWTALK_CHAT_MAX_MB','PAWTALK_UPDATE_PROXY']
         if all(new[key] == old[key] for key in runtime_keys):
             write_config(self.etc/'config.env',new)
             return False
@@ -295,9 +296,13 @@ class Controller:
             self.backup(entry,resume=False)
             entry['phase'] = 'applying'
             save(self.journal,entry)
+            candidate = dict(state)
+            if network_changed:
+                candidate['identity'] = self.runtime.reconfigure_network(state,old,new)
             write_config(self.etc/'config.env',new)
-            self.runtime.start(state,new) # Always the installed digest, never a config pin.
-            self.runtime.healthy(state,new,state['identity'])
+            self.runtime.start(candidate,new) # Always the installed digest, never a config pin.
+            self.runtime.healthy(candidate,new,candidate['identity'])
+            save(self.state_file,candidate)
             self.finish()
             self.prune()
         except Exception:
