@@ -26,6 +26,11 @@ test('component scope fails closed and branch/PR default retains all components'
   assert.equal(check.on.workflow_call.inputs.component.default, 'all');
   assert.equal(check.on.workflow_dispatch.inputs.component.default, 'all');
   assert.equal(release.jobs.verify.with.component, '${{ needs.plan.outputs.component }}');
+  for (const job of Object.values(check.jobs)) {
+    const scope = job.steps.find(step => step.id === 'scope');
+    assert.equal(scope.run, 'node scripts/ci-scope.mjs');
+    assert.equal(scope.env.PAWTALK_CI_COMPONENT, "${{ inputs.component || 'all' }}");
+  }
 });
 
 for (const component of ['all', 'client', 'server', 'manager']) {

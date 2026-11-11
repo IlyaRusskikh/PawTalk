@@ -35,7 +35,9 @@ jobs:
           node-version: '24.22.1'
       - name: Select verification scope
         id: scope
-        run: node scripts/ci-scope.mjs "${{ inputs.component || 'all' }}"
+        env:
+          PAWTALK_CI_COMPONENT: ${{ inputs.component || 'all' }}
+        run: node scripts/ci-scope.mjs
       - uses: actions/setup-go@v5
         if: steps.scope.outputs.server == 'true'
         with:
@@ -116,7 +118,9 @@ jobs:
           cache: npm
       - name: Select verification scope
         id: scope
-        run: node scripts/ci-scope.mjs "${{ inputs.component || 'all' }}"
+        env:
+          PAWTALK_CI_COMPONENT: ${{ inputs.component || 'all' }}
+        run: node scripts/ci-scope.mjs
       - uses: actions/setup-python@v5
         if: steps.scope.outputs.host == 'true'
         with:

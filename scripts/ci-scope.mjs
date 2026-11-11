@@ -14,7 +14,7 @@ export function ciScope(component = 'all') {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const plan = ciScope(process.argv[2] ?? 'all');
+  const plan = ciScope(process.argv[2] ?? process.env.PAWTALK_CI_COMPONENT ?? 'all');
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(plan).map(([key, value]) => `${key}=${value}\n`).join(''));
   }
