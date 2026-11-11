@@ -71,8 +71,11 @@ Git-тегах сохранена. README на двух языках и сайт
 1. Production-публичные ключи Server/Manager настроены в `manager/trust.json`,
    соответствующие GitHub secrets созданы. Временные test keys не используются в продукте.
    До публикации подписанных релизов обычная установка остаётся недоступна.
-2. Проверить отдельный checkout bridge `3747a0d` перед будущим выпуском `v0.8.1`.
-   Проверки финального 0.9.0 не заменяют pre-release прогон этого checkout.
+2. Отдельный неизменённый checkout bridge `3747a0d` локально прошёл build,
+   128 тестов без пропусков, native smoke, public guard, NSIS packaging и packaged
+   smoke. Первый параллельный прогон дал таймаут PowerShell-теста; отдельный тест
+   и полный повторный набор прошли. Перед tag push нужны остальные применимые
+   шаги его собственного workflow; проверки 0.9.0 их не заменяют.
 3. Native Linux amd64/arm64, systemd oneshot units и Windows Server 2022/2025 SCM/EXE
    прошли branch CI на `ec45dae`; финальный кандидат с ключами и изменением UI проверяется
    отдельно. Локальные контейнеры
@@ -85,3 +88,21 @@ Git-тегах сохранена. README на двух языках и сайт
 
 Первый будущий порядок публикации после отдельного разрешения: bridge → Server →
 Manager → Client. Затем линии независимы. [Полная инструкция](RELEASING.md).
+
+## Финальный кандидат с production roots и кнопкой обновления
+
+Код `9250e74` локально проверен на Windows: Client build, 139 тестов без пропусков,
+update-layout/update-dialog/fixes-main/UI-flow (RU/EN, normal/reduced motion,
+фактический Electron IPC), сборка NSIS и packaged smoke. Manager EXE пересобран
+с публичными production roots; три Windows process/NTFS/SQLite regression-теста,
+Go host tests/vet и native console/job lifecycle прошли. Последний включает
+двусторонний encrypted RTP с настоящими Electron-клиентами и synthetic audio,
+backup/update/rollback/restore; локальная регистрация SCM не выполнялась без admin.
+
+На Debian 12 в Docker: 29 Python-тестов прошли, три Windows-only теста пропущены;
+реальный Compose E2EE install/update/data rollback/SIGKILL recovery/Manager-only
+update/backup/fresh-root restore прошёл. Actionlint и website/public guards прошли.
+Подтверждено соответствие production private/public keys перед загрузкой двух
+GitHub secrets; закрытые ключи не включены в Git или CI artifacts. Публикация не
+выполнялась. После push требуется отдельный branch CI финального дерева; это
+не результат будущего tag workflow и не проверка внешнего VPS/физических устройств.
