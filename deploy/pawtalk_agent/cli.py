@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 from . import bundles, preflight, release
-from .config import DEFAULTS, atomic, lock, read_config, write_config, save
+from .config import DEFAULTS, atomic, lock, read_config, write_config, save, validate
 from .controller import Controller
 from .runtime import run
 
@@ -37,6 +37,12 @@ MESSAGES = {
  'uninstall':('Остановить комнату и таймеры? Данные и настройки сохранятся.','Stop room and timers? Data and settings will be kept.'),
  'healthy':('Работает','Healthy'),'unhealthy':('Ошибка проверки здоровья','Unhealthy'),
  'starting':('Запускается','Starting'),'unknown':('Состояние неизвестно','Unknown state'),
+ 'invalid_bool':('Введите true или false.','Enter true or false.'),
+ 'invalid_channel':('Введите stable или preview.','Enter stable or preview.'),
+ 'invalid_ip':('Введите корректный IPv4-адрес.','Enter a valid IPv4 address.'),
+ 'invalid_port':('Введите порт от 1024 до 65532.','Enter a port from 1024 to 65532.'),
+ 'invalid_key':('Введите SHA-256 key ID: 64 шестнадцатеричных символа.','Enter the SHA-256 key ID: 64 hexadecimal characters.'),
+ 'invalid_chat':('Введите целое число от 0 до 1048576 МиБ.','Enter an integer from 0 to 1048576 MiB.'),
 }
 
 
@@ -66,8 +72,30 @@ def wizard(lang):
         if key == 'key' and values['PAWTALK_E2EE'] != 'true':
             continue
         default = values[field]
-        values[field] = input(text(key,lang)+(f' [{default}]' if default else '')+': ').strip() or default
-    from .config import validate
+        while True:
+            response = input(text(key,lang)+(f' [{default}]' if default else '')+': ')
+            # Minimal Python TTYs may return bracketed-paste delimiters literally.
+            response = response.replace('\x1b[200~','').replace('\x1b[201~','').strip() or default
+            if key in ('e2ee','server_auto','deploy_auto'):
+                response = response.casefold()
+                if response not in ('true','false'):
+                    print(text('invalid_bool',lang))
+                    continue
+            elif key in ('server_channel','deploy_channel'):
+                response = response.casefold()
+                if response not in ('stable','preview'):
+                    print(text('invalid_channel',lang))
+                    continue
+            else:
+                if key == 'key':
+                    response = response.lower()
+                try:
+                    validate({**values,field:response})
+                except ValueError:
+                    print(text('invalid_'+key,lang))
+                    continue
+            values[field] = response
+            break
     return validate(values)
 
 

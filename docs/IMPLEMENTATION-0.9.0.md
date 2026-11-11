@@ -46,7 +46,7 @@ Git-тегах сохранена. README на двух языках и сайт
 |---|---|
 | `npm run build` | TypeScript/Vite прошли; обычное предупреждение о размере JS chunk |
 | `npm test` с Go 1.27.3 | 135 passed, 0 failed, 0 skipped; настоящий PowerShell/Electron helper и TLS diagnostic command |
-| Python host tools | 22 passed: signatures, routes, archive faults, config, rollback/journal, lock/watchdog, wizard RU/EN, безопасная диагностика и защита чужого project при restore |
+| Python host tools | 24 passed: signatures, routes, archive faults, config, rollback/journal, lock/watchdog, wizard RU/EN (включая настоящую PTY-вставку), безопасная диагностика и защита чужого project при restore |
 | Go | `go test ./...`, `go vet ./...`, `go test -race ./...` прошли в Linux amd64 контейнере |
 | Compose | Debian 12 и Ubuntu 24.04 userspace на Docker Desktop; реальные Docker/Compose/registry и временные signing keys |
 | E2EE lifecycle | E2EE policy/key ID и opaque history проверены при install/update/rollback/restore; это не аппаратное испытание шифрованного голоса |

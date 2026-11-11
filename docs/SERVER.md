@@ -32,7 +32,10 @@ sudo python3 deploy/pawtalkctl --lang ru install
 
 Мастер подтверждает публичный IP, порт, E2EE, лимит истории, согласие на отдельные
 автообновления Server/Deploy и их каналы. Он показывает кандидата IP из двух
-внешних сервисов. При отсутствии Docker предложит установку из официального
+внешних сервисов. Каждый ответ проверяется сразу: неверный ввод переспрашивается,
+а после `E2EE=true` обязательно запрашивается SHA-256 key ID. Регистр `true/false`
+и стандартные управляющие обёртки терминальной вставки нормализуются.
+При отсутствии Docker предложит установку из официального
 [репозитория Ubuntu](https://docs.docker.com/engine/install/ubuntu/) или
 [репозитория Debian](https://docs.docker.com/engine/install/debian/).
 Конфликтующие пакеты не удаляются автоматически. Firewall не меняется.
@@ -158,6 +161,8 @@ Start `sudo python3 deploy/pawtalkctl --lang en install` from a trusted checkout
 with configured public roots. The wizard verifies and runs the signed Deploy
 installer and independently verifies the Server digest. Current empty production
 roots intentionally prevent installation until the owner provisions keys/releases.
+The wizard validates each answer immediately and always requests the SHA-256 key ID
+when E2EE is enabled; boolean case and terminal paste wrappers are normalized.
 
 Use `status`, `doctor`, `logs`, `configure`, `update check|now`, `deploy check|now`,
 `backup create|list|restore`, and `uninstall --keep-data`. Restore/uninstall require
