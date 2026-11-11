@@ -28,7 +28,7 @@ func (a *app) signChallenge(value string) string {
 func (a *app) roomConfig(w http.ResponseWriter, _ *http.Request) {
 	capabilities := []string{"voice-v1"}
 	if a.chat != nil {
-		capabilities = append(capabilities, "chat-v2", "profiles-v1")
+		capabilities = append(capabilities, "chat-v2", "profiles-v1", "private-presence-v1", "password-rotation-v1", "network-settings-v1")
 	}
 	result := map[string]any{"e2eeRequired": a.cfg.RequireE2EE, "apiProtocolVersion": 1, "capabilities": capabilities}
 	if a.chat != nil {

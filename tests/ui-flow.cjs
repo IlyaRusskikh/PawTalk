@@ -52,7 +52,7 @@ app.whenReady().then(async () => {
   assert.equal(await run(`document.querySelectorAll('dialog[open]').length`), 1);
   await input('  pawtalk://192.168.0.13:18443/'+'a'.repeat(64)+'#password=invited-secret  '); await wait();
   await click('Присоединиться'); await wait();
-  assert.equal(await run(`window.testCalls().filter(v=>v[0]==='diagnose').length`), 1);
+  assert.equal(await run(`window.testCalls().filter(v=>v[0]==='diagnose').length`), 2);
   assert.equal(await run(`window.testCalls().filter(v=>v[0]==='connect').at(-1)[1].password`), 'invited-secret');
   assert.equal(await run(`window.testCalls().filter(v=>v[0]==='connect').at(-1)[1].address`), 'pawtalk://192.168.0.13:18443/'+'a'.repeat(64)+'#password=invited-secret');
   await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`); await wait();

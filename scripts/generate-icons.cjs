@@ -4,7 +4,7 @@ const path = require('node:path');
 if (!process.versions.electron) {
  const { spawn } = require('node:child_process');
  const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
- const child = spawn(require('electron'), [__filename], { env, stdio: 'inherit', windowsHide: true });
+ const child = spawn(require('electron'), [__filename, ...process.argv.slice(2)], { env, stdio: 'inherit', windowsHide: true });
  child.on('error', e => { console.error(e); process.exit(1); });
  child.on('exit', code => process.exit(code ?? 1));
 } else {
@@ -14,7 +14,8 @@ if (!process.versions.electron) {
   let win;
   try {
    const root = path.join(__dirname, '..');
-   const svg = await fs.readFile(path.join(root, 'assets/pawtalk.svg'), 'utf8');
+   const serverOnly = process.argv.includes('--server-only');
+   const svg = await fs.readFile(path.join(root, serverOnly ? 'assets/server.svg' : 'assets/pawtalk.svg'), 'utf8');
    win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, offscreen: true } });
    await win.loadURL('data:text/html,<html><body></body></html>');
    const frames = [];
@@ -29,6 +30,11 @@ if (!process.versions.electron) {
     return Buffer.concat([header,...images.map(v=>v.data)]);
    }
    const asset = name => path.join(root,'assets',name);
+   if (serverOnly) {
+    await fs.writeFile(asset('server.ico'),ico(frames.filter(v=>v.size<=256)));
+    await fs.writeFile(asset('server.png'),frames.find(v=>v.size===256).data);
+    console.log('Generated Server icons.');win.destroy();app.exit(0);return;
+   }
    await fs.writeFile(asset('pawtalk.ico'),ico(frames.filter(v=>v.size<=256)));
    await fs.writeFile(asset('tray.ico'),ico(frames.filter(v=>v.size<=64)));
    await fs.writeFile(asset('pawtalk.png'),frames.find(v=>v.size===512).data);

@@ -9,10 +9,15 @@ app.whenReady().then(async () => {
  session.defaultSession.setPermissionRequestHandler((_w,_p,done) => done(true));
  session.defaultSession.setPermissionCheckHandler(() => true);
  const win = new BrowserWindow({ show: false, width: 1100, height: 760, webPreferences: { preload: path.join(__dirname, 'ui-flow-preload.cjs'), contextIsolation: true, sandbox: true, offscreen: true } });
- const js = code => win.webContents.executeJavaScript(code, true);
+ win.webContents.on('console-message',event=>{if(event.level==='error')console.error('renderer:',event.message);});
+ const js = code => win.webContents.executeJavaScript(code, true).catch(error=>{console.error('Bookmark UI operation:',code.slice(0,160));throw error;});
  const wait = () => new Promise(resolve => setTimeout(resolve, 150));
  try {
   await win.loadFile(path.resolve('dist/index.html')); await wait();
+  await js(`localStorage.setItem('pawtalk.bookmarks',JSON.stringify([{address:'https://192.0.2.10:18443',name:'Saved room'},{address:'pawtalk://192.0.2.10:18443/'+ 'a'.repeat(64),name:'Duplicate share link'}]))`);
+  await win.reload();await wait();
+  assert.equal(await js(`document.querySelectorAll('.bookmark-orb').length`),1,'legacy bare-IP/share duplicates become one bookmark');
+  assert.equal(await js(`JSON.parse(localStorage.getItem('pawtalk.bookmarks'))[0].address.startsWith('pawtalk://')`),true,'migration preserves the pinned route');
   await js(`localStorage.setItem('pawtalk.bookmarks', JSON.stringify(['A','B','C'].map(name=>({name,address:'https://'+name.toLowerCase()+'.example.com'}))))`);
   await win.reload(); await wait();
   assert.deepEqual(await js(`[...document.querySelectorAll('.participant-pin')].map(el=>el.textContent)`), ['3','3','3'], 'counts load while disconnected');
@@ -49,7 +54,7 @@ app.whenReady().then(async () => {
   await win.reload(); await wait();
   assert.deepEqual(await js(`[...document.querySelectorAll('.bookmark-orb')].map(el=>el.getAttribute('aria-label'))`), ['B','C','A'], 'order persists');
   await js(`document.querySelector('[title="Настройки"]').click()`); await wait();
-  await js(`document.querySelector('#settings-tab-language').click()`); await wait();
+  await js(`document.querySelector('#settings-tab-general').click()`); await wait();
   const row = text => `Array.from(document.querySelectorAll('.toggle-row')).find(el=>el.querySelector('strong').textContent===${JSON.stringify(text)}).querySelector('input')`;
   assert.equal(await js(`${row('Запускать свёрнутым в трее')}.disabled`),true);
   await js(`${row('Запускать PawTalk при входе в Windows')}.click()`); await wait();
@@ -70,7 +75,20 @@ app.whenReady().then(async () => {
   await js(`document.querySelector('.bookmark-list').scrollTop=99999`); await wait();
   assert.equal(await js(`document.querySelector('.bookmark-overflow').textContent`),'','counter disappears at the end');
   assert.equal(await js(`document.querySelector('.rail').getBoundingClientRect().width`),railWidth);
-  console.log('PASS disconnected counts, focus pause/resume, bookmark drag persistence, startup tray controls');
+  win.webContents.debugger.attach('1.3');
+  for(const language of ['ru','en'])for(const motion of ['no-preference','reduce']) {
+   await js(`localStorage.setItem('pawtalk.language',${JSON.stringify(language)})`);
+   await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:motion}]});
+   await win.reload();await wait();
+   await js(`window.testLockedPreviews(true);window.testWindowActive(false);window.testWindowActive(true)`);await wait();
+   assert.equal(await js(`document.querySelectorAll('.participant-pin,.bookmark-orb .unread-pin:not(.disconnected-pin)').length`),0,'locked bookmarks reveal no counts or unread badges');
+   await js(`document.querySelector('.bookmark-orb').dispatchEvent(new MouseEvent('mouseover',{bubbles:true}))`);await wait();
+   assert.equal(await js(`document.querySelector('.server-preview small').textContent`),language==='ru'?'Требуется повторный вход':'Sign in again');
+   assert.equal(await js(`document.querySelector('.server-preview').textContent.includes('Private fixture name')`),false,'locked tooltip reveals no participant names');
+  }
+  await js(`document.querySelector('.bookmark-orb').click()`);await wait();
+  assert.ok(await js(`!!document.querySelector('dialog .join-submit')`),'locked bookmark opens a fresh sign-in form');
+  console.log('PASS bookmark identity migration, locked privacy in RU/EN and both motion modes, focus pause/resume and drag persistence');
   win.destroy();app.exit(0);
  } catch(error) { console.error(error);win.destroy();app.exit(1); }
 });

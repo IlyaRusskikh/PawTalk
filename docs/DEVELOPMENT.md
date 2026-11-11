@@ -1,8 +1,8 @@
 # Разработка PawTalk / Local development
 
-Эта инструкция описывает разработку PawTalk 0.9.0 (ещё не выпущен). Постоянный VPS использует Docker Compose и [SERVER.md](SERVER.md); приведённый ниже `docker run` предназначен для локального тестирования.
+Эта инструкция описывает разработку Client/Server 0.10.0 и Manager 0.2.0 (ещё не выпущены). Постоянный VPS использует Docker Compose и [SERVER.md](SERVER.md); приведённый ниже `docker run` предназначен для локального тестирования.
 
-This guide covers unreleased PawTalk 0.9.0 development. Production VPS deployment uses Docker Compose; see [SERVER.md](SERVER.md).
+This guide covers unreleased Client/Server 0.10.0 and Manager 0.2.0 development. Production VPS deployment uses Docker Compose; see [SERVER.md](SERVER.md).
 
 ## Что нужно / Requirements
 

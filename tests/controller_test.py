@@ -4,12 +4,14 @@ import json
 import tempfile
 import tarfile
 import unittest
+from unittest.mock import patch
+from contextlib import redirect_stdout,redirect_stderr
 from pathlib import Path
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'manager'))
 from pawtalk_manager.config import read_config, write_config, save, validate, lock
 from pawtalk_manager.controller import Controller
-from pawtalk_manager import release, bundles
+from pawtalk_manager import release, bundles, cli
 
 
 class PowerLoss(BaseException):
@@ -69,7 +71,7 @@ class ControllerTests(unittest.TestCase):
         self.c = Controller(self.temp.name,self.room)
         template = Path(self.temp.name)/'source.yaml'
         template.write_text('services: {}')
-        self.manifest = dict(version='0.9.0',digest='sha256:'+'a'*64,dataSchema=1,apiProtocol=1,_signed='synthetic receipt; verification tested separately')
+        self.manifest = dict(version='0.9.0',digest='sha256:'+'a'*64,dataSchema=1,apiProtocol=1,windows={'name':'synthetic.zip','sha256':'a'*64,'size':1},_signed='synthetic receipt; verification tested separately')
         self.c.install({'PAWTALK_PUBLIC_IP':'203.0.113.10'},self.manifest,template,'0.1.0')
 
     def tearDown(self): self.temp.cleanup()
@@ -130,7 +132,60 @@ class ControllerTests(unittest.TestCase):
         state,config = self.c.state(),self.c.config()
         self.assertFalse(self.c.install({'PAWTALK_PUBLIC_IP':'198.51.100.12'},None,None,None))
         self.assertEqual(self.c.state(),state)
+
         self.assertEqual(self.c.config(),config)
+
+    def test_settings_reject_stale_window_and_preserve_advanced_fields(self):
+        old=self.c.config()
+        values={key:old[key] for key in cli.SETTINGS_FIELDS}
+        request=dict(expected=old,values=values)
+        self.assertFalse(cli.apply_settings(self.c,request))
+        values['PAWTALK_SERVER_AUTO_UPDATE']='true'
+        self.assertTrue(cli.apply_settings(self.c,request))
+        self.assertEqual(self.c.config()['PAWTALK_UPDATE_PROXY'],old['PAWTALK_UPDATE_PROXY'])
+        with self.assertRaisesRegex(ValueError,'elsewhere'):
+            cli.apply_settings(self.c,request)
+        with self.assertRaises(ValueError):
+            cli.apply_settings(self.c,dict(expected=self.c.config(),values={**values,'PAWTALK_IMAGE':'untrusted'}))
+
+    def test_settings_pipe_protocol_load_apply_and_conflict(self):
+        old=self.c.config()
+        values={key:old[key] for key in cli.SETTINGS_FIELDS}
+        values['PAWTALK_MANAGER_AUTO_UPDATE']='true'
+        request=json.dumps(dict(expected=old,values=values)).encode()
+        with patch.object(cli,'WINDOWS',True),patch.object(cli,'admin',return_value=True),patch.object(cli,'protect'),patch.object(cli,'Controller',return_value=self.c):
+            output=io.StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(cli.main(['--root',str(self.c.root),'settings']),0)
+            self.assertEqual(json.loads(output.getvalue())['values'],old)
+            for expected in [0,1]:
+                output,error=io.StringIO(),io.StringIO()
+                with patch.object(cli.sys,'stdin',io.TextIOWrapper(io.BytesIO(request))),redirect_stdout(output),redirect_stderr(error):
+                    self.assertEqual(cli.main(['--root',str(self.c.root),'settings','--apply']),expected)
+                if expected==0:
+                    self.assertTrue(json.loads(output.getvalue())['changed'])
+                else:
+                    self.assertIn('elsewhere',error.getvalue())
+
+    def test_native_network_change_updates_identity_and_failure_restores_pair(self):
+        old=self.c.config()
+        original=self.c.state()
+        # Only the native runtime offers this operation; generic Compose still
+        # rejects a network rebind before taking a backup or stopping anything.
+        self.room.reconfigure_network=lambda state,previous,new:self.room.identity_value
+        self.assertTrue(self.c.configure({'PAWTALK_PORT':'19443'}))
+        self.assertEqual(self.c.config()['PAWTALK_PORT'],'19443')
+        self.assertEqual(self.c.state()['identity'],original['identity'])
+        def fail(state,previous,new):
+            self.room.data=b'partially modified state'
+            raise RuntimeError('injected rebind failure')
+        self.room.reconfigure_network=fail
+        with self.assertRaisesRegex(RuntimeError,'rebind failure'):
+            self.c.configure({'PAWTALK_PUBLIC_IP':'198.51.100.22'})
+        self.assertEqual(self.c.config()['PAWTALK_PUBLIC_IP'],old['PAWTALK_PUBLIC_IP'])
+        self.assertEqual(self.c.config()['PAWTALK_PORT'],'19443')
+        self.assertEqual(self.room.data,b'original SQLite snapshot')
+        self.assertTrue(self.room.running)
 
     def test_schema_and_downgrade_blocked_before_stopping(self):
         self.assertFalse(self.c.update_server({**self.manifest,'version':'0.8.0'}))

@@ -2,6 +2,16 @@
 
 ## Unreleased / Не выпущено
 
+### Client 0.10.0 / Server 0.10.0 / Manager 0.2.0
+
+- **Manager 0.2.0:** add Windows service tray controls, desktop/sign-in shortcuts, a server badge, protected ProgramData installation/migration, full-data uninstall option and config reuse. Protect recoverable password invitations with user DPAPI; retry transient signed-release downloads. / Управление службой через трей, ярлыки, серверный значок, защищённая установка/миграция в ProgramData, полное удаление данных по выбору и повторное использование конфигурации. Приглашения с паролем защищены пользовательским DPAPI; временные ошибки загрузки подписанных выпусков повторяются.
+- **Client 0.10.0:** accept legacy Manager invitation/password paste, request missing E2EE credentials, use the authenticated LAN voice proxy and keep the embedded temporary-room Server security backport pinned by hash. / Разбор старой вставки приглашения/пароля Manager, запрос недостающих данных E2EE, проверенный LAN-прокси голоса и закреплённый хэшем security backport встроенного сервера временных комнат.
+
+- Add a native Windows Server settings window from the tray with current installer parameters, independent Server/Manager updates and stale-window protection. Apply native IP/port changes through backup, health verification and rollback; reissue the certificate for a changed IP while retaining password/history. / Добавлено графическое окно настроек Windows Server из трея с текущими параметрами установщика, раздельными обновлениями Server/Manager и защитой от устаревшего окна. Смена IP/порта native-сервера выполняется с резервной копией, проверкой и откатом; смена IP перевыпускает сертификат с сохранением пароля/истории.
+
+- Require current authorization for all room activity endpoints, revoke password/E2EE-policy-bound preview tokens, and rotate the LiveKit signing secret on native password reset. Remove anonymous preview fallback and active-session token borrowing; deduplicate verified-room bookmarks and refresh saved credentials only after successful authentication. / Все маршруты активности комнаты требуют действующую авторизацию; токены предпросмотра привязаны к паролю и политике E2EE, при штатном сбросе пароля меняется ключ подписи LiveKit. Удалены анонимный fallback и заимствование токена активной комнаты; закладки проверенной комнаты объединяются, сохранённые данные доступа обновляются только после успешной авторизации.
+- Show the Windows setup invitation once in the wizard without a duplicate password-bearing console window. / Windows-мастер показывает приглашение один раз, без дублирующего окна консоли с паролем.
+
 - Scope release builds and artifacts to Client, Server or Manager while retaining full branch/PR verification. Use a signed published Server for independent Client/Manager compatibility tests; Server tests prepare only the Manager host/runtime without its installer. / Сборки и artifacts выпуска разделены по Client, Server и Manager; полный набор проверок веток/PR сохранён. Совместимость Client/Manager проверяется с подписанным опубликованным Server; для тестов Server готовится только Manager host/runtime без его установщика.
 
 ## 0.9.0 — 2026-11-11

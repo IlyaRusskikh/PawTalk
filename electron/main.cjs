@@ -1,7 +1,9 @@
 const { t } = require('../shared/i18n.cjs');
 const { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage, powerMonitor, globalShortcut, net, safeStorage, clipboard, dialog, shell } = require('electron');
 const path = require('node:path');
-const { localInvitation, verifyInvitation, connectionError } = require('./connection.cjs');
+const { localInvitation, verifyInvitation, serverCertificate, connectionError } = require('./connection.cjs');
+const { mediaEndpoint } = require('./media-endpoint.cjs');
+const { roomIdentity } = require('./room-identity.cjs');
 const { X509Certificate, createHash, randomUUID } = require('node:crypto');
 const { requestChat, validChatAccess } = require('./chat.cjs');
 const { externalLinkHandler } = require('./external-links.cjs');
@@ -29,7 +31,8 @@ let signProfile;
 let chatAccess;
 const previews = new RoomPreviews({ fetcher: (...args) => net.fetch(...args), login: async (address, base) => {
   try {
-    if (chatAccess?.base === base) return { token: chatAccess.token, key: chatAccess.key, ephemeral: chatAccess.ephemeral };
+    // Each bookmark must prove its own saved credentials. Never borrow an
+    // active room's token simply because another invitation uses the same IP.
     const scope = credentialKey(address);
     const password = await credentials.load(scope); if (password === null) return;
     const key = await credentials.load('e2ee:' + scope);
@@ -60,7 +63,7 @@ function trustInvitation(address) {
   const room = invitation(address);
   if (room) certificatePins.set(room.hostname, room.fingerprint);
 }
-function credentialKey(address) { return invitation(address) ? address.trim().split('#')[0] : serverURL(address, !app.isPackaged); }
+function credentialKey(address) { const room=invitation(address); const url=room?new URL(room.origin):null; return room ? `pawtalk://${url.hostname}:${url.port||443}/${room.fingerprint}` : serverURL(address, !app.isPackaged); }
 function certificateFingerprint(certificate) {
   try { return new X509Certificate(certificate.data).fingerprint256.replace(/:/g, '').toLowerCase(); } catch { return ''; }
 }
@@ -90,7 +93,13 @@ function registerIPC() {
       const effective = invitation(address) ? localInvitation(address, hosting.status()) : address;
       const base = serverURL(effective, !app.isPackaged);
       await verifyInvitation(effective); trustInvitation(effective);
-      return await previews.read(address, base, cursor);
+      const preview=await previews.read(address, base, cursor);
+      if(preview.status==='online'&&cursor?.roomId) {
+        const certificate=await serverCertificate(effective,certificatePins.get(new URL(base).hostname.replace(/^\[|\]$/g,'')));
+        const {roomId}=roomIdentity(base,certificate,preview.feed);
+        if(roomId!==cursor.roomId)return {status:'locked'};
+      }
+      return preview;
     } catch { return { status: 'offline' }; }
   });
   ipcMain.handle('window-active', event => { authorized(event); return win.isVisible() && !win.isMinimized() && win.isFocused(); });
@@ -101,12 +110,8 @@ function registerIPC() {
       const base = serverURL(effective, !app.isPackaged);
       await verifyInvitation(effective);
       trustInvitation(effective);
-      const response = await net.fetch(`${base}/api/presence`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
-      if (!response.ok) { await response.body?.cancel(); return null; }
-      const raw = await response.text();
-      if (raw.length > 1024) return null;
-      const body = JSON.parse(raw);
-      return Number.isSafeInteger(body.participants) && body.participants >= 0 ? body.participants : null;
+      const result = await previews.read(address,base);
+      return result.status === 'online' ? result.participants ?? null : null;
     } catch { return null; }
   });
   ipcMain.handle('autostart-get', event => {
@@ -221,11 +226,11 @@ function registerIPC() {
     const address = app.isPackaged || invitation(input.address) ? localInvitation(input.address, hosting.status()) : input.address;
     const base = serverURL(address, !app.isPackaged);
     try {
-      const e2eeKey = invitation(input.address)?.e2eeKey ?? input.e2eeKey;
+      const e2eeKey = input.e2eeKey ?? invitation(input.address)?.e2eeKey;
       if (e2eeKey != null && !/^[a-f0-9]{64}$/.test(e2eeKey)) return { error: t("Неверный ключ E2EE.") };
-      await verifyInvitation(address);
+      const certificate = await serverCertificate(address,certificatePins.get(new URL(base).hostname.replace(/^\[|\]$/g,'')));
       trustInvitation(address);
-      const login = { nickname: input.nickname, password: invitation(input.address)?.password ?? input.password, ...(e2eeKey ? { e2ee: true, e2eeKeyId: createHash('sha256').update(Buffer.from(e2eeKey, 'hex')).digest('hex') } : {}) };
+      const login = { nickname: input.nickname, password: input.password || invitation(input.address)?.password || '', ...(e2eeKey ? { e2ee: true, e2eeKeyId: createHash('sha256').update(Buffer.from(e2eeKey, 'hex')).digest('hex') } : {}) };
       const scope = invitation(address)?.fingerprint ?? base;
       const join = async () => {
         let profile;
@@ -256,7 +261,7 @@ function registerIPC() {
       if (body.error) return { error: body.error };
       if (body.e2eeRequired === true && !e2eeKey) return { error: t("Для комнаты нужен ключ E2EE из приглашения.") };
       if (e2eeKey && body.e2eeRequired !== true) return { error: t("Приглашение требует E2EE, но сервер не подтвердил защищённый режим.") };
-      const mediaURL = new URL(body.url);
+      const mediaURL = mediaEndpoint(body.url, base, !app.isPackaged);
       const expected = new URL(base);
       if (mediaURL.hostname !== expected.hostname || !['wss:', ...(!app.isPackaged ? ['ws:'] : [])].includes(mediaURL.protocol) || mediaURL.username || mediaURL.password || typeof body.token !== 'string') throw new Error(t("Неверный адрес голосового сервера"));
       const healthURL = new URL(mediaURL); healthURL.protocol = mediaURL.protocol === 'wss:' ? 'https:' : 'http:';
@@ -276,7 +281,8 @@ function registerIPC() {
       chatAccess = validChatAccess(body) && (!body.e2eeRequired || e2eeKey)
         ? { handle: randomUUID(), feed: body.chatFeed, token: body.chatToken, profileId, base, join, renewAfter: 0, protocol: body.chatProtocol, encrypted: body.e2eeRequired === true, key: e2eeKey, ephemeral: body.chatEphemeral === true }
         : undefined;
-      return { url: body.url, token: body.token, identity: body.identity, ownHost, e2eeRequired: body.e2eeRequired === true, ...(e2eeKey ? { e2eeKey } : {}),
+      const {roomId,bookmarkAddress}=roomIdentity(base,certificate,body.chatFeed);
+      return { url: mediaURL.toString(), token: body.token, identity: body.identity, roomId, bookmarkAddress, ownHost, e2eeRequired: body.e2eeRequired === true, ...(e2eeKey ? { e2eeKey } : {}),
         ...(chatAccess ? { chat: { handle: chatAccess.handle, feed: chatAccess.feed, ephemeral: body.chatEphemeral === true, profileId, protocol: body.chatProtocol, encrypted: body.e2eeRequired === true, mutations: body.chatMutations === true } } : {}) };
     } catch (error) {
       return { error: connectionError(error) };

@@ -4,11 +4,13 @@ const noop = () => () => {};
 let cancelCheck;
 let active = true, activeListener, presenceReads = 0, autoStart = false, inTray = false;
 let autoUpdate = true;
+let lockedPreviews = false;
 let updateChannel = 'preview';
 contextBridge.exposeInMainWorld('desktop', {
  windowActive: async () => active,
  onWindowActive: fn => { activeListener = fn; return () => { activeListener = null; }; },
  roomPresence: async () => { presenceReads++; return 3; },
+ roomPreview: async () => { presenceReads++; return lockedPreviews ? {status:'locked',participants:99,unread:88,people:[{name:'Private fixture name'}]} : {status:'online',participants:3,unread:0,people:[],details:false}; },
  getAutoStart: async () => autoStart,
  setAutoStart: async value => { autoStart = value; return value; },
  getStartInTray: async () => inTray,
@@ -32,7 +34,7 @@ contextBridge.exposeInMainWorld('desktop', {
  },
  cancelHostCheck: async () => { if (cancelCheck) { calls.push(['host-check-cancel']); cancelCheck(); } },
  onInvitation: noop, onPtt: noop, onAction: noop, onSuspend: noop, onHostChanged: noop,
- diagnose: async address => { calls.push(['diagnose', address]); return { ok: !address.includes('unreachable'), e2eeRequired: address.includes('encrypted.example.com'), message: 'Test server unavailable' }; },
+ diagnose: async address => { calls.push(['diagnose', address]); return { ok: !address.includes('unreachable'), e2eeRequired: address.includes('encrypted.example.com') || address.includes('/' + 'e'.repeat(64)), message: 'Test server unavailable' }; },
  connect: async target => { calls.push(['connect', target]); return { error: 'Test connection stopped before media' }; },
  loadPassword: async address => { calls.push(['load', address]); return { password: 'saved-secret' }; },
  savePassword: async input => { calls.push(['save', input]); },
@@ -41,3 +43,4 @@ contextBridge.exposeInMainWorld('testCalls', () => calls);
 
 contextBridge.exposeInMainWorld('testWindowActive', value => { active = value; activeListener?.(value); });
 contextBridge.exposeInMainWorld('testPresenceReads', () => presenceReads);
+contextBridge.exposeInMainWorld('testLockedPreviews', value => { lockedPreviews = value; });

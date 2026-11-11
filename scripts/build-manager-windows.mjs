@@ -17,6 +17,8 @@ await mkdir(path.join(stage,'runtime'),{recursive:true});
 const run=(cmd,args,cwd=root)=>execFileSync(cmd,args,{cwd,stdio:'inherit',windowsHide:true});
 const go=process.env.PAWTALK_GO||'go';
 run(go,['build','-trimpath','-o',path.join(stage,'pawtalkctl.exe'),'.'],path.join(root,'manager/windows'));
+run(go,['build','-trimpath','-ldflags=-H=windowsgui','-o',path.join(stage,'pawtalk-server-tray.exe'),'.'],path.join(root,'manager/windows'));
+await cp(path.join(root,'assets/server.ico'),path.join(stage,'server.ico'));
 const pythonVersion='3.14.10';
 const expected='90905e64a840557d8c1bc4f5b74db3d7ee85e3ffb217611cac1c7813acea4159';
 const archive=path.join(os.tmpdir(),`pawtalk-python-${pythonVersion}-embed-amd64.zip`);

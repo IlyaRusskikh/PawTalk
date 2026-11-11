@@ -2,5 +2,7 @@
   "version": "0.8.0",
   "commit": "3747a0de76b2e9a42e408d7f6448cbd3472f2628",
   "livekitVersion": "1.13.11",
-  "goVersion": "1.27.3"
+  "goVersion": "1.27.3",
+  "securityPatch": "build/bundled-server-security.patch",
+  "securityPatchSha256": "1d53be84dbffc2c719427c888c511775001f2189065feb9456b0b34eec6facab"
 }

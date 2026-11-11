@@ -26,9 +26,14 @@ MESSAGES = {
  'updates':('Обновление сервера прерывает звонок. Автообновление включает сервер и средство его обслуживания.','Server updates interrupt calls. Automatic updates include the server and its maintenance tool.'),
  'docker':('Установить Docker из официального apt-репозитория?','Install Docker from its official apt repository?'),
  'installed':('Комната установлена. Сохраните приглашение и первый пароль.','Room installed. Save the invitation and initial password.'),
+ 'invitation':('Приглашение (вставьте только следующую строку в клиент):','Invitation (paste only the next line into the client):'),
+ 'initial_password':('Первый пароль (введите в отдельном окне пароля клиента):','Initial password (enter in the client’s separate password dialog):'),
+ 'password_unavailable':('Старый пароль не сохранён. В меню сервера выберите «Сменить пароль и скопировать приглашение». Смена пароля прервёт текущие звонки.', 'The old password was not saved. Choose “Reset password and copy invitation” in the server menu. Resetting the password interrupts current calls.'),
+ 'reset_password':('Сменить пароль комнаты и перезапустить сервер? Старые приглашения с паролем перестанут работать.', 'Reset the room password and restart the server? Old password-bearing invitations will stop working.'),
  'existing':('Существующая комната сохранена; данные не сброшены.','Existing room preserved; data retained.'),
  'external':('Локальная проверка не подтверждает внешний TCP/UDP и голос из другой сети.','Local checks do not verify external TCP/UDP or voice from another network.'),
  'error':('Ошибка выполнения.','Operation failed.'),
+ 'download_error':('Не удалось скачать файлы с {host} после {attempts} попыток. Проверьте доступ к GitHub через вашу сеть/VPN и повторите установку.', 'Could not download files from {host} after {attempts} attempts. Check GitHub access through your network/VPN and retry installation.'),
  'changed':('Изменения применены.','Changes applied.'),
  'unchanged':('Изменений нет.','No changes.'),
  'restore':('Восстановить копию? Работающая комната будет остановлена.','Restore backup? The running room will stop.'),
@@ -45,6 +50,26 @@ MESSAGES = {
 
 def text(key,lang):
     return MESSAGES[key][lang == 'en']
+
+
+SETTINGS_FIELDS = {'PAWTALK_PUBLIC_IP','PAWTALK_PORT','PAWTALK_E2EE','PAWTALK_E2EE_KEY_ID',
+                   'PAWTALK_CHAT_MAX_MB','PAWTALK_SERVER_AUTO_UPDATE','PAWTALK_MANAGER_AUTO_UPDATE','PAWTALK_LANGUAGE'}
+
+
+def apply_settings(controller,request):
+    if not isinstance(request,dict) or set(request) != {'expected','values'}:
+        raise ValueError('Invalid settings request')
+    old = controller.config()
+    if request['expected'] != old:
+        raise ValueError('Settings changed elsewhere. Close this window and open it again.')
+    values = request['values']
+    if not isinstance(values,dict) or set(values) != SETTINGS_FIELDS or any(not isinstance(v,str) for v in values.values()):
+        raise ValueError('Invalid settings fields')
+    validate({**old,**values})
+    if all(old[key] == value for key,value in values.items()):
+        return False
+    controller.configure(values)
+    return True
 
 
 def confirm(message,yes,lang):
@@ -140,8 +165,14 @@ def arguments(argv):
     for key in ['config','trust','server-manifest','manager-manifest','bundle','server-bundle']:
         install.add_argument('--'+key)
     install.add_argument('--bootstrap-docker',action='store_true')
+    invitation = sub.add_parser('invitation')
+    invitation.add_argument('--url',action='store_true')
+    invitation.add_argument('--reset-password',action='store_true')
+    invitation.add_argument('--yes',action='store_true')
     for name in ['status','doctor','logs','periodic','health','run-server','setup']:
         sub.add_parser(name)
+    settings = sub.add_parser('settings')
+    settings.add_argument('--apply',action='store_true')
     config = sub.add_parser('configure')
     config.add_argument('values',nargs='+',help='PAWTALK_FIELD=value')
     config.add_argument('--yes',action='store_true')
@@ -203,15 +234,42 @@ def main(argv=None):
         with lock(controller.directory/'operation.lock') as release_lock:
             if args.lang is None and controller.state_file.exists():
                 lang = controller.config()['PAWTALK_LANGUAGE']
+            if args.command == 'settings':
+                if not WINDOWS or not controller.state_file.exists():
+                    raise ValueError('No installed Windows room')
+                controller.recover()
+                if args.apply:
+                    raw = sys.stdin.buffer.read(32769)
+                    if len(raw) > 32768:
+                        raise ValueError('Settings request too large')
+                    changed = apply_settings(controller,json.loads(raw))
+                else:
+                    changed = False
+                print(json.dumps(dict(values=controller.config(),changed=changed)))
+                return 0
             if args.command in ('status','doctor'):
                 print(json.dumps(doctor(controller,lang),ensure_ascii=False,indent=2))
+                return 0
+            if args.command == 'invitation':
+                if not WINDOWS or not controller.state_file.exists():
+                    raise ValueError('No installed Windows room')
+                if args.reset_password:
+                    confirm(text('reset_password',lang),args.yes,lang)
+                result = controller.runtime.invitation(controller.state(),controller.config(),reset=args.reset_password)
+                if result is None:
+                    print(text('password_unavailable',lang),file=sys.stderr)
+                    return 2
+                if args.url:
+                    sys.stdout.write(result['url'])
+                else:
+                    print(json.dumps(result,ensure_ascii=False))
                 return 0
             if args.command == 'install':
                 existing = controller.state_file.exists()
                 if existing:
                     directory = controller.root/'opt/pawtalk-manager/versions'/controller.state()['managerVersion']
                     bundles.self_test(directory)
-                    if source.resolve() != (directory/'manager').resolve():
+                    if not WINDOWS and source.resolve() != (directory/'manager').resolve():
                         release_lock()
                         handoff([sys.executable,'-B','-X','utf8','-I',str(directory/'manager/pawtalkctl'),*(argv if argv is not None else sys.argv[1:])])
                     controller.install(controller.config(),{},source/'compose.server.yaml','')
@@ -230,7 +288,7 @@ def main(argv=None):
                     if server is None or manager is None:
                         raise ValueError('No compatible signed Server/Manager release')
                     directory = bundles.stage(controller.root,manager,keys,args.bundle)
-                    if source.resolve() != (directory/'manager').resolve():
+                    if not WINDOWS and source.resolve() != (directory/'manager').resolve():
                         # Hand off to the verified Manager installer, not checkout code.
                         # Python descriptors are close-on-exec, releasing the operation lock.
                         prepared = controller.directory/'bootstrap'
@@ -262,8 +320,16 @@ def main(argv=None):
                 state = controller.state()
                 container = controller.runtime.container(state,config)['Id']
                 print(text('existing' if existing else 'installed',lang))
-                if not existing:
+                if WINDOWS:
+                    invitation = controller.runtime.invitation(state,config)
+                    if invitation:
+                        print(text('invitation',lang))
+                        print(invitation['url'])
+                    else:
+                        print(text('password_unavailable',lang))
+                elif not existing:
                     for action in ['info','initial-password']:
+                        print(text('invitation' if action == 'info' else 'initial_password',lang))
                         print((controller.runtime.command(state,config,action) if WINDOWS else run(['docker','exec',container,'/pawtalk','serve',action])).decode().strip())
                 print(text('external',lang))
                 return 0
@@ -374,5 +440,6 @@ def main(argv=None):
             with contextlib.suppress(OSError):
                 # Never persist exception text: input/config/HTTP errors can contain secrets.
                 save(controller.directory/'last-error.json',dict(command=args.command,category='validation' if isinstance(error,ValueError) else 'execution',at=int(time.time())))
-        print(text('error',lang)+' '+str(error),file=sys.stderr)
+        detail = text('download_error',lang).format(host=error.host,attempts=error.attempts) if isinstance(error,release.DownloadError) else str(error)
+        print(text('error',lang)+' '+detail,file=sys.stderr)
         return 1

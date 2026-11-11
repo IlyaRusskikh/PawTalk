@@ -1,6 +1,10 @@
 # Независимые выпуски / Independent releases
 
 **Выпущены Client 0.9.0, Server 0.9.0, Manager 0.1.0 и Client bridge v0.8.1.**
+Ветка подготовки `0.10.0`: Client/Server **0.10.0**, Manager **0.2.0**.
+Версии независимы; Manager получает собственный следующий minor.
+Сначала branch/PR CI и ревью, затем отдельное разрешение на merge и component tags.
+План и порядок server-first: [RELEASE-NOTES-0.10.0](RELEASE-NOTES-0.10.0.md).
 Локальные сборки используют `--publish never`. Push/tag/release требуют отдельного
 разрешения владельца. Опубликованные теги, EXE и образы не заменяются.
 
@@ -163,8 +167,8 @@ Client assets: `PawTalk.Setup.X.Y.Z.exe`, `update-manifest.json`, `SHA256SUMS.tx
 Не прикладывать отдельные лицензии или дубликат source archive; GitHub оставляет
 автоматические Source code ZIP/TAR. Все источники и сторонние notices сохраняются.
 README/site должны ссылаться на фактическую **клиентскую** загрузку, Server/Manager
-указываются отдельно. До публикации сохранять действующие ссылки на 0.8.0 и явно
-обозначать 0.9.0 как разработку. Не публиковать сайт обычным push/tag.
+указываются отдельно. До публикации сохранять действующие ссылки на Client/Server
+0.9.0 и Manager 0.1.0; 0.10.0/0.2.0 обозначать как разработку. Не публиковать сайт обычным push/tag.
 
 ## English
 
@@ -173,8 +177,10 @@ Client, Server and Manager have independent version sources and `client-v*`,
 from commit `3747a0d`, published before `client-v0.9.0` after separate review.
 Never replace historical tags or assets. The component release workflow validates
 its own source, runs verification and publishes only its component's assets.
-Stable/preview flags must match signed metadata. Keep current public 0.8.0 links
-until new artifacts actually exist.
+Stable/preview flags must match signed metadata. Keep current public Client/Server
+0.9.0 and Manager 0.1.0 links until new artifacts actually exist. The `0.10.0`
+development branch prepares Client/Server 0.10.0 and Manager 0.2.0; branch CI does
+not authorize merging or publishing component tags.
 
 Release verification receives the selected component scope; branch/PR checks
 default to `all`. Client tags package only the Client, Server tags package only

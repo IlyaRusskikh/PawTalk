@@ -74,7 +74,12 @@ func pointer(root, name string) (string, error) {
 
 func python(ctx context.Context, script string, args ...string) *exec.Cmd {
 	command := exec.CommandContext(ctx, filepath.Join(base(), "runtime", "python.exe"), append([]string{"-B", "-X", "utf8", "-I", script}, args...)...)
-	command.Env = append(os.Environ(), "PAWTALK_MANAGER_HOST="+executable(), "PYTHONUTF8=1", "PYTHONDONTWRITEBYTECODE=1")
+	// The GUI tray is not the host protocol executable. Python must always call
+	// the companion console host for protection, DPAPI and service commands.
+	command.Env = append(os.Environ(), "PAWTALK_MANAGER_HOST="+filepath.Join(base(), "pawtalkctl.exe"), "PYTHONUTF8=1", "PYTHONDONTWRITEBYTECODE=1")
+	// Console output still follows the host's pipes/terminal, but the embedded
+	// runtime must never create an additional installer console window.
+	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return command
 }
 
@@ -111,7 +116,15 @@ func selected(root string) (string, error) {
 }
 
 func launch(ctx context.Context, root string, args []string, job windows.Handle, stdio bool) error {
-	script, e := selected(root)
+	var script string
+	var e error
+	// The native installer's Windows setup/credential UX comes from its shipped
+	// bootstrap. Signed Manager releases still drive periodic maintenance.
+	if bootstrapCommand(args) {
+		script, e = filepath.Join(base(), "bootstrap", "manager", "pawtalkctl"), nil
+	} else {
+		script, e = selected(root)
+	}
 	if e != nil {
 		return e
 	}
@@ -368,6 +381,9 @@ func verify(args []string) error {
 }
 
 func main() {
+	if isTrayExecutable() {
+		os.Exit(trayMain(os.Args[1:]))
+	}
 	args := os.Args[1:]
 	if len(args) > 0 && args[0] == "--elevate" {
 		quoted := make([]string, 0, len(args)-1)
@@ -390,8 +406,18 @@ func main() {
 	var err error
 	if len(args) > 0 && args[0] == "verify" {
 		err = verify(args[1:])
+	} else if len(args) == 1 && (args[0] == "seal-credential" || args[0] == "unseal-credential") {
+		err = credentialCommand(args[0] == "unseal-credential")
+	} else if len(args) == 2 && args[0] == "validate-install-removal" {
+		err = validateInstallRemoval(args[1])
+	} else if len(args) == 2 && args[0] == "purge-data" {
+		err = purgeData(args[1])
+	} else if len(args) == 2 && args[0] == "uninstall-services" {
+		err = uninstallServices(args[1])
 	} else if len(args) == 2 && args[0] == "protect" {
 		err = protectRoot(args[1])
+	} else if len(args) == 2 && args[0] == "close-tray" {
+		err = closeTray(args[1])
 	} else if len(args) == 2 && args[0] == "protect-install" {
 		err = protectInstall(args[1])
 	} else if len(args) == 2 && args[0] == "secure-tree" {

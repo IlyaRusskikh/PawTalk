@@ -1,11 +1,14 @@
 """Bounded GitHub discovery and component-specific Ed25519 trust verification."""
 import base64
+import http.client
 import json
 import re
+import ssl
 import subprocess
 import tempfile
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
 from pathlib import Path
 from .platforms import WINDOWS, host
@@ -64,14 +67,40 @@ class Redirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(request, fp, code, msg, headers, newurl)
 
 
+class DownloadError(RuntimeError):
+    def __init__(self, url, attempts):
+        self.host = urllib.parse.urlsplit(url).hostname
+        self.attempts = attempts
+        # Do not expose signed redirect query strings in console output.
+        super().__init__(f'Download failed from {self.host} after {attempts} attempts')
+
+
 def fetch(url, limit=1024 * 1024, api=False):
     allowed_url(url, api)
     request = urllib.request.Request(url, headers={"User-Agent": "PawTalk-host", "Accept": "application/vnd.github+json"})
-    with urllib.request.build_opener(Redirect()).open(request, timeout=30) as response:
-        data = response.read(limit + 1)
-    if len(data) > limit:
-        raise ValueError("Release response too large")
-    return data
+    for attempt in range(1, 4):
+        try:
+            with urllib.request.build_opener(Redirect()).open(request, timeout=30) as response:
+                data = response.read(limit + 1)
+                if len(data) > limit:
+                    raise ValueError("Release response too large")
+                length = response.headers.get('Content-Length')
+                if length is not None and len(data) < int(length):
+                    raise http.client.IncompleteRead(data)
+            return data
+        except urllib.error.HTTPError as error:
+            error.close()
+            if error.code not in (408, 429, 500, 502, 503, 504):
+                raise
+            failure = error
+        except (OSError, http.client.IncompleteRead) as error:
+            reason = error.reason if isinstance(error, urllib.error.URLError) else error
+            if not isinstance(reason, (ConnectionError, TimeoutError, http.client.IncompleteRead, ssl.SSLEOFError)):
+                raise
+            failure = error
+        if attempt == 3:
+            raise DownloadError(url, attempt) from failure
+        time.sleep(attempt)
 
 
 def select(releases, component):

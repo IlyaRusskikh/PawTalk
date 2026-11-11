@@ -4,13 +4,13 @@ import { Icon } from './Controls';
 import { Avatar } from './Avatar';
 import { t } from './i18n';
 
-export type Bookmark = { address: string; name: string };
-export type RoomPreview = { status: 'online' | 'offline'; participants?: number; unread?: number; people?: { name: string; avatar?: string }[]; details?: boolean; feed?: string; ephemeral?: boolean };
+export type Bookmark = { address: string; name: string; roomId?: string };
+export type RoomPreview = { status: 'online' | 'offline' | 'locked'; participants?: number; unread?: number; people?: { name: string; avatar?: string }[]; details?: boolean; feed?: string; ephemeral?: boolean };
 type Drag = { temporaryAddress?: string; bookmarks: Bookmark[]; order: Bookmark[]; statuses: boolean[]; from: number; centers: number[]; offline: boolean };
 
-export function BookmarkRail({ bookmarks, temporaryRoom, onSaveTemporary, activeAddress, selected, people, livePeople = [], unread = 0, presence, disabled, onOpen, onMenu, onReorder }: {
+export function BookmarkRail({ bookmarks, temporaryRoom, onSaveTemporary, activeAddress, activeRoomId, selected, people, livePeople = [], unread = 0, presence, disabled, onOpen, onMenu, onReorder }: {
   temporaryRoom?: Bookmark; onSaveTemporary?(): void;
-  bookmarks: Bookmark[]; activeAddress?: string; selected: boolean; people: number;
+  bookmarks: Bookmark[]; activeAddress?: string; activeRoomId?: string; selected: boolean; people: number;
   livePeople?: { name: string; avatar?: string }[]; unread?: number;
   presence: Record<string, RoomPreview | number | null>; disabled: boolean;
   onOpen(item: Bookmark): void; onMenu(address: string, x: number, y: number): void;
@@ -40,8 +40,9 @@ export function BookmarkRail({ bookmarks, temporaryRoom, onSaveTemporary, active
   const [preview, setPreview] = useState<{ drag: Drag; to: number } | null>(null);
   const id = useId();
   const [hover, setHover] = useState<{ item: Bookmark; x: number; y: number }>();
-  const stateFor = (address: string): RoomPreview | undefined => {
-    if (address === activeAddress) return { status: 'online', participants: people, people: livePeople.slice(0, 3), unread, details: true };
+  const isActive = (item: Bookmark) => item.address === activeAddress && (!item.roomId || item.roomId === activeRoomId);
+  const stateFor = (address: string, roomId?: string): RoomPreview | undefined => {
+    if (isActive({address,name:'',roomId})) return { status: 'online', participants: people, people: livePeople.slice(0, 3), unread, details: true };
     const value = presence[address];
     return typeof value === 'number' ? { status: 'online', participants: value, unread: 0, details: false } : value ?? undefined;
   };
@@ -49,8 +50,8 @@ export function BookmarkRail({ bookmarks, temporaryRoom, onSaveTemporary, active
     const rect = button.getBoundingClientRect();
     setHover({ item, x: rect.right + 14, y: Math.max(12, Math.min(rect.top - 10, window.innerHeight - 190)) });
   }
-  const shown = hover ? stateFor(hover.item.address) : undefined;
-  const offline = (item: Bookmark) => stateFor(item.address)?.status === 'offline';
+  const shown = hover ? stateFor(hover.item.address,hover.item.roomId) : undefined;
+  const offline = (item: Bookmark) => stateFor(item.address,item.roomId)?.status === 'offline';
   // Keep the saved order intact: connection changes only affect the displayed groups.
   const ordered = [...bookmarks.filter(item => !offline(item)), ...bookmarks.filter(offline)];
   const sameOrder = (current: Drag) => current.temporaryAddress === temporaryRoom?.address && current.bookmarks === bookmarks && current.order.every((item, index) => ordered[index]?.address === item.address && current.statuses[index] === offline(item));
@@ -125,8 +126,8 @@ export function BookmarkRail({ bookmarks, temporaryRoom, onSaveTemporary, active
     </button>
     <button type="button" className="temporary-room-pin" disabled={disabled} title={t("Временная комната — добавить в закладки")} aria-label={t("Временная комната — добавить в закладки")} onClick={onSaveTemporary}><span className="temporary-room-timer"><Icon name="stopwatch" size={12}/></span><span className="temporary-room-star"><Icon name="star" size={12}/></span></button>
   </div>}{ordered.map((item, index) => {
-    const state = stateFor(item.address);
-    const count = state?.participants;
+    const state = stateFor(item.address,item.roomId);
+    const count = state?.status === 'online' ? state.participants : undefined;
     let offset = 0;
     const placeholder = placement?.drag.from === index;
     if (placement) {
@@ -137,7 +138,7 @@ export function BookmarkRail({ bookmarks, temporaryRoom, onSaveTemporary, active
       else if (to <= index && index < from) slot++;
       offset = centers[slot] - centers[index];
     }
-    return <button key={item.address} className={`server-orb bookmark-orb ${selected && item.address === activeAddress ? 'selected' : ''} ${placeholder ? 'bookmark-placeholder' : ''}${state?.status === 'offline' ? ' server-offline' : ''}${index > 0 && offline(item) && !offline(ordered[index - 1]) ? ' bookmark-group-start' : ''}`}
+    return <button key={item.address} className={`server-orb bookmark-orb ${selected && isActive(item) ? 'selected' : ''} ${placeholder ? 'bookmark-placeholder' : ''}${state?.status === 'offline' ? ' server-offline' : ''}${index > 0 && offline(item) && !offline(ordered[index - 1]) ? ' bookmark-group-start' : ''}`}
       aria-label={item.name} aria-describedby={hover?.item.address === item.address ? id : undefined} disabled={disabled} draggable={!disabled}
       onMouseEnter={event => show(item, event.currentTarget)} onMouseLeave={() => setHover(undefined)} onFocus={event => show(item, event.currentTarget)} onBlur={() => setHover(undefined)}
       style={offset ? { transform: `translateY(${offset}px)` } : undefined}
@@ -149,10 +150,10 @@ export function BookmarkRail({ bookmarks, temporaryRoom, onSaveTemporary, active
     >{item.name.slice(0, 1).toUpperCase()}
       {state?.status === 'online' && count !== undefined && <span className="participant-pin" title={t("Участников: {0}", count)}><Icon name="users" size={10}/>{count}</span>}
       {state?.status === 'offline' ? <span className="unread-pin disconnected-pin" title={t("Нет соединения")} aria-label={t("Нет соединения")}><Icon name="offline" size={12}/></span>
-        : state?.unread ? <span className="unread-pin" title={t("Непрочитанных: {0}", state.unread)}><Icon name="chat" size={10}/>{state.unread > 99 ? '99+' : state.unread}</span> : null}
+        : state?.status === 'online' && state.unread ? <span className="unread-pin" title={t("Непрочитанных: {0}", state.unread)}><Icon name="chat" size={10}/>{state.unread > 99 ? '99+' : state.unread}</span> : null}
     </button>;
   })}{hover && !placement && createPortal(<div className="server-preview" role="tooltip" id={id} style={{ left: hover.x, top: hover.y }}>
-    <div className="server-preview-heading"><span className="server-preview-icon"><Icon name={shown?.status === 'offline' ? 'offline' : 'headphones'} size={20}/></span><div><strong>{hover.item.name}</strong><small>{shown?.status === 'offline' ? t("Нет соединения") : shown ? shown.participants !== undefined ? t("Участников: {0}", shown.participants) : t("Сервер доступен") : t("Проверяем соединение…")}</small></div></div>
+    <div className="server-preview-heading"><span className="server-preview-icon"><Icon name={shown?.status === 'offline' ? 'offline' : 'headphones'} size={20}/></span><div><strong>{hover.item.name}</strong><small>{shown?.status === 'locked' ? t("Требуется повторный вход") : shown?.status === 'offline' ? t("Нет соединения") : shown ? shown.participants !== undefined ? t("Участников: {0}", shown.participants) : t("Сервер доступен") : t("Проверяем соединение…")}</small></div></div>
     {shown?.status === 'online' && <><div className="server-preview-people">{shown.people?.map((person, index) => <div key={index}><Avatar name={person.name} image={person.avatar}/><span>{person.name}</span></div>)}{(shown.participants ?? 0) > (shown.people?.length ?? 0) && shown.details && <span className="server-preview-more">+{(shown.participants ?? 0) - (shown.people?.length ?? 0)}</span>}{!shown.people?.length && <p>{shown.details ? t("В канале пока тихо") : t("Подключитесь, чтобы увидеть участников")}</p>}</div>
       <div className="server-preview-footer"><Icon name="chat" size={13}/>{t("Непрочитанных: {0}", shown.unread ?? 0)}</div></>}
   </div>, document.body)}</div>{overflow && <div className="bookmark-overflow" aria-label={hiddenBelow ? t("Ещё серверов ниже: {0}", hiddenBelow) : undefined}><span>{hiddenBelow ? `+${hiddenBelow}` : ''}</span></div>}</div>;

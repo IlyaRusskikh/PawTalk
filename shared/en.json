@@ -591,5 +591,6 @@
   "Потеряно пакетов": "Packets lost",
   "Да": "Yes",
   "Нет": "No",
-  "Потеря исходящих аудиопакетов": "Outgoing audio packet loss"
+  "Потеря исходящих аудиопакетов": "Outgoing audio packet loss",
+  "Требуется повторный вход": "Sign in again"
 }

@@ -199,6 +199,36 @@ func standaloneHandler(state serverState, chat *chatStore) http.Handler {
 	})
 }
 
+func rotateRoomPassword(state *serverState, password string) error {
+	hash, err := passwordHash(password)
+	if err != nil {
+		return err
+	}
+	var secret [32]byte
+	if _, err = rand.Read(secret[:]); err != nil {
+		return err
+	}
+	// Restarting with a new LiveKit secret revokes outstanding voice JWTs as
+	// well as password-bound chat/preview tokens, while preserving room identity.
+	state.PasswordHash = hash
+	state.APISecret = hex.EncodeToString(secret[:])
+	return nil
+}
+
+func rebindRoom(state *serverState, ip string) error {
+	if parsed := net.ParseIP(ip); parsed != nil && parsed.Equal(net.ParseIP(state.IP)) {
+		return nil
+	}
+	// A new address needs a certificate covering it. Preserve the password,
+	// API key and history; revoke old sessions with the new signing secret.
+	replacement, _, err := createState(ip)
+	if err != nil {
+		return err
+	}
+	state.IP, state.Certificate, state.PrivateKey, state.APISecret = replacement.IP, replacement.Certificate, replacement.PrivateKey, replacement.APISecret
+	return nil
+}
+
 func standalone(args []string) error {
 	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
 		switch {
@@ -251,6 +281,11 @@ func standalone(args []string) error {
 			return err
 		}
 		switch args[0] {
+		case "rebind":
+			if err := rebindRoom(&state, os.Getenv("PAWTALK_PUBLIC_IP")); err != nil {
+				return err
+			}
+			return saveState(dir, state)
 		case "info":
 			fmt.Println(invitation(state))
 			return nil
@@ -272,7 +307,7 @@ func standalone(args []string) error {
 			if err != nil {
 				return err
 			}
-			state.PasswordHash, err = passwordHash(strings.TrimSuffix(strings.TrimSuffix(string(raw), "\n"), "\r"))
+			err = rotateRoomPassword(&state, strings.TrimSuffix(strings.TrimSuffix(string(raw), "\n"), "\r"))
 			if err != nil {
 				return err
 			}
@@ -283,7 +318,7 @@ func standalone(args []string) error {
 			fmt.Println("Password updated. Restart the container to apply it.")
 			return nil
 		default:
-			return errors.New("usage: serve [info|healthcheck|initial-password|reset-password]")
+			return errors.New("usage: serve [info|healthcheck|initial-password|reset-password|rebind]")
 		}
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {

@@ -247,6 +247,12 @@ func protectInstall(path string) error {
 	if !strings.EqualFold(filepath.Clean(absolute), filepath.Clean(base())) {
 		return errors.New("installer path must match this host executable")
 	}
+	if err := noLinks(absolute); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(absolute, ".pawtalk-manager-install"), []byte("pawtalk-manager-install-v1"), 0600); err != nil {
+		return err
+	}
 	return filepath.WalkDir(absolute, func(file string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err

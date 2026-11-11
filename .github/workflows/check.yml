@@ -216,6 +216,12 @@ jobs:
         if: steps.scope.outputs.client == 'true'
       - run: node scripts/ui-flow-smoke.mjs --built
         if: steps.scope.outputs.client == 'true'
+      - name: Verify legacy Manager invitations with native clipboard paste
+        if: steps.scope.outputs.client == 'true'
+        run: node scripts/manager-invitation-smoke.mjs
+      - name: Verify bookmark identity and locked room privacy
+        if: steps.scope.outputs.client == 'true'
+        run: node scripts/bookmarks-smoke.mjs
       - run: npm run test:connection-ui
         if: steps.scope.outputs.client == 'true'
       - run: node scripts/updates-ui-smoke.mjs

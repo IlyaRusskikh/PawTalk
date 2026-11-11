@@ -1,11 +1,11 @@
 # Application language and updates / Язык и обновления
 
-PawTalk 0.8.0 is the current public preview. For update fixes in previous releases, see the [changelog](../CHANGELOG.md).
-Актуальный предварительный выпуск — PawTalk 0.8.0. Исправления обновлятора в прошлых выпусках описаны в [CHANGELOG](../CHANGELOG.md).
+Client/Server 0.9.0 and Manager 0.1.0 are published. Client/Server 0.10.0 and Manager 0.2.0 are in development; see the [release plan](RELEASE-NOTES-0.10.0.md).
+Опубликованы Client/Server 0.9.0 и Manager 0.1.0. Client/Server 0.10.0 и Manager 0.2.0 готовятся к выпуску; см. [план](RELEASE-NOTES-0.10.0.md).
 
 ## Русский
 
-### Подготовка перехода 0.8.1 → 0.9.0 (ещё не опубликовано)
+### Исторический переход 0.8.1 → 0.9.0
 
 Сначала выпускается клиентский bridge `v0.8.1`, который виден обновляторам 0.8.0.
 Он понимает `client-v*` и затем предложит `client-v0.9.0` через обычное подтверждение
