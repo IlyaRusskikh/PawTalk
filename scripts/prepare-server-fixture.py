@@ -1,17 +1,33 @@
 """Use a published, trusted Server for independent Client/Manager CI; never publish."""
 import argparse
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
 import sys
+import time
+import urllib.error
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'manager'))
 from pawtalk_manager import release
 
 
-def prepare(keys, destination=None, get=release.fetch):
+def fetch_ci(url, limit=1024*1024, api=False):
+    for attempt in range(3):
+        try:
+            return release.fetch(url, limit, api=api)
+        except urllib.error.HTTPError as error:
+            if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
+            if attempt == 2:
+                raise
+        time.sleep(attempt + 1)
+
+
+def prepare(keys, destination=None, get=fetch_ci):
     manifest = release.discover('server', keys, get=get)
     if manifest is None:
         raise ValueError('A published signed Server is required for component CI')

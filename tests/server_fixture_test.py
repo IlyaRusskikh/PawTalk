@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('server_fixture', Path(__file__).resolve().parents[1] / 'scripts/prepare-server-fixture.py')
@@ -11,6 +12,18 @@ spec.loader.exec_module(fixture)
 
 
 class ServerFixtureTests(unittest.TestCase):
+    def test_transient_network_failures_retry_but_missing_assets_and_invalid_data_do_not(self):
+        with patch.object(fixture.time, 'sleep'), patch.object(fixture.release, 'fetch', side_effect=[TimeoutError(), b'ok']) as fetch:
+            self.assertEqual(fixture.fetch_ci('https://example.test'), b'ok')
+            self.assertEqual(fetch.call_count, 2)
+        for error in [urllib.error.HTTPError('https://example.test',404,'missing',{},None), ValueError('invalid metadata')]:
+            with patch.object(fixture.release,'fetch',side_effect=error) as fetch:
+                with self.assertRaises(type(error)):fixture.fetch_ci('https://example.test')
+                self.assertEqual(fetch.call_count, 1)
+        with patch.object(fixture.time, 'sleep'), patch.object(fixture.release,'fetch',side_effect=TimeoutError()) as fetch:
+            with self.assertRaises(TimeoutError):fixture.fetch_ci('https://example.test')
+            self.assertEqual(fetch.call_count, 3)
+
     def manifest(self, data):
         return dict(version='0.9.7', image=fixture.release.IMAGE, digest='sha256:'+'a'*64,
                     windows=dict(name='PawTalk.Server.0.9.7.windows-x64.zip', size=len(data),
