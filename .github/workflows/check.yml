@@ -105,7 +105,10 @@ jobs:
       - run: node scripts/native-smoke.cjs
       - run: npm run build
       - run: npm run test:sounds
-      - run: npm test
+      - name: Test Client including real Windows TLS diagnostics
+        run: |
+          $env:PAWTALK_GO = (Get-Command go -ErrorAction Stop).Source
+          npm test
       - run: npm run server:prepare
       - name: Verify native Manager host safeguards
         working-directory: manager/windows
@@ -113,6 +116,8 @@ jobs:
           go test ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet ./...
+      - name: Verify Windows handoff completion and read-only cleanup
+        run: python -m unittest discover -s tests -p windows_handoff_test.py
       - name: Build permanent Windows Server and Manager installer
         run: |
           node scripts/build-windows-server.mjs

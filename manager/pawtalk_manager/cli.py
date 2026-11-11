@@ -165,6 +165,15 @@ def arguments(argv):
     return args
 
 
+def handoff(command):
+    """Wait through the verified installer on Windows; CRT exec returns early."""
+    if WINDOWS:
+        # Windows execv spawns a successor then exits the original PID with 0.
+        # NSIS/SCM must instead observe the successor's completion and exit code.
+        raise SystemExit(subprocess.call(command))
+    os.execv(command[0],command)
+
+
 def main(argv=None):
     args = arguments(argv)
     lang,source = args.lang or 'ru',Path(__file__).resolve().parent.parent
@@ -204,7 +213,7 @@ def main(argv=None):
                     bundles.self_test(directory)
                     if source.resolve() != (directory/'manager').resolve():
                         release_lock()
-                        os.execv(sys.executable,[sys.executable,'-B','-X','utf8','-I',str(directory/'manager/pawtalkctl'),*(argv if argv is not None else sys.argv[1:])])
+                        handoff([sys.executable,'-B','-X','utf8','-I',str(directory/'manager/pawtalkctl'),*(argv if argv is not None else sys.argv[1:])])
                     controller.install(controller.config(),{},source/'compose.server.yaml','')
                 else:
                     config = read_config(args.config) if args.config else wizard(lang) if sys.stdin.isatty() else None
@@ -238,7 +247,7 @@ def main(argv=None):
                         if args.server_bundle:
                             command += ['--server-bundle',str(Path(args.server_bundle).resolve())]
                         release_lock()
-                        os.execv(sys.executable,command)
+                        handoff(command)
                     if WINDOWS:
                         bundles.switch(controller.root,directory)
                     controller.install(config,server,directory/'manager/compose.server.yaml',manager['version'])
@@ -276,7 +285,7 @@ def main(argv=None):
                     directory = bundles.stage(controller.root,manager,keys,snapshot/'manager.tar.gz')
                     if source.resolve() != (directory/'manager').resolve():
                         release_lock()
-                        os.execv(sys.executable,[sys.executable,'-B','-X','utf8','-I',str(directory/'manager/pawtalkctl'),*(argv if argv is not None else sys.argv[1:])])
+                        handoff([sys.executable,'-B','-X','utf8','-I',str(directory/'manager/pawtalkctl'),*(argv if argv is not None else sys.argv[1:])])
                 if WINDOWS and directory is not None:
                     bundles.switch(controller.root,directory)
                 controller.restore(args.name or '')

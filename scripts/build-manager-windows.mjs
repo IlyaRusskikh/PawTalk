@@ -1,5 +1,5 @@
 // Local builds never publish. Python is private to Manager; users install no runtime.
-import {cp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
+import {cp,mkdir,readFile,writeFile,rm,chmod} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
@@ -35,6 +35,9 @@ const goRoot=execFileSync(go,['env','GOROOT'],{encoding:'utf8',windowsHide:true}
 const modCache=execFileSync(go,['env','GOMODCACHE'],{encoding:'utf8',windowsHide:true}).trim();
 await cp(path.join(goRoot,'LICENSE'),path.join(stage,'GO-LICENSE'));
 await cp(path.join(modCache,'golang.org/x/sys@v0.49.0/LICENSE'),path.join(stage,'X-SYS-LICENSE'));
+// The Go module cache marks files read-only; only its notice bytes belong in the
+// installer. Keep the copied notice removable during explicit maintenance/QA.
+await chmod(path.join(stage,'X-SYS-LICENSE'),0o644);
 const version=(await readFile(path.join(root,'manager/VERSION'),'utf8')).trim();
 const {getMakeNsisPath}=createRequire(import.meta.url)('app-builder-lib/out/toolsets/windows.js');
 const makensis=process.env.PAWTALK_MAKENSIS?{path:process.env.PAWTALK_MAKENSIS}:await getMakeNsisPath();

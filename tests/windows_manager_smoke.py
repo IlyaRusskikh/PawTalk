@@ -15,6 +15,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 fixtures,stage = map(Path,sys.argv[1:3])
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from windows_smoke_support import remove_owned_tree
 sys.path.insert(0,str(stage/'bootstrap/manager'))
 from pawtalk_manager import bundles, native, release, preflight
 from pawtalk_manager.config import atomic, lock
@@ -280,7 +282,9 @@ try:
                 assert hashlib.sha256(installed.read_bytes()).digest()==hashlib.sha256((stage/'pawtalkctl.exe').read_bytes()).digest()
                 for attempt in range(20):
                     status=subprocess.run([str(installed),'--root',str(install_root),'status'],capture_output=True,timeout=30)
-                    if status.returncode==0 and json.loads(status.stdout)['health']=='Healthy':break
+                    if status.returncode==0:
+                        result=json.loads(status.stdout)
+                        if result.get('installed') and result.get('health')=='Healthy':break
                     time.sleep(0.5)
                 else:raise RuntimeError('Installed server did not become healthy')
                 assert not list((install_root/'var/lib/pawtalk-data').glob('*/initial-password'))
@@ -294,24 +298,29 @@ try:
                 assert (install_root/'var/lib/pawtalk-manager/installed.json').is_file()
                 print('PASS actual silent EXE install, embedded runtime, signed offline artifacts, services and data-preserving uninstaller')
             finally:
-                # Only this fresh, exact product directory may be removed; never
-                # recursively delete a pre-existing installation or unrelated path.
-                if program.exists() and (program/'pawtalkctl.exe').is_file():
-                    matching=hashlib.sha256((program/'pawtalkctl.exe').read_bytes()).digest()==hashlib.sha256((stage/'pawtalkctl.exe').read_bytes()).digest()
-                    if matching and program.parent.resolve()==Path(os.environ['ProgramFiles']).resolve() and program.name=='PawTalk Server Manager':
-                        for action in ['stop-server','stop-manager','uninstall-manager','uninstall-server']:
-                            real_host(action,install_root)
-                        for attempt in range(20):
-                            try:shutil.rmtree(program);break
-                            except PermissionError:time.sleep(0.2)
-                        if menu.exists():
-                            if menu.parent.resolve()!=(Path(os.environ['ProgramData'])/'Microsoft/Windows/Start Menu/Programs').resolve():
-                                raise RuntimeError('Unsafe shortcut cleanup path')
-                            shutil.rmtree(menu)
-                        for name in [uninstall_key,registration]:
-                            try:winreg.DeleteKeyEx(winreg.HKEY_LOCAL_MACHINE,name,winreg.KEY_WOW64_64KEY)
-                            except FileNotFoundError:pass
+                installer_error=sys.exception()
+                try:
+                    # Only this fresh, exact product directory may be removed; never
+                    # recursively delete a pre-existing installation or unrelated path.
+                    if program.exists() and (program/'pawtalkctl.exe').is_file():
+                        matching=hashlib.sha256((program/'pawtalkctl.exe').read_bytes()).digest()==hashlib.sha256((stage/'pawtalkctl.exe').read_bytes()).digest()
+                        if matching and program.parent.resolve()==Path(os.environ['ProgramFiles']).resolve() and program.name=='PawTalk Server Manager':
+                            for action in ['stop-server','stop-manager','uninstall-manager','uninstall-server']:
+                                real_host(action,install_root)
+                            remove_owned_tree(program,Path(os.environ['ProgramFiles']),'PawTalk Server Manager')
+                            if menu.exists():
+                                if menu.parent.resolve()!=(Path(os.environ['ProgramData'])/'Microsoft/Windows/Start Menu/Programs').resolve():
+                                    raise RuntimeError('Unsafe shortcut cleanup path')
+                                remove_owned_tree(menu,menu.parent,'PawTalk Server Manager')
+                            for name in [uninstall_key,registration]:
+                                try:winreg.DeleteKeyEx(winreg.HKEY_LOCAL_MACHINE,name,winreg.KEY_WOW64_64KEY)
+                                except FileNotFoundError:pass
+                except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as cleanup_error:
+                    if installer_error is None:raise
+                    print("Installer cleanup failed: "+type(cleanup_error).__name__+"; original error preserved",file=sys.stderr)
 finally:
+    primary_error=sys.exception()
+    cleanup_errors=[]
     clean = True
     for target in roots:
         for action in ['stop-server','stop-manager','uninstall-manager','uninstall-server']:
@@ -322,12 +331,12 @@ finally:
         for target in roots+([bootstrap] if bootstrap else []):
             if target.parent.resolve()!=Path(os.environ['ProgramData']).resolve() or not target.name.startswith('PawTalk-CI-'):
                 raise RuntimeError('Unsafe SCM test cleanup path')
-            if target.exists():
-                import time
-                for attempt in range(20):
-                    try:shutil.rmtree(target);break
-                    except PermissionError:time.sleep(0.2)
-                else:raise RuntimeError('Windows test directory still has active handles')
+            try:remove_owned_tree(target,Path(os.environ['ProgramData']),'PawTalk-CI-')
+            except OSError as error:cleanup_errors.append(type(error).__name__)
     if not clean:
-        raise RuntimeError('Windows service cleanup failed; test root retained')
+        cleanup_errors.append('service cleanup failed; test root retained')
+    if cleanup_errors:
+        message='Windows test cleanup: '+', '.join(cleanup_errors)
+        if primary_error is not None:print(message,file=sys.stderr)
+        else:raise RuntimeError(message)
 print('PASS real Windows SCM lifecycle' if scm else 'PASS Windows console service/job lifecycle (SCM registration not exercised)')

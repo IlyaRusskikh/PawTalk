@@ -2,6 +2,8 @@
 
 ## 0.9.0 — Unreleased / Не выпущено
 
+- Wait for the verified Windows installer handoff and propagate failures instead of reporting completion while the successor still runs. Cover actual Windows parent/child exit semantics and read-only license cleanup. / Windows-установщик ждёт завершения проверенного дочернего процесса и передаёт ошибку вместо преждевременного успеха. Добавлены проверки настоящих Windows-процессов и очистки read-only лицензии; ошибки очистки не скрывают исходный сбой.
+
 - Rename the unpublished host controller to **Server Manager** (`manager-v*`, `manager/VERSION`, `pawtalkctl manager`). Add a native Windows Server package, bilingual EXE setup and Windows service/filesystem adapters for the shared transactional controller. / Неопубликованный компонент обслуживания переименован в **Server Manager**. Добавлены нативный Windows-сервер, EXE с русским/английским мастером и адаптеры служб/файлов для общего контроллера обновлений, backup и восстановления.
 
 - Simplify VPS setup: encryption and automatic updates default to yes, one answer controls Server/Manager updates, and channel settings are removed in favor of the latest signed component release. / Мастер VPS предлагает шифрование и автообновление по умолчанию; один ответ управляет обновлением сервера и средства обслуживания. Настройка канала удалена: выбирается последняя подписанная версия своего семейства тегов.
