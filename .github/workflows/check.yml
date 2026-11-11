@@ -21,6 +21,9 @@ on:
         default: true
 permissions:
   contents: read
+concurrency:
+  group: verify-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ inputs.component || 'all' }}-${{ github.event_name == 'workflow_dispatch' && 'manual' || 'automatic' }}
+  cancel-in-progress: true
 jobs:
   server:
     strategy:

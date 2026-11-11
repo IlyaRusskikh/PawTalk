@@ -78,3 +78,19 @@ test('publisher artifact names and extraction paths match independent uploads', 
     assert.ok(!upload.with.path.includes('\n'));
   }
 });
+
+test('duplicate push/PR checks cancel each other without cancelling other components or manual checks', () => {
+  const group = (event, component = 'all', branch = '0.9.0', repository = 'IlyaRusskikh/PawTalk') => {
+    const github = { repository: 'IlyaRusskikh/PawTalk', ref_name: event === 'pull_request' ? '9/merge' : branch,
+      event_name: event, event: { pull_request: { head: { ref: event === 'pull_request' ? branch : '',
+        repo: { full_name: event === 'pull_request' ? repository : '' } } } } };
+    return check.concurrency.group.replace(/\$\{\{(.*?)\}\}/g, (_, expression) =>
+      Function('github', 'inputs', `return (${expression});`)(github, { component }));
+  };
+  assert.equal(check.concurrency['cancel-in-progress'], true);
+  assert.equal(group('push'), group('pull_request'));
+  assert.notEqual(group('push', 'server'), group('push', 'manager'));
+  assert.notEqual(group('push'), group('workflow_dispatch'));
+  assert.notEqual(group('push'), group('push', 'all', 'other-branch'));
+  assert.notEqual(group('push'), group('pull_request', 'all', '0.9.0', 'someone/fork'));
+});
