@@ -4,7 +4,7 @@ release
 native/build
 .git
 .env
-deploy/generated
+manager/generated
 resources/server
 src/generated
 CONTINUE.md

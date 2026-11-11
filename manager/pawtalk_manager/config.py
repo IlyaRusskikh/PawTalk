@@ -1,21 +1,27 @@
 """Strict data-only config and durable managed state, never source an env file."""
 import contextlib
-import fcntl
 import ipaddress
 import json
 import os
 import re
 import tempfile
 from pathlib import Path
+from .platforms import WINDOWS, sync_directory, secure
+if WINDOWS:
+    import msvcrt
+else:
+    import fcntl
 
 DEFAULTS = dict(PAWTALK_PORT='18443',PAWTALK_E2EE='false',PAWTALK_E2EE_KEY_ID='',
                 PAWTALK_CHAT_MAX_MB='128',PAWTALK_UPDATE_PROXY='true',
                 PAWTALK_BACKUP_KEEP='5',
-                PAWTALK_SERVER_AUTO_UPDATE='false',PAWTALK_DEPLOY_AUTO_UPDATE='false',
-                PAWTALK_SERVER_CHANNEL='preview',PAWTALK_DEPLOY_CHANNEL='preview',PAWTALK_LANGUAGE='ru')
+                PAWTALK_SERVER_AUTO_UPDATE='false',PAWTALK_MANAGER_AUTO_UPDATE='false',
+                PAWTALK_LANGUAGE='ru')
 
 
 def validate(values):
+    # Discard obsolete selectors from existing installations and backup configs.
+    values = {k:v for k,v in values.items() if k not in ('PAWTALK_SERVER_CHANNEL','PAWTALK_MANAGER_CHANNEL')}
     values = {**DEFAULTS, **values}
     if set(values) != set(DEFAULTS) | {'PAWTALK_PUBLIC_IP'}:
         raise ValueError('Unknown/missing configuration field')
@@ -24,12 +30,9 @@ def validate(values):
         raise ValueError('Expected unicast IPv4 address')
     if not re.fullmatch(r'[0-9]{1,5}', values['PAWTALK_PORT']) or not 1024 <= int(values['PAWTALK_PORT']) <= 65532:
         raise ValueError('Port must be 1024..65532')
-    for key in ['PAWTALK_E2EE','PAWTALK_UPDATE_PROXY','PAWTALK_SERVER_AUTO_UPDATE','PAWTALK_DEPLOY_AUTO_UPDATE']:
+    for key in ['PAWTALK_E2EE','PAWTALK_UPDATE_PROXY','PAWTALK_SERVER_AUTO_UPDATE','PAWTALK_MANAGER_AUTO_UPDATE']:
         if values[key] not in ('true','false'):
             raise ValueError('Invalid boolean: '+key)
-    for key in ['PAWTALK_SERVER_CHANNEL','PAWTALK_DEPLOY_CHANNEL']:
-        if values[key] not in ('stable','preview'):
-            raise ValueError('Invalid update channel')
     key_id = values['PAWTALK_E2EE_KEY_ID']
     if (key_id or values['PAWTALK_E2EE'] == 'true') and not re.fullmatch(r'[a-f0-9]{64}',key_id):
         raise ValueError('E2EE requires the SHA-256 key ID, never the secret key')
@@ -61,16 +64,14 @@ def atomic(file, data, mode=0o600):
     fd, temporary = tempfile.mkstemp(prefix='.'+file.name+'-',dir=file.parent)
     try:
         with os.fdopen(fd,'wb') as out:
-            os.fchmod(out.fileno(),mode)
+            if not WINDOWS:
+                os.fchmod(out.fileno(),mode)
             out.write(data)
             out.flush()
             os.fsync(out.fileno())
+        secure(temporary)
         os.replace(temporary,file)
-        directory = os.open(file.parent,os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        sync_directory(file.parent)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
@@ -88,23 +89,39 @@ def save(file, data):
 def remove(file):
     file = Path(file)
     file.unlink(missing_ok=True)
-    directory = os.open(file.parent,os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
+    sync_directory(file.parent)
 
 
 @contextlib.contextmanager
 def lock(file):
     Path(file).parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-    with open(file,'a') as stream:
+    with open(file,'a+b') as stream:
+        secure(file)
         os.chmod(file,0o600)
         try:
-            fcntl.flock(stream,fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            if WINDOWS:
+                stream.seek(0)
+                if not stream.read(1):
+                    stream.write(b'0')
+                    stream.flush()
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(),msvcrt.LK_NBLCK,1)
+            else:
+                fcntl.flock(stream,fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
             raise ValueError('Another PawTalk operation is running') from None
+        locked = True
+        def release_lock():
+            nonlocal locked
+            if not locked:
+                return
+            if WINDOWS:
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(),msvcrt.LK_UNLCK,1)
+            else:
+                fcntl.flock(stream,fcntl.LOCK_UN)
+            locked = False
         try:
-            yield
+            yield release_lock
         finally:
-            fcntl.flock(stream,fcntl.LOCK_UN)
+            release_lock()

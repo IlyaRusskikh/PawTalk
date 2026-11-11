@@ -7,10 +7,10 @@
 | Компонент | Источник версии | Тег | Артефакты |
 |---|---|---|---|
 | Client | `package.json` + обе версии `package-lock.json` | `client-vX.Y.Z` | EXE, `update-manifest.json`, SHA256SUMS, ZIP лицензий |
-| Server | `server/VERSION` | `server-vX.Y.Z` | GHCR amd64/arm64 image и подписанный `server-manifest.json` |
-| Deploy | `deploy/VERSION` | `deploy-vX.Y.Z` | `PawTalk.Deploy.X.Y.Z.tar.gz` и подписанный `deploy-manifest.json` |
+| Server | `server/VERSION` | `server-vX.Y.Z` | GHCR Linux amd64/arm64 image, `PawTalk.Server.X.Y.Z.windows-x64.zip`, подписанный `server-manifest.json` |
+| Manager | `manager/VERSION` | `manager-vX.Y.Z` | Общий `PawTalk.Manager.X.Y.Z.tar.gz`, Windows `PawTalk.Server.Manager.Setup.X.Y.Z.exe`, подписанный `manager-manifest.json` |
 
-Client, Server и Deploy используют независимые версии. Patch — небольшие исправления,
+Client, Server и Manager используют независимые версии. Patch — небольшие исправления,
 minor — существенные функции, major — очень крупные изменения; нижние компоненты
 сбрасываются. Версию поднимают при подготовке выпуска, не на каждом рабочем изменении.
 Заметки ведутся в общем `CHANGELOG.md` с указанием компонента.
@@ -20,7 +20,7 @@ minor — существенные функции, major — очень круп
 1. Сначала отдельно проверить и выпустить **Client-only `v0.8.1` из локального
    коммита `3747a0d`**. Его package metadata — 0.8.1; общий серверный образ не выпускается.
    Не ставить этот тег на финальное дерево 0.9.0.
-2. После принятия нового Server/Deploy и полной проверки выпустить `client-v0.9.0`.
+2. После принятия нового Server/Manager и полной проверки выпустить `client-v0.9.0`.
 3. Старый updater 0.8.0 видит `v0.8.1`, а переходный клиент видит `client-v0.9.0`.
    Установка сохраняет обычное подтверждение пользователя. Исторические теги не меняются.
 
@@ -45,19 +45,22 @@ minor — существенные функции, major — очень круп
 запускает проверки и только затем публикует свои артефакты.
 
 - Client tag публикует только клиентские assets.
-- Server tag публикует только GHCR image и server metadata; Windows installer не пакуется.
-- Deploy tag публикует только полный bundle и metadata; пустого фиктивного релиза нет.
+- Server tag публикует GHCR image, Windows Server ZIP и server metadata; клиентский установщик не публикуется.
+- Manager tag публикует общий bundle, Windows EXE и metadata; пустого фиктивного релиза нет.
 - Shared/API изменения проверяют обе стороны. Подписи используют отдельные ключи.
 - Опубликованный release/image version повторно не используется. Ошибка публикации
   после загрузки образа требует отдельного разбора; не перезаписывать image/tag.
 - Канал каждой линии задаётся независимо repository variable `PAWTALK_CLIENT_CHANNEL`,
-  `PAWTALK_SERVER_CHANNEL`, `PAWTALK_DEPLOY_CHANNEL`: `stable` или `preview` (default).
+  `PAWTALK_SERVER_CHANNEL`, `PAWTALK_MANAGER_CHANNEL`: `stable` или `preview` (default).
   SemVer prerelease всегда принудительно `preview`. Workflow передаёт один и тот же
   выбор в signing и GitHub Release flags; stable Client получает отметку Latest,
-  Server/Deploy её не перехватывают. Updater всё равно не использует общий Latest.
+  Server/Manager её не перехватывают. Updater всё равно не использует общий Latest.
 
 Updater каждого компонента просматривает список Releases с пагинацией и фильтрует
-своё семейство, SemVer, draft/channel, подпись и ассеты. Не использовать общий
+своё семейство, SemVer, draft, подпись и ассеты. Client дополнительно учитывает
+выбранный канал; Server/Manager выбирают последнюю версию без настройки канала,
+включая prerelease. Поле channel в подписанном schema 1 манифесте сохраняется
+для проверки соответствия отметке GitHub Release. Не использовать общий
 `/releases/latest`: он не представляет три независимые линии.
 
 ## Ключи и доверие
@@ -66,36 +69,39 @@ Client сохраняет `electron/update-keys.json` и существующи�
 в GitHub secret `PAWTALK_UPDATE_PRIVATE_KEY` ([Client signing](UPDATE-SIGNING.md)).
 Не менять его при bridge-переходе. Schema 1 дополнена `component: client`, понятна bridge.
 
-Server/Deploy публичные ключи нужно заранее внести в `deploy/trust.json` под
-соответствующие разделы `server`/`deploy`; сейчас оба пусты и production-проверка
+Server/Manager публичные ключи нужно заранее внести в `manager/trust.json` под
+соответствующие разделы `server`/`manager`; сейчас оба пусты и production-проверка
 закрыта. Private keys создаются и хранятся **вне репозитория**, независимо, и попадают
-только в secrets `PAWTALK_SERVER_PRIVATE_KEY` и `PAWTALK_DEPLOY_PRIVATE_KEY`.
+только в secrets `PAWTALK_SERVER_PRIVATE_KEY` и `PAWTALK_MANAGER_PRIVATE_KEY`.
 Не сохранять приватные ключи, токены или реальные приглашения в Git/CI artifacts.
 Проверка Server key выполняется до публикации GHCR image.
 
 Envelope: `keyId`, Base64 `payload`, Ed25519 `signature` над точными байтами payload.
-Server/Deploy schema 1 содержит `component`, `repository`, `version`, `channel`,
+Server/Manager schema 1 содержит `component`, `repository`, `version`, `channel`,
 `publishedAt`/`expiresAt` (Unix seconds), `apiProtocol:1`, `dataSchema:1`.
-Server добавляет фиксированное имя GHCR image и immutable digest. Deploy добавляет
-точное имя bundle, SHA-256, размер, `launcherProtocol:1`, `configSchema:1`.
+Server добавляет фиксированное имя GHCR image и immutable digest, а также
+`windows: {name, sha256, size}` для точного Windows ZIP. Manager добавляет
+точное имя bundle, SHA-256, размер, `launcherProtocol:1`, `configSchema:1` и
+`windowsInstaller: {name, sha256, size}` для точного EXE.
 Манифест другого типа/ключа, просроченный или с неподдерживаемой схемой отклоняется.
 Один checksum из той же загрузки не является trust root.
 
 Trust root bootstrap — проверенный checkout с известными публичными ключами,
-не ключ из непроверенного скачанного bundle. Добавлять новые Server/Deploy ключи
-можно через bundle, подписанный текущим Deploy ключом; существующие корни должны
+не ключ из непроверенного скачанного bundle. Добавлять новые Server/Manager ключи
+можно через bundle, подписанный текущим Manager ключом; существующие корни должны
 сохраняться без изменений. Удаление/замена корней и обновление стабильного launcher
 сейчас требуют явного административного обслуживания. Сначала доставить новый
 публичный ключ, затем переключать подпись; не удалять единственный доверенный ключ
 из уже установленных клиентов/агентов.
 
 Хост, пропустивший доставку нового публичного ключа, после переключения подписи
-останется заблокированным. Для него нужен явный переходный Deploy bundle,
-подписанный ещё доверенным старым ключом, через `deploy now --manifest ... --bundle ...`;
+останется заблокированным. Для него нужен явный переходный Manager bundle,
+подписанный ещё доверенным старым ключом, через `manager now --manifest ... --bundle ...`;
 затем обычное обновление. Автоматического принятия неизвестного ключа нет.
 
 `scripts/release-metadata.mjs` собирает/подписывает свои артефакты без публикации.
-Для Server нужен точный `PAWTALK_IMAGE_DIGEST`; для Deploy собирается allowlist
+Для Server нужен точный `PAWTALK_IMAGE_DIGEST` и Windows ZIP из verification job;
+для Manager нужен Windows EXE из той же проверки и собирается allowlist
 полного кода, Compose, units, trust и notices. `--check-key` только проверяет ключ.
 
 ## Совместимость и встроенный сервер
@@ -121,11 +127,11 @@ Client pin. Для нового pin нужны совместимые контр
    тот EXE, который будет загружен. Для сайта — `node scripts/check-website.mjs`.
 4. Зафиксировать локально недоступные проверки: native Linux/arm64, внешний VPS/UDP,
    настоящие микрофоны/две сети. Контейнерные synthetic tests не доказывают их успех.
-5. Проверить Client-only/Server-only/Deploy-only маршруты, подмену metadata/assets,
-   каналы, backup/restore, нездоровый rollout, SIGKILL recovery, Deploy fallback.
+5. Проверить Client-only/Server-only/Manager-only маршруты, подмену metadata/assets,
+   каналы, backup/restore, нездоровый rollout, SIGKILL recovery, Manager fallback.
 6. Получить отдельное разрешение на публикацию. В текущей задаче его нет.
 
-Порядок первого нового выпуска: проверенный bridge `v0.8.1` → Server → Deploy
+Порядок первого нового выпуска: проверенный bridge `v0.8.1` → Server → Manager
 (с существующим подписанным Server) → Client. Все production ключи/артефакты должны
 быть готовы до обещания пользователям автономной установки. Впоследствии линии
 выпускаются независимо. После push различать branch CI и tag CI; передать владельцу
@@ -135,21 +141,21 @@ Client assets: `PawTalk.Setup.X.Y.Z.exe`, `update-manifest.json`, `SHA256SUMS.tx
 один `PawTalk.Licenses.X.Y.Z.zip` с `LICENSE`, `THIRD_PARTY_NOTICES.md`, `licenses/`.
 Не прикладывать отдельные лицензии или дубликат source archive; GitHub оставляет
 автоматические Source code ZIP/TAR. Все источники и сторонние notices сохраняются.
-README/site должны ссылаться на фактическую **клиентскую** загрузку, Server/Deploy
+README/site должны ссылаться на фактическую **клиентскую** загрузку, Server/Manager
 указываются отдельно. До публикации сохранять действующие ссылки на 0.8.0 и явно
 обозначать 0.9.0 как разработку. Не публиковать сайт обычным push/tag.
 
 ## English
 
-Client, Server and Deploy have independent version sources and `client-v*`,
-`server-v*`, `deploy-v*` tags. The final legacy bridge is Client-only `v0.8.1`
+Client, Server and Manager have independent version sources and `client-v*`,
+`server-v*`, `manager-v*` tags. The final legacy bridge is Client-only `v0.8.1`
 from commit `3747a0d`, published before `client-v0.9.0` after separate review.
 Never replace historical tags or assets. The component release workflow validates
 its own source, runs verification and publishes only its component's assets.
 Stable/preview flags must match signed metadata. Keep current public 0.8.0 links
 until new artifacts actually exist. No publication is authorized in this task.
 
-Client retains its existing key; Server and Deploy require separate owner-provisioned
+Client retains its existing key; Server and Manager require separate owner-provisioned
 Ed25519 roots and CI secrets. Empty roots fail closed. Bootstrap trusts a reviewed
 checkout; updates verify type, repository, version, channel, signature and digest.
 Bundled Windows self-host uses a pinned source commit and records binary hashes.

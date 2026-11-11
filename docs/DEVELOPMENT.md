@@ -72,7 +72,7 @@ go vet ./...
 | `npm run test:docker` | Изолированные Go API и LiveKit через `docker run`, Electron-интеграция |
 | `npm run test:docker -- --containers-only` | Реальный запуск двух Docker-контейнеров, HTTP LiveKit, авторизация Go API, подпись и права JWT; без Electron |
 | `npm run dev:server -- --smoke` | Временный запуск точно той же `docker run`-конфигурации dev-сервера из локального образа `pawtalk-server:local`; TLS fingerprint, HTTPS, ограничения контейнера, очистка ресурсов |
-| `python3 tests/compose_integration.py` (Linux) | Настоящие Compose, локальный registry, install/reinstall, SQLite backup, Server rollout, неисправный образ, SIGKILL, Deploy update без рестарта и fresh restore |
+| `python3 tests/compose_integration.py` (Linux) | Настоящие Compose, локальный registry, install/reinstall, SQLite backup, Server rollout, неисправный образ, SIGKILL, Manager update без рестарта и fresh restore |
 | `npm run check:public` | Эвристическая проверка случайной публикации секретов |
 | `node scripts/check-website.mjs` | Сайт, локальные ссылки, метаданные |
 | `python3 -m unittest discover -s tests -p '*_test.py'` (Linux) | Подписи, семейства релизов, конфигурация, backup/rollback, аварии, архивы и launcher fallback |
@@ -85,10 +85,10 @@ CI на Linux AMD64 и ARM64 проверяет Go/race/vet, Docker lifecycle, C
 
 ## Сервер на VPS / VPS
 
-Для VPS используйте проверенный установщик и Compose-шаблон `deploy/compose.server.yaml`. Локальный `docker run` не заменяет production lifecycle:
+Для VPS используйте проверенный установщик и Compose-шаблон `manager/compose.server.yaml`. Локальный `docker run` не заменяет production lifecycle:
 
 ```sh
-sudo python3 deploy/pawtalkctl install
+sudo python3 manager/pawtalkctl install
 ```
 
 Подробные инструкции с правилами firewall, backup и независимыми обновлениями: [SERVER.md](SERVER.md). Миграция старых установок не предусмотрена.

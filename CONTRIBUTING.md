@@ -14,7 +14,7 @@ also run `npm run smoke` and the relevant integration or hardware checks in
 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md). Describe checks you could not run.
 
 Never include room passwords, invitations, E2EE keys, TLS private keys, personal
-recordings, local diagnostics or `deploy/generated/`. Replace real addresses
+recordings, local diagnostics or `manager/generated/`. Replace real addresses
 with documentation examples. Inspect `git diff --cached` before committing.
 For a suspected security issue, use GitHub's private vulnerability reporting
 if enabled; never post credentials in a public issue.
@@ -34,7 +34,7 @@ Release steps are in [docs/RELEASING.md](docs/RELEASING.md).
 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md). Укажите, что не удалось проверить.
 
 Не добавляйте пароли комнат, приглашения, ключи E2EE, приватные TLS-ключи,
-личные записи, локальные отчёты и `deploy/generated/`. Реальные адреса заменяйте
+личные записи, локальные отчёты и `manager/generated/`. Реальные адреса заменяйте
 примерами. Перед коммитом просматривайте `git diff --cached`. Уязвимости сообщайте
 через private vulnerability reporting GitHub, если он включён; не публикуйте
 секреты в открытом issue.

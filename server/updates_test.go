@@ -39,7 +39,7 @@ func TestUpdateResourcesAndRedirectsAreRestricted(t *testing.T) {
 	for _, resource := range []string{
 		"/api/updates/releases?per_page=100&page=11", "/api/updates/releases?per_page=100&page=1&url=https://evil.example",
 		"/api/updates/assets/v0.6.0/other.exe", "/api/updates/assets/v0.6.0/PawTalk.Setup.0.5.0.exe",
-		"/api/updates/assets/server-v0.9.0/update-manifest.json", "/api/updates/assets/deploy-v0.9.0/PawTalk.Setup.0.9.0.exe",
+		"/api/updates/assets/server-v0.9.0/update-manifest.json", "/api/updates/assets/manager-v0.9.0/PawTalk.Setup.0.9.0.exe",
 		"/api/updates/assets/v0.6.0/update-manifest.json?url=https://evil.example", "/api/updates/assets/v0.6.0/../secret",
 	} {
 		if _, _, ok := updateTarget(httptest.NewRequest("GET", resource, nil)); ok {

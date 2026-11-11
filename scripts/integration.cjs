@@ -5,6 +5,10 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const serverAddress = process.env.PAWTALK_TEST_SERVER || 'http://127.0.0.1:8080';
+const uiAddress = process.env.PAWTALK_UI_TEST_URL || 'http://127.0.0.1:5173';
+const mediaKey = process.env.PAWTALK_TEST_MEDIA_KEY;
+if(mediaKey && !/^[a-f0-9]{64}$/.test(mediaKey))throw Error('Invalid synthetic media key');
+const encryption = mediaKey ? {e2ee:true,e2eeKeyId:require('node:crypto').createHash('sha256').update(Buffer.from(mediaKey,'hex')).digest('hex')} : {};
 // Container integration uses the same certificate pin as a normal invitation.
 const testInvitation = process.env.PAWTALK_TEST_INVITATION && require('../electron/address.cjs').invitation(process.env.PAWTALK_TEST_INVITATION);
 function pinTestServer(partition) {
@@ -38,10 +42,10 @@ app.whenReady().then(async () => {
    partition.setPermissionRequestHandler((_wc,_permission,cb)=>cb(true)); partition.setPermissionCheckHandler(()=>true);
    const win=new BrowserWindow({show:false,webPreferences:{offscreen:true,session:partition,backgroundThrottling:false,sandbox:true}});windows.push(win);
    win.webContents.on('console-message',event=>{ if(event.level === 'error') console.error('renderer:',event.message); });
-   await win.loadURL('http://127.0.0.1:5173/tests/voice.html?noise='+(process.env.PAWTALK_TEST_NOISE_MODE === 'rnnoise' ? 'rnnoise' : 'off'));
+   await win.loadURL(uiAddress+'/tests/voice.html?noise='+(process.env.PAWTALK_TEST_NOISE_MODE === 'rnnoise' ? 'rnnoise' : 'off'));
    await until(()=>win.webContents.executeJavaScript('window.ready === true'),'renderer ready');
-   const response=await net.fetch(`${serverAddress}/api/connect`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:'same-name',password:process.env.PAWTALK_TEST_PASSWORD})});
-   assert.equal(response.status,200);const data=await response.json();credentials.push(data);
+   const response=await net.fetch(`${serverAddress}/api/connect`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:'same-name',password:process.env.PAWTALK_TEST_PASSWORD,...encryption})});
+   assert.equal(response.status,200);const data=await response.json();if(mediaKey)data.e2eeKey=mediaKey;credentials.push(data);
    await win.webContents.executeJavaScript(`window.start(${JSON.stringify(data)})`,true);
   }
   const [a,b]=windows.map(w=>w.webContents);

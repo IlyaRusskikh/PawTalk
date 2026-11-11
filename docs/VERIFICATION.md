@@ -6,7 +6,7 @@
 native/Electron/UI, NSIS и packaged smoke прошли локально. Compose проверен в
 Debian 12 / Ubuntu 24.04 userspace с настоящим Docker, локальным registry и
 временными ключами: backup/restore, неисправный rollout, настоящий SIGKILL,
-Deploy-only без рестарта и сохранение E2EE policy/opaque history.
+Manager-only без рестарта и сохранение E2EE policy/opaque history.
 Карта файлов, методы проверки и ограничения: [IMPLEMENTATION-0.9.0](IMPLEMENTATION-0.9.0.md).
 GitHub Actions, native arm64, настоящий VPS/внешние сети и физические устройства
 не объявляются проверенными. Push, release tags и публикации не выполнялись.

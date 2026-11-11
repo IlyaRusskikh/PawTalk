@@ -8,6 +8,7 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from .platforms import WINDOWS, host
 
 REPO = "IlyaRusskikh/PawTalk"
 IMAGE = "ghcr.io/ilyarusskikh/pawtalk-server"
@@ -73,8 +74,8 @@ def fetch(url, limit=1024 * 1024, api=False):
     return data
 
 
-def select(releases, component, channel):
-    if component not in ("server", "deploy") or channel not in ("stable", "preview"):
+def select(releases, component):
+    if component not in ("server", "manager"):
         raise ValueError("Invalid release selector")
     result = []
     for release in releases:
@@ -89,14 +90,12 @@ def select(releases, component, channel):
             order = semver(version)
         except ValueError:
             continue
-        if channel == "stable" and (release.get("prerelease") or order[3] == 0):
-            continue
         result.append((order, release, version))
     return sorted(result, key=lambda entry: entry[0], reverse=True)
 
 
 def verify(raw, component, keys, now=None):
-    if len(raw) > 16384 or component not in ("server", "deploy"):
+    if len(raw) > 16384 or component not in ("server", "manager"):
         raise ValueError("Invalid manifest size/type")
     envelope = loads(raw)
     if not isinstance(envelope,dict) or not all(isinstance(envelope.get(k),str) for k in ['keyId','payload','signature']):
@@ -110,18 +109,21 @@ def verify(raw, component, keys, now=None):
     signature = base64.b64decode(envelope["signature"], validate=True)
     if len(signature) != 64:
         raise ValueError("Invalid Ed25519 signature")
-    with tempfile.TemporaryDirectory(prefix="pawtalk-verify-") as directory:
-        p = Path(directory)
-        (p / "public.pem").write_text(key, encoding="utf-8")
-        (p / "payload").write_bytes(payload)
-        (p / "signature").write_bytes(signature)
-        public = subprocess.run(['openssl','pkey','-pubin','-in',str(p/'public.pem'),'-pubout','-outform','DER'],capture_output=True,timeout=10)
-        if public.returncode or len(public.stdout) != 44 or not public.stdout.startswith(bytes.fromhex('302a300506032b6570032100')):
-            raise ValueError('Expected an Ed25519 trust root')
-        checked = subprocess.run(["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(p / "public.pem"), "-rawin",
-                                  "-in", str(p / "payload"), "-sigfile", str(p / "signature")], capture_output=True, timeout=10)
-        if checked.returncode:
-            raise ValueError("Manifest signature failed")
+    if WINDOWS:
+        checked = host('verify',input=json.dumps(dict(publicKey=key,payload=envelope['payload'],signature=envelope['signature'])).encode())
+    else:
+        with tempfile.TemporaryDirectory(prefix="pawtalk-verify-") as directory:
+            p = Path(directory)
+            (p / "public.pem").write_text(key, encoding="utf-8")
+            (p / "payload").write_bytes(payload)
+            (p / "signature").write_bytes(signature)
+            public = subprocess.run(['openssl','pkey','-pubin','-in',str(p/'public.pem'),'-pubout','-outform','DER'],capture_output=True,timeout=10)
+            if public.returncode or len(public.stdout) != 44 or not public.stdout.startswith(bytes.fromhex('302a300506032b6570032100')):
+                raise ValueError('Expected an Ed25519 trust root')
+            checked = subprocess.run(["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(p / "public.pem"), "-rawin",
+                                      "-in", str(p / "payload"), "-sigfile", str(p / "signature")], capture_output=True, timeout=10)
+    if checked.returncode:
+        raise ValueError("Manifest signature failed")
     m = loads(payload)
     if not isinstance(m,dict):
         raise ValueError('Invalid manifest object')
@@ -138,16 +140,24 @@ def verify(raw, component, keys, now=None):
     if component == "server":
         if m.get("image") != IMAGE or not isinstance(m.get('digest'),str) or not DIGEST.fullmatch(m['digest']):
             raise ValueError("Invalid server image/digest")
+        if 'windows' in m:
+            a = m['windows']
+            if not isinstance(a,dict) or a.get('name') != 'PawTalk.Server.'+m['version']+'.windows-x64.zip' or not re.fullmatch(r'[a-f0-9]{64}',str(a.get('sha256',''))) or type(a.get('size')) is not int or not 0<a['size']<=256*1024*1024:
+                raise ValueError('Invalid Windows Server artifact')
     else:
-        if m.get("bundle") != "PawTalk.Deploy." + m["version"] + ".tar.gz" or not isinstance(m.get('sha256'),str) or not re.fullmatch(r"[a-f0-9]{64}", m['sha256']) or type(m.get("size")) is not int or not 0 < m["size"] <= 16 * 1024 * 1024:
-            raise ValueError("Invalid deploy bundle")
+        if m.get("bundle") != "PawTalk.Manager." + m["version"] + ".tar.gz" or not isinstance(m.get('sha256'),str) or not re.fullmatch(r"[a-f0-9]{64}", m['sha256']) or type(m.get("size")) is not int or not 0 < m["size"] <= 16 * 1024 * 1024:
+            raise ValueError("Invalid manager bundle")
         if any(type(m.get(k)) is not int or m[k] != 1 for k in ['launcherProtocol','configSchema']):
             raise ValueError("Unsupported launcher/config contract")
+        if 'windowsInstaller' in m:
+            a = m['windowsInstaller']
+            if not isinstance(a,dict) or a.get('name') != 'PawTalk.Server.Manager.Setup.'+m['version']+'.exe' or not re.fullmatch(r'[a-f0-9]{64}',str(a.get('sha256',''))) or type(a.get('size')) is not int or not 0<a['size']<=256*1024*1024:
+                raise ValueError('Invalid Windows Manager installer')
     m['_signed'] = raw.decode('utf-8') if isinstance(raw,bytes) else raw
     return m
 
 
-def discover(component, channel, keys, get=fetch):
+def discover(component, keys, get=fetch):
     releases = []
     for page in range(1, 101):
         batch = loads(get(f"https://api.github.com/repos/{REPO}/releases?per_page=100&page={page}", 4 * 1024 * 1024, api=True))
@@ -158,7 +168,7 @@ def discover(component, channel, keys, get=fetch):
             break
     else:
         raise ValueError("Release pagination limit exceeded; cannot determine latest")
-    candidates = select(releases, component, channel)
+    candidates = select(releases, component)
     if not candidates:
         return None
     _, release, version = candidates[0]
@@ -179,7 +189,7 @@ def discover(component, channel, keys, get=fetch):
         raise ValueError("Missing/ambiguous signed manifest asset")
     raw = get(assets[0]['browser_download_url'], 16384)
     m = verify(raw, component, keys)
-    if m["version"] != version or (m["channel"] == "preview") != bool(release.get("prerelease")) or (channel == "stable" and m["channel"] != "stable"):
+    if m["version"] != version or (m["channel"] == "preview") != bool(release.get("prerelease")):
         raise ValueError("Release/manifest binding mismatch")
     return m
 
@@ -200,4 +210,6 @@ def verify_snapshot(meta,keys):
     m = verify_historical(state['serverManifest'],'server',keys)
     if state['version'] != m['version'] or state['image'] != m['image']+'@'+m['digest'] or state['dataSchema'] != m['dataSchema']:
         raise ValueError('Backup image/version does not match the signed Server receipt')
+    if state.get('windows') != m.get('windows'):
+        raise ValueError('Backup Windows artifact differs from the signed Server receipt')
     return m

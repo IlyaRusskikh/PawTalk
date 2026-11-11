@@ -13,7 +13,7 @@ if '--self-test' in sys.argv:
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument('--root',default='/')
 args,remaining = parser.parse_known_args()
-agent = Path(args.root).resolve()/'opt/pawtalk-agent'
+agent = Path(args.root).resolve()/'opt/pawtalk-manager'
 
 
 def selected(pointer):
@@ -24,9 +24,9 @@ def selected(pointer):
     directory = link.resolve(strict=True)
     if directory.parent != (agent/'versions').resolve():
         raise ValueError('Controller escapes version directory')
-    script = directory/'deploy/pawtalkctl'
+    script = directory/'manager/pawtalkctl'
     result = subprocess.run([sys.executable,'-I',str(script),'--self-test'],capture_output=True,timeout=15)
-    if result.returncode or result.stdout.strip() != b'PawTalk deploy protocol 1 OK':
+    if result.returncode or result.stdout.strip() != b'PawTalk manager protocol 1 OK':
         raise ValueError('Controller self-test failed')
     return script,target
 
@@ -42,6 +42,6 @@ except Exception:
         os.replace(temporary,agent/'current')
         print('Previous controller restored; current operation cancelled',file=sys.stderr)
     except Exception:
-        print('Controller unavailable; voice container remains independent. Repair Deploy from a verified bundle.',file=sys.stderr)
+        print('Controller unavailable; voice container remains independent. Repair Manager from a verified bundle.',file=sys.stderr)
     raise SystemExit(1)
 os.execv(sys.executable,[sys.executable,'-I',str(script),'--root',str(Path(args.root).resolve()),*remaining])

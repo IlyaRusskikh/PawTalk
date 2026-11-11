@@ -21,9 +21,9 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'deploy'))
-from pawtalk_agent import bundles, cli, controller, release, runtime, preflight
-from pawtalk_agent.config import save, write_config
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'manager'))
+from pawtalk_manager import bundles, cli, controller, release, runtime, preflight
+from pawtalk_manager.config import save, write_config
 from release_contract_test import ReleaseTests
 
 
@@ -92,6 +92,19 @@ def main():
                 free.bind(('127.0.0.1',0))
                 port = free.getsockname()[1]
             docker('run','-d','--name',registry,'--label','io.pawtalk.test='+prefix,'--network','host','-e',f'REGISTRY_HTTP_ADDR=127.0.0.1:{port}','registry:3')
+            # Docker returning a container ID does not mean its registry listener is ready.
+            for attempt in range(100):
+                try:
+                    connection = http.client.HTTPConnection('127.0.0.1',port,timeout=1)
+                    connection.request('GET','/v2/')
+                    ready = connection.getresponse().status == 200
+                    connection.close()
+                    if ready: break
+                except OSError:
+                    pass
+                time.sleep(0.1)
+            else:
+                raise RuntimeError('Disposable test registry did not become ready')
             repository = f'127.0.0.1:{port}/pawtalk-server'
             origin(repository)
             digests = []
@@ -121,19 +134,19 @@ def main():
             print('PASS unowned/unlabelled Docker volume is rejected without adoption')
 
             def bundle(version):
-                file = root/f'deploy-{version}.tar.gz'
+                file = root/f'manager-{version}.tar.gz'
                 with tarfile.open(file,'w:gz') as archive:
                     for name in sorted(bundles.FILES):
-                        if name == 'deploy/trust.json': data = json.dumps(fixture.keys).encode()
-                        elif name == 'deploy/VERSION': data = (version+'\n').encode()
+                        if name == 'manager/trust.json': data = json.dumps(fixture.keys).encode()
+                        elif name == 'manager/VERSION': data = (version+'\n').encode()
                         else: data = (source/name).read_bytes()
-                        if name == 'deploy/pawtalk_agent/release.py':
+                        if name == 'manager/pawtalk_manager/release.py':
                             data = data.replace(b'IMAGE = "ghcr.io/ilyarusskikh/pawtalk-server"',('IMAGE = '+repr(repository)).encode())
                         item = tarfile.TarInfo(name)
                         item.size = len(data)
                         archive.addfile(item,io.BytesIO(data))
-                signed = fixture.signed('deploy',version=version,bundle=f'PawTalk.Deploy.{version}.tar.gz',size=file.stat().st_size,sha256=hashlib.sha256(file.read_bytes()).hexdigest())
-                manifest = root/f'deploy-{version}.json'
+                signed = fixture.signed('manager',version=version,bundle=f'PawTalk.Manager.{version}.tar.gz',size=file.stat().st_size,sha256=hashlib.sha256(file.read_bytes()).hexdigest())
+                manifest = root/f'manager-{version}.json'
                 manifest.write_bytes(signed)
                 return file,manifest
 
@@ -149,7 +162,7 @@ def main():
             write_config(config_file,{'PAWTALK_PUBLIC_IP':'127.0.0.1','PAWTALK_PORT':str(room_port),
                          'PAWTALK_E2EE':'true' if encrypted else 'false','PAWTALK_E2EE_KEY_ID':key_id if encrypted else ''})
             command = ['--root',str(c.root),'--lang','en','--no-systemd','install','--config',str(config_file),
-                       '--trust',str(trust),'--server-manifest',str(server_manifest),'--deploy-manifest',str(initial_manifest),'--bundle',str(initial_bundle)]
+                       '--trust',str(trust),'--server-manifest',str(server_manifest),'--manager-manifest',str(initial_manifest),'--bundle',str(initial_bundle)]
             install = subprocess.run([sys.executable,__file__,'--install-worker',repository,*command],capture_output=True,text=True,timeout=180)
             assert install.returncode == 0,install.stderr
             lines = install.stdout.splitlines()
@@ -222,12 +235,12 @@ def main():
             preserved()
             print('PASS actual controller SIGKILL and durable crash-journal recovery')
             next_bundle,next_manifest = bundle('0.1.1')
-            manifest = release.verify(next_manifest.read_bytes(),'deploy',fixture.keys)
+            manifest = release.verify(next_manifest.read_bytes(),'manager',fixture.keys)
             old_id = c.runtime.container(c.state(),c.config())['Id']
             assert bundles.activate(c,manifest,fixture.keys,next_bundle,no_systemd=True)
             assert c.runtime.container(c.state(),c.config())['Id'] == old_id
-            assert c.state()['version'] == '0.9.1' and c.state()['deployVersion'] == '0.1.1'
-            print('PASS Deploy-only self-update has no Server restart or digest change')
+            assert c.state()['version'] == '0.9.1' and c.state()['managerVersion'] == '0.1.1'
+            print('PASS Manager-only self-update has no Server restart or digest change')
             c.restore(checkpoint)
             preserved()
             print('PASS explicit backup restore with password/history/TLS verification')

@@ -126,7 +126,7 @@ function registerIPC() {
   });
   ipcMain.handle('server-key-copy', (event, value) => {
     authorized(event);
-    if (typeof value !== 'string' || !/^(?:[a-f0-9]{64}|PAWTALK_E2EE=true\nPAWTALK_E2EE_KEY_ID=[a-f0-9]{64})$/.test(value)) throw new Error('Invalid encryption key field');
+    if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) throw new Error('Invalid encryption key field');
     clipboard.writeText(value);
   });
   ipcMain.handle('language-get', event => { authorized(event); return language; });

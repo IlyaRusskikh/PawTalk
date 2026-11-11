@@ -13,19 +13,17 @@ from . import bundles, preflight, release
 from .config import DEFAULTS, atomic, lock, read_config, write_config, save, validate
 from .controller import Controller
 from .runtime import run
+from .platforms import WINDOWS, admin, default_root, host, protect
 
 MESSAGES = {
  'confirm':('Продолжить? [y/N]: ','Continue? [y/N]: '),
  'ip':('Подтвердите публичный IPv4','Confirm public IPv4'),
  'port':('Основной порт','Base port'),
- 'e2ee':('Требовать E2EE? (true/false)','Require E2EE? (true/false)'),
+ 'e2ee':('Включить сквозное шифрование? (да/нет)','Enable end-to-end encryption? (yes/no)'),
  'key':('SHA-256 key ID из клиента (НЕ секретный ключ)','SHA-256 key ID from Client (NOT the secret key)'),
  'chat':('Лимит истории, МиБ (0 = без ограничения)','History limit, MiB (0 = unlimited)'),
- 'server_auto':('Автообновление Server? (true/false)','Server auto-updates? (true/false)'),
- 'deploy_auto':('Автообновление Deploy? (true/false)','Deploy auto-updates? (true/false)'),
- 'server_channel':('Канал Server (stable/preview)','Server channel (stable/preview)'),
- 'deploy_channel':('Канал Deploy (stable/preview)','Deploy channel (stable/preview)'),
- 'preview':('preview содержит предварительные выпуски. Обновление Server прерывает звонок.','preview includes prereleases. Server updates interrupt calls.'),
+ 'auto':('Включить автоматическое обновление сервера? (да/нет)','Enable automatic server updates? (yes/no)'),
+ 'updates':('Обновление сервера прерывает звонок. Автообновление включает сервер и средство его обслуживания.','Server updates interrupt calls. Automatic updates include the server and its maintenance tool.'),
  'docker':('Установить Docker из официального apt-репозитория?','Install Docker from its official apt repository?'),
  'installed':('Комната установлена. Сохраните приглашение и первый пароль.','Room installed. Save the invitation and initial password.'),
  'existing':('Существующая комната сохранена; данные не сброшены.','Existing room preserved; data retained.'),
@@ -37,8 +35,7 @@ MESSAGES = {
  'uninstall':('Остановить комнату и таймеры? Данные и настройки сохранятся.','Stop room and timers? Data and settings will be kept.'),
  'healthy':('Работает','Healthy'),'unhealthy':('Ошибка проверки здоровья','Unhealthy'),
  'starting':('Запускается','Starting'),'unknown':('Состояние неизвестно','Unknown state'),
- 'invalid_bool':('Введите true или false.','Enter true or false.'),
- 'invalid_channel':('Введите stable или preview.','Enter stable or preview.'),
+ 'invalid_bool':('Введите да или нет (также принимаются yes/no и true/false).','Enter yes or no (true/false also accepted).'),
  'invalid_ip':('Введите корректный IPv4-адрес.','Enter a valid IPv4 address.'),
  'invalid_port':('Введите порт от 1024 до 65532.','Enter a port from 1024 to 65532.'),
  'invalid_key':('Введите SHA-256 key ID: 64 шестнадцатеричных символа.','Enter the SHA-256 key ID: 64 hexadecimal characters.'),
@@ -60,31 +57,28 @@ def confirm(message,yes,lang):
         raise ValueError('Cancelled')
 
 
-def wizard(lang):
-    values = dict(DEFAULTS,PAWTALK_LANGUAGE=lang)
-    candidates = preflight.public_candidates()
+def wizard(lang,initial=None):
+    values = dict(DEFAULTS,**(initial or {}))
+    values['PAWTALK_LANGUAGE'] = lang
+    candidates = [] if initial else preflight.public_candidates()
     fields = [('ip','PAWTALK_PUBLIC_IP'),('port','PAWTALK_PORT'),('e2ee','PAWTALK_E2EE'),
-              ('key','PAWTALK_E2EE_KEY_ID'),('chat','PAWTALK_CHAT_MAX_MB'),('server_auto','PAWTALK_SERVER_AUTO_UPDATE'),
-              ('deploy_auto','PAWTALK_DEPLOY_AUTO_UPDATE'),('server_channel','PAWTALK_SERVER_CHANNEL'),('deploy_channel','PAWTALK_DEPLOY_CHANNEL')]
-    values['PAWTALK_PUBLIC_IP'] = candidates[0] if candidates else ''
-    print(text('preview',lang))
+              ('key','PAWTALK_E2EE_KEY_ID'),('chat','PAWTALK_CHAT_MAX_MB'),('auto','PAWTALK_SERVER_AUTO_UPDATE')]
+    values['PAWTALK_PUBLIC_IP'] = values.get('PAWTALK_PUBLIC_IP',candidates[0] if candidates else '')
+    print(text('updates',lang))
     for key,field in fields:
         if key == 'key' and values['PAWTALK_E2EE'] != 'true':
             continue
-        default = values[field]
+        default = 'true' if not initial and key in ('e2ee','auto') else values[field]
+        boolean = key in ('e2ee','auto')
+        shown_default = (('да' if default == 'true' else 'нет') if lang == 'ru' else ('yes' if default == 'true' else 'no')) if boolean else default
         while True:
-            response = input(text(key,lang)+(f' [{default}]' if default else '')+': ')
+            response = input(text(key,lang)+(f' [{shown_default}]' if shown_default else '')+': ')
             # Minimal Python TTYs may return bracketed-paste delimiters literally.
             response = response.replace('\x1b[200~','').replace('\x1b[201~','').strip() or default
-            if key in ('e2ee','server_auto','deploy_auto'):
-                response = response.casefold()
-                if response not in ('true','false'):
+            if boolean:
+                response = {'да':'true','yes':'true','true':'true','нет':'false','no':'false','false':'false'}.get(response.casefold())
+                if response is None:
                     print(text('invalid_bool',lang))
-                    continue
-            elif key in ('server_channel','deploy_channel'):
-                response = response.casefold()
-                if response not in ('stable','preview'):
-                    print(text('invalid_channel',lang))
                     continue
             else:
                 if key == 'key':
@@ -95,14 +89,14 @@ def wizard(lang):
                     print(text('invalid_'+key,lang))
                     continue
             values[field] = response
+            if key == 'auto':
+                values['PAWTALK_MANAGER_AUTO_UPDATE'] = response
             break
     return validate(values)
 
 
-def manifest(file,component,channel,keys):
-    found = release.verify(Path(file).read_bytes(),component,keys) if file else release.discover(component,channel,keys)
-    if found and channel == 'stable' and found['channel'] != 'stable':
-        raise ValueError('Preview manifest rejected by stable channel')
+def manifest(file,component,keys):
+    found = release.verify(Path(file).read_bytes(),component,keys) if file else release.discover(component,keys)
     return found
 
 
@@ -113,7 +107,7 @@ def doctor(controller,lang):
         result['action'] = 'pawtalkctl install / pawtalkctl backup restore'
         return result
     state,config = controller.state(),controller.config()
-    result.update(serverVersion=state['version'],deployVersion=state['deployVersion'],image=state['image'])
+    result.update(serverVersion=state['version'],managerVersion=state['managerVersion'],image=state['image'])
     for name in ['last-operation.json','last-error.json','health.json']:
         if (controller.directory/name).exists():
             result[name] = json.loads((controller.directory/name).read_text())
@@ -127,7 +121,9 @@ def doctor(controller,lang):
     except (ValueError,RuntimeError):
         result['health'] = text('unknown',lang)
         result['action'] = 'docker info; docker compose version; systemctl status docker; pawtalkctl install'
-    for name in ['pawtalk-update.timer','pawtalk-health.timer']:
+    if WINDOWS:
+        result['managerRunning'] = host('status-manager',controller.root).returncode == 0
+    for name in ([] if WINDOWS else ['pawtalk-update.timer','pawtalk-health.timer']):
         if shutil.which('systemctl'):
             result[name] = subprocess.run(['systemctl','is-active','--quiet',name],capture_output=True).returncode == 0
     return result
@@ -135,25 +131,25 @@ def doctor(controller,lang):
 
 def arguments(argv):
     p = argparse.ArgumentParser(description='PawTalk VPS CLI / Управление VPS')
-    p.add_argument('--root',default='/')
+    p.add_argument('--root',default=default_root())
     p.add_argument('--lang',choices=['ru','en'])
     p.add_argument('--no-systemd',action='store_true',help='Container/local verification only')
     p.add_argument('--self-test',action='store_true')
     sub = p.add_subparsers(dest='command')
     install = sub.add_parser('install')
-    for key in ['config','trust','server-manifest','deploy-manifest','bundle']:
+    for key in ['config','trust','server-manifest','manager-manifest','bundle','server-bundle']:
         install.add_argument('--'+key)
     install.add_argument('--bootstrap-docker',action='store_true')
-    for name in ['status','doctor','logs','periodic','health']:
+    for name in ['status','doctor','logs','periodic','health','run-server','setup']:
         sub.add_parser(name)
     config = sub.add_parser('configure')
     config.add_argument('values',nargs='+',help='PAWTALK_FIELD=value')
     config.add_argument('--yes',action='store_true')
-    for name in ['update','deploy']:
+    for name in ['update','manager']:
         update = sub.add_parser(name)
         update.add_argument('action',choices=['check','now'])
         update.add_argument('--manifest')
-        if name == 'deploy':
+        if name == 'manager':
             update.add_argument('--bundle')
     backup = sub.add_parser('backup')
     backup.add_argument('action',choices=['create','list','restore'])
@@ -174,17 +170,28 @@ def main(argv=None):
     lang,source = args.lang or 'ru',Path(__file__).resolve().parent.parent
     if args.self_test:
         for module in bundles.MODULES:
-            compile((source/'pawtalk_agent'/f'{module}.py').read_text(),module,'exec')
+            compile((source/'pawtalk_manager'/f'{module}.py').read_text(encoding='utf-8'),module,'exec')
         release.semver((source/'VERSION').read_text().strip())
         if not (source/'compose.server.yaml').is_file():
             return 1
-        print('PawTalk deploy protocol 1 OK')
+        print('PawTalk manager protocol 1 OK')
         return 0
     try:
-        if os.geteuid() != 0:
+        if args.command == 'run-server':
+            if not WINDOWS:
+                raise ValueError('Windows service operation')
+            from .native import serve
+            return serve(args.root)
+        if not admin():
             raise ValueError('Run with sudo/root')
+        if WINDOWS:
+            protect(args.root)
         controller = Controller(args.root)
-        with lock(controller.directory/'operation.lock'):
+        if args.command == 'install' and args.server_bundle:
+            if not WINDOWS:
+                raise ValueError('--server-bundle is for Windows; Linux uses the signed image digest')
+            controller.runtime.server_bundle = args.server_bundle
+        with lock(controller.directory/'operation.lock') as release_lock:
             if args.lang is None and controller.state_file.exists():
                 lang = controller.config()['PAWTALK_LANGUAGE']
             if args.command in ('status','doctor'):
@@ -193,56 +200,62 @@ def main(argv=None):
             if args.command == 'install':
                 existing = controller.state_file.exists()
                 if existing:
-                    directory = controller.root/'opt/pawtalk-agent/versions'/controller.state()['deployVersion']
+                    directory = controller.root/'opt/pawtalk-manager/versions'/controller.state()['managerVersion']
                     bundles.self_test(directory)
-                    if source.resolve() != (directory/'deploy').resolve():
-                        os.execv(sys.executable,[sys.executable,'-I',str(directory/'deploy/pawtalkctl'),*(argv if argv is not None else sys.argv[1:])])
+                    if source.resolve() != (directory/'manager').resolve():
+                        release_lock()
+                        os.execv(sys.executable,[sys.executable,'-B','-X','utf8','-I',str(directory/'manager/pawtalkctl'),*(argv if argv is not None else sys.argv[1:])])
                     controller.install(controller.config(),{},source/'compose.server.yaml','')
                 else:
                     config = read_config(args.config) if args.config else wizard(lang) if sys.stdin.isatty() else None
                     if config is None:
                         raise ValueError('Noninteractive install requires --config')
                     bootstrap = args.bootstrap_docker
-                    if not shutil.which('docker') and not bootstrap and sys.stdin.isatty():
+                    if not WINDOWS and not shutil.which('docker') and not bootstrap and sys.stdin.isatty():
                         confirm(text('docker',lang),False,lang)
                         bootstrap = True
                     preflight.check(config,bootstrap,args.no_systemd)
                     keys = json.loads(Path(args.trust or source/'trust.json').read_text())
-                    server = manifest(args.server_manifest,'server',config['PAWTALK_SERVER_CHANNEL'],keys)
-                    deploy = manifest(args.deploy_manifest,'deploy',config['PAWTALK_DEPLOY_CHANNEL'],keys)
-                    if server is None or deploy is None:
-                        raise ValueError('No compatible signed Server/Deploy release')
-                    directory = bundles.stage(controller.root,deploy,keys,args.bundle)
-                    if source.resolve() != (directory/'deploy').resolve():
-                        # Hand off to the verified Deploy installer, not checkout code.
+                    server = manifest(args.server_manifest,'server',keys)
+                    manager = manifest(args.manager_manifest,'manager',keys)
+                    if server is None or manager is None:
+                        raise ValueError('No compatible signed Server/Manager release')
+                    directory = bundles.stage(controller.root,manager,keys,args.bundle)
+                    if source.resolve() != (directory/'manager').resolve():
+                        # Hand off to the verified Manager installer, not checkout code.
                         # Python descriptors are close-on-exec, releasing the operation lock.
                         prepared = controller.directory/'bootstrap'
                         write_config(prepared/'config.env',config)
                         save(prepared/'trust.json',keys)
                         atomic(prepared/'server-manifest.json',server['_signed'].encode())
-                        atomic(prepared/'deploy-manifest.json',deploy['_signed'].encode())
-                        command = [sys.executable,'-I',str(directory/'deploy/pawtalkctl'),'--root',str(controller.root),'--lang',lang]
+                        atomic(prepared/'manager-manifest.json',manager['_signed'].encode())
+                        command = [sys.executable,'-B','-X','utf8','-I',str(directory/'manager/pawtalkctl'),'--root',str(controller.root),'--lang',lang]
                         if args.no_systemd:
                             command.append('--no-systemd')
                         command += ['install','--config',str(prepared/'config.env'),'--trust',str(prepared/'trust.json'),
-                                    '--server-manifest',str(prepared/'server-manifest.json'),'--deploy-manifest',str(prepared/'deploy-manifest.json'),
+                                    '--server-manifest',str(prepared/'server-manifest.json'),'--manager-manifest',str(prepared/'manager-manifest.json'),
                                     '--bundle',str(directory/'verified-bundle.tar.gz')]
+                        if args.server_bundle:
+                            command += ['--server-bundle',str(Path(args.server_bundle).resolve())]
+                        release_lock()
                         os.execv(sys.executable,command)
-                    controller.install(config,server,directory/'deploy/compose.server.yaml',deploy['version'])
+                    if WINDOWS:
+                        bundles.switch(controller.root,directory)
+                    controller.install(config,server,directory/'manager/compose.server.yaml',manager['version'])
                 config = controller.config()
                 if not (controller.etc/'trust.json').exists():
-                    atomic(controller.etc/'trust.json',(directory/'deploy/trust.json').read_bytes())
-                atomic(controller.root/'opt/pawtalk-agent/launcher',(directory/'deploy/launcher').read_bytes(),0o700)
-                atomic(controller.root/'usr/local/bin/pawtalkctl',b'#!/bin/sh\nexec /opt/pawtalk-agent/launcher "$@"\n',0o755)
-                bundles.install_units(controller.root,directory,config,args.no_systemd)
-                if not (controller.root/'opt/pawtalk-agent/current').is_symlink():
+                    atomic(controller.etc/'trust.json',(directory/'manager/trust.json').read_bytes())
+                atomic(controller.root/'opt/pawtalk-manager/launcher',(directory/'manager/launcher').read_bytes(),0o700)
+                atomic(controller.root/'usr/local/bin/pawtalkctl',b'#!/bin/sh\nexec /opt/pawtalk-manager/launcher "$@"\n',0o755)
+                if not (controller.root/'opt/pawtalk-manager'/('current.json' if WINDOWS else 'current')).exists():
                     bundles.switch(controller.root,directory)
+                bundles.install_units(controller.root,directory,config,args.no_systemd)
                 state = controller.state()
                 container = controller.runtime.container(state,config)['Id']
                 print(text('existing' if existing else 'installed',lang))
                 if not existing:
-                    print(run(['docker','exec',container,'/pawtalk','serve','info']).decode().strip())
-                    print(run(['docker','exec',container,'/pawtalk','serve','initial-password']).decode().strip())
+                    for action in ['info','initial-password']:
+                        print((controller.runtime.command(state,config,action) if WINDOWS else run(['docker','exec',container,'/pawtalk','serve',action])).decode().strip())
                 print(text('external',lang))
                 return 0
             if args.command == 'backup' and args.action == 'list':
@@ -257,17 +270,20 @@ def main(argv=None):
                 directory = None
                 if not controller.state_file.exists():
                     snapshot = controller.backups/args.name
-                    deploy = release.verify_historical((snapshot/'deploy-manifest.json').read_bytes(),'deploy',keys)
-                    if deploy['version'] != meta['state']['deployVersion']:
-                        raise ValueError('Backup Deploy version mismatch')
-                    directory = bundles.stage(controller.root,deploy,keys,snapshot/'deploy.tar.gz')
-                    if source.resolve() != (directory/'deploy').resolve():
-                        os.execv(sys.executable,[sys.executable,'-I',str(directory/'deploy/pawtalkctl'),*(argv if argv is not None else sys.argv[1:])])
+                    manager = release.verify_historical((snapshot/'manager-manifest.json').read_bytes(),'manager',keys)
+                    if manager['version'] != meta['state']['managerVersion']:
+                        raise ValueError('Backup Manager version mismatch')
+                    directory = bundles.stage(controller.root,manager,keys,snapshot/'manager.tar.gz')
+                    if source.resolve() != (directory/'manager').resolve():
+                        release_lock()
+                        os.execv(sys.executable,[sys.executable,'-B','-X','utf8','-I',str(directory/'manager/pawtalkctl'),*(argv if argv is not None else sys.argv[1:])])
+                if WINDOWS and directory is not None:
+                    bundles.switch(controller.root,directory)
                 controller.restore(args.name or '')
                 if directory is not None:
-                    atomic(controller.etc/'trust.json',(directory/'deploy/trust.json').read_bytes())
-                    atomic(controller.root/'opt/pawtalk-agent/launcher',(directory/'deploy/launcher').read_bytes(),0o700)
-                    atomic(controller.root/'usr/local/bin/pawtalkctl',b'#!/bin/sh\nexec /opt/pawtalk-agent/launcher "$@"\n',0o755)
+                    atomic(controller.etc/'trust.json',(directory/'manager/trust.json').read_bytes())
+                    atomic(controller.root/'opt/pawtalk-manager/launcher',(directory/'manager/launcher').read_bytes(),0o700)
+                    atomic(controller.root/'usr/local/bin/pawtalkctl',b'#!/bin/sh\nexec /opt/pawtalk-manager/launcher "$@"\n',0o755)
                     bundles.install_units(controller.root,directory,controller.config(),args.no_systemd)
                     bundles.switch(controller.root,directory)
                 print(text('changed',lang))
@@ -278,37 +294,39 @@ def main(argv=None):
             config = controller.config()
             keys = json.loads((controller.etc/'trust.json').read_text())
             if args.command == 'periodic':
-                for component in ['deploy','server']:
+                for component in ['manager','server']:
                     if config[f'PAWTALK_{component.upper()}_AUTO_UPDATE'] != 'true':
                         continue
-                    found = release.discover(component,config[f'PAWTALK_{component.upper()}_CHANNEL'],keys)
+                    found = release.discover(component,keys)
                     if found:
-                        if component == 'deploy':
+                        if component == 'manager':
                             if bundles.activate(controller,found,keys,no_systemd=args.no_systemd):
                                 return 0 # Next invocation uses the new controller.
                         else:
                             controller.update_server(found)
                 return 0
-            if args.command in ('update','deploy'):
-                component = 'server' if args.command == 'update' else 'deploy'
-                found = manifest(args.manifest,component,config[f'PAWTALK_{component.upper()}_CHANNEL'],keys)
+            if args.command in ('update','manager'):
+                component = 'server' if args.command == 'update' else 'manager'
+                found = manifest(args.manifest,component,keys)
                 if not found:
                     print(text('unchanged',lang))
                 elif args.action == 'check':
-                    print(json.dumps({component:found['version'],'channel':found['channel']}))
+                    print(json.dumps({component:found['version']}))
                 else:
                     changed = controller.update_server(found) if component == 'server' else bundles.activate(controller,found,keys,args.bundle,args.no_systemd)
                     print(text('changed' if changed else 'unchanged',lang))
-            elif args.command == 'configure':
+            elif args.command in ('configure','setup'):
                 changes = {}
-                for value in args.values:
+                for value in (args.values if args.command == 'configure' else []):
                     key,sep,val = value.partition('=')
                     if not sep or key in changes:
                         raise ValueError('Expected distinct PAWTALK_FIELD=value arguments')
                     changes[key] = val
-                confirm(text('confirm',lang),args.yes,lang)
+                if args.command == 'setup':
+                    changes = wizard(lang,config)
+                confirm(text('confirm',lang),args.yes if args.command == 'configure' else False,lang)
                 controller.configure(changes)
-                current = controller.root/'opt/pawtalk-agent/current'
+                current = (controller.root/'opt/pawtalk-manager/versions'/controller.state()['managerVersion']) if WINDOWS else controller.root/'opt/pawtalk-manager/current'
                 bundles.install_units(controller.root,current.resolve(),controller.config(),args.no_systemd)
                 print(text('changed',lang))
             elif args.command == 'backup':
@@ -316,16 +334,29 @@ def main(argv=None):
             elif args.command == 'health':
                 print(controller.watchdog())
             elif args.command == 'logs':
-                container = controller.runtime.container(controller.state(),config)['Id']
-                result = subprocess.run(['docker','logs','--tail','100',container],capture_output=True)
-                output = (result.stdout+result.stderr).decode(errors='replace')
+                if WINDOWS:
+                    file = controller.root/'var/log/pawtalk/server.log'
+                    with file.open('rb') as stream:
+                        stream.seek(max(0,file.stat().st_size-65536))
+                        output = stream.read().decode(errors='replace')
+                else:
+                    container = controller.runtime.container(controller.state(),config)['Id']
+                    result = subprocess.run(['docker','logs','--tail','100',container],capture_output=True)
+                    output = (result.stdout+result.stderr).decode(errors='replace')
                 output = re.sub(r'Initial room password[^\n]*','Initial room password: [redacted]',output)
                 print(re.sub(r'pawtalk://\S+','[invitation redacted]',output))
             elif args.command == 'uninstall':
                 confirm(text('uninstall',lang),args.yes,lang)
                 controller.runtime.stop(controller.state(),config)
-                controller.runtime.compose(controller.state(),config,'down')
-                if not args.no_systemd:
+                if WINDOWS:
+                    # Stopping Manager from within its own periodic child would deadlock;
+                    # uninstall is an explicit foreground operation.
+                    for action in ['stop-manager','uninstall-manager','uninstall-server']:
+                        if host(action,controller.root).returncode:
+                            raise RuntimeError('Windows service removal failed')
+                else:
+                    controller.runtime.compose(controller.state(),config,'down')
+                if not WINDOWS and not args.no_systemd:
                     run(['systemctl','disable','--now','pawtalk-update.timer','pawtalk-health.timer'])
                 print(text('changed',lang))
         return 0

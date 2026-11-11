@@ -12,6 +12,7 @@ from pathlib import Path
 from .config import atomic, read_config, remove, save, validate, write_config
 from .release import IMAGE, semver
 from .runtime import Runtime, run
+from .platforms import WINDOWS, secure
 
 
 def checksum(file):
@@ -23,11 +24,14 @@ class Controller:
     def __init__(self, root='/', runtime=None):
         self.root = Path(root).resolve()
         self.etc = self.root/'etc/pawtalk'
-        self.directory = self.root/'var/lib/pawtalk-agent'
+        self.directory = self.root/'var/lib/pawtalk-manager'
         self.backups = self.root/'var/backups/pawtalk'
         self.template = self.root/'opt/pawtalk/compose.server.yaml'
         self.state_file = self.directory/'installed.json'
         self.journal = self.directory/'transaction.json'
+        if runtime is None and WINDOWS:
+            from .native import NativeRuntime
+            runtime = NativeRuntime(self.root)
         self.runtime = runtime or Runtime(self.template)
 
     def state(self):
@@ -39,9 +43,10 @@ class Controller:
     def transaction(self,state,config,kind):
         entry = dict(previous=state,config=config,kind=kind,phase='prepared',backup=None,
                      template=base64.b64encode(self.template.read_bytes()).decode())
-        if kind == 'deploy-update':
-            agent = self.root/'opt/pawtalk-agent'
-            entry['pointers'] = {name:os.readlink(agent/name) for name in ['current','previous'] if (agent/name).is_symlink()}
+        if kind == 'manager-update':
+            agent = self.root/'opt/pawtalk-manager'
+            entry['pointers'] = ({name:json.loads((agent/(name+'.json')).read_text()) for name in ['current','previous'] if (agent/(name+'.json')).exists()} if WINDOWS else
+                                 {name:os.readlink(agent/name) for name in ['current','previous'] if (agent/name).is_symlink()})
             entry['trust'] = base64.b64encode((self.etc/'trust.json').read_bytes()).decode()
             units = self.root/'etc/systemd/system'
             entry['units'] = {p.name:base64.b64encode(p.read_bytes()).decode() for p in units.glob('pawtalk-*') if p.name in ['pawtalk-update.service','pawtalk-update.timer','pawtalk-health.service','pawtalk-health.timer']}
@@ -51,7 +56,7 @@ class Controller:
     def finish(self,outcome='success'):
         entry = json.loads(self.journal.read_text())
         state = self.state()
-        save(self.directory/'last-operation.json',dict(kind=entry['kind'],outcome=outcome,serverVersion=state['version'],deployVersion=state['deployVersion'],finishedAt=int(time.time())))
+        save(self.directory/'last-operation.json',dict(kind=entry['kind'],outcome=outcome,serverVersion=state['version'],managerVersion=state['managerVersion'],finishedAt=int(time.time())))
         entry['phase'] = 'committed'
         save(self.journal,entry)
         remove(self.journal)
@@ -84,6 +89,7 @@ class Controller:
         name = 'backup-'+uuid.uuid4().hex[:12]
         temporary = self.backups/('.'+name)
         temporary.mkdir(mode=0o700)
+        secure(temporary)
         self.runtime.stop(state,config)
         try:
             archive = temporary/'data.tar'
@@ -91,12 +97,13 @@ class Controller:
             os.chmod(archive,0o600)
             metadata = dict(schema=1,createdAt=int(time.time()),state=state,config=config,
                             sha256=checksum(archive),template=entry['template'])
-            deploy = self.root/'opt/pawtalk-agent/versions'/state['deployVersion']
-            if (deploy/'verified-bundle.tar.gz').is_file():
-                shutil.copyfile(deploy/'verified-bundle.tar.gz',temporary/'deploy.tar.gz')
-                shutil.copyfile(deploy/'deploy-manifest.json',temporary/'deploy-manifest.json')
-                metadata['deploySha256'] = checksum(temporary/'deploy.tar.gz')
+            manager = self.root/'opt/pawtalk-manager/versions'/state['managerVersion']
+            if (manager/'verified-bundle.tar.gz').is_file():
+                shutil.copyfile(manager/'verified-bundle.tar.gz',temporary/'manager.tar.gz')
+                shutil.copyfile(manager/'manager-manifest.json',temporary/'manager-manifest.json')
+                metadata['managerSha256'] = checksum(temporary/'manager.tar.gz')
             save(temporary/'metadata.json',metadata)
+            secure(temporary)
             os.rename(temporary,self.backups/name)
             entry.update(backup=name,phase='backed-up')
             save(self.journal,entry)
@@ -114,12 +121,13 @@ class Controller:
         directory = self.backups/name
         if directory.is_symlink() or directory.resolve().parent != self.backups.resolve():
             raise ValueError('Unsafe backup directory')
+        secure(directory)
         meta = json.loads((directory/'metadata.json').read_text())
         archive = directory/'data.tar'
         if meta.get('schema') != 1 or archive.is_symlink() or checksum(archive) != meta['sha256']:
             raise ValueError('Backup integrity check failed')
-        if 'deploySha256' in meta and checksum(directory/'deploy.tar.gz') != meta['deploySha256']:
-            raise ValueError('Backup Deploy bundle integrity check failed')
+        if 'managerSha256' in meta and checksum(directory/'manager.tar.gz') != meta['managerSha256']:
+            raise ValueError('Backup Manager bundle integrity check failed')
         validate(meta['config'])
         # Validate every member before extraction (including symlinks and hardlinks).
         with tarfile.open(archive) as contents:
@@ -168,11 +176,16 @@ class Controller:
             self.runtime.start(state,config)
             self.runtime.healthy(state,config,state.get('identity'))
             save(self.state_file,state)
-        if entry['kind'] == 'deploy-update':
+        if entry['kind'] == 'manager-update':
             for name,target in entry.get('pointers',{}).items():
+                if WINDOWS:
+                    from .release import semver
+                    semver(target['version'])
+                    save(self.root/'opt/pawtalk-manager'/(name+'.json'),target)
+                    continue
                 if not re.fullmatch(r'versions/[0-9A-Za-z.-]+',target):
                     raise ValueError('Unsafe recovery pointer')
-                pointer = self.root/'opt/pawtalk-agent'/name
+                pointer = self.root/'opt/pawtalk-manager'/name
                 temporary = pointer.with_name('.recovery-'+name)
                 temporary.unlink(missing_ok=True)
                 temporary.symlink_to(target)
@@ -190,7 +203,7 @@ class Controller:
         self.finish('recovered')
         return True
 
-    def install(self,config,manifest,template,deploy_version):
+    def install(self,config,manifest,template,manager_version):
         config = validate(config)
         if self.state_file.exists():
             self.recover()
@@ -203,7 +216,9 @@ class Controller:
             save(self.state_file,state)
             return False
         state = dict(project='pawtalk-'+uuid.uuid4().hex[:12],version=manifest['version'],
-                     image=IMAGE+'@'+manifest['digest'],dataSchema=1,deployVersion=deploy_version,serverManifest=manifest['_signed'])
+                     image=IMAGE+'@'+manifest['digest'],dataSchema=1,managerVersion=manager_version,serverManifest=manifest['_signed'])
+        if 'windows' in manifest:
+            state['windows'] = manifest['windows']
         state['volume'] = state['project']
         self.runtime.pull(state)
         write_config(self.etc/'config.env',config)
@@ -233,12 +248,18 @@ class Controller:
         state,config = self.state(),self.config()
         if semver(manifest['version']) == semver(state['version']) and state['image'] != IMAGE+'@'+manifest['digest']:
             raise ValueError('Published Server version was replaced; refusing changed digest')
+        if WINDOWS and semver(manifest['version']) == semver(state['version']) and state.get('windows') != manifest.get('windows'):
+            raise ValueError('Published Windows Server version was replaced')
         if semver(manifest['version']) <= semver(state['version']):
             return False
         if manifest['dataSchema'] != state['dataSchema'] or manifest['apiProtocol'] != 1:
             raise ValueError('Unsupported server data/protocol transition')
         candidate = {**state,'version':manifest['version'],'image':IMAGE+'@'+manifest['digest'],'serverManifest':manifest['_signed']}
-        if candidate['image'] == state['image']:
+        if 'windows' in manifest:
+            candidate['windows'] = manifest['windows']
+        elif WINDOWS:
+            raise ValueError('Server release has no Windows artifact')
+        if not WINDOWS and candidate['image'] == state['image']:
             save(self.state_file,candidate)
             return False
         self.runtime.pull(candidate)
@@ -291,14 +312,14 @@ class Controller:
         self.runtime.pull(meta['state'])
         self.recover()
         if self.state_file.exists():
-            deployed_agent = self.state()['deployVersion']
+            installed_manager = self.state()['managerVersion']
             entry = self.transaction(self.state(),self.config(),'restore')
             try:
                 self.backup(entry,resume=False)
                 entry['phase'] = 'applying'
                 save(self.journal,entry)
                 self.restore_data(name)
-                save(self.state_file,{**self.state(),'deployVersion':deployed_agent})
+                save(self.state_file,{**self.state(),'managerVersion':installed_manager})
             except Exception:
                 self.recover()
                 raise
@@ -320,7 +341,7 @@ class Controller:
             save(file,dict(attempts=0,next=0))
             return 'healthy'
         if not info['State'].get('Running'):
-            return 'stopped; inspect Docker restart policy or start manually'
+            return 'stopped; inspect Windows service recovery or start manually' if WINDOWS else 'stopped; inspect Docker restart policy or start manually'
         if info['State'].get('Health',{}).get('Status') != 'unhealthy':
             return 'starting'
         if health['attempts'] >= 3 or now < health['next']:

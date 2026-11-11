@@ -8,9 +8,9 @@
 
 - Сначала Client-only bridge `v0.8.1`, затем `client-v0.9.0`; двойных тегов одной
   версии нет. Bridge сохранён отдельным локальным коммитом `3747a0d`.
-- Windows temporary self-host сохранён. Удалено только постоянное размещение
-  на Windows и его Linux VM-инструкция; новые VPS используют Compose.
-- Client сохраняет свой ключ; Server и Deploy имеют отдельные trust roots.
+- Windows temporary self-host сохранён. Постоянный Windows-сервер добавлен обратно
+  как нативные службы с общим Manager controller; Linux использует Compose.
+- Client сохраняет свой ключ; Server и Manager имеют отдельные trust roots.
 - Реальные VPS/два физических Windows устройства недоступны. Приёмка использует
   локальный Docker, реальный Electron с synthetic audio и подготовленные GitHub Actions.
 
@@ -29,10 +29,10 @@ updater читал неподписанный digest из release notes и то�
 | Windows self-host | `bundled-server.json`, `scripts/prepare-server.mjs`, package resource allowlist | Точный commit/Go/LiveKit, receipt с хэшами, отсутствие случайных старых EXE |
 | API compatibility | `shared/protocol.cjs`, `server/profile.go`, `docs/COMPATIBILITY.md` | Legacy protocol 1, capabilities, блокировка неизвестного явного протокола до входа |
 | CI/CD | `.github/workflows/check.yml`, `release.yml`, `scripts/release-metadata.mjs` | Tag/version gate, отдельные ключи/артефакты, проверки до публикации, immutable releases |
-| VPS runtime | `deploy/compose.server.yaml`, `pawtalk_agent/runtime.py` | UID 65532, host networking, exact image digest, ownership checks |
-| Установка/config | `deploy/pawtalkctl`, `pawtalk_agent/cli.py`, `config.py`, `preflight.py` | Подписанный Deploy handoff, строгий data-only config, Docker bootstrap consent, идемпотентность |
-| Backup/update | `pawtalk_agent/controller.py` | Lock/journal/fsync, остановочный backup, health/identity, откат данных вместе с образом |
-| Deploy update | `pawtalk_agent/bundles.py`, `deploy/launcher` | Подпись/allowlist, self-test, atomic pointers/fallback, отсутствие лишнего Server restart |
+| VPS runtime | `manager/compose.server.yaml`, `pawtalk_manager/runtime.py` | UID 65532, host networking, exact image digest, ownership checks |
+| Установка/config | `manager/pawtalkctl`, `pawtalk_manager/cli.py`, `config.py`, `preflight.py` | Подписанный Manager handoff, строгий data-only config, Docker bootstrap consent, идемпотентность |
+| Backup/update | `pawtalk_manager/controller.py` | Lock/journal/fsync, остановочный backup, health/identity, откат данных вместе с образом |
+| Manager update | `pawtalk_manager/bundles.py`, `manager/launcher` | Подпись/allowlist, self-test, atomic pointers/fallback, отсутствие лишнего Server restart |
 | Recovery/doctor | controller/CLI и systemd units | Crash recovery, restore на чистом хосте, bounded watchdog, диагностика без секретов |
 
 Swarm deployment/updater/smoke/config, их production-инструкции и постоянный Windows
@@ -45,14 +45,16 @@ Git-тегах сохранена. README на двух языках и сайт
 | Проверка | Локальный результат и граница |
 |---|---|
 | `npm run build` | TypeScript/Vite прошли; обычное предупреждение о размере JS chunk |
-| `npm test` с Go 1.27.3 | 135 passed, 0 failed, 0 skipped; настоящий PowerShell/Electron helper и TLS diagnostic command |
-| Python host tools | 24 passed: signatures, routes, archive faults, config, rollback/journal, lock/watchdog, wizard RU/EN (включая настоящую PTY-вставку), безопасная диагностика и защита чужого project при restore |
+| `npm test` с Go 1.27.3 | 139 passed, 0 failed, 0 skipped; настоящий PowerShell/Electron helper, CMD/PS генераторы и TLS diagnostic command |
+| Python host tools | 29 passed: signatures, routes, archive faults, config, rollback/journal, lock/watchdog, wizard RU/EN (включая настоящую PTY-вставку), Windows version gate, безопасная диагностика и защита чужого project при restore |
+| Windows native | Настоящие Go/LiveKit, SQLite, TLS/E2EE policy, закрытый pipe Ed25519, cross-process lock, backup/update/rollback, Manager-only update и kill-on-close job; console service protocol, без регистрации SCM |
+| Windows SCM | Подготовлены jobs Windows Server 2022/2025; локально нет административного токена. Реальные SCM/LocalService ACL и весь целевой набор ОС ещё требуют успешного CI/проверки |
 | Go | `go test ./...`, `go vet ./...`, `go test -race ./...` прошли в Linux amd64 контейнере |
 | Compose | Debian 12 и Ubuntu 24.04 userspace на Docker Desktop; реальные Docker/Compose/registry и временные signing keys |
 | E2EE lifecycle | E2EE policy/key ID и opaque history проверены при install/update/rollback/restore; это не аппаратное испытание шифрованного голоса |
 | Actual SIGKILL | Настоящее завершение controller процесса после начала rollout, recovery по durable journal |
-| Deploy-only | Проверено сохранение container ID и Server digest при неизменном Compose runtime |
-| Fresh restore | Проверка подписанных Server/Deploy receipts, восстановление кода/SQLite/TLS/пароля в новую директорию хоста и новый volume |
+| Manager-only | Проверено сохранение container ID и Server digest при неизменном Compose runtime |
+| Fresh restore | Проверка подписанных Server/Manager receipts, восстановление кода/SQLite/TLS/пароля в новую директорию хоста и новый volume |
 | Native/UI | Нативный модуль, main/preload IPC, поля/кнопки, RU/EN, normal/reduced motion, clipboard representations, voice/chat/diagnostics smoke |
 | Client ↔ old Server | Опубликованный Server 0.8.0 по immutable digest, TLS/auth и два настоящих Electron/LiveKit клиента с synthetic audio |
 | Client ↔ new Server | Новый локальный Go/LiveKit image, двусторонний RTP, mute/PTT/rejoin и фактический playback gain |
@@ -66,7 +68,7 @@ Git-тегах сохранена. README на двух языках и сайт
 
 ## Что остаётся перед настоящим выпуском
 
-1. Владелец должен предоставить Server/Deploy **публичные** ключи в `deploy/trust.json`
+1. Владелец должен предоставить Server/Manager **публичные** ключи в `manager/trust.json`
    и настроить соответствующие CI secrets. Сейчас roots пусты намеренно: неподписанная
    production-установка/публикация блокируется, временные test keys не используются в продукте.
 2. Проверить отдельный checkout bridge `3747a0d` перед будущим выпуском `v0.8.1`.
@@ -81,4 +83,4 @@ Git-тегах сохранена. README на двух языках и сайт
    требуют отдельного контролируемого пути; обычное обновление их блокирует.
 
 Первый будущий порядок публикации после отдельного разрешения: bridge → Server →
-Deploy → Client. Затем линии независимы. [Полная инструкция](RELEASING.md).
+Manager → Client. Затем линии независимы. [Полная инструкция](RELEASING.md).

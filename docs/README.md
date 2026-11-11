@@ -23,9 +23,9 @@ Client guides cover public 0.8.0; Server/Architecture/Releasing describe **unrel
 | [Совместимость](COMPATIBILITY.md) | API protocol, Client ↔ Server, переход 0.8.1 и Windows self-host |
 | [Обновления клиента и язык](UPDATES.md) | Подписанные обновления клиента и резервная передача через комнаты |
 
-Новый VPS использует [`deploy/compose.server.yaml`](../deploy/compose.server.yaml) через проверенный host controller. Постоянное размещение на Windows больше не поддерживается; встроенные временные Windows-комнаты сохранены.
+Новый VPS использует [`manager/compose.server.yaml`](../manager/compose.server.yaml) через проверенный host controller. Постоянный Windows-сервер использует нативные службы и общий Manager: [WINDOWS-SERVER.md](WINDOWS-SERVER.md). Встроенные временные Windows-комнаты сохранены.
 
-New VPS installations use Docker Compose through the verified host controller. Permanent Windows hosting is removed; temporary Windows rooms remain.
+New VPS installations use Docker Compose through the verified host controller. Permanent Windows hosting uses native services and the shared Manager; see [WINDOWS-SERVER.md](WINDOWS-SERVER.md). Temporary Windows rooms remain.
 
 ## Разработчикам / For developers
 

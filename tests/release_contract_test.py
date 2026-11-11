@@ -7,15 +7,15 @@ import urllib.parse
 import unittest
 from pathlib import Path
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'deploy'))
-from pawtalk_agent import release
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'manager'))
+from pawtalk_manager import release
 
 
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.directory = Path(self.temp.name)
-        self.keys = {'server': {}, 'deploy': {}}
+        self.keys = {'server': {}, 'manager': {}}
         for component in self.keys:
             key = self.directory / component
             subprocess.run(['openssl','genpkey','-algorithm','ED25519','-out',str(key)], check=True, capture_output=True)
@@ -29,8 +29,8 @@ class ReleaseTests(unittest.TestCase):
         now = int(time.time())
         value = dict(schema=1,component=component,repository=release.REPO,version='0.9.0',channel='preview',
                      publishedAt=now,expiresAt=now+3600,apiProtocol=1,dataSchema=1,image=release.IMAGE,digest='sha256:'+'a'*64)
-        if component == 'deploy':
-            value.update(bundle='PawTalk.Deploy.0.9.0.tar.gz',size=42,sha256='a'*64,launcherProtocol=1,configSchema=1)
+        if component == 'manager':
+            value.update(bundle='PawTalk.Manager.0.9.0.tar.gz',size=42,sha256='a'*64,launcherProtocol=1,configSchema=1)
         value.update(changes)
         data = json.dumps(value).encode()
         (self.directory/'payload').write_bytes(data)
@@ -42,23 +42,30 @@ class ReleaseTests(unittest.TestCase):
             raw = self.signed(component)
             self.assertEqual(release.verify(raw,component,self.keys)['component'],component)
             with self.assertRaises(ValueError):
-                release.verify(raw, 'server' if component == 'deploy' else 'deploy', self.keys)
+                release.verify(raw, 'server' if component == 'manager' else 'manager', self.keys)
         for changes in [dict(expiresAt=0),dict(dataSchema=2),dict(apiProtocol=2),dict(schema=True),dict(apiProtocol=True),dict(image='evil/image'),dict(digest=None),dict(repository='other/repo'),dict(channel='stable',version='1.0.0-beta.1')]:
             with self.assertRaises(ValueError):
                 release.verify(self.signed(**changes),'server',self.keys)
+        for artifact in [dict(name='../escape',size=1,sha256='a'*64),
+                         dict(name='PawTalk.Server.0.9.0.windows-x64.zip',size=True,sha256='a'*64),
+                         dict(name='PawTalk.Server.0.9.0.windows-x64.zip',size=1,sha256='bad')]:
+            with self.assertRaises(ValueError):
+                release.verify(self.signed(windows=artifact),'server',self.keys)
         raw = json.loads(self.signed())
         raw['payload'] = base64.b64encode(b'{}').decode()
         with self.assertRaises(ValueError):
             release.verify(json.dumps(raw).encode(),'server',self.keys)
 
-    def test_routing_semver_channels(self):
+    def test_routing_uses_latest_component_version_without_channels(self):
         entries = [dict(tag_name=tag,prerelease=preview) for tag,preview in [
-            ('v99.0.0',False),('client-v99.0.0',False),('deploy-v99.0.0',False),
+            ('v99.0.0',False),('client-v99.0.0',False),('manager-v99.0.0',False),
             ('server-v0.9.0',False),('server-v0.10.0-beta.10',True),('server-v0.10.0-beta.2',True),
             ('server-v01.2.3',False),('server-v1.0.0-01',True)]]
-        self.assertEqual(release.select(entries,'server','preview')[0][2],'0.10.0-beta.10')
-        self.assertEqual(release.select(entries,'server','stable')[0][2],'0.9.0')
-        self.assertFalse(release.select(entries[:3],'server','preview'))
+        self.assertEqual(release.select(entries,'server')[0][2],'0.10.0-beta.10')
+        entries += [dict(tag_name='server-v1.0.0',prerelease=False),
+                    dict(tag_name='server-v99.0.0',draft=True)]
+        self.assertEqual(release.select(entries,'server')[0][2],'1.0.0')
+        self.assertFalse(release.select(entries[:3],'server'))
         with self.assertRaises(ValueError):
             release.loads('{"a":1,"a":2}')
 
@@ -86,15 +93,30 @@ class ReleaseTests(unittest.TestCase):
                 return json.dumps([selected]).encode()
             self.assertEqual(url,asset_url)
             return raw
-        self.assertEqual(release.discover('server','preview',self.keys,get)['version'],'0.9.0')
+        self.assertEqual(release.discover('server',self.keys,get)['version'],'0.9.0')
         self.assertEqual(len(calls),3)
         selected['assets'][0]['browser_download_url'] = asset_url.replace('IlyaRusskikh/PawTalk','ilyarusskikh/pawtalk')
         def case_get(url, limit, **kwargs):
             return raw if '/download/' in url else get(url,limit,**kwargs)
-        self.assertEqual(release.discover('server','preview',self.keys,case_get)['version'],'0.9.0')
+        self.assertEqual(release.discover('server',self.keys,case_get)['version'],'0.9.0')
         selected['assets'][0]['browser_download_url'] = 'https://evil.example/manifest'
         with self.assertRaises(ValueError):
-            release.discover('server','preview',self.keys,get)
+            release.discover('server',self.keys,get)
+
+    def test_discovery_crosses_preview_to_stable_and_keeps_signed_binding(self):
+        for component in ['server','manager']:
+            for version,channel in [('0.9.0','preview'),('1.0.0','stable')]:
+                with self.subTest(component=component,version=version):
+                    raw = self.signed(component,version=version,channel=channel,
+                                      **({'bundle':f'PawTalk.Manager.{version}.tar.gz'} if component == 'manager' else {}))
+                    url = f'https://github.com/{release.REPO}/releases/download/{component}-v{version}/{component}-manifest.json'
+                    selected = dict(tag_name=f'{component}-v{version}',prerelease=channel == 'preview',
+                                    assets=[dict(name=f'{component}-manifest.json',state='uploaded',browser_download_url=url)])
+                    def get(address,limit,**kwargs):
+                        return raw if address == url else json.dumps([selected]).encode()
+                    self.assertEqual(release.discover(component,self.keys,get)['version'],version)
+                    selected['prerelease'] = not selected['prerelease']
+                    with self.assertRaises(ValueError): release.discover(component,self.keys,get)
 
 
 if __name__ == '__main__':

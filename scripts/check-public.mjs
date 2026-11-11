@@ -19,7 +19,7 @@ try {
   process.exit(1);
 }
 
-const forbidden = /(?:^|\/)(?:plans|node_modules|release|dist|deploy\/generated|native\/build|resources\/server|src\/generated)(?:\/|$)|(?:^|\/)CONTINUE\.md$|(?:^|\/)connection-report[^/]*\.json$|\.(?:log|exe|test|key|pem|pfx|p12|crt|cer)$/i;
+const forbidden = /(?:^|\/)(?:plans|node_modules|release|dist|manager\/generated|native\/build|resources\/server|src\/generated)(?:\/|$)|(?:^|\/)CONTINUE\.md$|(?:^|\/)connection-report[^/]*\.json$|\.(?:log|exe|test|key|pem|pfx|p12|crt|cer)$/i;
 const secretPatterns = [
   ['private key', /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/],
   ['GitHub token', /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b/],

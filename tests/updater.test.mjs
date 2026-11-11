@@ -30,7 +30,7 @@ test('bridge discovers client tags, rejects other families and downloads from th
   const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-bridge-'));
   const requests = [];
   try {
-    const candidates = [familyRelease('8.0.0', 'server'), familyRelease('9.0.0', 'deploy'), release('0.8.1'), familyRelease('0.9.0', 'client')];
+    const candidates = [familyRelease('8.0.0', 'server'), familyRelease('9.0.0', 'manager'), release('0.8.1'), familyRelease('0.9.0', 'client')];
     assert.equal(selectRelease(candidates, '0.8.1').tag, 'client-v0.9.0');
     assert.equal(selectRelease(candidates.slice(0, 2), '0.8.1'), null);
     const updater = new Updater({ keys, current: '0.8.1', directory,

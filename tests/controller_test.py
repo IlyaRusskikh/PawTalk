@@ -6,10 +6,10 @@ import tarfile
 import unittest
 from pathlib import Path
 import sys
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'deploy'))
-from pawtalk_agent.config import read_config, write_config, save, validate, lock
-from pawtalk_agent.controller import Controller
-from pawtalk_agent import release, bundles
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'manager'))
+from pawtalk_manager.config import read_config, write_config, save, validate, lock
+from pawtalk_manager.controller import Controller
+from pawtalk_manager import release, bundles
 
 
 class PowerLoss(BaseException):
@@ -173,6 +173,19 @@ class ControllerTests(unittest.TestCase):
                         'PAWTALK_PUBLIC_IP=203.0.113.10\nPAWTALK_E2EE=true']:
             file.write_text(content)
             with self.assertRaises(ValueError): read_config(file)
+
+    def test_obsolete_channels_are_removed_without_changing_other_settings(self):
+        file = Path(self.temp.name)/'old.env'
+        for channel in ['stable','preview']:
+            file.write_text('PAWTALK_PUBLIC_IP=203.0.113.10\nPAWTALK_SERVER_CHANNEL='+channel+
+                            '\nPAWTALK_MANAGER_CHANNEL='+channel+'\nPAWTALK_SERVER_AUTO_UPDATE=true\n')
+            config = read_config(file)
+            self.assertNotIn('PAWTALK_SERVER_CHANNEL',config)
+            self.assertNotIn('PAWTALK_MANAGER_CHANNEL',config)
+            self.assertEqual(config['PAWTALK_SERVER_AUTO_UPDATE'],'true')
+            write_config(file,config)
+            self.assertNotIn('_CHANNEL',file.read_text())
+            self.assertEqual(read_config(file),config)
 
 
 if __name__ == '__main__': unittest.main()

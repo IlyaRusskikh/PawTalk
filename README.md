@@ -2,7 +2,7 @@
 
 [Русский](README.ru.md) · English
 
-Development: **Client 0.9.0 / Server 0.9.0 / Deploy 0.1.0**, unreleased. A separate Client-only `v0.8.1` bridge prepares automatic discovery of `client-v0.9.0`. New VPS installations use Compose and signed independent updates. The download below remains public 0.8.0. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
+Development: **Client 0.9.0 / Server 0.9.0 / Manager 0.1.0**, unreleased. A separate Client-only `v0.8.1` bridge prepares automatic discovery of `client-v0.9.0`. New VPS installations use Compose and signed independent updates. The download below remains public 0.8.0. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
 
 [![Verify and package](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)
 
@@ -16,7 +16,7 @@ PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows
 
 - **Get friends together for a game night.** Start a room on your PC and send an invitation. The room stays available while PawTalk runs, including in the system tray.
 - **Talk on your local network.** Share a LAN invitation when everyone is on the same network, whether you're at a LAN party or playing at home.
-- **Give your team a permanent room.** The upcoming release runs on a Linux VPS through Docker Compose, independently of the PawTalk app. Friends can talk while your home PC is off. [Server guide](docs/SERVER.md).
+- **Give your team a permanent room.** The upcoming release runs independently of the PawTalk app: Docker Compose on Linux or native services on Windows. The server computer stays on; the owner's PawTalk client can be closed. [Server guide](docs/SERVER.md).
 
 ## Feature comparison
 
@@ -63,7 +63,7 @@ Already have an invitation? Open **Join a room** after installing. [First call o
 <details>
 <summary>How do I invite a friend?</summary>
 
-In the room creation dialog, choose **Check** next to **Can I host over the internet?**. Internet hosting uses incoming TCP 18443, TCP 18444, and UDP 18445 by default. If your router or ISP restricts inbound connections, you can host on a Linux VPS with a public IP. Permanent Windows hosting is no longer supported; temporary rooms inside the Windows app remain available.
+In the room creation dialog, choose **Check** next to **Can I host over the internet?**. Internet hosting uses incoming TCP 18443, TCP 18444, and UDP 18445 by default. If your router or ISP restricts inbound connections, you can host on a Linux VPS with a public IP. The upcoming permanent Windows server uses a separate Server Manager installer; temporary rooms inside the Windows app remain available.
 To check whether you can self-host, copy this command into **Windows PowerShell**:
 
 ```powershell
@@ -77,7 +77,7 @@ $code = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/I
 <details>
 <summary>Which devices can run PawTalk?</summary>
 
-The desktop client runs on Windows 10/11 x64. The upcoming persistent server uses Docker Compose on Debian 12 / Ubuntu 24.04 amd64/arm64. Voice travels through a LiveKit media server over WebRTC. [Server guide](docs/SERVER.md).
+The desktop client runs on Windows 10/11 x64. The upcoming persistent server uses Docker Compose on Debian 12 / Ubuntu 24.04 amd64/arm64, or native services on Windows x64. See the [Windows setup and verification limits](docs/WINDOWS-SERVER.md). Voice travels through a LiveKit media server over WebRTC. [Server guide](docs/SERVER.md).
 
 </details>
 
@@ -89,6 +89,8 @@ PawTalk protects the connection to the server with TLS and checks the certificat
 You can enable **experimental end-to-end encryption (E2EE)** for voice and chat. It is off by default; participants receive the shared key through the invitation. The server can still see IP addresses, the participant list, and traffic timing and volume. Automatic key rotation and forward secrecy are not available yet. A built-in room invitation contains the password and, with E2EE enabled, the secret key: share it privately and do not publish it.
 
 PawTalk is still a public preview. Updates are verified using a signed manifest and SHA-256, but the Windows installer is not yet Authenticode-signed. [E2EE security model and setup](docs/E2EE.md) · [Security policy and vulnerability reporting](SECURITY.md).
+
+For the upcoming VPS installer, the key generator shows a shared participant secret and a separate SHA-256 key ID to paste into the wizard, without `.env` entries. On Windows, `scripts\e2ee-key.cmd` runs without installing PawTalk or Node.js. The VPS wizard defaults to enabling encryption and automatic updates; one update question covers both the server and its maintenance tool. VPS updates select the latest published version for each component tag family, with no channel setting.
 
 </details>
 
@@ -129,7 +131,7 @@ The [server configuration guide](docs/SERVER.md#конфигурация) covers
 
 ## Project status
 
-**Current public preview: [PawTalk 0.8.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.8.0)** — historical combined Client/Server release. Unreleased 0.9.0 separates Client, Server and Deploy. This is not a stable release.
+**Current public preview: [PawTalk 0.8.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.8.0)** — historical combined Client/Server release. Unreleased 0.9.0 separates Client, Server and Manager. This is not a stable release.
 
 ### Available in 0.8.0
 

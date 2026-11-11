@@ -24,7 +24,7 @@ function compare(a, b) {
 }
 function parseTag(tag, legacy = false) {
   if (typeof tag !== 'string' || tag.trim() !== tag) return null;
-  const m = /^(client|server|deploy)-v(.+)$/.exec(tag);
+  const m = /^(client|server|manager)-v(.+)$/.exec(tag);
   if (m && parseVersion(m[2])) return { component: m[1], version: m[2] };
   if (legacy && tag.startsWith('v') && parseVersion(tag.slice(1)) && compare(tag.slice(1), '0.8.1') <= 0) return { component: 'client', version: tag.slice(1), legacy: true };
   return null;
@@ -32,7 +32,7 @@ function parseTag(tag, legacy = false) {
 function releasePlan(tag, versions) {
   const parsed = parseTag(tag, tag === 'v0.8.1');
   if (!parsed || versions[parsed.component] !== parsed.version) throw Error('Release tag/version mismatch');
-  return { ...parsed, client: parsed.component === 'client', server: parsed.component === 'server', deploy: parsed.component === 'deploy' };
+  return { ...parsed, client: parsed.component === 'client', server: parsed.component === 'server', manager: parsed.component === 'manager' };
 }
 function channelFor(version, requested = 'preview') {
   if (!parseVersion(version) || !['stable', 'preview'].includes(requested)) throw Error('Invalid release channel');

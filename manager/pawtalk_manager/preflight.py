@@ -6,10 +6,12 @@ import shlex
 import shutil
 import socket
 import subprocess
+import sys
 import urllib.request
 from pathlib import Path
 from .config import atomic
 from .runtime import run
+from .platforms import WINDOWS, admin
 
 
 def supported(file='/etc/os-release',machine=None):
@@ -54,8 +56,14 @@ def bootstrap(distro,codename,arch):
 
 
 def check(config,bootstrap_docker=False,no_systemd=False):
-    if os.geteuid() != 0:
+    if not admin():
         raise ValueError('Run with sudo/root')
+    if WINDOWS:
+        supported_windows()
+        check_ports(int(config['PAWTALK_PORT']))
+        if shutil.disk_usage(os.environ.get('ProgramData',r'C:\ProgramData')).free < 1024*1024*1024:
+            raise ValueError('At least 1 GiB free disk space required')
+        return
     distro,codename,arch = supported()
     if not shutil.which('docker'):
         if not bootstrap_docker:
@@ -72,6 +80,12 @@ def check(config,bootstrap_docker=False,no_systemd=False):
     check_ports(int(config['PAWTALK_PORT']))
     if shutil.disk_usage('/').free < 1024*1024*1024:
         raise ValueError('At least 1 GiB of free disk space is required')
+
+
+def supported_windows(version=None,machine=None):
+    version = version or sys.getwindowsversion()
+    if version.major < 10 or (version.product_type != 1 and version.build < 17763) or (machine or platform.machine()).lower() not in ('amd64','x86_64'):
+        raise ValueError('Windows 10 / Windows Server 2019 or newer, x64 required')
 
 
 def check_ports(port):

@@ -44,9 +44,9 @@ jobs:
         run: sudo python3 -m unittest discover -s tests -p '*_test.py'
       - name: Verify actual systemd units and oneshot execution
         run: |
-          sudo install -D -m 0755 deploy/launcher /opt/pawtalk-agent/launcher
-          systemd-analyze verify deploy/pawtalk-update.service deploy/pawtalk-update.timer deploy/pawtalk-health.service deploy/pawtalk-health.timer
-          sudo systemd-run --wait --collect --unit="pawtalk-ci-selftest-${GITHUB_RUN_ID}" /usr/bin/python3 "$GITHUB_WORKSPACE/deploy/pawtalkctl" --self-test
+          sudo install -D -m 0755 manager/launcher /opt/pawtalk-manager/launcher
+          systemd-analyze verify manager/pawtalk-update.service manager/pawtalk-update.timer manager/pawtalk-health.service manager/pawtalk-health.timer
+          sudo systemd-run --wait --collect --unit="pawtalk-ci-selftest-${GITHUB_RUN_ID}" /usr/bin/python3 "$GITHUB_WORKSPACE/manager/pawtalkctl" --self-test
       - name: Real Compose install, backup, upgrade, restore and crash recovery
         run: sudo python3 tests/compose_integration.py
         timeout-minutes: 25
@@ -65,7 +65,14 @@ jobs:
           PAWTALK_TEST_IMAGE: ghcr.io/ilyarusskikh/pawtalk-server@sha256:601bd68f577c63a98b3dfec040b01379467576dfc6d16c15f2bf7501ac86b8f0
         run: node scripts/server-smoke.mjs
   windows:
-    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -100,6 +107,28 @@ jobs:
       - run: npm run test:sounds
       - run: npm test
       - run: npm run server:prepare
+      - name: Verify native Manager host safeguards
+        working-directory: manager/windows
+        run: |
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
+      - name: Build permanent Windows Server and Manager installer
+        run: |
+          node scripts/build-windows-server.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/build-manager-windows.mjs
+      - name: Verify native Windows lifecycle with actual SCM services
+        run: node scripts/windows-manager-smoke.mjs --scm --installer
+      - name: Upload permanent Windows components
+        if: matrix.runner == 'windows-2025'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pawtalk-server-manager-windows
+          if-no-files-found: error
+          path: |
+            release/server/PawTalk.Server.*.windows-x64.zip
+            release/manager/PawTalk.Server.Manager.Setup.*.exe
       - run: npm run smoke
       - run: node scripts/ui-flow-smoke.mjs --built
       - run: npm run test:connection-ui
@@ -152,7 +181,7 @@ jobs:
           PAWTALK_PRERELEASE: ${{ inputs.client-prerelease && 'true' || 'false' }}
         run: node scripts/sign-update.mjs
       - uses: actions/upload-artifact@v4
-        if: ${{ !startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/tags/client-v') || github.ref == 'refs/tags/v0.8.1' }}
+        if: ${{ matrix.runner == 'windows-2025' && (!startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/tags/client-v') || github.ref == 'refs/tags/v0.8.1') }}
         with:
           name: pawtalk-windows
           if-no-files-found: error

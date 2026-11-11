@@ -5,6 +5,6 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/pawtalk-agent/launcher health
+ExecStart=/opt/pawtalk-manager/launcher health
 TimeoutStartSec=20min
 UMask=0077

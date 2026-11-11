@@ -348,6 +348,11 @@ func standalone(args []string) error {
 	}()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// The native Windows service closes stdin for a graceful shutdown before
+	// its job object enforces a process-tree timeout. Containers keep signal handling.
+	if os.Getenv("PAWTALK_MANAGED_STDIN") == "true" {
+		go func() { _, _ = io.Copy(io.Discard, os.Stdin); stop() }()
+	}
 	for deadline := time.Now().Add(20 * time.Second); ; {
 		if mediaReady() {
 			break

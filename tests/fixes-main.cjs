@@ -28,14 +28,16 @@ app.on('browser-window-created', (_event, win) => {
       assert.equal(await js('window.desktop.getAutoUpdate()'),false);
       await js(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Browser clipboard unavailable'); } } })`);
       await js(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Сгенерировать ключ шифрования').click()`);
-      await until(`!!document.querySelector('#server-key-env')`);
-      for (const name of ['secret', 'env']) {
+      await until(`!!document.querySelector('#server-key-id')`);
+      for (const name of ['secret', 'id']) {
         const value = await js(`document.querySelector('#server-key-${name}').value`);
         await js(`document.querySelector('#server-key-${name}').parentElement.querySelector('button').click()`);
         await until(`document.querySelector('#server-key-${name}').parentElement.querySelector('button').textContent==='Скопировано'`);
         assert.equal(copied, value, name + ' reaches Electron clipboard');
       }
       assert.equal(await js(`window.desktop.copyServerKey('not a key').then(()=>false,()=>true)`), true);
+      const legacyEnv = 'PAWTALK_E2EE=true\nPAWTALK_E2EE_KEY_ID='+'a'.repeat(64);
+      assert.equal(await js(`window.desktop.copyServerKey(${JSON.stringify(legacyEnv)}).then(()=>false,()=>true)`),true);
       const chatText = 'Сообщение\nSecond line';
       await js(`window.desktop.copyChatText(${JSON.stringify(chatText)})`);
       assert.equal(copied,chatText,'chat text reaches the current Electron clipboard API unchanged');
@@ -64,6 +66,20 @@ app.on('browser-window-created', (_event, win) => {
           const geometry = await js(`(()=>{const f=document.querySelector('.update-settings .form-fields'),[a,b]=f.children;return {gap:b.getBoundingClientRect().top-a.getBoundingClientRect().bottom,overflow:f.scrollWidth>f.clientWidth}})()`);
           assert.ok(Math.abs(geometry.gap-20)<=1,'actual update field gap: '+geometry.gap);
           assert.equal(geometry.overflow,false);
+          await js(`document.querySelector('dialog [aria-label=${JSON.stringify(language === 'ru' ? 'Закрыть' : 'Close')} ]').click()`);
+          await js(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent===${JSON.stringify(language === 'ru' ? 'Сгенерировать ключ шифрования' : 'Generate an encryption key')}).click()`);
+          await until("!!document.querySelector('#server-key-id')");
+          const fields = await js(`(()=>{const m=document.querySelector('.server-key-modal'),f=m.querySelector('.form-fields'),[a,b]=f.children;return {secret:m.querySelector('#server-key-secret').value,id:m.querySelector('#server-key-id').value,label:m.querySelector('label[for="server-key-id"]').textContent,gap:b.getBoundingClientRect().top-a.getBoundingClientRect().bottom,env:m.textContent.includes('.env'),overflow:f.scrollWidth>f.clientWidth}})()`);
+          assert.equal(fields.id,require('node:crypto').createHash('sha256').update(Buffer.from(fields.secret,'hex')).digest('hex'));
+          assert.equal(fields.label,language === 'ru' ? 'Отпечаток для мастера (SHA-256 key ID)' : 'Installer fingerprint (SHA-256 key ID)');
+          assert.equal(fields.env,false);
+          assert.ok(Math.abs(fields.gap-20)<=1,'actual key field gap: '+fields.gap);
+          assert.equal(fields.overflow,false);
+          await js("document.querySelector('#server-key-id').parentElement.querySelector('button').click()");
+          await until(`document.querySelector('#server-key-id').parentElement.querySelector('button').textContent===${JSON.stringify(language === 'ru' ? 'Скопировано' : 'Copied')}`);
+          assert.equal(copied,fields.id);
+          await js(`document.querySelector('dialog [aria-label=${JSON.stringify(language === 'ru' ? 'Закрыть' : 'Close')} ]').click();document.querySelector('[title=${JSON.stringify(language === 'ru' ? 'Настройки' : 'Settings')} ]').click()`);
+          await until("!!document.querySelector('.settings-modal')");
         }
       }
       win.webContents.debugger.detach();

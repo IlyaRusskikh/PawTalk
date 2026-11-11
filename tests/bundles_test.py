@@ -9,24 +9,33 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'deploy'))
-from pawtalk_agent import bundles, cli, preflight, release
-from pawtalk_agent.config import save
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'manager'))
+from pawtalk_manager import bundles, cli, preflight, release
+from pawtalk_manager.config import save
 import controller_test
 
 
 class BundleTests(unittest.TestCase):
+    def test_windows_version_gate_distinguishes_server_and_client(self):
+        from types import SimpleNamespace
+        for product,build in [(1,10240),(1,22000),(3,17763),(3,20348),(3,26100)]:
+            preflight.supported_windows(SimpleNamespace(major=10,product_type=product,build=build),'AMD64')
+        for major,product,build,machine in [(6,1,9600,'AMD64'),(10,3,14393,'AMD64'),(10,1,26100,'ARM64')]:
+            with self.assertRaises(ValueError):
+                preflight.supported_windows(SimpleNamespace(major=major,product_type=product,build=build),machine)
+
     def test_bilingual_wizard_keeps_secret_keys_off_the_server(self):
         import contextlib
         for lang in ['ru','en']:
-            answers = ['203.0.113.10','18443','true','a'*64,'128','true','false','stable','preview']
+            answers = ['203.0.113.10','18443','true','a'*64,'128','true']
             with patch.object(preflight,'public_candidates',return_value=['203.0.113.10']),patch('builtins.input',side_effect=answers),contextlib.redirect_stdout(io.StringIO()):
                 values = cli.wizard(lang)
             self.assertEqual(values['PAWTALK_LANGUAGE'],lang)
             self.assertEqual(values['PAWTALK_E2EE_KEY_ID'],'a'*64)
             self.assertNotIn('PAWTALK_E2EE_KEY',values)
-            self.assertEqual(values['PAWTALK_SERVER_CHANNEL'],'stable')
-            self.assertEqual(values['PAWTALK_DEPLOY_AUTO_UPDATE'],'false')
+            self.assertNotIn('PAWTALK_SERVER_CHANNEL',values)
+            self.assertNotIn('PAWTALK_MANAGER_CHANNEL',values)
+            self.assertEqual(values['PAWTALK_MANAGER_AUTO_UPDATE'],'true')
     def test_port_preflight_distinguishes_tcp_time_wait_from_active_listeners(self):
         server = socket.socket()
         server.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
@@ -50,7 +59,7 @@ class BundleTests(unittest.TestCase):
     def test_archive_traversal_links_and_missing_files_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             p = Path(directory)
-            for name,kind in [('../escape',tarfile.REGTYPE),('deploy/pawtalkctl',tarfile.SYMTYPE),('deploy/VERSION',tarfile.REGTYPE)]:
+            for name,kind in [('../escape',tarfile.REGTYPE),('manager/pawtalkctl',tarfile.SYMTYPE),('manager/VERSION',tarfile.REGTYPE)]:
                 archive = p/'bad.tar.gz'
                 with tarfile.open(archive,'w:gz') as output:
                     item = tarfile.TarInfo(name)
@@ -73,15 +82,15 @@ class BundleTests(unittest.TestCase):
             with self.assertRaises(ValueError): preflight.supported(file,'x86_64')
 
     def test_launcher_restores_previous_and_cancels_operation(self):
-        source = Path(__file__).resolve().parents[1]/'deploy'
+        source = Path(__file__).resolve().parents[1]/'manager'
         with tempfile.TemporaryDirectory() as directory:
-            agent = Path(directory)/'opt/pawtalk-agent'
+            agent = Path(directory)/'opt/pawtalk-manager'
             versions = agent/'versions'
             good,bad = versions/'0.1.0',versions/'0.1.1'
             import shutil
-            shutil.copytree(source,good/'deploy',ignore=shutil.ignore_patterns('__pycache__'))
-            (bad/'deploy').mkdir(parents=True)
-            (bad/'deploy/pawtalkctl').write_text('raise RuntimeError("broken")')
+            shutil.copytree(source,good/'manager',ignore=shutil.ignore_patterns('__pycache__'))
+            (bad/'manager').mkdir(parents=True)
+            (bad/'manager/pawtalkctl').write_text('raise RuntimeError("broken")')
             (agent/'current').symlink_to('versions/0.1.1')
             (agent/'previous').symlink_to('versions/0.1.0')
             process = subprocess.run([sys.executable,str(source/'launcher'),'--root',directory,'periodic'],capture_output=True)
@@ -94,7 +103,7 @@ class BundleTests(unittest.TestCase):
         fixture = controller_test.ControllerTests()
         fixture.setUp()
         try:
-            save(fixture.c.etc/'trust.json',{'server':{},'deploy':{}})
+            save(fixture.c.etc/'trust.json',{'server':{},'manager':{}})
             manifest = Path(fixture.temp.name)/'bad-manifest.json'
             manifest.write_text('{"keyId":"unknown","payload":"synthetic-sensitive-input","signature":""}')
             with contextlib.redirect_stderr(io.StringIO()):
@@ -110,7 +119,7 @@ class BundleTests(unittest.TestCase):
         fixture = controller_test.ControllerTests()
         fixture.setUp()
         try:
-            save(fixture.c.etc/'trust.json',{'server':{},'deploy':{}})
+            save(fixture.c.etc/'trust.json',{'server':{},'manager':{}})
             with patch.object(release,'discover',side_effect=AssertionError('Unexpected network request')):
                 self.assertEqual(cli.main(['--root',fixture.temp.name,'periodic']),0)
         finally:
