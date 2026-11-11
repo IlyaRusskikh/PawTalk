@@ -1,6 +1,6 @@
 # Независимые выпуски / Independent releases
 
-**Ветка 0.9.0 — подготовка к ревью. Ничего не опубликовано автоматически.**
+**Выпущены Client 0.9.0, Server 0.9.0, Manager 0.1.0 и Client bridge v0.8.1.**
 Локальные сборки используют `--publish never`. Push/tag/release требуют отдельного
 разрешения владельца. Опубликованные теги, EXE и образы не заменяются.
 
@@ -148,7 +148,7 @@ Client pin. Для нового pin нужны совместимые контр
    настоящие микрофоны/две сети. Контейнерные synthetic tests не доказывают их успех.
 5. Проверить Client-only/Server-only/Manager-only маршруты, подмену metadata/assets,
    каналы, backup/restore, нездоровый rollout, SIGKILL recovery, Manager fallback.
-6. Получить отдельное разрешение на публикацию. В текущей задаче его нет.
+6. Получить отдельное разрешение на публикацию.
 
 Порядок первого нового выпуска: проверенный bridge `v0.8.1` → Server → Manager
 (с существующим подписанным Server) → Client. Все production ключи/артефакты должны
@@ -172,7 +172,7 @@ from commit `3747a0d`, published before `client-v0.9.0` after separate review.
 Never replace historical tags or assets. The component release workflow validates
 its own source, runs verification and publishes only its component's assets.
 Stable/preview flags must match signed metadata. Keep current public 0.8.0 links
-until new artifacts actually exist. No publication is authorized in this task.
+until new artifacts actually exist.
 
 Release verification receives the selected component scope; branch/PR checks
 default to `all`. Client tags package only the Client, Server tags package only

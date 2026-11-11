@@ -1,6 +1,6 @@
 # Permanent Windows server / Постоянный Windows-сервер
 
-**0.9.0 development, unreleased / В разработке, не опубликовано.**
+**Server 0.9.0 / Manager 0.1.0 — released / выпущены.**
 Целевые ОС: Windows 10/11 x64 и Windows Server 2019/2022/2025 x64.
 Это матрица целей, а не утверждение о проверке всех этих ОС.
 На локальной машине проверяется настоящий Go/LiveKit, SQLite, Ed25519 и Windows
@@ -11,7 +11,7 @@ Windows CI-тестом на Windows Server 2022 и 2025: службы, EXE-ус
 
 ## Установка
 
-После выпуска скачайте `PawTalk.Server.Manager.Setup.X.Y.Z.exe` из `manager-vX.Y.Z`.
+Скачайте `PawTalk.Server.Manager.Setup.X.Y.Z.exe` из `manager-vX.Y.Z`.
 Запустите EXE с правами администратора, выберите язык и заполните настройки:
 публичный IPv4, порт, шифрование, SHA-256 key ID (не секретный ключ), лимит истории
 и общий переключатель автообновления сервера/Manager. Шифрование и обновления
@@ -24,7 +24,7 @@ runtime/host; это прерывает звонок. Обычное обнов�
 Python встроен в установщик. Docker, WSL, Node.js и отдельная установка Python
 не требуются. Настоящие подписанные Server/Manager релизы и заранее настроенные
 корни доверия обязательны. Публичные ключи в `manager/trust.json` настроены;
-production-установка требует публикации подписанных релизов, как и на Linux.
+подписанные релизы опубликованы, как и для Linux.
 
 По умолчанию программа находится в `%ProgramFiles%\PawTalk Server Manager`,
 данные/конфигурация/backup — в `%ProgramData%\PawTalk`.
@@ -116,7 +116,7 @@ node scripts/windows-manager-smoke.mjs --scm --installer
 
 ## English
 
-The unreleased Windows installer targets Windows 10/11 and Server 2019/2022/2025
+The Windows installer targets Windows 10/11 and Server 2019/2022/2025
 x64. It bundles Python and needs no Docker/WSL/Node installation. These OS targets
 still require actual OS-specific verification.
 Windows Server 2022/2025 CI passed actual SCM service and EXE install/uninstall

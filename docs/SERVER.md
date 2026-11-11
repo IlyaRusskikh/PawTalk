@@ -1,10 +1,8 @@
 # PawTalk Server — Linux и Windows
 
-**Разработка 0.9.0, ещё не опубликовано.** Команды установки требуют настоящих
-подписанных Server/Manager релизов и настроенных публичных ключей. В репозитории
-уже настроены публичные ключи в `manager/trust.json`; установка станет доступна после
-публикации настоящих подписанных Server/Manager релизов.
-Действующая публичная загрузка клиента остаётся 0.8.0. [Процесс выпуска](RELEASING.md).
+**Server 0.9.0 / Manager 0.1.0 опубликованы.** Команды установки используют
+подписанные релизы и настроенные публичные ключи из `manager/trust.json`.
+Клиент выпускается отдельно как `client-v0.9.0`. [Процесс выпуска](RELEASING.md).
 
 ## Требования
 
@@ -161,13 +159,13 @@ sudo python3 manager/pawtalkctl backup restore backup-012345abcdef --trust manag
 
 ## English
 
-Unreleased 0.9.0 uses one Debian 12 / Ubuntu 24.04 amd64/arm64 host with Docker
+Server 0.9.0 uses one Debian 12 / Ubuntu 24.04 amd64/arm64 host with Docker
 Engine and Compose v2+, host networking and a persistent non-root Go/LiveKit room.
 Permanent Windows hosting uses native services and the shared Manager controller; see [Windows setup](WINDOWS-SERVER.md). Temporary rooms inside the Windows client remain.
 Start `sudo python3 manager/pawtalkctl --lang en install` from a trusted checkout
 with configured public roots. The wizard verifies and runs the signed Manager
 installer and independently verifies the Server digest. Production public roots are
-configured; installation still requires published signed Server/Manager releases.
+configured, and signed Server/Manager releases are published.
 The wizard validates each answer immediately and always requests the SHA-256 key ID
 when E2EE is enabled; boolean case and terminal paste wrappers are normalized.
 Encryption and automatic updates default to yes in the wizard. One automatic-update

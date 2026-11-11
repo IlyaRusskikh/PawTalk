@@ -1,6 +1,6 @@
 # Client 0.9.0 / Server 0.9.0 / Manager 0.1.0
 
-Prepared for review; not published. / Подготовлено к ревью; не опубликовано.
+Released 2026-11-11. / Выпущено 2026-11-11.
 
 ## Русский
 
