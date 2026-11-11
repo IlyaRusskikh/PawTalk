@@ -6,6 +6,12 @@ Unicode true
 !include "x64.nsh"
 !include "FileFunc.nsh"
 !include "WinMessages.nsh"
+; Fixed phase names only. Never write captured invitation/password output here.
+!macro InstallStage TEXT
+ FileOpen $R0 "$INSTDIR\install-status.txt" w
+ FileWrite $R0 "${TEXT}"
+ FileClose $R0
+!macroend
 Name "PawTalk Server Manager"
 OutFile "${OUTPUT}"
 InstallDir "$APPDATA\PawTalk Server Manager"
@@ -270,12 +276,14 @@ Section "PawTalk Server Manager"
  ${EndIf}
  SetOutPath "$INSTDIR"
  File /r "${STAGE}\*"
+ !insertmacro InstallStage "protect-install"
  ExecWait '"$INSTDIR\pawtalkctl.exe" protect-install "$INSTDIR"' $0
  ${If} $0 != 0
   SetErrorLevel 1
   Abort
  ${EndIf}
  CreateDirectory "$SMPROGRAMS\PawTalk Server Manager"
+ !insertmacro InstallStage "gui-host-self-test"
  ExecWait '"$INSTDIR\pawtalk-server-tray.exe" --self-test' $0
  ${If} $0 != 0
   SetErrorLevel 1
@@ -295,10 +303,12 @@ Section "PawTalk Server Manager"
  ${EndIf}
  ; Capture output privately: the invitation has its own copyable wizard page.
  ; Never log the captured password-bearing output into the installer details.
+ !insertmacro InstallStage "manager-install"
  nsExec::ExecToStack /TIMEOUT=600000 '"$INSTDIR\pawtalkctl.exe" --root "$DataRoot" --lang $LanguageValue install --config "$ExternalConfig" $ExtraArgs'
  Pop $0
  Pop $1
  ${If} $0 != 0
+  !insertmacro InstallStage "manager-install failed (exit $0)"
   SetErrorLevel 1
   IfSilent failed
   MessageBox MB_ICONSTOP "$(Failure)"
@@ -309,6 +319,7 @@ Section "PawTalk Server Manager"
  WriteRegStr HKLM "Software\PawTalk\ServerManager" "DataRoot" "$DataRoot"
  WriteRegDWORD HKLM "Software\PawTalk\ServerManager" "Language" $LANGUAGE
  WriteUninstaller "$INSTDIR\Uninstall.exe"
+ !insertmacro InstallStage "protect-uninstaller"
  ExecWait '"$INSTDIR\pawtalkctl.exe" protect-install "$INSTDIR"' $0
  ${If} $0 != 0
   SetErrorLevel 1
@@ -332,6 +343,7 @@ Section "PawTalk Server Manager"
    DetailPrint "Legacy program directory preserved for manual review. Room data remains in ProgramData."
   ${EndIf}
  ${EndIf}
+ !insertmacro InstallStage "complete"
 SectionEnd
 
 Function InvitationCreate

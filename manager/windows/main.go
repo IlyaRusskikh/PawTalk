@@ -283,8 +283,19 @@ func control(action, root string) error {
 	if errors.Is(e, windows.ERROR_SERVICE_DOES_NOT_EXIST) && (pieces[0] == "uninstall" || pieces[0] == "stop") {
 		return nil
 	}
+	if errors.Is(e, windows.ERROR_SERVICE_MARKED_FOR_DELETE) && (pieces[0] == "uninstall" || pieces[0] == "stop") {
+		return awaitServiceRemoval(connection, name)
+	}
 	if e != nil {
 		return e
+	}
+	if pieces[0] == "uninstall" {
+		err := s.Delete()
+		_ = s.Close() // Holding our handle itself prevents SCM from removing it.
+		if err != nil && !errors.Is(err, windows.ERROR_SERVICE_MARKED_FOR_DELETE) {
+			return err
+		}
+		return awaitServiceRemoval(connection, name)
 	}
 	defer s.Close()
 	switch pieces[0] {
@@ -309,8 +320,6 @@ func control(action, root string) error {
 			return nil
 		}
 		return s.Start()
-	case "uninstall":
-		return s.Delete()
 	case "stop":
 		// SCM cannot cancel queued recovery actions. Disable before a consistent
 		// backup/restore, then re-enable only when start is explicitly requested.
@@ -324,6 +333,18 @@ func control(action, root string) error {
 		if status.State == svc.Stopped {
 			return nil
 		}
+		// SERVICE_STOPPED may precede process teardown. Wait for the old host
+		// to release Python/runtime files before a reinstall replaces its tree.
+		var process windows.Handle
+		if status.ProcessId != 0 {
+			process, err = windows.OpenProcess(windows.SYNCHRONIZE, false, status.ProcessId)
+			if err != nil && !errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
+				return err
+			}
+			if process != 0 {
+				defer windows.CloseHandle(process)
+			}
+		}
 		if _, err = s.Control(svc.Stop); err != nil && !errors.Is(err, windows.ERROR_SERVICE_NOT_ACTIVE) {
 			return err
 		}
@@ -333,12 +354,49 @@ func control(action, root string) error {
 				return err
 			}
 			if status.State == svc.Stopped {
+				if process == 0 {
+					return nil
+				}
+				result, err := windows.WaitForSingleObject(process, 10000)
+				if err != nil {
+					return err
+				}
+				if result != windows.WAIT_OBJECT_0 {
+					return errors.New("service process did not exit")
+				}
 				return nil
 			}
 		}
 		return errors.New("service stop timed out")
 	}
 	return errors.New("unknown service action")
+}
+
+func awaitServiceRemoval(connection *mgr.Mgr, name string) error {
+	return waitServiceGone(func() error {
+		service, err := connection.OpenService(name)
+		if err == nil {
+			_ = service.Close()
+		}
+		return err
+	}, 40*time.Second)
+}
+
+func waitServiceGone(probe func() error, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		err := probe()
+		if errors.Is(err, windows.ERROR_SERVICE_DOES_NOT_EXIST) {
+			return nil
+		}
+		if err != nil && !errors.Is(err, windows.ERROR_SERVICE_MARKED_FOR_DELETE) {
+			return err
+		}
+		if time.Now().After(deadline) {
+			return errors.New("service deletion timed out")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func verify(args []string) error {

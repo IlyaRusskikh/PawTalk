@@ -421,7 +421,9 @@ try:
                 # No config/manifest flags: reuse the saved config and verified
                 # release without a wizard, network request or identity reset.
                 again=subprocess.run([str(setup),'/S',f'/ROOT={install_root}'],capture_output=True,timeout=240)
-                assert again.returncode==0,'Reinstallation with existing config failed'
+                stage_file=program/'install-status.txt'
+                install_stage=stage_file.read_text() if stage_file.is_file() else 'before protected file copy'
+                assert again.returncode==0,f'Reinstallation with existing config failed (exit={again.returncode}, stage={install_stage})'
                 assert not legacy.exists(),'Legacy Program Files directory was not retired'
                 assert (install_root/'etc/pawtalk/config.env').read_bytes()==saved_config
                 again_invitation=subprocess.run([str(installed),'--root',str(install_root),'invitation'],capture_output=True,timeout=30)

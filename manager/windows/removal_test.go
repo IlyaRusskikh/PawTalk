@@ -5,12 +5,33 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"golang.org/x/sys/windows"
 )
+
+func TestServiceDeletionWaitsForSCMToReleaseItsName(t *testing.T) {
+	sequence := []error{nil, windows.ERROR_SERVICE_MARKED_FOR_DELETE, windows.ERROR_SERVICE_DOES_NOT_EXIST}
+	index := 0
+	if err := waitServiceGone(func() error { result := sequence[index]; index++; return result }, time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if index != len(sequence) {
+		t.Fatal("pending deletion was mistaken for deletion completion")
+	}
+	if err := waitServiceGone(func() error { return windows.ERROR_ACCESS_DENIED }, time.Second); !errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+		t.Fatal("permission failure hidden", err)
+	}
+	if err := waitServiceGone(func() error { return windows.ERROR_SERVICE_MARKED_FOR_DELETE }, 0); err == nil {
+		t.Fatal("pending deletion never timed out")
+	}
+}
 
 func TestPythonUsesConsoleHostEvenFromGUI(t *testing.T) {
 	command := python(context.Background(), "fixture.py", "--self-test")

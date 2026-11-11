@@ -4,6 +4,8 @@
 
 ### Client 0.10.0 / Server 0.10.0 / Manager 0.2.0
 
+- Wait for Windows service processes and pending SCM deletion before reinstalling; record only fixed installer phases for diagnostics. Exercise drag behavior under explicit normal/reduced motion instead of inheriting runner settings. / Повторная установка ждёт завершения процессов служб и удаления записи SCM; диагностика сохраняет только фиксированные этапы установки. Drag-проверки явно задают обычные/уменьшенные анимации вместо настроек runner.
+
 - **Manager 0.2.0:** add Windows service tray controls, desktop/sign-in shortcuts, a server badge, protected ProgramData installation/migration, full-data uninstall option and config reuse. Protect recoverable password invitations with user DPAPI; retry transient signed-release downloads. / Управление службой через трей, ярлыки, серверный значок, защищённая установка/миграция в ProgramData, полное удаление данных по выбору и повторное использование конфигурации. Приглашения с паролем защищены пользовательским DPAPI; временные ошибки загрузки подписанных выпусков повторяются.
 - **Client 0.10.0:** accept legacy Manager invitation/password paste, request missing E2EE credentials, use the authenticated LAN voice proxy and keep the embedded temporary-room Server security backport pinned by hash. / Разбор старой вставки приглашения/пароля Manager, запрос недостающих данных E2EE, проверенный LAN-прокси голоса и закреплённый хэшем security backport встроенного сервера временных комнат.
 
