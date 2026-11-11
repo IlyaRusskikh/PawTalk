@@ -5,7 +5,8 @@
 Это матрица целей, а не утверждение о проверке всех этих ОС.
 На локальной машине проверяется настоящий Go/LiveKit, SQLite, Ed25519 и Windows
 job lifecycle. Регистрация SCM, LocalService ACL и автозапуск проверяются отдельным
-Windows CI-тестом; до успешного workflow их готовность не подтверждена.
+Windows CI-тестом на Windows Server 2022 и 2025: службы, EXE-установка и удаление
+с сохранением данных прошли. Windows 10/11 и Server 2019 отдельно не проверялись.
 Реальный внешний TCP/UDP и голос между физическими устройствами не проверены.
 
 ## Установка
@@ -22,8 +23,8 @@ runtime/host; это прерывает звонок. Обычное обнов�
 
 Python встроен в установщик. Docker, WSL, Node.js и отдельная установка Python
 не требуются. Настоящие подписанные Server/Manager релизы и заранее настроенные
-корни доверия обязательны. Пустой `manager/trust.json` в текущем checkout блокирует
-production-установку, как и на Linux.
+корни доверия обязательны. Публичные ключи в `manager/trust.json` настроены;
+production-установка требует публикации подписанных релизов, как и на Linux.
 
 По умолчанию программа находится в `%ProgramFiles%\PawTalk Server Manager`,
 данные/конфигурация/backup — в `%ProgramData%\PawTalk`.
@@ -117,7 +118,9 @@ node scripts/windows-manager-smoke.mjs --scm --installer
 
 The unreleased Windows installer targets Windows 10/11 and Server 2019/2022/2025
 x64. It bundles Python and needs no Docker/WSL/Node installation. These OS targets
-still require actual OS-specific verification. Run the EXE as Administrator and
+still require actual OS-specific verification.
+Windows Server 2022/2025 CI passed actual SCM service and EXE install/uninstall
+checks; Windows 10/11 and Server 2019 remain unverified. Run the EXE as Administrator and
 configure IP, ports, E2EE key ID, history and automatic updates. Save the invitation
 and one-time password shown at the end. Configure external TCP/UDP and Windows
 Firewall yourself. The same Manager controller handles signatures, backup,

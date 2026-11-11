@@ -69,9 +69,9 @@ Client сохраняет `electron/update-keys.json` и существующи�
 в GitHub secret `PAWTALK_UPDATE_PRIVATE_KEY` ([Client signing](UPDATE-SIGNING.md)).
 Не менять его при bridge-переходе. Schema 1 дополнена `component: client`, понятна bridge.
 
-Server/Manager публичные ключи нужно заранее внести в `manager/trust.json` под
-соответствующие разделы `server`/`manager`; сейчас оба пусты и production-проверка
-закрыта. Private keys создаются и хранятся **вне репозитория**, независимо, и попадают
+Server/Manager публичные ключи внесены в `manager/trust.json` под
+соответствующими разделами `server`/`manager` (key IDs `server-2026-11` и
+`manager-2026-11`). Private keys создаются и хранятся **вне репозитория**, независимо, и попадают
 только в secrets `PAWTALK_SERVER_PRIVATE_KEY` и `PAWTALK_MANAGER_PRIVATE_KEY`.
 Не сохранять приватные ключи, токены или реальные приглашения в Git/CI artifacts.
 Проверка Server key выполняется до публикации GHCR image.
@@ -155,7 +155,7 @@ its own source, runs verification and publishes only its component's assets.
 Stable/preview flags must match signed metadata. Keep current public 0.8.0 links
 until new artifacts actually exist. No publication is authorized in this task.
 
-Client retains its existing key; Server and Manager require separate owner-provisioned
+Client retains its existing key; Server and Manager have separate provisioned
 Ed25519 roots and CI secrets. Empty roots fail closed. Bootstrap trusts a reviewed
 checkout; updates verify type, repository, version, channel, signature and digest.
 Bundled Windows self-host uses a pinned source commit and records binary hashes.

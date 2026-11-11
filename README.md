@@ -97,6 +97,8 @@ For the upcoming VPS installer, the key generator shows a shared participant sec
 <details>
 <summary>How do I update or get help?</summary>
 
+The available-update button appears in the sidebar above Settings without shifting the page.
+
 Current PawTalk builds check GitHub releases at startup and verify the update manifest signature and the file's SHA-256 checksum before installing. If GitHub is unavailable, the updater can use a compatible bookmarked room as a download relay. Both built-in Windows self-host rooms and VPS rooms support this; the room must be running and able to reach GitHub for metadata and uncached files. The server streams and caches one installer on disk, serves repeat downloads without fetching the installer from GitHub again, and removes the older cached installer after a newer version finishes downloading. Installer transfers have no server bandwidth cap.
 
 [Update details](docs/UPDATES.md).

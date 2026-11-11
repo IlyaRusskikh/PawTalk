@@ -138,6 +138,8 @@ jobs:
       - run: node scripts/ui-flow-smoke.mjs --built
       - run: npm run test:connection-ui
       - run: node scripts/updates-ui-smoke.mjs
+      - name: Verify update button geometry in Russian and English
+        run: node scripts/update-layout-smoke.mjs
       - run: node scripts/fixes-main-smoke.mjs
       - name: Cache LiveKit server
         uses: actions/cache@v4
