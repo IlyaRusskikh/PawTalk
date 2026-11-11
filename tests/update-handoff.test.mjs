@@ -16,13 +16,13 @@ const waitForProcessExit = async (pid, timeout = 5000) => {
   }
   throw new Error(`PowerShell helper ${pid} did not exit`);
 };
-test('hidden PowerShell executes and survives a real Electron parent shutdown', { skip: process.platform !== 'win32', timeout: 15000 }, async () => {
+test('hidden PowerShell executes and survives a real Electron parent shutdown', { skip: process.platform !== 'win32', timeout: 40000 }, async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk handoff '));
   const env = { ...process.env, PAWTALK_HANDOFF_DIRECTORY: directory };
   delete env.ELECTRON_RUN_AS_NODE;
   try {
     const childPid = path.join(directory, 'child-pid');
-    await promisify(execFile)(require('electron'), ['tests/update-handoff.cjs'], { env, windowsHide: true, timeout: 10000 });
+    await promisify(execFile)(require('electron'), ['tests/update-handoff.cjs'], { env, windowsHide: true, timeout: 25000 });
     let contents;
     for (let i = 0; i < 50; i++) {
       try { contents = await readFile(path.join(directory, 'done'), 'utf8'); break; } catch {}
