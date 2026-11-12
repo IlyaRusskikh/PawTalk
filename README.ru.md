@@ -2,11 +2,11 @@
 
 Русский · [English](README.md)
 
-Выпущены **Client 0.11.0 / Server 0.10.1 / Manager 0.2.1**. Переходный клиент `v0.8.1` обеспечивает обнаружение выпусков `client-v*` установленными клиентами 0.8.0. Постоянные серверы Linux и Windows используют независимые подписанные обновления. [Процесс выпуска](docs/RELEASING.md) · [Совместимость](docs/COMPATIBILITY.md).
+Выпущены **Client 0.11.0 / Server 0.10.1 / Manager 0.3.0**. Переходный клиент `v0.8.1` обеспечивает обнаружение выпусков `client-v*` установленными клиентами 0.8.0. Постоянные серверы Linux и Windows используют независимые подписанные обновления. [Процесс выпуска](docs/RELEASING.md) · [Совместимость](docs/COMPATIBILITY.md).
 
 Client 0.11.0 добавляет мастер первого запуска, отзывчивые звуки уведомлений и общее ядро встроенного сервера. [Заметки выпуска Client](docs/releases/client-v0.11.0.md).
 
-Manager **0.3.0 готовится** в отдельной ветке разработки: окно настроек Electron/React, цвета реального статуса в трее, управление доступом/копиями/диагностикой и автоматическая установка Windows Manager с проверкой подписи и хеша. Опубликованные загрузки выше не меняются. [Поведение и проверки нового Manager](docs/MANAGER-DESKTOP.md).
+Manager **0.3.0 опубликован как preview**: окно настроек Electron/React, цвета реального статуса в трее, управление доступом/копиями/диагностикой и автоматическая установка Windows Manager с проверкой подписи и хеша. [Поведение и проверки нового Manager](docs/MANAGER-DESKTOP.md).
 
 [Изменения и порядок обновления](docs/RELEASE-NOTES-0.10.1.md). Windows Server Manager получил управление через трей, настройки, миграцию в ProgramData и полное удаление данных по выбору. Для защиты активности обновите установленный Server до 0.10.1: переустановка Manager сохраняет установленную версию Server.
 
@@ -14,7 +14,7 @@ Manager **0.3.0 готовится** в отдельной ветке разра
 
 PawTalk — **альтернатива Discord и TeamSpeak для голосового общения** на Windows. Соберите друзей перед матчем, общайтесь с командой во время игры или заведите постоянную голосовую комнату для своего сообщества. Чтобы присоединиться, достаточно приглашения и никнейма. Регистрация не нужна.
 
-**[Скачать PawTalk 0.11.0 для Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe)** · [Как начать](#как-начать) · [Сервер на Linux](docs/SERVER.md) · [Установщик сервера Windows](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.2.1/PawTalk.Server.Manager.Setup.0.2.1.exe)
+**[Скачать PawTalk 0.11.0 для Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe)** · [Как начать](#как-начать) · [Сервер на Linux](docs/SERVER.md) · [Установщик сервера Windows](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.3.0/PawTalk.Server.Manager.Setup.0.3.0.exe)
 
 ![Комната PawTalk с тремя участниками, кнопками звонка и зашифрованным текстовым чатом](website/assets/room-chat.png)
 
@@ -156,7 +156,7 @@ npm run dev
 
 ## Статус проекта
 
-**Актуальный предварительный выпуск: [PawTalk Client 0.11.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.11.0)**. [Server 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) и [Manager 0.2.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.2.1) выпускаются отдельно. Это ещё не стабильная версия.
+**Актуальный предварительный выпуск: [PawTalk Client 0.11.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.11.0)**. [Server 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) и [Manager 0.3.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.3.0) выпускаются отдельно. Это ещё не стабильная версия.
 
 ### Что доступно в 0.11.0
 

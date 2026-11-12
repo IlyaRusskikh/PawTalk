@@ -24,7 +24,7 @@ Preview для Windows x64 и Linux / Preview for Windows x64 and Linux.
 
 ### Установка и обновление
 
-В Windows установите новый EXE поверх текущего Manager. Данные комнаты, сертификат, пароль и настройки сохраняются; удаление данных при деинсталляции остаётся отдельным выбором. Планируйте перерыв: установка может остановить текущий звонок. Обновление сохраняет остановленное состояние сервера; следующий обычный запуск использует сохранённые настройки.
+В Windows установите новый EXE поверх текущего Manager. При переходе с 0.2.x нужен полный EXE: один Python bundle не доставляет новое окно и Go host. Данные комнаты, сертификат, пароль и настройки сохраняются; удаление данных при деинсталляции остаётся отдельным выбором. Планируйте перерыв: установка может остановить текущий звонок. Обновление сохраняет остановленное состояние сервера; следующий обычный запуск использует сохранённые настройки.
 
 В Linux используйте штатное обновление Manager с подписанным `manager-manifest.json` и соответствующим bundle. Новое окно относится только к Windows. Установленные Server 0.10.1 и Client 0.11.0 обновлять ради этого Manager не требуется; установка Manager сама по себе не заменяет версию установленного Server. Схемы конфигурации и данных не меняются.
 
@@ -48,7 +48,7 @@ Preview для Windows x64 и Linux / Preview for Windows x64 and Linux.
 
 ### Install or update
 
-On Windows, install the new EXE over the existing Manager. Room data, certificate, password and settings remain; removing data during uninstallation is still a separate choice. Plan a maintenance interruption: installation may stop the current call. Updating preserves a stopped server; its next ordinary start uses saved settings.
+On Windows, install the new EXE over the existing Manager. Upgrading from 0.2.x requires the complete EXE: a Python bundle alone does not deliver the new window and Go host. Room data, certificate, password and settings remain; removing data during uninstallation is still a separate choice. Plan a maintenance interruption: installation may stop the current call. Updating preserves a stopped server; its next ordinary start uses saved settings.
 
 On Linux, use the existing Manager update mechanism with signed `manager-manifest.json` and its matching bundle. The new window is Windows-only. Installed Server 0.10.1 and Client 0.11.0 need no upgrade for this Manager; installing Manager does not itself replace the installed Server version. Configuration and data schemas are unchanged.
 
@@ -71,3 +71,7 @@ EXE не подписан Authenticode; подпись манифеста не �
 [CHANGELOG](https://github.com/IlyaRusskikh/PawTalk/blob/manager-v0.3.0/CHANGELOG.md) · [Руководство Manager / Manager guide](https://github.com/IlyaRusskikh/PawTalk/blob/manager-v0.3.0/docs/MANAGER-DESKTOP.md) · [Windows Server](https://github.com/IlyaRusskikh/PawTalk/blob/manager-v0.3.0/docs/WINDOWS-SERVER.md) · [Совместимость / Compatibility](https://github.com/IlyaRusskikh/PawTalk/blob/manager-v0.3.0/docs/COMPATIBILITY.md).
 
 [Успешный branch CI / Successful branch CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43223509437). Выпускной tag workflow проверяется отдельно. / The release-tag workflow is verified separately.
+
+[Успешный выпускной tag CI / Successful release-tag workflow](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43228717099) проверил и опубликовал этот Manager. / Verified and published this Manager.
+
+После публикации проверены скачанные EXE/bundle, доверенная Ed25519-подпись, размеры, SHA-256, GitHub digest и содержимое bundle с исходниками и notices. / After publication, the downloaded EXE/bundle, trusted Ed25519 signature, sizes, SHA-256, GitHub digests and bundle source/notices were verified.

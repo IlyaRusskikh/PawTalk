@@ -1,7 +1,7 @@
 # Server Manager 0.3.0 desktop
 
-Подготовка, ещё не опубликовано / In preparation, not yet published.
-Published downloads remain linked from [Windows Server](WINDOWS-SERVER.md).
+Опубликован preview / Published preview: [Manager 0.3.0](releases/manager-v0.3.0.md).
+Downloads and installation: [Windows Server](WINDOWS-SERVER.md).
 
 ## Русский
 
@@ -118,15 +118,16 @@ services with SCM.
 console integration использует реальные Go/LiveKit, DPAPI, SQLite и два Electron
 клиента с синтетическим звуком, но не регистрирует службы SCM.
 
-Before release, use a clean elevated Windows VM for actual SCM install/upgrade,
-SYSTEM scheduled installer, login autostart and uninstall. These require an
-administrator session; console or mocked-scheduler success does not establish
-that they passed. Do not run the installer smoke over a user's existing server.
-Physical audio devices, external Internet reachability and other CPU platforms
-require separate verification.
+The 0.3.0 branch CI passed actual SCM services and NSIS install/reinstall/uninstall
+on Windows 2022/2025, plus Linux amd64/arm64 Compose lifecycle. Unattended SYSTEM
+installation and login autostart still require separate acceptance in a clean
+elevated Windows VM; console or mocked-scheduler success does not establish them.
+Do not run installer smoke over a user's existing server. Physical audio devices,
+external Internet reachability and load require separate verification.
 
-Перед выпуском в чистой Windows VM с правами администратора проверяются настоящие
-SCM install/upgrade, установка задачей SYSTEM, автозапуск при входе и удаление.
-Console smoke и подменённый планировщик не заменяют эти проверки. Не запускайте
-installer smoke поверх существующего сервера пользователя. Физические аудиоустройства,
-внешняя сеть и другие процессорные платформы проверяются отдельно.
+Branch CI 0.3.0 проверил настоящие SCM-службы и NSIS install/reinstall/uninstall
+на Windows 2022/2025, а также Compose lifecycle на Linux amd64/arm64. Автоматическая
+установка задачей SYSTEM и автозапуск при входе ещё требуют отдельной приёмки в
+чистой Windows VM с правами администратора; console smoke и подменённый планировщик
+их не заменяют. Не запускайте installer smoke поверх существующего сервера
+пользователя. Физические аудиоустройства, внешняя сеть и нагрузка проверяются отдельно.

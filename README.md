@@ -2,11 +2,11 @@
 
 [Русский](README.ru.md) · English
 
-Released: **Client 0.11.0 / Server 0.10.1 / Manager 0.2.1**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v*` releases. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
+Released: **Client 0.11.0 / Server 0.10.1 / Manager 0.3.0**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v*` releases. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
 
 Client 0.11.0 adds first-run setup, responsive notification sounds and a shared embedded server core. [Client release notes](docs/releases/client-v0.11.0.md).
 
-Manager **0.3.0 is being prepared** on a separate development branch: an Electron/React settings window, live status colors in the tray, access/backup/diagnostic actions and automatic Windows Manager installation with signature and hash checks. Published downloads above remain unchanged. [New Manager behavior and verification](docs/MANAGER-DESKTOP.md).
+Manager **0.3.0 preview is released**: an Electron/React settings window, live status colors in the tray, access/backup/diagnostic actions and automatic Windows Manager installation with signature and hash checks. [New Manager behavior and verification](docs/MANAGER-DESKTOP.md).
 
 [Release notes and upgrade order](docs/RELEASE-NOTES-0.10.1.md). Windows Server Manager adds tray controls, settings, ProgramData migration and optional full-data removal. Upgrade the installed Server to 0.10.1 for activity privacy; reinstalling Manager preserves the installed Server version.
 
@@ -14,7 +14,7 @@ Manager **0.3.0 is being prepared** on a separate development branch: an Electro
 
 PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
 
-**[Download PawTalk 0.11.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe)** · [Get started](#get-started) · [Linux server](docs/SERVER.md) · [Windows server installer](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.2.1/PawTalk.Server.Manager.Setup.0.2.1.exe)
+**[Download PawTalk 0.11.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe)** · [Get started](#get-started) · [Linux server](docs/SERVER.md) · [Windows server installer](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.3.0/PawTalk.Server.Manager.Setup.0.3.0.exe)
 
 ![PawTalk room with three participants, call controls and encrypted text chat](website/assets/room-chat-en.png)
 
@@ -156,7 +156,7 @@ The [server configuration guide](docs/SERVER.md#конфигурация) covers
 
 ## Project status
 
-**Current public preview: [PawTalk Client 0.11.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.11.0)**. [Server 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) and [Manager 0.2.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.2.1) are released separately. This is not a stable release.
+**Current public preview: [PawTalk Client 0.11.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.11.0)**. [Server 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) and [Manager 0.3.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.3.0) are released separately. This is not a stable release.
 
 ### Available in 0.11.0
 

@@ -1,6 +1,24 @@
 # Проверки
 
-## Manager 0.3.0 — рабочая ветка, не опубликован
+## Manager 0.3.0 — preview
+
+[Выпускной tag CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43228717099)
+успешен на Windows 2022/2025 и Linux amd64/arm64; опубликован Manager preview.
+Скачанные три assets проверены: доверенная Ed25519-подпись Manager, версии/схемы,
+preview-канал, размеры, SHA-256 и GitHub digest EXE/bundle совпадают. Архив содержит
+ровно allowlist publisher; каждый файл исходников, LICENSE и THIRD_PARTY_NOTICES.md
+совпадает с проверенным деревом с учётом перевода строк. Описание синхронизировано
+с двуязычным файлом заметок. Использованы assets выпускного tag CI.
+
+The separate release-tag CI passed on Windows 2022/2025 and Linux amd64/arm64 and
+published the Manager preview. All three downloaded assets passed verification:
+trusted Manager Ed25519 signature, version/schemas, preview channel, sizes,
+SHA-256 and GitHub digests. The bundle matches the publisher allowlist and its
+source/license/notice files match the reviewed tree after newline normalization.
+The published bilingual body matches its notes file. Assets came from tag CI.
+
+EXE SHA-256: `1afa89769bb78a2fbcec74f9bb9a1b355d54f9a00600699821d34df5494d10be`.
+Bundle SHA-256: `364d2c22c2283ac9b126adb016ce5509c57b4b523101d2addf9aae630267227a`.
 
 Перед первым push кандидат перенесён на main с опубликованным Client 0.11.0.
 На итоговом дереве повторно прошли build, 168 Node-тестов, 59 Python-тестов
@@ -28,11 +46,13 @@ Electron-клиентами с синтетическим звуком, вклю
 режиме заменён console-адаптером. Отдельный настоящий Docker/Compose lifecycle
 проверил install, update, backup, restore и восстановление после SIGKILL.
 
-Настоящие SCM install/upgrade, SYSTEM auto-install, login autostart и uninstall
-остаются для чистой Windows VM с правами администратора. Существующая установка
-пользователя не изменялась. Native Linux/arm64, внешняя сеть и физические
-аудиоустройства в этой проверке не проверялись. Локальные результаты не
-гарантируют результат GitHub Actions. Подробности: [Manager desktop](MANAGER-DESKTOP.md).
+Настоящие SCM install/upgrade/uninstall и native Linux/arm64 локально не проверялись.
+Отдельный [branch CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43223509437)
+успешен: Windows 2022/2025 проверили SCM, NSIS install/reinstall/uninstall и сохранность
+данных; Linux amd64/arm64 — Compose lifecycle с E2EE и без. SYSTEM auto-install и
+login autostart остаются для отдельной приёмки. Существующая установка пользователя
+не изменялась. Внешняя сеть и физические аудиоустройства не проверялись. Локальные
+результаты не гарантируют результат GitHub Actions. Подробности: [Manager desktop](MANAGER-DESKTOP.md).
 
 ## Client 0.11.0 — 12 ноября 2026
 
