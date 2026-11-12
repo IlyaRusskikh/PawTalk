@@ -344,6 +344,19 @@ func runTray(root, lang string) error {
 	}
 }
 
+// Installer helpers expose only the native error number, never command output
+// or credentials. This lets silent setup identify SCM/preparation failures.
+func installerExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var code syscall.Errno
+	if errors.As(err, &code) && code != 0 {
+		return int(code)
+	}
+	return 1
+}
+
 func trayMain(args []string) int {
 	if len(args) == 1 && args[0] == "--self-test" {
 		if guiHostSelfTest() != nil {
@@ -363,17 +376,11 @@ func trayMain(args []string) int {
 		default:
 			goto normalTray
 		}
-		if err != nil {
-			return 1
-		}
-		return 0
+		return installerExitCode(err)
 	}
 normalTray:
 	if len(args) == 2 && args[0] == "--close-tray" {
-		if closeTray(args[1]) != nil {
-			return 1
-		}
-		return 0
+		return installerExitCode(closeTray(args[1]))
 	}
 	root, lang := defaultRoot(), "en"
 	language, _, _ := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetUserDefaultUILanguage").Call()

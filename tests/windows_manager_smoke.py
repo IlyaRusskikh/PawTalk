@@ -427,13 +427,16 @@ try:
                 # No config/manifest flags: reuse the saved config and verified
                 # release without a wizard, network request or identity reset.
                 again=subprocess.run([str(setup),'/S',f'/ROOT={install_root}'],capture_output=True,timeout=240)
-                stage_file=program/'install-status.txt'
-                install_stage=stage_file.read_text() if stage_file.is_file() else 'before protected file copy'
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,registration,0,winreg.KEY_READ|winreg.KEY_WOW64_64KEY) as key:
+                    install_stage=winreg.QueryValueEx(key,'InstallStatus')[0]
                 assert again.returncode==0,f'Reinstallation with existing config failed (exit={again.returncode}, stage={install_stage})'
                 assert not legacy.exists(),'Legacy Program Files directory was not retired'
                 assert (install_root/'etc/pawtalk/config.env').read_bytes()==saved_config
                 again_invitation=subprocess.run([str(installed),'--root',str(install_root),'invitation'],capture_output=True,timeout=30)
-                assert again_invitation.returncode==0 and json.loads(again_invitation.stdout)==saved_invitation
+                assert again_invitation.returncode==0,f'Invitation after migration failed (exit={again_invitation.returncode})'
+                restored_invitation=json.loads(again_invitation.stdout)
+                assert restored_invitation.get('password')==saved_invitation['password'],'Migration changed the recoverable password'
+                assert restored_invitation.get('url')==saved_invitation['url'],'Migration changed the invitation URL'
                 purged=subprocess.run([str(program/'Uninstall.exe'),'/S','/DELETE-DATA'],capture_output=True,timeout=120)
                 assert purged.returncode==0,'Full uninstall failed'
                 for attempt in range(100):

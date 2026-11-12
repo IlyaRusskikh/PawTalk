@@ -8,6 +8,7 @@ Unicode true
 !include "WinMessages.nsh"
 ; Fixed phase names only. Never write captured invitation/password output here.
 !macro InstallStage TEXT
+ WriteRegStr HKLM "Software\PawTalk\ServerManager" "InstallStatus" "${TEXT}"
  FileOpen $R0 "$INSTDIR\install-status.txt" w
  FileWrite $R0 "${TEXT}"
  FileClose $R0
@@ -259,18 +260,22 @@ Section "PawTalk Server Manager"
  InitPluginsDir
  SetOutPath "$PLUGINSDIR"
  File "/oname=pawtalk-server-tray.exe" "${STAGE}\pawtalk-server-tray.exe"
+ WriteRegStr HKLM "Software\PawTalk\ServerManager" "InstallStatus" "close-tray"
  ExecWait '"$PLUGINSDIR\pawtalk-server-tray.exe" --close-tray "$DataRoot"' $0
  ${If} $0 != 0
+  WriteRegStr HKLM "Software\PawTalk\ServerManager" "InstallStatus" "close-tray failed (exit $0)"
   SetErrorLevel 1
   Abort
  ${EndIf}
  ExecWait '"$PLUGINSDIR\pawtalk-server-tray.exe" --uninstall-services "$DataRoot"' $0
  ${If} $0 != 0
+  WriteRegStr HKLM "Software\PawTalk\ServerManager" "InstallStatus" "uninstall-services failed (exit $0)"
   SetErrorLevel 1
   Abort
  ${EndIf}
  ExecWait '"$PLUGINSDIR\pawtalk-server-tray.exe" --prepare-install "$INSTDIR"' $0
  ${If} $0 != 0
+  WriteRegStr HKLM "Software\PawTalk\ServerManager" "InstallStatus" "prepare-install failed (exit $0)"
   SetErrorLevel 1
   Abort
  ${EndIf}
