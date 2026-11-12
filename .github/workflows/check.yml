@@ -57,6 +57,8 @@ jobs:
       - name: Resolve published Server test dependency
         if: steps.scope.outputs.publishedServer == 'true'
         id: published
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 scripts/prepare-server-fixture.py --github-output
           image=$(sed -n 's/^image=//p' "$GITHUB_OUTPUT")
@@ -195,6 +197,7 @@ jobs:
       - name: Fetch signed published Windows Server test dependency
         if: steps.scope.outputs.manager == 'true' && steps.scope.outputs.server != 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           PAWTALK_MANAGER_HOST: ${{ github.workspace }}\release\manager\windows\pawtalkctl.exe
         run: python scripts/prepare-server-fixture.py --windows-zip release/qa/windows-server-fixture.zip
       - name: Verify native Windows lifecycle with actual SCM services

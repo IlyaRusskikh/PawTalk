@@ -15,6 +15,11 @@ test('LiveKit API download entry points receive the scoped CI token', () => {
     assert.ok(step, command);
     assert.equal(step.env.GH_TOKEN, '${{ github.token }}', command);
   }
+  for (const job of ['server', 'windows']) {
+    const step = check.jobs[job].steps.find(step => step.name?.includes('published') && step.run?.includes('prepare-server-fixture.py'));
+    assert.ok(step, job + ' signed dependency');
+    assert.equal(step.env.GH_TOKEN, '${{ github.token }}');
+  }
 });
 
 // Evaluate the restricted boolean syntax used by these workflow conditions.

@@ -8,17 +8,40 @@ from pathlib import Path
 import sys
 import time
 import urllib.error
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'manager'))
 from pawtalk_manager import release
 
 
+class NoAuthenticatedRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        raise ValueError('Authenticated CI API redirects are not allowed')
+
+
+def fetch_once_ci(url, limit, api):
+    token=os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+    if not api or not token:
+        return release.fetch(url,limit,api=api)
+    # Only CI metadata requests use the ephemeral token. Asset downloads retain
+    # the production allowlist/signature/hash verifier and never receive it.
+    release.allowed_url(url,api=True)
+    request=urllib.request.Request(url,headers={'User-Agent':'PawTalk CI','Accept':'application/vnd.github+json','Authorization':'Bearer '+token})
+    with urllib.request.build_opener(NoAuthenticatedRedirect()).open(request,timeout=30) as response:
+        data=response.read(limit+1)
+        if len(data)>limit:raise ValueError('Release response too large')
+        length=response.headers.get('Content-Length')
+        if length is not None and len(data)<int(length):raise http.client.IncompleteRead(data)
+        return data
+
+
 def fetch_ci(url, limit=1024*1024, api=False):
     for attempt in range(3):
         try:
-            return release.fetch(url, limit, api=api)
+            return fetch_once_ci(url, limit, api)
         except urllib.error.HTTPError as error:
+            error.close()
             if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
                 raise
         except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):

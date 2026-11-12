@@ -1,5 +1,7 @@
 import hashlib
 import importlib.util
+import io
+import http.client
 from pathlib import Path
 import tempfile
 import unittest
@@ -12,6 +14,27 @@ spec.loader.exec_module(fixture)
 
 
 class ServerFixtureTests(unittest.TestCase):
+    def test_ci_metadata_auth_is_bounded_and_never_used_for_assets_or_redirects(self):
+        url='https://api.github.com/repos/IlyaRusskikh/PawTalk/releases'
+        def response(data,length=None):
+            result=io.BytesIO(data);result.headers={} if length is None else {'Content-Length':str(length)}
+            return result
+        with patch.dict(fixture.os.environ,{'GH_TOKEN':'synthetic-ci-token'}),patch.object(fixture.urllib.request,'build_opener') as opener:
+            opener.return_value.open.return_value=response(b'ok',2)
+            self.assertEqual(fixture.fetch_ci(url,2,api=True),b'ok')
+            request=opener.return_value.open.call_args.args[0]
+            self.assertEqual(request.get_header('Authorization'),'Bearer synthetic-ci-token')
+            with self.assertRaises(ValueError):fixture.fetch_ci('https://api.github.com.example/releases',api=True)
+            with self.assertRaises(ValueError):
+                fixture.NoAuthenticatedRedirect().redirect_request(request,None,302,'redirect',{},'https://release-assets.githubusercontent.com/example')
+            with patch.object(fixture.release,'fetch',return_value=b'asset') as public:
+                self.assertEqual(fixture.fetch_ci('https://github.com/IlyaRusskikh/PawTalk/releases/download/server-v0.9.0/example',api=False),b'asset')
+                self.assertEqual(public.call_count,1)
+            opener.return_value.open.return_value=response(b'oversized')
+            with self.assertRaises(ValueError):fixture.fetch_once_ci(url,2,True)
+            opener.return_value.open.return_value=response(b'x',2)
+            with self.assertRaises(http.client.IncompleteRead):fixture.fetch_once_ci(url,2,True)
+
     def test_transient_network_failures_retry_but_missing_assets_and_invalid_data_do_not(self):
         with patch.object(fixture.time, 'sleep'), patch.object(fixture.release, 'fetch', side_effect=[TimeoutError(), b'ok']) as fetch:
             self.assertEqual(fixture.fetch_ci('https://example.test'), b'ok')
