@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import buildDownloads from '../shared/build-download.cjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (process.argv.slice(2).some(arg => arg !== '--livekit-only')) throw Error('Supported option: --livekit-only');
 const livekitOnly = process.argv.includes('--livekit-only');
@@ -21,7 +22,7 @@ async function download(url, headers = {}) {
   for (let attempt = 1; attempt <= 4; attempt++) {
     try {
       const r = await fetch(url, {
-        headers: { 'User-Agent': 'PawTalk build', ...headers },
+        headers: buildDownloads.buildDownloadHeaders(url, headers),
         signal: AbortSignal.timeout(120000),
       });
       if (r.ok) return Buffer.from(await r.arrayBuffer());

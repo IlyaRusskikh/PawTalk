@@ -8,6 +8,15 @@ const yaml = createRequire(require.resolve('app-builder-lib/package.json'))('js-
 const check = yaml.load(await readFile(new URL('../.github/workflows/check.yml', import.meta.url), 'utf8'));
 const release = yaml.load(await readFile(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
 
+test('LiveKit API download entry points receive the scoped CI token', () => {
+  const commands = ['npm run server:prepare', 'node scripts/prepare-server.mjs --livekit-only', 'npm run package'];
+  for (const command of commands) {
+    const step = check.jobs.windows.steps.find(step => step.run === command);
+    assert.ok(step, command);
+    assert.equal(step.env.GH_TOKEN, '${{ github.token }}', command);
+  }
+});
+
 // Evaluate the restricted boolean syntax used by these workflow conditions.
 // This exercises the actual YAML guards, not a second copy of the routing table.
 function enabled(step, component, runner = 'windows-2025') {

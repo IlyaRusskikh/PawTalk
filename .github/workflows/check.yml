@@ -163,6 +163,8 @@ jobs:
           npm test
       - run: npm run server:prepare
         if: steps.scope.outputs.client == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Verify native Manager host safeguards
         if: steps.scope.outputs.host == 'true'
         working-directory: manager/windows
@@ -178,6 +180,8 @@ jobs:
         run: node scripts/prepare-rnnoise.mjs
       - name: Prepare LiveKit without the bundled Client API
         if: steps.scope.outputs.server == 'true' && steps.scope.outputs.client != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/prepare-server.mjs --livekit-only
       - name: Build permanent Windows Server
         if: steps.scope.outputs.server == 'true'
@@ -250,6 +254,7 @@ jobs:
       - name: Package PawTalk
         if: steps.scope.outputs.client == 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           ELECTRON_BUILDER_CACHE: ${{ runner.temp }}\electron-builder-cache
           ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
         run: npm run package
