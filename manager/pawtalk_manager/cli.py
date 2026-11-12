@@ -231,7 +231,10 @@ def main(argv=None):
             if not WINDOWS:
                 raise ValueError('--server-bundle is for Windows; Linux uses the signed image digest')
             controller.runtime.server_bundle = args.server_bundle
-        with lock(controller.directory/'operation.lock') as release_lock:
+        # The freshly started maintenance service may briefly own this lock.
+        # Let the interactive invitation request wait; watchdog/mutations remain
+        # nonblocking so stopping maintenance from a foreground operation cannot deadlock.
+        with lock(controller.directory/'operation.lock',timeout=10 if args.command=='invitation' else 0) as release_lock:
             if args.lang is None and controller.state_file.exists():
                 lang = controller.config()['PAWTALK_LANGUAGE']
             if args.command == 'settings':

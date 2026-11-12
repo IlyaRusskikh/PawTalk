@@ -14,7 +14,33 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/svc"
 )
+
+func TestStopWaitsForStartupAndConcurrentSCMTransitions(t *testing.T) {
+	states := []svc.Status{{State: svc.StartPending}, {State: svc.Running, Accepts: svc.AcceptStop}, {State: svc.Running, Accepts: svc.AcceptStop}, {State: svc.StopPending}, {State: svc.Stopped}}
+	index, requests := 0, 0
+	query := func() (svc.Status, error) { status := states[index]; index++; return status, nil }
+	stop := func() error {
+		requests++
+		if requests == 1 {
+			return windows.ERROR_SERVICE_CANNOT_ACCEPT_CTRL
+		}
+		return nil
+	}
+	if err := waitServiceStopped(query, stop, 2*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if index != len(states) || requests != 2 {
+		t.Fatal("startup or stop-pending mistaken for completed stop", index, requests)
+	}
+	if err := waitServiceStopped(func() (svc.Status, error) { return svc.Status{State: svc.StartPending}, nil }, func() error { t.Fatal("control sent during startup"); return nil }, 0); err == nil {
+		t.Fatal("hung startup never timed out")
+	}
+	if err := waitServiceStopped(func() (svc.Status, error) { return svc.Status{State: svc.Running, Accepts: svc.AcceptStop}, nil }, func() error { return windows.ERROR_ACCESS_DENIED }, time.Second); !errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+		t.Fatal("permission failure hidden", err)
+	}
+}
 
 func TestServiceDeletionWaitsForSCMToReleaseItsName(t *testing.T) {
 	sequence := []error{nil, windows.ERROR_SERVICE_MARKED_FOR_DELETE, windows.ERROR_SERVICE_DOES_NOT_EXIST}

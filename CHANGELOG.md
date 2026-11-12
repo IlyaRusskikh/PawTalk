@@ -8,6 +8,8 @@
 
 ### Client 0.10.0 / Server 0.10.0 / Manager 0.2.0
 
+- Handle service startup/pending transitions before migration stops; let invitation requests briefly wait for startup maintenance without changing nonblocking watchdog locks. Cover native SCM transitions and actual cross-process Windows locking. / Миграция ждёт перехода запускаемой службы в состояние, принимающее Stop; запрос приглашения кратковременно ждёт стартовое обслуживание, сохраняя неблокирующие locks watchdog. Добавлены проверки переходов SCM и настоящей межпроцессной блокировки Windows.
+
 - Wait for Windows service processes and pending SCM deletion before reinstalling; record only fixed installer phases for diagnostics. Exercise drag behavior under explicit normal/reduced motion instead of inheriting runner settings. / Повторная установка ждёт завершения процессов служб и удаления записи SCM; диагностика сохраняет только фиксированные этапы установки. Drag-проверки явно задают обычные/уменьшенные анимации вместо настроек runner.
 
 - **Manager 0.2.0:** add Windows service tray controls, desktop/sign-in shortcuts, a server badge, protected ProgramData installation/migration, full-data uninstall option and config reuse. Protect recoverable password invitations with user DPAPI; retry transient signed-release downloads. / Управление службой через трей, ярлыки, серверный значок, защищённая установка/миграция в ProgramData, полное удаление данных по выбору и повторное использование конфигурации. Приглашения с паролем защищены пользовательским DPAPI; временные ошибки загрузки подписанных выпусков повторяются.

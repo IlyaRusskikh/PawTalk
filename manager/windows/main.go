@@ -326,50 +326,68 @@ func control(action, root string) error {
 		if err := windows.ChangeServiceConfig(s.Handle, windows.SERVICE_NO_CHANGE, windows.SERVICE_DISABLED, windows.SERVICE_NO_CHANGE, nil, nil, nil, nil, nil, nil, nil); err != nil {
 			return err
 		}
-		status, err := s.Query()
+		// SERVICE_STOPPED may precede process teardown. Wait for the old host
+		// to release Python/runtime files before a reinstall replaces its tree.
+		var process windows.Handle
+		defer func() {
+			if process != 0 {
+				windows.CloseHandle(process)
+			}
+		}()
+		query := func() (svc.Status, error) {
+			status, err := s.Query()
+			if err == nil && process == 0 && status.ProcessId != 0 {
+				process, err = windows.OpenProcess(windows.SYNCHRONIZE, false, status.ProcessId)
+				if errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
+					err = nil
+				}
+			}
+			return status, err
+		}
+		if err := waitServiceStopped(query, func() error { _, err := s.Control(svc.Stop); return err }, 40*time.Second); err != nil {
+			return err
+		}
+		if process == 0 {
+			return nil
+		}
+		result, err := windows.WaitForSingleObject(process, 10000)
+		if err != nil {
+			return err
+		}
+		if result != windows.WAIT_OBJECT_0 {
+			return errors.New("service process did not exit")
+		}
+		return nil
+	}
+	return errors.New("unknown service action")
+}
+
+func waitServiceStopped(query func() (svc.Status, error), stop func() error, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	requested := false
+	for {
+		status, err := query()
 		if err != nil {
 			return err
 		}
 		if status.State == svc.Stopped {
 			return nil
 		}
-		// SERVICE_STOPPED may precede process teardown. Wait for the old host
-		// to release Python/runtime files before a reinstall replaces its tree.
-		var process windows.Handle
-		if status.ProcessId != 0 {
-			process, err = windows.OpenProcess(windows.SYNCHRONIZE, false, status.ProcessId)
-			if err != nil && !errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
+		// SCM rejects controls during startup and pending transitions. A freshly
+		// started legacy service must reach an accepting state before migration.
+		if !requested && (status.State == svc.Running || status.State == svc.Paused) && status.Accepts&svc.AcceptStop != 0 {
+			err = stop()
+			if err == nil {
+				requested = true
+			} else if !errors.Is(err, windows.ERROR_SERVICE_CANNOT_ACCEPT_CTRL) && !errors.Is(err, windows.ERROR_SERVICE_NOT_ACTIVE) {
 				return err
 			}
-			if process != 0 {
-				defer windows.CloseHandle(process)
-			}
 		}
-		if _, err = s.Control(svc.Stop); err != nil && !errors.Is(err, windows.ERROR_SERVICE_NOT_ACTIVE) {
-			return err
+		if !time.Now().Before(deadline) {
+			return errors.New("service stop timed out")
 		}
-		for deadline := time.Now().Add(40 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
-			status, err = s.Query()
-			if err != nil {
-				return err
-			}
-			if status.State == svc.Stopped {
-				if process == 0 {
-					return nil
-				}
-				result, err := windows.WaitForSingleObject(process, 10000)
-				if err != nil {
-					return err
-				}
-				if result != windows.WAIT_OBJECT_0 {
-					return errors.New("service process did not exit")
-				}
-				return nil
-			}
-		}
-		return errors.New("service stop timed out")
+		time.Sleep(100 * time.Millisecond)
 	}
-	return errors.New("unknown service action")
 }
 
 func awaitServiceRemoval(connection *mgr.Mgr, name string) error {

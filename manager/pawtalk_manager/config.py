@@ -1,10 +1,12 @@
 """Strict data-only config and durable managed state, never source an env file."""
 import contextlib
+import errno
 import ipaddress
 import json
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 from .platforms import WINDOWS, sync_directory, secure
 if WINDOWS:
@@ -93,23 +95,30 @@ def remove(file):
 
 
 @contextlib.contextmanager
-def lock(file):
+def lock(file,timeout=0):
     Path(file).parent.mkdir(parents=True,exist_ok=True,mode=0o700)
     with open(file,'a+b') as stream:
         secure(file)
         os.chmod(file,0o600)
-        try:
-            if WINDOWS:
-                stream.seek(0)
-                if not stream.read(1):
-                    stream.write(b'0')
-                    stream.flush()
-                stream.seek(0)
-                msvcrt.locking(stream.fileno(),msvcrt.LK_NBLCK,1)
-            else:
-                fcntl.flock(stream,fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            raise ValueError('Another PawTalk operation is running') from None
+        deadline=time.monotonic()+timeout
+        while True:
+            try:
+                if WINDOWS:
+                    stream.seek(0)
+                    if not stream.read(1):
+                        stream.write(b'0')
+                        stream.flush()
+                    stream.seek(0)
+                    msvcrt.locking(stream.fileno(),msvcrt.LK_NBLCK,1)
+                else:
+                    fcntl.flock(stream,fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError as error:
+                if error.errno not in (errno.EACCES,errno.EAGAIN,errno.EDEADLK):raise
+                remaining=deadline-time.monotonic()
+                if remaining<=0:
+                    raise ValueError('Another PawTalk operation is running') from None
+                time.sleep(min(0.05,remaining))
         locked = True
         def release_lock():
             nonlocal locked

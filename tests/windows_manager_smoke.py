@@ -433,7 +433,8 @@ try:
                 assert not legacy.exists(),'Legacy Program Files directory was not retired'
                 assert (install_root/'etc/pawtalk/config.env').read_bytes()==saved_config
                 again_invitation=subprocess.run([str(installed),'--root',str(install_root),'invitation'],capture_output=True,timeout=30)
-                assert again_invitation.returncode==0,f'Invitation after migration failed (exit={again_invitation.returncode})'
+                busy=b'Another PawTalk operation is running' in again_invitation.stderr
+                assert again_invitation.returncode==0,f'Invitation after migration failed (exit={again_invitation.returncode}, busy={busy})'
                 restored_invitation=json.loads(again_invitation.stdout)
                 assert restored_invitation.get('password')==saved_invitation['password'],'Migration changed the recoverable password'
                 assert restored_invitation.get('url')==saved_invitation['url'],'Migration changed the invitation URL'

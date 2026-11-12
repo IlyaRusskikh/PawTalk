@@ -12,6 +12,35 @@ import unittest
 from windows_smoke_support import remove_owned_tree
 
 
+class OperationLockTests(unittest.TestCase):
+    def test_invitation_wait_can_outlast_startup_health_without_weakening_exclusion(self):
+        from unittest.mock import patch
+        source=Path(__file__).resolve().parents[1]/'manager'
+        sys.path.insert(0,str(source))
+        from pawtalk_manager.config import lock
+        with tempfile.TemporaryDirectory(prefix='pawtalk-lock-') as directory:
+            file=Path(directory)/'operation.lock'
+            # Exercise the actual platform lock; isolate unrelated managed ACL policy.
+            code=('import sys,time;from unittest.mock import patch;sys.path.insert(0,'+repr(str(source))+');'
+                  'from pawtalk_manager.config import lock;'
+                  '\nwith patch("pawtalk_manager.config.secure"),lock(sys.argv[1]):\n print("locked",flush=True);time.sleep(0.6)')
+            child=subprocess.Popen([sys.executable,'-B','-I','-c',code,str(file)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            try:
+                self.assertEqual(child.stdout.readline().strip(),'locked')
+                with patch('pawtalk_manager.config.secure'):
+                    with self.assertRaisesRegex(ValueError,'Another PawTalk operation'):
+                        with lock(file):self.fail('Concurrent maintenance lock was ignored')
+                    start=time.monotonic()
+                    with self.assertRaises(ValueError):
+                        with lock(file,timeout=0.05):self.fail('Bounded timeout was ignored')
+                    self.assertLess(time.monotonic()-start,1)
+                    with lock(file,timeout=3):pass
+                self.assertEqual(child.wait(timeout=5),0)
+            finally:
+                if child.poll() is None:child.kill();child.wait()
+                child.stdout.close();child.stderr.close()
+
+
 @unittest.skipUnless(os.name=='nt','Windows CRT/NTFS semantics')
 class WindowsHandoffTests(unittest.TestCase):
     def test_handoff_waits_for_child_and_propagates_both_exit_codes(self):
