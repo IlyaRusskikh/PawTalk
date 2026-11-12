@@ -2,7 +2,7 @@ const { app, BrowserWindow, session }=require('electron');
 const assert=require('node:assert/strict');const path=require('node:path');const os=require('node:os');const https=require('node:https');const {randomBytes}=require('node:crypto');
 const {SelfHost}=require('../electron/selfhost.cjs');
 app.setPath('userData',path.join(os.tmpdir(),'pawtalk-realtime-'+process.pid));
-app.commandLine.appendSwitch('use-fake-ui-for-media-stream');app.commandLine.appendSwitch('use-fake-device-for-media-stream');app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('use-fake-ui-for-media-stream');app.commandLine.appendSwitch('use-fake-device-for-media-stream');app.disableHardwareAcceleration();app.on('window-all-closed',()=>{});
 const testPort=Number(process.env.PAWTALK_REALTIME_PORT||31443);
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 app.whenReady().then(async()=>{
@@ -16,7 +16,7 @@ app.whenReady().then(async()=>{
   const until=async(fn,label)=>{for(let i=0;i<250;i++){if(await fn())return;await delay(100);}throw Error('Timeout: '+label);};
   for(const name of ['QA A','QA B']){
    const win=new BrowserWindow({show:false,webPreferences:{session:partition,sandbox:true,contextIsolation:true,offscreen:true,backgroundThrottling:false}});windows.push(win);
-   await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/voice.html');
+   await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/voice.html?cues=1');
    const js=source=>win.webContents.executeJavaScript(source,true);
    await until(()=>js('window.ready===true'),'voice fixture ready');
    const result=await credentials(name);assert.ok(result.token,'API token');await js(`window.start(${JSON.stringify(result)})`);
@@ -44,6 +44,8 @@ app.whenReady().then(async()=>{
   await until(()=>b('window.liveMessages>=3'),'live chat delivers the allowed burst');
   await delay(250);
   assert.equal(await b('window.liveMessages'),3,'receiving client drops excess live chat packets');
+  await until(()=>a('window.roomCues.length===2 && window.roomCues.every(c=>c.energy>0.01)'),'own entry and peer entry produce native output audio');
+  await until(()=>b('window.roomCues.length===1 && window.roomCues[0].energy>0.01'),'second client hears own entry');
   await until(()=>b('window.snapshot.people.some(p=>!p.local && p.avatar?.startsWith("data:image/webp;base64,"))'),'late join receives the current avatar');
   assert.equal(await b('window.snapshot.people.find(p=>!p.local).avatar'),await a('window.testAvatar'));
   await b(`window.expectedAvatar=${JSON.stringify(await a('window.testAvatar'))}`);
@@ -51,9 +53,14 @@ app.whenReady().then(async()=>{
   await a('window.voice.disconnect()');
   assert.equal(await a('window.voice.diagnostics.getSnapshot().rtt.length+window.voice.diagnostics.getSnapshot().loss.length'),0,'full disconnect clears local history');
   await until(()=>b('window.snapshot.people.length===1'),'peer leaves');
+  await until(async()=>await a('window.roomCues.length===3 && window.roomCues[2].energy>0.01') && await b('window.roomCues.length===2 && window.roomCues[1].energy>0.01'),'own exit and peer exit produce native output audio');
   await a(`window.start(${JSON.stringify(await credentials('QA A'))})`);
   assert.equal(await a('window.voice.diagnostics.getSnapshot().rtt.filter(p=>p.value!==undefined).length'),0,'new session starts without previous RTT points');
   await until(()=>b('window.snapshot.people.length===2'),'peer rejoins');
+  await until(async()=>await a('window.roomCues.length===4 && window.roomCues[3].energy>0.01') && await b('window.roomCues.length===3 && window.roomCues[2].energy>0.01'),'entry sounds also work after reconnect');
+  await a('window.voice.updateSettings({...window.voice.settings,sounds:false})');
+  await b('window.voice.updateSettings({...window.voice.settings,sounds:false})');
+  console.log('PASS audible own/peer entry and exit cues through real LiveKit session events');
   await until(()=>b('window.snapshot.people.find(p=>!p.local)?.avatar===window.expectedAvatar'),'avatar after rejoin');
   await until(()=>a('window.snapshot.people.find(p=>!p.local)?.avatar===window.testAvatar'),'rejoining peer receives existing avatar');
   await a('void (window.voice.onChatRefresh=()=>{window.refreshCount=(window.refreshCount||0)+1})');
@@ -171,5 +178,5 @@ app.whenReady().then(async()=>{
   await a('window.preview.stop();window.voice.rttMeter.measuredAt=-Infinity;window.voice.emit()');assert.equal(await a('window.snapshot.rtt===undefined'),true,'stale local RTT removed');
   await b('for(const item of window.voice.peerNetwork.values())item.received=-Infinity;window.voice.emit()');assert.equal(await b('window.snapshot.people.filter(p=>!p.local).every(p=>p.rtt===undefined && p.packetLoss===undefined)'),true,'stale remote metrics removed');
   console.log('PASS real two-client voice session, typing status, live chat rate limit, peer telemetry/expiry, remote deafen, icon-only card states, local mute, microphone preview.');
- }catch(e){console.error(e);exitCode=1;}finally{for(const win of windows){await win.webContents.executeJavaScript('window.voice?.disconnect()').catch(()=>{});win.destroy();}await host.stop();app.exit(exitCode);}
+ }catch(e){console.error(e);console.error(JSON.stringify(await Promise.all(windows.map(w=>w.webContents.executeJavaScript('({cues:window.roomCues,sounds:window.voice?.settings.sounds})').catch(()=>({}))))));exitCode=1;}finally{for(const win of windows){await win.webContents.executeJavaScript('window.voice?.disconnect()').catch(()=>{});win.destroy();}await host.stop();app.exit(exitCode);}
 });

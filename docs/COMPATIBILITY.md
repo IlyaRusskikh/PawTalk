@@ -16,6 +16,12 @@ message before login. Existing chat feature negotiation remains authoritative.
 | 0.10.0–0.10.1 | 0.10.1 | Authorized activity only; password reset revokes native voice/chat/preview tokens; stable verified-room bookmarks |
 | 0.10.0–0.10.1 self-host | pinned Go 0.8.0 + hashed security backport | Anonymous occupancy denied by the embedded API as well as the Client |
 
+Development tree (not yet released): temporary Client rooms and permanent Windows
+Server use the same `server/` core with identical Go/LiveKit binaries, verified by
+`scripts/check-server-core.mjs`. Modes remain `selfhost` (in-memory room) and
+`serve` (persistent room). The historical rows above describe published binaries;
+updating this tree does not change them. See [shared-core details](BUNDLED-SERVER.md).
+
 Manager 0.2.1 retains signed Server/Manager verification. Existing Server 0.9.0
 supports native port changes; IP rebinding requires Server 0.10.1's `serve rebind`.
 Upgrade Server first, then Manager and Client; a new Manager EXE alone does not
@@ -47,5 +53,6 @@ blocked by the host updater until a tested backup/restore transition is supplied
 протокола трактуется как legacy 1; неизвестный явный протокол блокируется до входа
 с локализованной ошибкой. Голос/чат проверяются отдельно от relay: старый VPS не
 раздаёт новые `client-v*` ассеты. Прямое обновление через GitHub работает независимо.
-Windows self-host сохраняется и использует закреплённый commit. Проверки с
+Опубликованный Client 0.10.1 сохраняет закреплённый commit; текущие сборки
+используют общее ядро server/ для selfhost и serve. Проверки с
 синтетическими микрофонами не заменяют реальную сеть и устройства.

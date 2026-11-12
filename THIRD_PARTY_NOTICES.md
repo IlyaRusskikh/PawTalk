@@ -48,7 +48,9 @@ No endorsement or affiliation with Krisp or Discord is implied.
 
 ## Notification recordings
 
-All seven notification recordings are edits of works by **Joseph SARDIN /
+Current notification recordings feature Manya (Маня), the project owner’s cat, recorded on a phone and supplied for PawTalk under AGPL-3.0-only. See `sounds/sources.json` for checksums.
+
+Historical notice (recordings replaced in this working tree): the previous seven notification recordings were edits of works by **Joseph SARDIN /
 BigSoundBank**, dedicated under **CC0 1.0 Universal**:
 
 - Join (approved variant B): https://bigsoundbank.com/meow-cat-13-s1901.html.
@@ -56,8 +58,8 @@ BigSoundBank**, dedicated under **CC0 1.0 Universal**:
 - Five purrs: https://bigsoundbank.com/cat-purr-s0436.html.
 
 License: https://creativecommons.org/publicdomain/zero/1.0/.
-Asset-specific provenance and checksums are bundled in `sounds/sources.json`
-and `sounds/README.md`. The earlier user-provided meows are no longer used.
+This notice is retained for historical versions. Current asset provenance and
+checksums are bundled in `sounds/sources.json` and `sounds/README.md`.
 
 ## Corresponding source
 

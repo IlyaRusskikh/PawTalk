@@ -32,7 +32,6 @@ if (!process.versions.electron) {
    const asset = name => path.join(root,'assets',name);
    if (serverOnly) {
     await fs.writeFile(asset('server.ico'),ico(frames.filter(v=>v.size<=256)));
-    await fs.writeFile(asset('server.png'),frames.find(v=>v.size===256).data);
     console.log('Generated Server icons.');win.destroy();app.exit(0);return;
    }
    await fs.writeFile(asset('pawtalk.ico'),ico(frames.filter(v=>v.size<=256)));

@@ -1,4 +1,5 @@
 {
+  "Не удалось закрыть комнату. Попробуйте ещё раз.": "Could not close the room. Please try again.",
   "Секретный ключ (для участников комнаты)": "Secret key (for room participants)",
   "Канал обновлений": "Update channel",
   "Стабильные версии": "Stable releases",
@@ -592,5 +593,15 @@
   "Да": "Yes",
   "Нет": "No",
   "Потеря исходящих аудиопакетов": "Outgoing audio packet loss",
-  "Требуется повторный вход": "Sign in again"
+  "Требуется повторный вход": "Sign in again",
+  "Открыть обновление": "Open update",
+  "Добро пожаловать в PawTalk": "Welcome to PawTalk",
+  "Шаг {0} из 3": "Step {0} of 3",
+  "Как вас называть? Выберите язык приложения и никнейм.": "Choose your app language and nickname.",
+  "Добавьте аватарку — или оставьте инициалы.": "Add an avatar, or keep your initials.",
+  "Выберите устройства и проверьте микрофон в наушниках.": "Choose your devices and test your microphone with headphones.",
+  "Настроить позже": "Set up later",
+  "Назад": "Back",
+  "Далее": "Next",
+  "Готово": "Done"
 }

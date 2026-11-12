@@ -1,3 +1,4 @@
+const { HostError } = require('./host-errors.cjs');
 const { t } = require('../shared/i18n.cjs');
 const { spawn, fork } = require('node:child_process');
 const { randomBytes, createHash } = require('node:crypto');
@@ -20,7 +21,7 @@ function publicIPv4(ip) {
 }
 function bounded(promise, ms, message) {
   let timer;
-  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); })]).finally(() => clearTimeout(timer));
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new HostError(message)), ms); })]).finally(() => clearTimeout(timer));
 }
 async function checkPorts(port) {
   const sockets = [];
@@ -29,13 +30,13 @@ async function checkPorts(port) {
       await new Promise((resolve, reject) => { const socket = net.createServer(); sockets.push(socket); socket.once('error', reject); socket.listen(p, '0.0.0.0', resolve); });
     }
     await new Promise((resolve, reject) => { const socket = dgram.createSocket('udp4'); sockets.push(socket); socket.once('error', reject); socket.bind(port+2, '0.0.0.0', resolve); });
-  } catch { throw new Error(t("Порты комнаты заняты. Укажите другой порт.")); }
+  } catch { throw new HostError(t("Порты комнаты заняты. Укажите другой порт.")); }
   finally { for (const socket of sockets) { try { socket.close(); } catch {} } }
 }
 function childReady(child, ready) {
   return bounded(new Promise((resolve, reject) => {
     const lines = createInterface({ input: child.stdout });
-    const fail = () => reject(new Error(t("Не удалось запустить встроенный сервер. Возможно, порт занят.")));
+    const fail = () => reject(new HostError(t("Не удалось запустить встроенный сервер. Возможно, порт занят.")));
     child.once('error', fail); child.once('exit', fail);
     lines.on('line', line => { const value = ready(line); if (value) { child.off('error', fail); child.off('exit', fail); lines.close(); child.stdout.resume(); resolve(value); } });
   }), 15000, t("Встроенный сервер не запустился вовремя"));
@@ -49,12 +50,12 @@ class SelfHost {
   }
   status() { return this.state; }
   async start(input) {
-    if (this.starting || this.stopping || this.state.running) throw new Error(t("Комната уже запущена или меняет состояние"));
-    if (!input || typeof input.password !== 'string' || Buffer.byteLength(input.password) < 8 || Buffer.byteLength(input.password) > 1024) throw new Error(t("Пароль комнаты должен содержать от 8 до 1024 байт"));
-    if (input.name !== undefined && (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 80)) throw new Error(t("Укажите название комнаты до 80 символов"));
-    if (input.e2ee !== undefined && typeof input.e2ee !== 'boolean') throw new Error(t("Неверный режим шифрования"));
+    if (this.starting || this.stopping || this.state.running) throw new HostError(t("Комната уже запущена или меняет состояние"));
+    if (!input || typeof input.password !== 'string' || Buffer.byteLength(input.password) < 8 || Buffer.byteLength(input.password) > 1024) throw new HostError(t("Пароль комнаты должен содержать от 8 до 1024 байт"));
+    if (input.name !== undefined && (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 80)) throw new HostError(t("Укажите название комнаты до 80 символов"));
+    if (input.e2ee !== undefined && typeof input.e2ee !== 'boolean') throw new HostError(t("Неверный режим шифрования"));
     const port = Number(input.port);
-    if (!Number.isInteger(port) || port < 1024 || port > 65532) throw new Error(t("Укажите порт от 1024 до 65532"));
+    if (!Number.isInteger(port) || port < 1024 || port > 65532) throw new HostError(t("Укажите порт от 1024 до 65532"));
     this.starting = true;
     this.cancelled = false;
     try {
@@ -75,10 +76,10 @@ class SelfHost {
       });
       let mapped = false, externalIP = '';
       try { ({ mapped, externalIP } = await mappedResult); } catch { this.mapper.kill(); }
-      if (this.cancelled) throw new Error(t("Создание комнаты отменено: компьютер перешёл в сон"));
+      if (this.cancelled) throw new HostError(t("Создание комнаты отменено: компьютер перешёл в сон"));
       const lan = localAddresses();
       const nodeIP = publicIPv4(externalIP) && mapped ? externalIP : lan[0];
-      if (!nodeIP) throw new Error(t("Не найден сетевой адрес компьютера"));
+      if (!nodeIP) throw new HostError(t("Не найден сетевой адрес компьютера"));
       const key = 'vc_' + randomBytes(12).toString('hex'), secret = randomBytes(32).toString('hex');
       // This key stays in the client process and invitations, never in Go/LiveKit.
       const mediaKey = input.e2ee ? randomBytes(32).toString('hex') : null;
@@ -93,7 +94,7 @@ class SelfHost {
       const ready = childReady(api, line => { try { const v = JSON.parse(line); return /^[a-f0-9]{64}$/.test(v.fingerprint) ? v : null; } catch { return null; } });
       api.stdin.write(JSON.stringify({ Port: port, MediaPort: port+3, Key: key, Secret: secret, Password: input.password, RequireE2EE: !!mediaKey, E2EEKeyID: mediaKeyID, Addresses: [...lan, ...(mapped && publicIPv4(externalIP) ? [externalIP] : [])], MediaExecutable: path.join(this.resources, 'livekit-server.exe'), MediaConfig: config })+'\n');
       const { fingerprint } = await ready;
-      if (this.cancelled) throw new Error(t("Создание комнаты отменено: компьютер перешёл в сон"));
+      if (this.cancelled) throw new HostError(t("Создание комнаты отменено: компьютер перешёл в сон"));
       api.once('exit', () => { if (this.state.running) void this.stop(t("Сервер комнаты остановился")); });
       const invite = ip => `pawtalk://${ip}:${port}/${fingerprint}#password=${encodeURIComponent(input.password)}&name=${encodeURIComponent(input.name || t("Комната"))}${mediaKey ? '&e2ee=' + mediaKey : ''}`;
       const internet = mapped && publicIPv4(externalIP);

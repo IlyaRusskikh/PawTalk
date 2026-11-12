@@ -32,8 +32,8 @@ jobs:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: '24.22.1'
       - name: Select verification scope
@@ -41,7 +41,7 @@ jobs:
         env:
           PAWTALK_CI_COMPONENT: ${{ inputs.component || 'all' }}
         run: node scripts/ci-scope.mjs
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: steps.scope.outputs.server == 'true'
         with:
           go-version: '1.27.3'
@@ -114,10 +114,10 @@ jobs:
         runner: [windows-2022, windows-2025]
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '24.22.1'
           cache: npm
@@ -126,17 +126,17 @@ jobs:
         env:
           PAWTALK_CI_COMPONENT: ${{ inputs.component || 'all' }}
         run: node scripts/ci-scope.mjs
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.scope.outputs.host == 'true'
         with:
           python-version: '3.13'
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.27.3'
           cache: false
       - run: npm ci
       - name: Cache Electron binary
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ runner.temp }}\electron-cache
           key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
@@ -167,6 +167,13 @@ jobs:
         if: steps.scope.outputs.client == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: Verify shared Go core on native Windows
+        if: steps.scope.outputs.client == 'true' || steps.scope.outputs.server == 'true'
+        working-directory: server
+        run: |
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
       - name: Verify native Manager host safeguards
         if: steps.scope.outputs.host == 'true'
         working-directory: manager/windows
@@ -188,6 +195,15 @@ jobs:
       - name: Build permanent Windows Server
         if: steps.scope.outputs.server == 'true'
         run: node scripts/build-windows-server.mjs
+      - name: Verify identical Client and permanent Server cores
+        if: steps.scope.outputs.server == 'true' && steps.scope.outputs.client == 'true'
+        run: node scripts/check-server-core.mjs
+      - name: Verify shared-core temporary rooms with real Electron IPC
+        if: steps.scope.outputs.client == 'true'
+        run: node scripts/selfhost-main-smoke.mjs
+      - name: Verify shared-core temporary API privacy and chat lifecycle
+        if: steps.scope.outputs.client == 'true'
+        run: node scripts/selfhost-smoke.cjs
       - name: Build Windows Manager installer
         if: steps.scope.outputs.manager == 'true'
         run: node scripts/build-manager-windows.mjs
@@ -207,14 +223,14 @@ jobs:
         run: node scripts/windows-manager-smoke.mjs --scm ${{ steps.scope.outputs.manager == 'true' && '--installer' || '' }}
       - name: Upload Windows Server package
         if: steps.scope.outputs.server == 'true' && matrix.runner == 'windows-2025'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pawtalk-server-windows
           if-no-files-found: error
           path: release/server/PawTalk.Server.*.windows-x64.zip
       - name: Upload Windows Manager installer
         if: steps.scope.outputs.manager == 'true' && matrix.runner == 'windows-2025'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pawtalk-manager-windows
           if-no-files-found: error
@@ -240,7 +256,7 @@ jobs:
         if: steps.scope.outputs.client == 'true'
       - name: Cache LiveKit server
         if: steps.scope.outputs.client == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             resources/server/livekit-server.exe
@@ -248,7 +264,7 @@ jobs:
           key: livekit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/prepare-server.mjs') }}
       - name: Cache electron-builder tools
         if: steps.scope.outputs.client == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ runner.temp }}\electron-builder-cache
           key: electron-builder-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
@@ -261,7 +277,7 @@ jobs:
           ELECTRON_BUILDER_CACHE: ${{ runner.temp }}\electron-builder-cache
           ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
         run: npm run package
-      - name: Verify packaged Client, pinned binaries and receipt
+      - name: Verify packaged Client, shared core and receipt
         if: steps.scope.outputs.client == 'true'
         run: node scripts/packaged-smoke.mjs
       - run: node scripts/realtime-smoke.mjs
@@ -290,7 +306,7 @@ jobs:
           PAWTALK_UPDATE_PRIVATE_KEY: ${{ secrets.PAWTALK_UPDATE_PRIVATE_KEY }}
           PAWTALK_PRERELEASE: ${{ inputs.client-prerelease && 'true' || 'false' }}
         run: node scripts/sign-update.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: steps.scope.outputs.client == 'true' && matrix.runner == 'windows-2025'
         with:
           name: pawtalk-windows

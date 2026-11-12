@@ -10,14 +10,43 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_w, _p, cb) => cb(true));
   session.defaultSession.setPermissionCheckHandler(() => true);
   const win = new BrowserWindow({ show: false, width: 1100, height: 760, webPreferences: { preload: path.join(__dirname, 'updates-preload.cjs'), sandbox: true, contextIsolation: true, backgroundThrottling: false } });
+  win.webContents.on('console-message', event => { if (event.level === 'error') console.error('renderer:', event.message); });
   const run = expression => win.webContents.executeJavaScript(expression, true);
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const until = async expression => { for (let i = 0; i < 100; i++) { if (await run(expression)) return; await wait(50); } throw new Error('Timed out: ' + expression); };
-  const click = text => run(`Array.from((document.querySelector('dialog[open]') || document).querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(text)}).click()`);
+  const click = text => run(`Array.from((document.querySelector('.update-modal[open]') || Array.from(document.querySelectorAll('dialog[open]')).at(-1) || document).querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(text)}).click()`);
   const screenshot = async name => { win.webContents.invalidate(); await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }); await wait(200); await fs.mkdir('release/qa', { recursive: true }); await fs.writeFile(`release/qa/${name}.png`, (await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG()); };
   try {
     await win.loadURL(process.env.PAWTALK_UI_TEST_URL);
     await until(`!!document.querySelector('.home-actions')`);
+    await until(`!!document.querySelector('.onboarding-modal')`);
+    await screenshot('onboarding-profile-ru');
+    await win.loadURL(process.env.PAWTALK_UI_TEST_URL);
+    await until(`!!document.querySelector('.onboarding-modal')`);
+    assert.equal(await run(`document.querySelector('.onboarding-progress').textContent.includes('Шаг 1 из 3')`), true, 'interrupted first run is offered again');
+    await click('Далее'); await wait(80);
+    await screenshot('onboarding-avatar-ru');
+    assert.ok(await run(`!!document.querySelector('.profile-avatar')`));
+    await click('Назад'); await wait(80);
+    assert.ok(await run(`!!document.querySelector('.onboarding-modal select')`));
+    await click('Далее'); await wait(80); await click('Далее'); await wait(80);
+    await until(`!!document.querySelector('.mic-test-button:not(:disabled)')`);
+    await click('Проверка микрофона');
+    await until(`document.querySelector('.mic-test-button').getAttribute('aria-pressed') === 'true'`);
+    await click('Готово'); await wait(80);
+    assert.equal(await run(`!!document.querySelector('dialog[open]')`), false);
+    await win.reload(); await wait(100);
+    assert.equal(await run(`!!document.querySelector('.onboarding-modal')`), false, 'setup completion survives reload');
+    await run(`localStorage.removeItem('pawtalk.onboarding');localStorage.removeItem('pawtalk.nickname');localStorage.setItem('pawtalk.language','en')`);
+    await win.loadURL(process.env.PAWTALK_UI_TEST_URL);
+    await until(`document.documentElement.lang === 'en' && !!document.querySelector('.onboarding-modal')`);
+    await click('Next'); await wait(80); await click('Next');
+    await until(`!!document.querySelector('.mic-test-button:not(:disabled)')`);
+    await screenshot('onboarding-audio-en');
+    await click('Set up later'); await wait(80);
+    await run(`localStorage.setItem('pawtalk.language','ru')`);
+    await win.loadURL(process.env.PAWTALK_UI_TEST_URL);
+    await until(`document.documentElement.lang === 'ru' && !!document.querySelector('.home-actions')`);
     for (const width of [940, 1100, 1240]) {
       win.setSize(width, 760); await wait(80);
       assert.ok(await run(`document.querySelector('.rail').getBoundingClientRect().bottom - document.querySelector('.rail-settings').getBoundingClientRect().bottom < 28`), 'settings are at the bottom of the rail at ' + width);
@@ -26,9 +55,9 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('[title="Настройки"]').click()`);
     await until(`!!document.querySelector('dialog[open]')`);
     await run(`window.updateTest.offer()`); await wait(80);
-    assert.equal(await run(`document.querySelector('dialog h2').textContent`), 'Настройки', 'update waits for existing modal');
+    await until(`!!document.querySelector('.update-modal[open]')`);
+    assert.ok(await run(`document.querySelector('.update-modal').matches(':modal') && document.querySelector('.settings-modal').matches(':modal')`), 'update is above the still-open settings');
     assert.equal(await run(`!!document.querySelector('.update-indicator')`), false);
-    await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`);
     await until(`!!document.querySelector('.update-modal[open]')`);
     const actions = await run(`Array.from(document.querySelectorAll('.update-actions button'),b=>{const r=b.getBoundingClientRect();return {center:r.top+r.height/2,height:r.height}})`);
     assert.ok(Math.abs(actions[0].center - actions[1].center) <= 1, 'update action centers align');
@@ -37,7 +66,11 @@ app.whenReady().then(async () => {
     await click('Отложить'); await wait(80);
     assert.ok(await run(`!!document.querySelector('.update-indicator')`));
     await run(`document.querySelector('[title="Настройки"]').click()`); await wait(80);
-    assert.equal(await run(`!!document.querySelector('.update-indicator')`), false, 'deferred icon hidden by settings');
+    assert.ok(await run(`!!document.querySelector('.settings-modal[open]')`));
+    await run(`document.querySelector('#settings-tab-updates').click()`); await wait(100);
+    await click('Открыть обновление');
+    await until(`!!document.querySelector('.update-modal[open]')`);
+    await click('Отложить'); await wait(80);
     await run(`document.querySelector('#settings-tab-language').click()`); await wait(80);
     await run(`(()=>{const select=document.querySelector('select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'en');select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     await until(`document.querySelector('dialog h2').textContent === 'Settings'`);
@@ -81,7 +114,7 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('.update-indicator').click()`); await wait(80);
     assert.ok(await run(`document.querySelector('.update-modal [role=alert]').textContent.includes('Установка отменена')`));
     await screenshot('update-security-ru');
-    console.log('PASS: dock geometry, update deferral/retry, unsafe installer blocking/source/VPN guidance, Russian/English dialogs and settings.');
+    console.log('PASS first-run guide in RU/EN, microphone loopback, interrupted/completed setup persistence, update above Settings and explicit reopen, installer retry/security, action geometry. Synthetic microphone and update transport.');
   } catch (error) { console.error(error); app.exit(1); }
   finally { win.destroy(); app.quit(); }
 });

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile, access, unlink, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, access, unlink, copyFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -6,13 +6,13 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import buildDownloads from '../shared/build-download.cjs';
+import { serverDefinition, buildWindowsServer } from './server-core.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (process.argv.slice(2).some(arg => arg !== '--livekit-only')) throw Error('Supported option: --livekit-only');
 const livekitOnly = process.argv.includes('--livekit-only');
 const output = path.join(root, 'resources/server');
-const bundled = JSON.parse(await readFile(path.join(root, 'bundled-server.json'), 'utf8'));
-if (!/^[a-f0-9]{40}$/.test(bundled.commit) || !/^\d+\.\d+\.\d+$/.test(bundled.version)) throw Error('Invalid pinned bundled server source');
-if (bundled.securityPatch !== 'build/bundled-server-security.patch' || !/^[a-f0-9]{64}$/.test(bundled.securityPatchSha256 || '')) throw Error('Missing pinned bundled Server security patch');
+const bundled = await serverDefinition(root);
+let built;
 const version = bundled.livekitVersion;
 function run(command, args, options = {}) {
   const r = spawnSync(command, args, { cwd: root, stdio: 'inherit', windowsHide: true, ...options });
@@ -40,30 +40,7 @@ async function download(url, headers = {}) {
 }
 await mkdir(output, { recursive: true });
 const go = process.env.PAWTALK_GO || (await access(path.join(tmpdir(), 'pawtalk-tools/go/bin/go.exe')).then(() => path.join(tmpdir(), 'pawtalk-tools/go/bin/go.exe')).catch(() => 'go'));
-if (!livekitOnly) {
-const source = await mkdtemp(path.join(tmpdir(), 'pawtalk-bundled-source-'));
-try {
-  const archive = path.join(source, 'server.tar');
-  run('git', ['archive', '--format=tar', '-o', archive, bundled.commit, 'server']);
-  run('tar', ['-xf', archive, '-C', source]);
-  if ((await readFile(path.join(source, 'server/VERSION'), 'utf8')).trim() !== bundled.version) throw Error('Pinned server version mismatch');
-  const securityPatch=path.join(root,bundled.securityPatch);
-  if(createHash('sha256').update(await readFile(securityPatch)).digest('hex')!==bundled.securityPatchSha256)throw Error('Bundled Server security patch hash mismatch');
-  run('git',['apply','--check',securityPatch],{cwd:source});
-  run('git',['apply',securityPatch],{cwd:source});
-  const goRoot = spawnSync(go, ['env', 'GOROOT'], { encoding: 'utf8', windowsHide: true });
-  if (goRoot.status === 0) {
-    const actualGo = spawnSync(go, ['version'], {encoding:'utf8',windowsHide:true});
-    if (actualGo.status !== 0 || !actualGo.stdout.includes(`go${bundled.goVersion} `)) throw Error('Bundled server requires pinned Go '+bundled.goVersion);
-    run(go,['test','./...'],{cwd:path.join(source,'server')});
-    run(go, ['build', '-trimpath', '-o', path.join(output, 'pawtalk-api.exe'), '.'], { cwd: path.join(source, 'server'), env: { ...process.env, GOOS: 'windows', GOARCH: 'amd64' } });
-    await copyFile(path.join(goRoot.stdout.trim(), 'LICENSE'), path.join(output, 'GO-LICENSE'));
-  } else {
-    // Optional Docker fallback on developer PCs without a Go installation.
-    run('docker', ['run', '--rm', '--mount', `type=bind,source=${path.join(source,'server')},target=/src`, '--mount', `type=bind,source=${output},target=/out`, '-w', '/src', '-e', 'GOOS=windows', '-e', 'GOARCH=amd64', `golang:${bundled.goVersion}-alpine`, 'sh', '-c', 'go build -trimpath -o /out/pawtalk-api.exe . && cp /usr/local/go/LICENSE /out/GO-LICENSE']);
-  }
-} finally { await rm(source, {recursive:true,force:true}); }
-}
+if (!livekitOnly) built = await buildWindowsServer(path.join(output, 'pawtalk-api.exe'));
 const binary = path.join(output, 'livekit-server.exe');
 const installed = spawnSync(binary, ['--version'], { encoding: 'utf8', windowsHide: true });
 if (installed.status !== 0 || !installed.stdout.includes(`version ${version}`)) {
@@ -94,5 +71,5 @@ if (livekitOnly) {
   console.log('LiveKit prepared for permanent Server tests; bundled Client API not built.');
   process.exit(0);
 }
-await writeFile(path.join(output, 'bundled-server.json'), JSON.stringify({...bundled, apiSha256:await binaryHash('pawtalk-api.exe'),livekitSha256:await binaryHash('livekit-server.exe')})+'\n');
+await writeFile(path.join(output, 'bundled-server.json'), JSON.stringify({...built, livekitSha256:await binaryHash('livekit-server.exe')})+'\n');
 console.log('Bundled API and LiveKit are ready.');

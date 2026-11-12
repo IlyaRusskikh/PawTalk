@@ -65,27 +65,14 @@ Russian and English must convey the same changes and conditions. Publish this fi
 with `--notes-file`; generated PR/commit lists are insufficient. Keep the GitHub body
 and file synchronized. Never backdate a later fix into an earlier release.
 
-## Переход установленного Windows-клиента
+## Обновление старых Windows-клиентов
 
-1. Сначала отдельно проверить и выпустить **Client-only `v0.8.1` из локального
-   коммита `3747a0d`**. Его package metadata — 0.8.1; общий серверный образ не выпускается.
-   Не ставить этот тег на финальное дерево 0.9.0.
-2. После принятия нового Server/Manager и полной проверки выпустить `client-v0.9.0`.
-3. Старый updater 0.8.0 видит `v0.8.1`, а переходный клиент видит `client-v0.9.0`.
-   Установка сохраняет обычное подтверждение пользователя. Исторические теги не меняются.
-
-Полная готовность к выпуску bridge требует прогонов его **собственного** checkout,
-включая packaging/smoke. Проверки финального 0.9.0 не заменяют их. CI bridge находится
-в том же коммите. Его signing manifest schema 1 и старый Client public key сохранены.
-Серверы 0.8.0 не умеют relay `client-v*`: напрямую через GitHub bridge работает;
-для relay новых ассетов требуется обновлённая комната. Не обещать этот fallback
-для старого VPS. Встроенный сервер bridge уже понимает Client tags.
-
-Автоматический bridge имеет срок действия подписанного манифеста (сейчас 365 дней,
-ограничение уже установленного verifier — максимум 366). После его истечения
-бесшовный переход старого клиента не обещается; опубликованный asset не переподписывается
-поверх прежнего. Не удалять commit/ref bridge при squash/очистке истории: он также
-является закреплённым источником Windows self-host.
+Переход `0.8.0 → v0.8.1 → client-v0.9.0` уже выполнен.
+[Исторический план и ограничения bridge](archive/CLIENT-BRIDGE-0.8.1.md) сохранены
+для сопровождения старых установок; не повторяйте публикацию этих тегов.
+Bridge commit `3747a0d` нужен для воспроизводимости старых выпусков: сохраняйте его
+доступность. Истечение подписанного bridge-манифеста может потребовать ручной
+установки актуального клиента; старые assets не заменяются.
 
 ## CI и публикация
 
@@ -102,7 +89,7 @@ Release workflow передаёт выбранный компонент в reusa
 
 | Scope | Выпускные сборки и загружаемые CI artifacts | Зависимости интеграционных тестов |
 |---|---|---|
-| `client` | Только Client EXE, лицензии, checksum и подписанный манифест при tag push | Опубликованный подписанный Server; закреплённый встроенный сервер клиента |
+| `client` | Только Client EXE, лицензии, checksum и подписанный манифест при tag push | Опубликованный подписанный Server; встроенный сервер из общего `server/` |
 | `server` | Только Server ZIP; release job публикует Linux image и манифест | Минимальный Manager host/runtime без NSIS-установщика; полный серверный lifecycle |
 | `manager` | Только Manager EXE; release job собирает bundle и подписывает metadata | Опубликованный подписанный Server ZIP/image, без пересборки Server; SCM/EXE и Compose lifecycle |
 | `all` | Все три пакета | Полные исходники и полный набор проверок ветки/PR |
@@ -181,12 +168,14 @@ API protocol 1 независим от release versions; отсутствие п
 protocol 1. [Матрица](COMPATIBILITY.md). Breaking API/schema требуют server-first
 перехода с обратной совместимостью либо отдельного согласованного механизма восстановления.
 
-`bundled-server.json` закрепляет **точный commit**, версию Go API и LiveKit для
-Windows self-host. `server:prepare` извлекает этот commit через `git archive`, а не
-собирает случайные незакоммиченные `server/` изменения. В installer входит receipt
-с версиями/commit/хэшами бинарников. Для сборки нужен checkout с историей этого
-коммита (`fetch-depth: 0` в Windows CI). Смена Server версии сама по себе не меняет
-Client pin. Для нового pin нужны совместимые контрактные и Windows self-host тесты.
+Текущие сборки Client и Windows Server используют один `server/` через
+`scripts/server-core.mjs`, один Go toolchain и одинаковые флаги. Источники версий:
+`server/VERSION` и `server/standalone.Dockerfile` (Go/LiveKit). Receipt
+`resources/server/bundled-server.json` содержит SHA-256 исходников и бинарников.
+При совместной сборке `node scripts/check-server-core.mjs` требует побайтового
+совпадения Go/LiveKit в обоих пакетах. Смена ядра доставляется установленным
+клиентам только новым Client-релизом; выпуск Server сам по себе Client не меняет.
+[Контракт и проверки](BUNDLED-SERVER.md).
 
 ## Проверки перед разрешённым push/release
 
@@ -202,11 +191,10 @@ Client pin. Для нового pin нужны совместимые контр
    каналы, backup/restore, нездоровый rollout, SIGKILL recovery, Manager fallback.
 6. Получить отдельное разрешение на публикацию.
 
-Порядок первого нового выпуска: проверенный bridge `v0.8.1` → Server → Manager
-(с существующим подписанным Server) → Client. Все production ключи/артефакты должны
-быть готовы до обещания пользователям автономной установки. Впоследствии линии
-выпускаются независимо. После push различать branch CI и tag CI; передать владельцу
-URL **tag workflow**, если требуется мониторинг. Локальный успех не гарантирует GitHub CI.
+Client, Server и Manager выпускаются независимо. Изменения общего API требуют
+проверки обеих сторон и совместимого server-first перехода по [матрице](COMPATIBILITY.md).
+После push различать branch CI и tag CI; передать владельцу URL **tag workflow**,
+если требуется мониторинг. Локальный успех не гарантирует GitHub CI.
 
 Client assets: `PawTalk.Setup.X.Y.Z.exe`, `update-manifest.json`, `SHA256SUMS.txt`,
 один `PawTalk.Licenses.X.Y.Z.zip` с `LICENSE`, `THIRD_PARTY_NOTICES.md`, `licenses/`.
@@ -221,7 +209,10 @@ README/site должны ссылаться на фактическую **кли
 
 Client, Server and Manager have independent version sources and `client-v*`,
 `server-v*`, `manager-v*` tags. The final legacy bridge is Client-only `v0.8.1`
-from commit `3747a0d`, published before `client-v0.9.0` after separate review.
+from commit `3747a0d`; the migration to `client-v0.9.0` is complete.
+The [historical plan](archive/CLIENT-BRIDGE-0.8.1.md) records legacy limitations;
+do not repeat its publication steps. Preserve the bridge source commit for bundled
+historical self-host builds. An expired bridge manifest may require manual Client installation.
 Never replace historical tags or assets. The component release workflow validates
 its own source, runs verification and publishes only its component's assets.
 Stable/preview flags must match signed metadata. Client 0.10.1, Server 0.10.1 and
@@ -242,6 +233,8 @@ immutable.
 Client retains its existing key; Server and Manager have separate provisioned
 Ed25519 roots and CI secrets. Empty roots fail closed. Bootstrap trusts a reviewed
 checkout; updates verify type, repository, version, channel, signature and digest.
-Bundled Windows self-host uses a pinned source commit and records binary hashes.
+Development builds share one server/ core across hosting modes and record source
+and binary hashes. Windows Client/Server binaries must match byte for byte.
+Published Client 0.10.1 still uses its historical pin until a new Client is released.
 Run applicable CI locally and packaged smoke before release; distinguish Docker,
 synthetic audio and emulation from native arm64, real devices and external networks.

@@ -1,4 +1,4 @@
-<!doctype html><html><body><script type="module">
+<!doctype html><html><head><base href="/"/></head><body><script type="module">
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Participants } from '/src/Participants.tsx';
@@ -13,7 +13,19 @@ import { defaults } from '/src/settings.ts';
 import { changeLanguage } from '/src/i18n.ts';
 window.changeLanguage=changeLanguage;
 import { Track, LocalVideoTrack, Room } from 'livekit-client';
-const c = new VoiceSession({ ...defaults, echoCancellation: false, noiseMode: new URLSearchParams(location.search).get('noise') === 'rnnoise' ? 'rnnoise' : 'off', autoGainControl: false, sounds: false, autoSensitivity: false, threshold: -75, inputMode: 'ptt', pttReleaseMs: 0 });
+const cueTest = new URLSearchParams(location.search).has('cues');
+window.roomCues=[];
+if(cueTest){
+ const gains=new WeakMap();const connect=AudioBufferSourceNode.prototype.connect;
+ AudioBufferSourceNode.prototype.connect=function(destination,...args){if(destination instanceof GainNode)gains.set(this,destination);return connect.call(this,destination,...args);};
+ const start=AudioBufferSourceNode.prototype.start;
+ AudioBufferSourceNode.prototype.start=function(...args){
+  const gain=gains.get(this),record={seconds:this.buffer.duration,energy:0,state:this.context.state,gain:gain?.gain.value};window.roomCues.push(record);
+  if(gain){const analyser=this.context.createAnalyser();analyser.fftSize=2048;gain.connect(analyser);const data=new Float32Array(2048);let samples=0;const timer=setInterval(()=>{analyser.getFloatTimeDomainData(data);record.energy+=data.reduce((sum,x)=>sum+x*x,0);if(++samples===30){clearInterval(timer);try{gain.disconnect(analyser);}catch{}analyser.disconnect();}},10);}
+  return start.apply(this,args);
+ };
+}
+const c = new VoiceSession({ ...defaults, echoCancellation: false, noiseMode: new URLSearchParams(location.search).get('noise') === 'rnnoise' ? 'rnnoise' : 'off', autoGainControl: false, sounds: cueTest, autoSensitivity: false, threshold: -75, inputMode: 'ptt', pttReleaseMs: 0 });
 window.voice = c;
 let uiRoot;
 const root = () => { if(!uiRoot){const el=document.createElement('div');el.style.padding='30px';document.body.append(el);uiRoot=createRoot(el);}return uiRoot;};

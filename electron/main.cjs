@@ -12,6 +12,7 @@ const { serverURL, invitation } = require('./address.cjs');
 const { diagnosticCommand } = require('./diagnostic-command.cjs');
 const { SelfHost } = require('./selfhost.cjs');
 const { HostCheck } = require('./host-check.cjs');
+const { HostError, hostResult } = require('./host-errors.cjs');
 const { CredentialStore } = require('./credentials.cjs');
 const { Updater } = require('./updater.cjs');
 const { UpdatePreferences } = require('./update-settings.cjs');
@@ -194,18 +195,28 @@ function registerIPC() {
   ipcMain.handle('host-status', event => { authorized(event); return hosting.status(); });
   ipcMain.handle('host-check', (event, port) => {
     authorized(event);
-    if (hosting.status().running || hosting.starting || hosting.stopping) throw new Error(t("Закройте комнату перед проверкой сети."));
-    return hostCheck.start(port);
+    return hostResult(() => {
+      if (hosting.status().running || hosting.starting || hosting.stopping) throw new HostError(t("Закройте комнату перед проверкой сети."));
+      return hostCheck.start(port);
+    }, t("Не удалось получить результат проверки сети. Попробуйте ещё раз."));
   });
-  ipcMain.handle('host-check-cancel', event => { authorized(event); return hostCheck.cancel(); });
+  ipcMain.handle('host-check-cancel', event => { authorized(event); return hostResult(() => hostCheck.cancel(), t("Не удалось получить результат проверки сети. Попробуйте ещё раз.")); });
   ipcMain.handle('host-start', async (event, input) => {
     authorized(event);
-    if (hostCheck.running) throw new Error(t("Дождитесь завершения проверки сети."));
-    const result = await hosting.start(input);
-    trustInvitation(result.localAddress);
-    return result;
+    return hostResult(async () => {
+      if (hostCheck.running) throw new HostError(t("Дождитесь завершения проверки сети."));
+      const result = await hosting.start(input);
+      trustInvitation(result.localAddress);
+      return result;
+    }, t("Не удалось запустить встроенный сервер. Возможно, порт занят."));
   });
-  ipcMain.handle('host-stop', async event => { authorized(event); if (hosting.starting) throw new Error(t("Дождитесь запуска комнаты")); await hosting.stop(); });
+  ipcMain.handle('host-stop', async event => {
+    authorized(event);
+    return hostResult(async () => {
+      if (hosting.starting) throw new HostError(t("Дождитесь запуска комнаты"));
+      await hosting.stop();
+    }, t("Не удалось закрыть комнату. Попробуйте ещё раз."));
+  });
   ipcMain.handle('capabilities', async (event) => { authorized(event); return { native: !!native, platform: process.platform, packaged: app.isPackaged, secureStorage: await safeStorage.isAsyncEncryptionAvailable() }; });
   ipcMain.handle('credentials-load', async (event, address) => {
     authorized(event);

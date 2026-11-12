@@ -1,5 +1,16 @@
 # Changelog / История изменений
 
+## Client 0.11.0 — 2026-11-12 (prepared, not published / подготовлен, не опубликован)
+
+- First-run guide for language, nickname, avatar and microphone setup; better settings scrolling and explicit reopening of update offers. / Мастер первого запуска для языка, никнейма, аватара и микрофона; улучшена прокрутка настроек и повторное открытие предложения обновления.
+- Project-owner Manya recordings for room/message notifications and microphone/audio toggles; preserve notification volume and chosen output. / Записи Мани, кошки автора проекта, для комнаты, сообщений и переключения микрофона/входящего звука с общей громкостью и выбранным выходом.
+
+- Client: replace message notification cooldown with an immediate new cue and a 120 ms fade of the previous cue. Separate room/microphone/playback cues so message bursts cannot exhaust a global source limit and suppress entry/exit sounds; skip quiet lead-ins on room recordings during playback. / Вместо паузы между уведомлениями новый звук сообщения запускается сразу, предыдущий затихает за 120 мс. Сигналы комнаты, микрофона и воспроизведения разделены, чтобы серия сообщений не подавляла вход/выход из-за общего лимита звуков; тихое начало записей входа/выхода пропускается при воспроизведении.
+
+- Client: show localized hosting errors without Electron IPC prefixes; clear the previous failure when retrying. / Ошибки создания и закрытия комнаты и проверки сети показываются на выбранном языке без служебной обёртки Electron; повторная попытка очищает прежнюю ошибку.
+
+- Client / Server: build temporary Windows rooms and permanent Windows Server from one current `server/` core using a shared toolchain and build flags. Record source/binary hashes and compare Windows packages byte for byte; remove the separate legacy source pin/security backport after compatibility checks. Published releases remain unchanged. / Временные Windows-комнаты и постоянный Windows Server собираются из общего текущего `server/` одним сборщиком. Receipt содержит хэши исходников/бинарников, Windows-пакеты сравниваются побайтово; отдельный старый pin и backport удаляются после проверки совместимости. Опубликованные выпуски не меняются.
+
 ## Client 0.10.1 / Manager 0.2.1 — 2026-11-12
 
 - Stop/wait for Windows service hosts without requiring SeDebugPrivilege; retain bounded process-exit verification when LocalService denies SYNCHRONIZE. Explain uninstaller failures instead of silently aborting. / Остановка службы и ожидание её процесса не требуют SeDebugPrivilege; отказ LocalService в SYNCHRONIZE обрабатывается через проверку завершения процесса. Деинсталлятор объясняет сбой вместо молчаливого прерывания.

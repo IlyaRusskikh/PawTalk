@@ -34,10 +34,12 @@ export function UpdateSettings() {
     }}/>
     </div>
     <div className="update-check-card"><span className="update-check-icon"><Icon name="download" size={25}/></span><div><strong>{state.version ? t("Доступна версия {0}", state.version) : t("Проверка обновлений")}</strong><p role="status">{busy || state.status === 'checking' ? t("Проверяем обновления…") : state.status === 'check-failed' ? t("Не удалось проверить обновления. Попробуйте снова.") : checked && state.status === 'idle' && !state.version ? t("У вас последняя версия.") : t("Можно проверить вручную, даже если автообновление выключено.")}</p></div></div>
-    <button type="button" className="primary" disabled={!supported || busy || ['checking', 'downloading', 'installing'].includes(state.status)} onClick={() => {
+    <div className="modal-actions update-settings-actions"><button type="button" className="primary" disabled={!supported || busy || ['checking', 'downloading', 'installing'].includes(state.status)} onClick={() => {
       setBusy(true); setError(false);
       void window.desktop!.checkUpdate!().then(value => { setState(value); setChecked(true); }).catch(() => setError(true)).finally(() => setBusy(false));
     }}>{t("Проверить обновления")}</button>
+    {state.version && <button type="button" className="secondary" onClick={() => window.dispatchEvent(new Event('pawtalk-show-update'))}>{t("Открыть обновление")}</button>}
+    </div>
     {state.status === 'security-failed' && <UpdateSecurityError source={state.source}/>}
     {error && <p className="text-error" role="alert">{t("Не удалось изменить или проверить настройки обновления.")}</p>}
     {!supported && <p className="host-hint">{t("Обновления доступны в установленном приложении Windows.")}</p>}

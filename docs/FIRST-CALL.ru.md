@@ -6,17 +6,23 @@
 
 ## 1. Установите клиент
 
-На обоих ПК скачайте `PawTalk.Setup.0.8.0.exe` из
-[выпуска 0.8.0](https://github.com/IlyaRusskikh/pawtalk/releases/tag/v0.8.0).
+На обоих ПК скачайте [PawTalk.Setup.0.10.1.exe](https://github.com/IlyaRusskikh/PawTalk/releases/download/client-v0.10.1/PawTalk.Setup.0.10.1.exe) из
+[выпуска Client 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.10.1).
 Архив Source code содержит исходники, а не готовое приложение. Для установки
 не нужны Node.js, Go, Docker или права администратора на роутере.
 
 Установщик пока не подписан: Windows может показать предупреждение о неизвестном
-издателе. Сверьте источник скачивания и SHA-256 с `SHA256SUMS.txt` из того же
-релиза. В PowerShell в папке скачивания:
+издателе. Сверьте источник скачивания и SHA-256 с [SHA256SUMS.txt](https://github.com/IlyaRusskikh/PawTalk/releases/download/client-v0.10.1/SHA256SUMS.txt) из того же
+релиза. Опубликованный SHA-256 установщика Client 0.10.1:
+
+```text
+3aefb23b9cd67d988702cfde68b83ce1e1fba34cf32d1d7430e76423230b70c3  PawTalk.Setup.0.10.1.exe
+```
+
+В PowerShell в папке скачивания:
 
 ```powershell
-Get-FileHash -LiteralPath '.\PawTalk.Setup.0.8.0.exe' -Algorithm SHA256
+Get-FileHash -LiteralPath '.\PawTalk.Setup.0.10.1.exe' -Algorithm SHA256
 ```
 
 Сравните полученный `Hash` со строкой установщика в `SHA256SUMS.txt` (регистр
@@ -84,7 +90,7 @@ VPS с публичным IP: [пошаговая установка Linux-се�
 | Пароль принят, но нет голосового подключения | Проверьте голосовой сервис и TCP/UDP-порты; см. диагностику в руководстве сервера |
 | Подключение есть, но звука нет | Проверьте устройства, mute/deafen, индивидуальную громкость и PTT на обоих ПК |
 
-Инструкция соответствует PawTalk 0.8.0. Формулировки зависят от выбранного языка. Подробности: [руководство](GUIDE.ru.md), [сервер](SERVER.md).
+Инструкция соответствует Client 0.10.1. Формулировки зависят от выбранного языка. Подробности: [руководство](GUIDE.ru.md), [сервер](SERVER.md).
 
 Для обращения в [GitHub Issues](https://github.com/IlyaRusskikh/pawtalk/issues/new/choose)
 укажите версии клиента/сервера, Windows, LAN или разные сети, шаги и точный

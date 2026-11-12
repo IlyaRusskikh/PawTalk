@@ -66,6 +66,7 @@ app.on('browser-window-created', (_event, win) => {
       await fs.mkdir(output, { recursive: true });
       for (let i = 0; i < 80 && !await run(`!!document.querySelector('.home-actions')`); i++) await wait(100);
       await wait(400);
+      await run(`document.querySelector('.onboarding-actions .quiet')?.click()`);
       // Avoid registering shortcuts already used by the user's running client.
       await run(`localStorage.setItem('pawtalk.settings', JSON.stringify({muteKey:'',deafenKey:''}))`);
       await new Promise(resolve => { win.webContents.once('did-finish-load', resolve); win.reload(); });

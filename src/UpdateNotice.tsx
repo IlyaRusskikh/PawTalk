@@ -21,6 +21,11 @@ export function UpdateNotice({ blocked, active, hosting }: { blocked: boolean; a
   useEffect(() => {
     if (available && !blocked && !offered.current) { offered.current = true; setOpen(true); }
   }, [available, blocked]);
+  useEffect(() => {
+    const show = () => { if (available && !blocked) setOpen(true); };
+    window.addEventListener('pawtalk-show-update', show);
+    return () => window.removeEventListener('pawtalk-show-update', show);
+  }, [available, blocked]);
   async function install() {
     if (downloading || !window.desktop?.installUpdate) return;
     setPending(true);

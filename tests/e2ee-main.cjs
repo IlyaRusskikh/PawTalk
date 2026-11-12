@@ -38,6 +38,7 @@ app.on('browser-window-created',(_e,win)=>{
   let remoteHost;
   try {
    await until(()=>js('!!document.querySelector(".home-actions")'),'app ready');
+   await js(`document.querySelector('.onboarding-actions .quiet')?.click()`);
    await js(`document.querySelector('.rail-settings').click()`);
    await until(()=>js('!!document.querySelector(".profile-avatar input")'),'avatar picker');
    const sampleAvatar = await js(`(()=>{

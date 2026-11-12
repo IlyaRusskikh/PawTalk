@@ -30,6 +30,7 @@ import { RoomSplit } from './RoomSplit';
 import { HostPanel } from './HostPanel';
 import { ServerKey } from './ServerKey';
 import { UpdateNotice } from './UpdateNotice';
+import { playSound } from './sounds';
 import { useLanguage, changeLanguage } from './i18n';
 
 type JoinTarget = { address: string; nickname: string; password: string; e2eeKey?: string; roomId?: string };
@@ -39,6 +40,10 @@ function stored(key: string) { try { return localStorage.getItem(key) || ''; } c
 export function App() {
   const language = useLanguage();
   const keys: [number, string][] = [[5, t("Боковая кнопка мыши 4")], [6, t("Боковая кнопка мыши 5")], [32, t("Пробел")], [162, t("Левый Ctrl")], [163, t("Правый Ctrl")], [164, t("Левый Alt")], [165, t("Правый Alt")], [160, t("Левый Shift")], [161, t("Правый Shift")], [20, 'Caps Lock'], ...Array.from({ length: 26 }, (_, i) => [65 + i, String.fromCharCode(65 + i)] as [number, string]), ...Array.from({ length: 12 }, (_, i) => [112 + i, `F${i + 1}`] as [number, string])];
+  const [onboarding, setOnboarding] = useState<number | null>(() => stored('pawtalk.onboarding') === 'pending' || (!stored('pawtalk.onboarding') && !stored('pawtalk.nickname')) ? 0 : null);
+  useEffect(() => { if (onboarding !== null) localStorage.setItem('pawtalk.onboarding', 'pending'); }, [onboarding]);
+  const onboardingActive = useRef(onboarding !== null); onboardingActive.current = onboarding !== null;
+  function finishOnboarding() { localStorage.setItem('pawtalk.onboarding', 'done'); setNickname(value => value.trim() || t("Гость")); setOnboarding(null); setModal(address ? 'join' : null); }
   const [settings, setSettings] = useState(loadSettings);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('profile');
   const settingsPageId = settingsPage(settingsSection);
@@ -48,7 +53,7 @@ export function App() {
   const [nativeNoticeDismissed, setNativeNoticeDismissed] = useState(false);
   useEffect(() => { try { localStorage.setItem('pawtalk.chat.window', String(chatWindow)); } catch {} }, [chatWindow]);
   useEffect(() => { applyTheme(theme); try { localStorage.setItem('pawtalk.theme', JSON.stringify(theme)); } catch {} }, [theme]);
-  const [modal, setModal] = useState<'join' | 'create' | 'share' | 'host-share' | 'settings' | 'server-key' | null>(null);
+  const [modal, setModal] = useState<'join' | 'create' | 'share' | 'host-share' | 'settings' | 'server-key' | null>(() => onboarding !== null ? 'settings' : null);
   const [roomName, setRoomName] = useState('');
   const [page, setPage] = useState<'home' | 'room'>('home');
   const [renaming, setRenaming] = useState<Bookmark | null>(null);
@@ -200,7 +205,7 @@ export function App() {
   }
   const stopTest = () => { testMic.current?.stopMonitor(); setTesting(false); };
   useEffect(() => {
-    const receive = (value: string) => { if (value) { setAddress(value); setError(''); setModal(null); setModal('join'); } };
+    const receive = (value: string) => { if (value) { setAddress(value); setError(''); if (!onboardingActive.current) { setModal(null); setModal('join'); } } };
     const off = window.desktop?.onInvitation?.(receive);
     void window.desktop?.pendingInvitation?.().then(receive);
     return off;
@@ -239,7 +244,14 @@ export function App() {
     return () => clearTimeout(timer);
   }, [nickname]);
   useEffect(() => { if (modal !== 'settings') setAvatarFile(undefined); }, [modal]);
-  useEffect(() => { controller.current?.setMute(muted, deafened); }, [muted, deafened]);
+  const previousAudio = useRef({ muted, deafened });
+  useEffect(() => {
+    controller.current?.setMute(muted, deafened);
+    const previous = previousAudio.current;
+    if (previous.deafened !== deafened) void playSound(deafened ? 'deafen' : 'undeafen', currentSettings.current);
+    else if (previous.muted !== muted) void playSound(muted ? 'mute' : 'unmute', currentSettings.current);
+    previousAudio.current = { muted, deafened };
+  }, [muted, deafened]);
   useEffect(() => {
     void window.desktop?.configureKeys({ ptt: settings.pttKey, mute: settings.muteKey, deafen: settings.deafenKey }).then(result => {
       setKeyError(result.failed.length ? t("Комбинация занята или указана неверно: ") + result.failed.join(', ') : '');
@@ -342,7 +354,7 @@ export function App() {
     <button className="icon-button call-leave" title={t("Отключиться")} onClick={() => void disconnect()}><Icon name="exit"/></button>
   </div>;
   return <div className="app">
-    <aside className="rail"><button className={`server-orb home-orb ${!showRoom ? 'selected' : ''}`} title={t("Главная")} onClick={() => { setPage('home'); setModal(null); }}><img src="./pawtalk-mark.svg" width="44" height="44" alt="PawTalk"/></button><div className="rail-line"/><BookmarkRail bookmarks={bookmarks} temporaryRoom={inRoom && !isBookmarked && currentTarget.current ? { address: currentTarget.current.address.split('#')[0], name: roomName || t("Комната") } : undefined} onSaveTemporary={() => void toggleBookmark()} activeAddress={inRoom ? currentTarget.current?.address.split('#')[0] : undefined} activeRoomId={currentTarget.current?.roomId} selected={showRoom} people={snapshot.people.length} livePeople={snapshot.people} unread={activeUnread} presence={presence} disabled={busy || hostBusy || bookmarkBusy} onOpen={item => void openBookmark(item)} onReorder={setBookmarks} onMenu={(address, x, y) => setMenu({ address, x: Math.max(8, Math.min(x, window.innerWidth - 210)), y: Math.max(8, Math.min(y, window.innerHeight - 120)) })}/><div className="rail-actions"><UpdateNotice blocked={modal !== null || renaming !== null} active={active || busy} hosting={hostRunning}/><button className="icon-button rail-settings" title={t("Настройки")} onClick={() => setModal('settings')}><Icon name="settings"/></button></div></aside>
+    <aside className="rail"><button className={`server-orb home-orb ${!showRoom ? 'selected' : ''}`} title={t("Главная")} onClick={() => { setPage('home'); setModal(null); }}><img src="./pawtalk-mark.svg" width="44" height="44" alt="PawTalk"/></button><div className="rail-line"/><BookmarkRail bookmarks={bookmarks} temporaryRoom={inRoom && !isBookmarked && currentTarget.current ? { address: currentTarget.current.address.split('#')[0], name: roomName || t("Комната") } : undefined} onSaveTemporary={() => void toggleBookmark()} activeAddress={inRoom ? currentTarget.current?.address.split('#')[0] : undefined} activeRoomId={currentTarget.current?.roomId} selected={showRoom} people={snapshot.people.length} livePeople={snapshot.people} unread={activeUnread} presence={presence} disabled={busy || hostBusy || bookmarkBusy} onOpen={item => void openBookmark(item)} onReorder={setBookmarks} onMenu={(address, x, y) => setMenu({ address, x: Math.max(8, Math.min(x, window.innerWidth - 210)), y: Math.max(8, Math.min(y, window.innerHeight - 120)) })}/><div className="rail-actions"><UpdateNotice blocked={(modal !== null && modal !== 'settings') || renaming !== null || !!avatarFile || onboarding !== null} active={active || busy} hosting={hostRunning}/><button className="icon-button rail-settings" title={t("Настройки")} onClick={() => setModal('settings')}><Icon name="settings"/></button></div></aside>
     {menu && <div className="bookmark-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={e => e.stopPropagation()}><button autoFocus role="menuitem" onClick={() => { const item = bookmarks.find(b => b.address === menu.address); if (item) setRenaming(item); setMenu(null); }}>{t("Переименовать")}</button><button role="menuitem" onClick={() => void removeBookmark(menu.address)}>{t("Удалить закладку")}</button></div>}
     <main>
     <div className={`content${showRoom ? ' room-content' : ''}`}>
@@ -374,8 +386,8 @@ export function App() {
       {modal === 'share' && currentTarget.current && <GuestShare target={currentTarget.current} name={roomName} onClose={() => setModal(null)}/>}
       <HostPanel nickname={nickname} active={active || busy} modal={modal} onClose={() => setModal(null)} onCreated={name => { setRoomName(name); setModal('host-share'); }} onStatus={setHostRunning} onJoin={input => connect(input, true)} onStop={disconnect} onError={setError} onBusy={setHostBusy}/>
       {renaming && <Modal title={t("Переименовать сервер")} onClose={() => setRenaming(null)}><form onSubmit={event => { event.preventDefault(); renameRoom(renaming.address, renaming.name); }}><div className="form-fields"><label>{t("Название сервера")}<input autoFocus required maxLength={64} value={renaming.name} onChange={event => setRenaming({ ...renaming, name: event.target.value })}/></label></div><p className="host-hint">{t("Название изменится только у вас.")}</p><div className="modal-actions"><button type="button" className="quiet" onClick={() => setRenaming(null)}>{t("Отмена")}</button><button className="primary" disabled={!renaming.name.trim()}>{t("Сохранить")}</button></div></form></Modal>}
-      {modal === 'settings' && <Modal title={t("Настройки")} className="settings-modal" onClose={() => setModal(null)}>{settingsError && <p role="alert" className="text-error">{settingsError}</p>}<SettingsShell section={settingsSection} onChange={setSettingsSection}>{settingsSection === 'profile' && <section className="settings-page"><div className="settings-card profile-settings"><h1>{t("Обо мне")}</h1>
-        <div className="profile-avatar">
+      {modal === 'settings' && <Modal title={onboarding !== null ? t("Добро пожаловать в PawTalk") : t("Настройки")} className={onboarding !== null ? 'settings-modal onboarding-modal' : 'settings-modal'} onClose={() => onboarding !== null ? finishOnboarding() : setModal(null)}>{settingsError && <p role="alert" className="text-error">{settingsError}</p>}{onboarding !== null && <div className="onboarding-progress"><p>{t("Шаг {0} из 3", onboarding + 1)}</p><p>{[t("Как вас называть? Выберите язык приложения и никнейм."), t("Добавьте аватарку — или оставьте инициалы."), t("Выберите устройства и проверьте микрофон в наушниках.")][onboarding]}</p></div>}<SettingsShell wizard={onboarding !== null} section={settingsSection} onChange={setSettingsSection}>{settingsSection === 'profile' && <section className="settings-page"><div className="settings-card profile-settings"><h1>{t("Обо мне")}</h1>
+        {onboarding !== 0 && <div className="profile-avatar">
           <Avatar name={nickname} image={avatar}/>
           <div className="profile-avatar-actions">
             <input ref={avatarPicker} type="file" hidden accept={avatarFormats.join(',')} onChange={event => {
@@ -388,8 +400,8 @@ export function App() {
               if (!saveAvatar()) setSettingsError(t("Не удалось сохранить аватар."));
             }}>{t("Удалить аватар")}</button>}
           </div>
-        </div>
-        <div className="form-fields"><label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div><p>{t("Никнейм обновляется и в открытой комнате.")}</p></div></section>}
+        </div>}
+        {onboarding !== 1 && <div className="form-fields">{onboarding === 0 && <label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setSettingsError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">Русский</option><option value="en">English</option></select></label>}<label>{t("Никнейм")}<input value={nickname} onChange={event => setNickname(event.target.value)} maxLength={32} required placeholder={t("Как вас называть?")}/></label></div>}{onboarding === null && <p>{t("Никнейм обновляется и в открытой комнате.")}</p>}</div></section>}
       {settingsSection === 'language' && <section className="settings-card"><h1>{t("Язык")}</h1><div className="form-fields"><label>{t("Язык приложения")}<select value={language} onChange={event => void changeLanguage(event.target.value as 'ru' | 'en').catch(() => setSettingsError(t("Не удалось сохранить язык. Попробуйте снова.")))}><option value="ru">{t("Русский")}</option><option value="en">English</option></select></label></div></section>}
       {settingsPageId === 'system' && <section id="settings-anchor-general" className="settings-card settings-section"><h1>{t("Основные")}</h1>{autoStart !== null && <Toggle label={t("Запускать PawTalk при входе в Windows")} checked={autoStart} detail={autoStartAvailable ? undefined : t("Автозапуск доступен в установленном приложении Windows.")} disabled={autoStartBusy || !autoStartAvailable} onChange={value => void changeAutoStart(value)}/>} {autoStart !== null && <Toggle label={t("Запускать свёрнутым в трее")} detail={t("При автозапуске окно будет скрыто; открыть его можно через значок в трее.")} checked={startInTray} disabled={autoStartBusy || !autoStartAvailable || !autoStart} onChange={value => void changeStartInTray(value)}/>}</section>}
       {settingsSection === 'appearance' && <AppearanceSettings theme={theme} onChange={setTheme}/>}
@@ -397,7 +409,7 @@ export function App() {
 
       {['audio', 'system'].includes(settingsPageId) && <VoiceSettings section={settingsPageId === 'audio' ? 'audio' : 'shortcuts'} settings={settings} update={update} devices={devices} keys={keys} db={db} threshold={threshold} speaking={active && !testing ? snapshot.speaking : testSpeaking} active={active} busy={busy} testing={testing} testBusy={testBusy} ready={previewReady} native={native} keyError={keyError} onTest={() => void toggleTest()}/>}
       {settingsPageId === 'system' && <section id="settings-anchor-updates" className="settings-section"><UpdateSettings/></section>}
-      {['audio', 'system'].includes(settingsPageId) && <footer className="settings-page-footer"><button type="button" className="quiet settings-reset" onClick={() => setSettings(current => settingsPageId === 'audio' ? resetSettingsTab(resetSettingsTab(current, 'voice'), 'sounds') : resetSettingsTab(current, 'shortcuts'))}>{t("Сбросить настройки вкладки")}</button></footer>}</SettingsShell></Modal>}
+      {['audio', 'system'].includes(settingsPageId) && <footer className="settings-page-footer"><button type="button" className="quiet settings-reset" onClick={() => setSettings(current => settingsPageId === 'audio' ? resetSettingsTab(resetSettingsTab(current, 'voice'), 'sounds') : resetSettingsTab(current, 'shortcuts'))}>{t("Сбросить настройки вкладки")}</button></footer>}</SettingsShell>{onboarding !== null && <div className="modal-actions onboarding-actions"><button className="quiet" onClick={finishOnboarding}>{t("Настроить позже")}</button>{onboarding > 0 && <button className="secondary" onClick={() => { setOnboarding(onboarding - 1); setSettingsSection('profile'); }}>{t("Назад")}</button>}<button className="primary" disabled={!nickname.trim()} onClick={() => { if (onboarding === 2) finishOnboarding(); else { setOnboarding(onboarding + 1); setSettingsSection(onboarding === 1 ? 'voice' : 'profile'); } }}>{onboarding === 2 ? t("Готово") : t("Далее")}</button></div>}</Modal>}
       {modal === 'settings' && avatarFile && <AvatarEditor file={avatarFile} onClose={() => setAvatarFile(undefined)} onSave={saveAvatar}/>}
       {busy && <Modal title={t("Подключение к комнате")} className="connection-loading" onClose={() => {}}><div className="connection-progress" role="status" aria-live="polite" aria-busy="true"><span className="connection-spinner" aria-hidden="true"/><strong>{connectionStage === 'server' ? t("Связываемся с сервером…") : t("Подключаем голос и чат…")}</strong><p>{t("Это может занять несколько секунд.")}</p><progress aria-label={t("Подключение к комнате")}/></div></Modal>}
     </div>

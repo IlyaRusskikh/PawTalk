@@ -20,6 +20,7 @@ app.on('browser-window-created', (_event, win) => {
   win.webContents.once('did-finish-load', async () => {
     try {
       await until(`!!document.querySelector('.home-actions')`);
+      await js(`document.querySelector('.onboarding-actions .quiet')?.click()`);
       assert.equal(await js('window.desktop.getUpdateChannel()'),'preview');
       assert.equal(await js("window.desktop.setUpdateChannel('stable')"),'stable');
       assert.equal(await js("window.desktop.setUpdateChannel('invalid').then(()=>false,()=>true)"),true);

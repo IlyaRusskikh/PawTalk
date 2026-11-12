@@ -37,6 +37,7 @@ app.on('browser-window-created',(_event,win)=>{
   try {
    assert.equal(new URL(win.webContents.getURL()).origin,ui.origin,'actual harness renderer, independent of Client dist');
    await until(`!!document.querySelector('.home-actions')`);
+   await run(`document.querySelector('.onboarding-actions .quiet')?.click()`);
    const link=bare+'#password='+encodeURIComponent(password);
    await run(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent.startsWith('Присоединиться к комнате')).click()`);
    await run(`(()=>{const el=document.querySelector('dialog input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(link)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`);

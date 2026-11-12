@@ -58,6 +58,8 @@ test.emitLive = async (own = false, repeat = false) => {
   session.onChat?.(chatEncoder.encode(JSON.stringify(test.lastLive)), own ? 'Me' : 'Friend', own ? 'local' : 'friend');
 };
 test.audioPlays = [];
+const audioNodes: {source:AudioBufferSourceNode;gain?:GainNode;ended:boolean}[] = [];
+test.soundState = (index:number) => ({ended:audioNodes[index].ended,gain:audioNodes[index].gain?.gain.value});
 const soundGains = new WeakMap<AudioNode, GainNode>();
 const connect = AudioNode.prototype.connect;
 AudioNode.prototype.connect = function (...args: any[]) {
@@ -66,7 +68,10 @@ AudioNode.prototype.connect = function (...args: any[]) {
 } as typeof connect;
 const start = AudioBufferSourceNode.prototype.start;
 AudioBufferSourceNode.prototype.start = function (...args: Parameters<typeof start>) {
-  test.audioPlays.push({ seconds: this.buffer?.duration, channels: this.buffer?.numberOfChannels, sink: (this.context as AudioContext & { sinkId: string }).sinkId, gain: soundGains.get(this)?.gain.value });
+  const node={source:this,gain:soundGains.get(this),ended:false};
+  audioNodes.push(node);
+  this.addEventListener('ended',()=>{node.ended=true;});
+  test.audioPlays.push({ offset:args[1]??0, seconds: this.buffer?.duration, channels: this.buffer?.numberOfChannels, sink: (this.context as AudioContext & { sinkId: string }).sinkId, gain: soundGains.get(this)?.gain.value });
   return start.apply(this, args);
 };
 test.playSound = (event: 'join' | 'leave' | 'message', overrides = {}) => playSound(event, { ...defaults, ...overrides });
