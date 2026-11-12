@@ -27,6 +27,13 @@ jobs:
         run: |
           node scripts/release-contract.mjs "$GITHUB_REF_NAME" > /tmp/route.json
           node --input-type=module -e "import fs from 'node:fs'; const p=JSON.parse(fs.readFileSync('/tmp/route.json')); fs.appendFileSync(process.env.GITHUB_OUTPUT, 'component='+p.component+'\nversion='+p.version+'\nchannel='+p.channel+'\n');"
+      - name: Require reviewed component release notes
+        run: |
+          notes="docs/releases/$GITHUB_REF_NAME.md"
+          if [ ! -s "$notes" ]; then
+            echo "Missing release description: $notes (see docs/RELEASING.md)" >&2
+            exit 1
+          fi
       - name: Refuse replacing a published release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -48,6 +55,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: pawtalk-windows
@@ -59,7 +67,9 @@ jobs:
         run: |
           flags=(--latest=true)
           if [ "$CHANNEL" = preview ]; then flags=(--prerelease --latest=false); fi
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "Client ${{ needs.plan.outputs.version }}" --generate-notes release/PawTalk.Setup.*.exe release/PawTalk.Licenses.*.zip release/SHA256SUMS.txt release/update-manifest.json
+          title=$(head -n 1 "docs/releases/$GITHUB_REF_NAME.md")
+          title="${title#\# }"
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/PawTalk.Setup.*.exe release/PawTalk.Licenses.*.zip release/SHA256SUMS.txt release/update-manifest.json
   server:
     if: needs.plan.outputs.component == 'server'
     needs: [plan, verify]
@@ -122,7 +132,9 @@ jobs:
         run: |
           flags=(--latest=false)
           if [ "$CHANNEL" = preview ]; then flags+=(--prerelease); fi
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "Server ${{ needs.plan.outputs.version }}" --generate-notes release/server/server-manifest.json release/server/PawTalk.Server.*.windows-x64.zip
+          title=$(head -n 1 "docs/releases/$GITHUB_REF_NAME.md")
+          title="${title#\# }"
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/server/server-manifest.json release/server/PawTalk.Server.*.windows-x64.zip
   manager:
     if: needs.plan.outputs.component == 'manager'
     needs: [plan, verify]
@@ -150,4 +162,6 @@ jobs:
         run: |
           flags=(--latest=false)
           if [ "$CHANNEL" = preview ]; then flags+=(--prerelease); fi
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "Manager ${{ needs.plan.outputs.version }}" --generate-notes release/manager/PawTalk.Manager.*.tar.gz release/manager/manager-manifest.json release/manager/PawTalk.Server.Manager.Setup.*.exe
+          title=$(head -n 1 "docs/releases/$GITHUB_REF_NAME.md")
+          title="${title#\# }"
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/manager/PawTalk.Manager.*.tar.gz release/manager/manager-manifest.json release/manager/PawTalk.Server.Manager.Setup.*.exe

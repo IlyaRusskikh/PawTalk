@@ -22,6 +22,49 @@ minor — существенные функции, major — очень круп
 сбрасываются. Версию поднимают при подготовке выпуска, не на каждом рабочем изменении.
 Заметки ведутся в общем `CHANGELOG.md` с указанием компонента.
 
+## Описание каждого релиза / Release notes for every tag
+
+До push тега подготовьте и проверьте `docs/releases/<tag>.md`, например
+`docs/releases/client-v0.10.1.md`. Это полный текст GitHub Release, а не ссылка
+на PR или автоматически сгенерированный список коммитов. Сравнивайте с предыдущим
+выпуском **того же компонента**; для первого выпуска перечислите его возможности.
+Описывайте результат для пользователя, не внутреннюю историю разработки.
+
+Обязательный порядок:
+
+1. Компонент, версия, stable/preview, краткая цель и прямая ссылка на установщик
+   либо Server ZIP/Linux image.
+2. **Русский:** «Добавлено», «Исправлено», «Изменено» — только непустые разделы,
+   понятные пункты с конкретным поведением до/после. Затем «Установка и обновление»:
+   что установить, сохраняются ли данные, будет ли перерыв, какие другие компоненты
+   нужно обновить и есть ли миграция.
+3. **English:** тот же набор изменений и требований без пропущенных условий.
+4. Ограничения и известные проблемы именно этого выпуска. Не переносите исправление
+   из следующего тега в старый релиз; не выдавайте синтетические проверки за аппаратную
+   или внешнесетевую приёмку. Отличайте подпись update manifest от Authenticode EXE.
+5. Точные файлы, способ проверки, исходники/CHANGELOG/руководство **этого тега**,
+   лицензия и ссылка на фактически успешный tag CI, когда он завершён.
+
+Не заполняйте пустые категории фразами «нет изменений» и не подменяйте заметки
+ссылкой на общий changelog. Основа стиля — подробные релизы `v0.7.0`/`v0.8.0`;
+готовые примеры для независимых компонентов находятся в [releases/](releases/).
+Заголовок GitHub Release должен называть компонент, версию и главную тему.
+
+Workflow требует непустой файл заметок до сборки и публикует его через
+`--notes-file`, без `--generate-notes`. После публикации проверьте отображённый текст,
+ссылки и соответствие файлу; подтверждённые результаты CI можно добавить в файл и
+описание после завершения выпуска. Редактирование описания не меняет теги, бинарники,
+хэши, даты выпуска или stable/preview flags.
+
+Before tagging, review a complete bilingual `docs/releases/<tag>.md`. Lead with the
+component/version and user benefit; group actual additions, fixes and changes since
+the previous release of that component, omitting empty groups. Include upgrade/data/
+downtime and cross-component requirements, accurate limitations, exact downloads,
+verification, source/license links pinned to the tag and confirmed tag CI when available.
+Russian and English must convey the same changes and conditions. Publish this file
+with `--notes-file`; generated PR/commit lists are insufficient. Keep the GitHub body
+and file synchronized. Never backdate a later fix into an earlier release.
+
 ## Переход установленного Windows-клиента
 
 1. Сначала отдельно проверить и выпустить **Client-only `v0.8.1` из локального

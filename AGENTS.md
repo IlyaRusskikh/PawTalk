@@ -35,6 +35,13 @@
   `server-vX.Y.Z`, `manager-vX.Y.Z` and must match their own version sources.
   The one-time Client bridge uses `v0.8.1` from commit 3747a0d; historical tags
   remain immutable. Never replace published tags or binaries.
+- Every component release must have reviewed Russian and English notes in
+  `docs/releases/<tag>.md`, following `docs/RELEASING.md`. Explain user-visible
+  additions, fixes and changes since that component's previous release, then
+  installation/upgrade requirements, limitations and exact downloads/source.
+  Omit empty categories. A PR/commit list is not a release description. Publish
+  that file with `--notes-file`; never substitute `--generate-notes`. Keep the
+  published body consistent with the file; do not attribute later fixes to old tags.
 - Keep release assets compact: `PawTalk.Setup.X.Y.Z.exe`, `SHA256SUMS.txt`,
   and one `PawTalk.Licenses.X.Y.Z.zip` containing `LICENSE`,
   `THIRD_PARTY_NOTICES.md`, and `licenses/` from that release. Do not attach
