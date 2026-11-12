@@ -1,5 +1,55 @@
 # Проверки
 
+## Client 0.11.0 — 12 ноября 2026
+
+Перед merge/tag финальный кандидат проверен в отдельном checkout: production build,
+166 Node-тестов, Server Go tests/vet, native smoke с существующим неизменённым
+модулем, NSIS build и `packaged-smoke`. Проверены побайтовое совпадение Go/LiveKit
+Client и Windows Server, shared-core TLS/auth/privacy/chat lifecycle с E2EE и без,
+два Electron-клиента с декодированным синтетическим голосом, RU/EN,
+normal/reduced motion, пустой/заполненный настоящий clipboard, приглашения Manager,
+закладки, соединение, мастер первого запуска, обновления, геометрия диалогов и чат.
+Docker lifecycle/TLS/auth/persistence, developer Docker launch и совместимость
+с опубликованным Server 0.8.0 прошли. `check:public`, staged diff и website guard проверены.
+
+В этом окружении нет Python и native compiler для новой сборки модуля;
+Linux-only `docker-smoke --containers-only` на Windows остановился на `process.getuid`.
+Native Linux/arm64, Linux host/Compose и чистая MSVC-сборка проверяются отдельно в CI.
+Физические микрофоны, игры/PTT/UAC, разные внешние сети и нагрузка не проверялись.
+
+The final candidate passed an isolated local production build, 166 Node tests,
+Server Go tests/vet, smoke of the existing unchanged native module, NSIS packaging
+and packaged smoke. Real Electron IPC covered shared-core TLS/auth/privacy/chat,
+E2EE on/off, two synthetic-audio peers, RU/EN, both motion modes, empty/populated
+native clipboard, Manager invitations, bookmarks, connection UI, first-run setup,
+updates, dialog geometry and chat. Client/Windows Server Go and LiveKit binaries
+matched byte for byte. Docker lifecycle/TLS/auth/persistence, developer Docker launch,
+published Server 0.8.0 compatibility, public/staged review and website guard passed.
+
+Python and a native compiler were unavailable locally; the existing unchanged
+native binary was reused. The Linux-only two-container smoke stopped at
+`process.getuid` on Windows. Native Linux/arm64, Linux host/Compose and clean MSVC
+builds are separate CI checks. Physical microphones, games/PTT/UAC, external
+networks and load remain outside this verification.
+
+Branch candidate: [43210048330](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43210048330).
+Release-tag workflow: [43214973146](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43214973146).
+
+Tag CI завершился успешно на Windows 2022/2025 и Linux amd64/arm64 и опубликовал
+Client preview. Скачанные четыре assets проверены: SHA-256/размер EXE совпадают
+с checksum, доверенным Ed25519-манифестом и GitHub digest; архив содержит LICENSE,
+THIRD_PARTY_NOTICES.md и licenses/. Описание релиза синхронизировано с файлом заметок.
+Исходный branch artifact не имел подписанного манифеста; опубликован пакет tag CI.
+
+Tag CI passed on Windows 2022/2025 and Linux amd64/arm64 and published the Client
+preview. The four downloaded assets were verified: installer hash/size match the
+checksum, trusted Ed25519 manifest and GitHub digest; the license archive contains
+LICENSE, THIRD_PARTY_NOTICES.md and licenses/. The release body matches its notes
+file. The original branch artifact lacked a signed manifest; tag CI supplied the
+published package.
+
+EXE SHA-256: `ce808e66d80947bdc6c015c107c5a7fd09061a873dfb3c0d8d9ac9f738cf7e82`.
+
 ## Опубликованы Client 0.10.1 / Manager 0.2.1 — 12 ноября 2026
 
 Локальные регрессии воспроизводят отказ реального process DACL в SYNCHRONIZE при

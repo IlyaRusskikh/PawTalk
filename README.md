@@ -2,9 +2,9 @@
 
 [Русский](README.ru.md) · English
 
-Released: **Client 0.10.1 / Server 0.10.1 / Manager 0.2.1**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v*` releases. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
+Released: **Client 0.11.0 / Server 0.10.1 / Manager 0.2.1**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v*` releases. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
 
-The patch fixes Windows service control without debug privilege, immediate settings language and saved-room reconnects. [Patch notes](docs/RELEASE-NOTES-0.10.1.md).
+Client 0.11.0 adds first-run setup, responsive notification sounds and a shared embedded server core. [Client release notes](docs/releases/client-v0.11.0.md).
 
 [Release notes and upgrade order](docs/RELEASE-NOTES-0.10.1.md). Windows Server Manager adds tray controls, settings, ProgramData migration and optional full-data removal. Upgrade the installed Server to 0.10.1 for activity privacy; reinstalling Manager preserves the installed Server version.
 
@@ -12,7 +12,7 @@ The patch fixes Windows service control without debug privilege, immediate setti
 
 PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
 
-**[Download PawTalk 0.10.1 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.10.1/PawTalk.Setup.0.10.1.exe)** · [Get started](#get-started) · [Linux server](docs/SERVER.md) · [Windows server installer](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.2.1/PawTalk.Server.Manager.Setup.0.2.1.exe)
+**[Download PawTalk 0.11.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe)** · [Get started](#get-started) · [Linux server](docs/SERVER.md) · [Windows server installer](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.2.1/PawTalk.Server.Manager.Setup.0.2.1.exe)
 
 ![PawTalk room with three participants, call controls and encrypted text chat](website/assets/room-chat-en.png)
 
@@ -57,7 +57,7 @@ PawTalk takes inspiration from **Discord** for easy-to-join voice rooms and indi
 
 ## Get started
 
-1. **Install PawTalk.** [Download the installer](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.10.1/PawTalk.Setup.0.10.1.exe) on each Windows PC. Choose English or Russian.
+1. **Install PawTalk.** [Download the installer](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe) on each Windows PC. Choose English or Russian.
 2. **Pick a nickname.** Open **Settings → About me** and enter a nickname. You can test your microphone under **Voice**.
 3. **Get your friends together.** Select **Create a room**, give the room a name, and choose a password of at least 8 characters. Share the full invitation privately. Your friend opens **Join a room** and pastes the link.
 
@@ -125,7 +125,7 @@ The Windows program is installed in `%ProgramData%\PawTalk Server Manager`, with
 
 The next Server build requires current room authorization for occupancy and participant previews, including aggregate counts. Password reset revokes old preview/chat tokens and rotates the voice signing secret on restart. The updated Client never falls back to an anonymous count after access is denied; it shows **Sign in again**. Bookmarks identify the verified room independently of its password, so sharing a link or entering a new password updates one bookmark after successful login. The server-side protection requires updating Server as well as Client; it does not change an already installed published binary.
 
-Development builds use one shared `server/` core for temporary Client rooms and permanent Windows/Linux servers. Both Windows packages use the same compiler and flags; CI compares their Go and LiveKit binaries byte for byte. The embedded receipt records the source and binary hashes. Published Client 0.10.1 still contains the legacy pinned core; the shared core ships with a future Client release. [Build and compatibility details](docs/BUNDLED-SERVER.md).
+Client 0.11.0 and development builds use one shared `server/` core for temporary Client rooms and permanent Windows/Linux servers. Both Windows packages use the same compiler and flags; CI compares their Go and LiveKit binaries byte for byte. The embedded receipt records the source and binary hashes. Historical Client 0.10.1 retains its legacy pinned core. [Build and compatibility details](docs/BUNDLED-SERVER.md).
 
 <details>
 <summary>Build and run checks on Windows x64</summary>
@@ -154,9 +154,9 @@ The [server configuration guide](docs/SERVER.md#конфигурация) covers
 
 ## Project status
 
-**Current public preview: [PawTalk Client 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.10.1)**. [Server 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) and [Manager 0.2.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.2.1) are released separately. This is not a stable release.
+**Current public preview: [PawTalk Client 0.11.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.11.0)**. [Server 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) and [Manager 0.2.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.2.1) are released separately. This is not a stable release.
 
-### Available in 0.10.1
+### Available in 0.11.0
 
 - Voice rooms with invitations, nickname-only entry, Push-to-Talk, per-user volume, RNNoise noise suppression and audio device selection.
 - Text chat with replies, Markdown, editing/deleting your own messages on updated servers, typing indicators, room previews, unread counts and static PNG/JPEG/WebP attachments up to 2 MiB.

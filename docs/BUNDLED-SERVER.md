@@ -1,9 +1,9 @@
 # Общее серверное ядро / Shared server core
 
-Изменение в текущем дереве ещё не опубликовано. Client 0.10.1 в GitHub остаётся
-на историческом Go 0.8.0 с backport; опубликованные теги и бинарники не меняются.
-This development change is unreleased. Published Client 0.10.1 retains its
-historical Go 0.8.0 plus backport; published tags and binaries remain unchanged.
+Общее ядро опубликовано в Client 0.11.0. Исторический Client 0.10.1 остаётся
+на Go 0.8.0 с backport; ранее опубликованные теги и бинарники не меняются.
+The shared core ships in Client 0.11.0. Historical Client 0.10.1 retains Go 0.8.0
+plus backport; previously published tags and binaries remain unchanged.
 
 ## Источники и сборка / Source and build
 

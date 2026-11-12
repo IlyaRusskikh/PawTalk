@@ -1,8 +1,8 @@
 # PawTalk — актуальная документация / Current documentation
 
-Опубликованы Client 0.10.1, Server 0.10.1 и Manager 0.2.1. Новые возможности и миграция описаны в [заметках выпуска](RELEASE-NOTES-0.10.1.md); исторические карты изменений сохраняются. История — в [CHANGELOG](../CHANGELOG.md).
+Опубликованы Client 0.11.0, Server 0.10.1 и Manager 0.2.1. Новые возможности Client описаны в [заметках выпуска](releases/client-v0.11.0.md); [порядок обновления Server/Manager](RELEASE-NOTES-0.10.1.md) и исторические карты изменений сохраняются. История — в [CHANGELOG](../CHANGELOG.md).
 
-Client 0.10.1, Server 0.10.1 and Manager 0.2.1 are published. See the [release notes](RELEASE-NOTES-0.10.1.md) for new behavior and migration; historical change maps remain available. See the [changelog](../CHANGELOG.md) for history.
+Client 0.11.0, Server 0.10.1 and Manager 0.2.1 are published. See the [Client release notes](releases/client-v0.11.0.md) for new behavior; the [Server/Manager upgrade order](RELEASE-NOTES-0.10.1.md) and historical change maps remain available. See the [changelog](../CHANGELOG.md) for history.
 
 ## Пользователям / For users
 

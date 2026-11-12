@@ -1,13 +1,13 @@
 # Независимые выпуски / Independent releases
 
-**Выпущены Client 0.10.1, Server 0.10.1, Manager 0.2.1 и Client bridge v0.8.1.**
+**Выпущены Client 0.11.0, Server 0.10.1, Manager 0.2.1 и Client bridge v0.8.1.**
 Все три текущие линии опубликованы как preview; подписи и скачанные assets проверены.
 Проверка тега `server-v0.10.0` остановилась до публикации из-за зависимости
 server-only Electron smoke от Client dist. Тег не заменяется; исправление выпущено в 0.10.1.
 Версии независимы. После принятого Server Manager и Client можно выпускать параллельно
 из одного проверенного коммита; каждый тег сохраняет собственный workflow и artifacts.
 Сначала branch/PR CI и ревью, затем отдельное разрешение на merge и component tags.
-Текущий патч: [RELEASE-NOTES-0.10.1](RELEASE-NOTES-0.10.1.md); исходный порядок server-first: [RELEASE-NOTES-0.10.0](RELEASE-NOTES-0.10.0.md).
+Текущий Client: [client-v0.11.0](releases/client-v0.11.0.md); патч Server/Manager: [RELEASE-NOTES-0.10.1](RELEASE-NOTES-0.10.1.md); исходный порядок server-first: [RELEASE-NOTES-0.10.0](RELEASE-NOTES-0.10.0.md).
 Локальные сборки используют `--publish never`. Push/tag/release требуют отдельного
 разрешения владельца. Опубликованные теги, EXE и образы не заменяются.
 
@@ -201,7 +201,7 @@ Client assets: `PawTalk.Setup.X.Y.Z.exe`, `update-manifest.json`, `SHA256SUMS.tx
 Не прикладывать отдельные лицензии или дубликат source archive; GitHub оставляет
 автоматические Source code ZIP/TAR. Все источники и сторонние notices сохраняются.
 README/site должны ссылаться на фактическую **клиентскую** загрузку, Server/Manager
-указываются отдельно. Текущие ссылки: Client 0.10.1, Server 0.10.1 и Manager 0.2.1.
+указываются отдельно. Текущие ссылки: Client 0.11.0, Server 0.10.1 и Manager 0.2.1.
 Для следующего выпуска сохранять их до фактической публикации новых assets.
 Не публиковать сайт обычным push/tag.
 
@@ -215,7 +215,7 @@ do not repeat its publication steps. Preserve the bridge source commit for bundl
 historical self-host builds. An expired bridge manifest may require manual Client installation.
 Never replace historical tags or assets. The component release workflow validates
 its own source, runs verification and publishes only its component's assets.
-Stable/preview flags must match signed metadata. Client 0.10.1, Server 0.10.1 and
+Stable/preview flags must match signed metadata. Client 0.11.0, Server 0.10.1 and
 Manager 0.2.1 are published previews. Keep their links until later assets actually
 exist. After accepting the Server release, independent Manager and Client tags may
 run in parallel from the same verified commit; each retains its own verification
@@ -235,6 +235,6 @@ Ed25519 roots and CI secrets. Empty roots fail closed. Bootstrap trusts a review
 checkout; updates verify type, repository, version, channel, signature and digest.
 Development builds share one server/ core across hosting modes and record source
 and binary hashes. Windows Client/Server binaries must match byte for byte.
-Published Client 0.10.1 still uses its historical pin until a new Client is released.
+Historical Client 0.10.1 retains its pinned core; Client 0.11.0 ships the shared core.
 Run applicable CI locally and packaged smoke before release; distinguish Docker,
 synthetic audio and emulation from native arm64, real devices and external networks.
