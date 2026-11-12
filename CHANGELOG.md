@@ -1,6 +1,6 @@
 # Changelog / История изменений
 
-## Unreleased — Client 0.10.1 / Manager 0.2.1
+## Client 0.10.1 / Manager 0.2.1 — 2026-11-12
 
 - Stop/wait for Windows service hosts without requiring SeDebugPrivilege; retain bounded process-exit verification when LocalService denies SYNCHRONIZE. Explain uninstaller failures instead of silently aborting. / Остановка службы и ожидание её процесса не требуют SeDebugPrivilege; отказ LocalService в SYNCHRONIZE обрабатывается через проверку завершения процесса. Деинсталлятор объясняет сбой вместо молчаливого прерывания.
 - Show Server settings on the first hidden-process launch. Change and persist language immediately, update the tray, preserve unrelated unsaved fields and wait for brief maintenance locks. / Настройки открываются с первого запуска из скрытого процесса. Язык переключается и сохраняется сразу, обновляет трей, сохраняет несвязанные черновые поля и ожидает краткое обслуживание.

@@ -1,4 +1,4 @@
-# Архитектура / Architecture — Client 0.10.0 / Server 0.10.1 / Manager 0.2.0
+# Архитектура / Architecture — Client 0.10.1 / Server 0.10.1 / Manager 0.2.1
 
 Один монорепозиторий, три независимых выпуска:
 

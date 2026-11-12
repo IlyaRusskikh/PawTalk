@@ -1,6 +1,6 @@
 # Проверки
 
-## Client 0.10.1 / Manager 0.2.1 — подготовка follow-up
+## Опубликованы Client 0.10.1 / Manager 0.2.1 — 12 ноября 2026
 
 Локальные регрессии воспроизводят отказ реального process DACL в SYNCHRONIZE при
 отключённой SeDebugPrivilege; новый путь ждёт фактического завершения процесса.
@@ -13,7 +13,21 @@ Electron UI проверяет normal/reduced motion, stale locked → реал�
 с сохранённым ключом и форму после синтетического credentials rejection; настоящий
 Server/IPC отдельно проверяет флаг отказа для неверного пароля и E2EE-ключа.
 Полный локальный native Go/LiveKit/Electron lifecycle с синтетическим голосом прошёл.
-Финальная проверка новых установщиков и GitHub CI определят готовность патча.
+Локально прошли 164 Node-теста, Go tests/vet Server и Manager,
+Python controller-тесты, native UI/clipboard RU/EN, normal/reduced motion,
+полный native lifecycle, сборки обоих установщиков и packaged smoke клиента.
+
+Финальный код `89c8fe1`: [branch CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43169749304),
+[Client tag CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43172017460) и
+[Manager tag CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43172017294)
+прошли Windows Server 2022/2025 и native Linux amd64/arm64. SCM CI явно отключает
+SeDebugPrivilege и проверяет фактическую остановку LocalService, повторный запуск,
+установку EXE, миграцию и оба режима удаления. Все три branch artifacts получены.
+После публикации скачаны оба официальных установщика и Manager bundle; проверены
+Ed25519-подписи, версия/срок манифестов, точные размеры и SHA-256, комплект лицензий Client.
+Server 0.10.1 не пересобирался и не переиздавался.
+Реальные микрофоны, два физических устройства и внешний TCP/UDP не проверены;
+SCM и native Linux arm64 проверены в GitHub, а не на локальной машине.
 
 ## Опубликованы Client 0.10.0 / Server 0.10.1 / Manager 0.2.0 — 12 ноября 2026
 

@@ -1,6 +1,19 @@
-# Client 0.10.1 / Manager 0.2.1 — patch in preparation
+# Client 0.10.1 / Manager 0.2.1 — 2026-11-12
 
-Status: unpublished. Server remains 0.10.1; historical component tags/assets are unchanged.
+Status: published previews. Server remains 0.10.1; historical component tags/assets are unchanged.
+
+Previous feature release and server-first upgrade guidance: [0.10.0 release notes](RELEASE-NOTES-0.10.0.md).
+
+Both tags point to verified commit `89c8fe1` and ran in parallel:
+
+- [Client 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.10.1) · [tag CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43172017460)
+- [Manager 0.2.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.2.1) · [tag CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43172017294)
+
+Both release workflows passed Windows Server 2022/2025 and native Linux amd64/arm64. Downloaded installers, signed manifests and exact asset hashes were verified after publication.
+
+Установите обновлённые Client и Manager. Установщик Manager сохраняет конфигурацию и данные; замена host/runtime временно прерывает звонок. Уже установленный Server 0.10.1 менять не требуется.
+
+Install the updated Client and Manager. Manager setup preserves configuration/data; replacing the host/runtime briefly interrupts calls. An installed Server 0.10.1 needs no replacement.
 
 ## Русский
 

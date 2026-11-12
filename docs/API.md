@@ -1,6 +1,6 @@
 # API v0.1
 
-## Независимые версии компонентов (Client 0.10.0, Server 0.10.1, Manager 0.2.0)
+## Независимые версии компонентов (Client 0.10.1, Server 0.10.1, Manager 0.2.1)
 
 `GET /api/config` дополнен `apiProtocolVersion: 1` и массивом `capabilities`
 (`voice-v1`, `chat-v2`, `profiles-v1`). Legacy 0.8.0 не содержит поля
