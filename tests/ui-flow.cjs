@@ -15,7 +15,12 @@ app.whenReady().then(async () => {
  const click = text => run(`Array.from((Array.from(document.querySelectorAll('dialog[open]')).at(-1) || document).querySelectorAll('button')).find(b=>b.textContent.startsWith(${JSON.stringify(text)})).click()`);
  const input = value => run(`(()=>{const el=document.querySelector('dialog:last-of-type input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
  try {
-  await win.loadURL(process.env.PAWTALK_UI_TEST_URL); await wait();
+  await win.loadURL(process.env.PAWTALK_UI_TEST_URL);
+    for (let i = 0; i < 100; i++) {
+      if (await win.webContents.executeJavaScript("!!document.querySelector('.onboarding-actions .quiet')")) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    await win.webContents.executeJavaScript("document.querySelector('.onboarding-actions .quiet')?.click()"); await wait();
   await run(`localStorage.setItem('pawtalk.bookmarks',JSON.stringify([{address:'https://voice.example.com',name:'Test bookmark'}]))`);
   await win.reload(); await wait();
   assert.equal(await run(`document.querySelector('.brand-mark')`), null);
@@ -33,6 +38,15 @@ app.whenReady().then(async () => {
   await click('Сгенерировать ключ шифрования'); await wait();
   assert.notEqual(await run(`document.querySelector('#server-key-secret').value`), serverKey);
   await run(`document.querySelector('dialog [aria-label="Закрыть"]').click()`); await wait();
+  await click('Присоединиться к комнате'); await wait();
+  const points = await run(`(()=>{const r=document.querySelector('dialog input').getBoundingClientRect();return {x:Math.round(r.x+15),y:Math.round(r.y+r.height/2)}})()`);
+  win.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,...points});
+  win.webContents.sendInputEvent({type:'mouseMove',x:5,y:5,modifiers:['leftButtonDown']});
+  win.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,x:5,y:5}); await wait();
+  assert.equal(await run(`document.querySelectorAll('dialog[open]').length`),1,'selection drag from inside to backdrop keeps join open');
+  win.webContents.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,x:5,y:5});
+  win.webContents.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,x:5,y:5}); await wait();
+  assert.equal(await run(`document.querySelectorAll('dialog[open]').length`),0,'click beginning on backdrop closes join');
   await click('Присоединиться к комнате'); await wait();
   assert.equal(await run(`document.querySelector('dialog input[type=password]')`), null);
   assert.equal(await run(`document.querySelector('.join-submit').disabled`), true);

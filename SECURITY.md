@@ -6,7 +6,31 @@
 
 ### Поддерживаемые версии
 
-PawTalk находится в стадии **публичного предварительного выпуска**, а не стабильного релиза. На 10 ноября 2026 года актуальная версия — [0.8.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.8.0). Исправления безопасности, если они потребуются, выпускаются в новых версиях; исправление всех предыдущих версий отдельно **не гарантируется**.
+PawTalk находится в стадии **публичного предварительного выпуска**, а не стабильного релиза. Версии компонентов независимы. На 12 ноября 2026 года:
+
+| Компонент | Текущий опубликованный preview |
+| --- | --- |
+| Client | [0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.10.1) |
+| Server (постоянные комнаты Linux/Windows) | [0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) |
+| Manager | [0.2.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.2.1) |
+
+Исправления безопасности выпускаются новыми версиями затронутых компонентов.
+Поддерживается последний опубликованный выпуск каждой линии; отдельное исправление
+предыдущих версий **не гарантируется**. Совместимость по API со старым сервером
+не означает его поддержку по безопасности. Обновление Client или Manager
+не заменяет установленный постоянный Server: обновляйте его отдельно.
+
+В текущих исходниках Client и Server используют одно ядро [server/](server/).
+Исправления авторизации, чата и API применяются к обоим режимам; отдельной копии
+ядра и backport-патча в текущей сборке нет. Временные комнаты получают исправления
+через выпуск Client, постоянные — через выпуск Server. Обновление одного компонента
+не обновляет уже установленные бинарники другого.
+
+Опубликованный Client 0.10.1 ещё использует Go Server 0.8.0 с security backport:
+[исторический pin](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/bundled-server.json)
+и [патч](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/build/bundled-server-security.patch).
+Переход общего ядра к пользователям требует нового Client-релиза.
+[Сборка и проверки](docs/BUNDLED-SERVER.md), [совместимость](docs/COMPATIBILITY.md).
 
 ### Как сообщить об уязвимости
 
@@ -29,7 +53,31 @@ PawTalk находится в стадии **публичного предвар
 
 ### Supported versions
 
-PawTalk is a **public preview**, not a stable release. As of November 10, 2026, the current release is [0.8.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/v0.8.0). Security fixes, when necessary, are shipped in new releases; backports to every older version are **not guaranteed**.
+PawTalk is a **public preview**, not a stable release. Component versions are independent. As of November 12, 2026:
+
+| Component | Current published preview |
+| --- | --- |
+| Client | [0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.10.1) |
+| Server (permanent Linux/Windows rooms) | [0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) |
+| Manager | [0.2.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.2.1) |
+
+Security fixes ship as new releases of affected components. The latest published
+release of each component is supported; backports to older releases are **not
+guaranteed**. API compatibility with an older server does not imply security
+support. Updating Client or Manager does not replace an installed permanent
+Server; update Server separately.
+
+In the development tree, Client and Server use one shared [server/](server/) core.
+Auth, chat and API fixes apply to both hosting modes; current builds maintain no
+separate core copy or backport patch. Temporary rooms receive fixes through Client
+releases; permanent rooms through Server releases. Updating one component does not
+update the other component's installed binaries.
+
+Published Client 0.10.1 still uses Go Server 0.8.0 with a security backport:
+[historical pin](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/bundled-server.json)
+and [patch](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/build/bundled-server-security.patch).
+Delivering the shared core requires a new Client release. See
+[build and verification details](docs/BUNDLED-SERVER.md) and [compatibility](docs/COMPATIBILITY.md).
 
 ### Reporting a vulnerability
 

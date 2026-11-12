@@ -24,6 +24,11 @@ app.whenReady().then(async () => {
   })()`);
   try {
     await win.loadFile(path.resolve('dist/index.html'));
+    for (let i = 0; i < 100; i++) {
+      if (await win.webContents.executeJavaScript("!!document.querySelector('.onboarding-actions .quiet')")) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    await win.webContents.executeJavaScript("document.querySelector('.onboarding-actions .quiet')?.click()");
     await win.webContents.debugger.attach('1.3');
     for (const motion of ['reduce', 'no-preference']) {
       await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: motion }] });

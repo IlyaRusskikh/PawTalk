@@ -14,7 +14,12 @@ app.whenReady().then(async () => {
  const wait = () => new Promise(resolve=>setTimeout(resolve,180));
  let clipboardItems;
  try {
-  await win.loadURL(pathToFileURL(path.resolve('dist/index.html')).href); await wait();
+  await win.loadURL(pathToFileURL(path.resolve('dist/index.html')).href);
+    for (let i = 0; i < 100; i++) {
+      if (await win.webContents.executeJavaScript("!!document.querySelector('.onboarding-actions .quiet')")) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    await win.webContents.executeJavaScript("document.querySelector('.onboarding-actions .quiet')?.click()"); await wait();
   win.webContents.debugger.attach('1.3');
   await win.webContents.debugger.sendCommand('Emulation.setFocusEmulationEnabled', { enabled: true });
   const snapshot = require('../scripts/clipboard-snapshot.cjs').snapshotClipboard;

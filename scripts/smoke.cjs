@@ -44,7 +44,7 @@ app.whenReady().then(async () => {
     win.webContents.on('console-message', event => { if (event.level === 'error') errors.push(event.message); });
     const run = source => win.webContents.executeJavaScript(source, true);
     const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-    const until = async (test, label) => { for (let i = 0; i < 100; i++) { if (await test()) return; await wait(100); } throw Error(label); };
+    const until = async (test, label) => { for (let i = 0; i < 100; i++) { if (await test()) return; await wait(100); } console.error(await run(`(()=>{const p=document.querySelector('#settings-panel');return p&&{height:p.clientHeight,scroll:p.scrollTop,max:p.scrollHeight-p.clientHeight,css:p.style.cssText,sections:[...p.querySelectorAll('.settings-section,.settings-page-footer')].map(e=>({id:e.id,top:e.getBoundingClientRect().top,height:e.getBoundingClientRect().height,min:getComputedStyle(e).minHeight,padding:getComputedStyle(e).paddingTop}))}})()`)); throw Error(label); };
     const tab = async name => { await run(`document.querySelector('#settings-tab-${name}').click()`); await wait(50); await until(() => run(`(()=>{const panel=document.querySelector('#settings-panel');const anchor=document.querySelector('#settings-anchor-${name}')||panel;const heading=anchor.querySelector('h1');return !!heading&&Math.abs(heading.getBoundingClientRect().top-panel.getBoundingClientRect().top-parseFloat(getComputedStyle(panel).paddingTop))<1;})()`), 'anchor settles: '+name); };
     const output = path.resolve('release/qa'); await fs.mkdir(output, { recursive: true });
     const capture = async name => { await wait(200); await fs.writeFile(path.join(output, name + '.png'), (await win.webContents.capturePage()).toPNG()); };
@@ -56,6 +56,11 @@ app.whenReady().then(async () => {
       assert.equal(await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`), motion === 'reduce');
     };
     await win.loadFile(path.resolve('dist/index.html'));
+    for (let i = 0; i < 100; i++) {
+      if (await win.webContents.executeJavaScript("!!document.querySelector('.onboarding-actions .quiet')")) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    await win.webContents.executeJavaScript("document.querySelector('.onboarding-actions .quiet')?.click()");
     await setMotion('reduce');
     await setMotion('no-preference');
     await until(() => run(`!!document.querySelector('.home-actions')`), 'home renders');
@@ -180,6 +185,10 @@ app.whenReady().then(async () => {
             assert.ok(motion === 'reduce' ? frames <= 2 : frames > 2, 'anchor scroll respects ' + motion + ' in ' + language + ': ' + frames + ' positions');
           }
           assert.ok(await run(`document.querySelector('#settings-panel').scrollWidth<=document.querySelector('#settings-panel').clientWidth+1`), section + ' fits ' + language + ' ' + motion);
+          if (section === 'sounds' || section === 'updates') {
+            await run(`document.querySelector('#settings-panel').scrollTo({top:1e6,behavior:'instant'})`);
+            assert.ok(await run(`(()=>{const panel=document.querySelector('#settings-panel').getBoundingClientRect();const heading=document.querySelector('#settings-anchor-${section} h1').getBoundingClientRect();return heading.top>=panel.top && heading.bottom<panel.bottom})()`), 'bottom scroll retains last section heading: '+section+' '+language+' '+motion);
+          }
           if (section === 'voice') {
             assert.equal(await run(`document.querySelector('.settings-advanced').open`), false);
             await run(`document.querySelector('.input-settings button:last-child').click()`);

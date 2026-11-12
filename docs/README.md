@@ -38,4 +38,9 @@ New VPS installations use Docker Compose through the verified host controller. P
 | [План аппаратной приёмки](ACCEPTANCE.md) | Что ещё не подтверждено на реальном оборудовании |
 | [Публикация релиза](RELEASING.md) | Версия, CI, GitHub Releases и GHCR |
 | [Подпись обновлений](UPDATE-SIGNING.md) | Ed25519-манифест и ключи |
+
+План сопровождения и унификации встроенного ядра / Bundled-core maintenance and unification: [BUNDLED-SERVER.md](BUNDLED-SERVER.md).
+
+Исторические снимки / Historical records: [карта 0.9.0](IMPLEMENTATION-0.9.0.md), [выполненный bridge-переход](archive/CLIENT-BRIDGE-0.8.1.md).
+
 Документы с историей старого процесса первой публикации не являются актуальными руководствами: изменения и номера выпусков сохранены в Git и [CHANGELOG](../CHANGELOG.md).

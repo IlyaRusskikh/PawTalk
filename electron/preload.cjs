@@ -1,4 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
+async function invokeHost(channel, ...args) {
+  const result = await ipcRenderer.invoke(channel, ...args);
+  if (result.error) throw new Error(result.error);
+  return result.value;
+}
 function listen(channel, callback) {
   const listener = (_event, value) => callback(value);
   ipcRenderer.on(channel, listener);
@@ -32,11 +37,11 @@ contextBridge.exposeInMainWorld('desktop', {
   copyInvitation: (address) => ipcRenderer.invoke('invitation-copy', address),
   pendingInvitation: () => ipcRenderer.invoke('invitation-pending'),
   onInvitation: (fn) => listen('invitation', fn),
-  startHost: (input) => ipcRenderer.invoke('host-start', input),
-  stopHost: () => ipcRenderer.invoke('host-stop'),
+  startHost: (input) => invokeHost('host-start', input),
+  stopHost: () => invokeHost('host-stop'),
   hostStatus: () => ipcRenderer.invoke('host-status'),
-  checkHost: (port) => ipcRenderer.invoke('host-check', port),
-  cancelHostCheck: () => ipcRenderer.invoke('host-check-cancel'),
+  checkHost: (port) => invokeHost('host-check', port),
+  cancelHostCheck: () => invokeHost('host-check-cancel'),
   onHostChanged: (fn) => listen('host-changed', fn),
   connect: (input) => ipcRenderer.invoke('connect', input),
   chatRequest: (handle, input) => ipcRenderer.invoke('chat-request', handle, input),

@@ -8,10 +8,27 @@ export function settingsPage(section: SettingsSection) {
   if (section === 'general' || section === 'shortcuts' || section === 'updates') return 'system';
   return section;
 }
-export function SettingsShell({ section, onChange, children }: { section: SettingsSection; onChange(section: SettingsSection): void; children: ReactNode }) {
+export function SettingsShell({ section, onChange, children, wizard = false }: { wizard?: boolean; section: SettingsSection; onChange(section: SettingsSection): void; children: ReactNode }) {
   const panel = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(section);
   const page = settingsPage(section);
+  useLayoutEffect(() => {
+    const container = panel.current;
+    if (!container) return;
+    const resize = () => {
+      const style = getComputedStyle(container);
+      const footer = container.querySelector<HTMLElement>('.settings-page-footer');
+      const footerStyle = footer && getComputedStyle(footer);
+      const footerHeight = footer ? footer.offsetHeight + parseFloat(footerStyle!.marginTop) + parseFloat(footerStyle!.marginBottom) : 0;
+      container.style.setProperty('--settings-last-height', `${Math.max(0, container.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) - footerHeight)}px`);
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(container);
+    const footer = container.querySelector<HTMLElement>('.settings-page-footer');
+    if (footer) observer.observe(footer);
+    return () => observer.disconnect();
+  }, [page, wizard]);
   const scrollToSection = (target: SettingsSection) => {
     const container = panel.current;
     if (!container) return;
@@ -38,6 +55,7 @@ export function SettingsShell({ section, onChange, children }: { section: Settin
     { id: 'updates', label: t("Обновления"), icon: 'download', child: true },
     { id: 'language', label: t("Язык"), icon: 'settings', group: t("Регион") },
   ];
+  if (wizard) return <div ref={panel} className="settings-panel"><div className="settings-content">{children}</div></div>;
   return <div className="settings-layout"><nav className="settings-nav" role="tablist" aria-label={t("Разделы настроек")} aria-orientation="vertical" onKeyDown={event => {
     const direction = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
     if (!direction && event.key !== 'Home' && event.key !== 'End') return;

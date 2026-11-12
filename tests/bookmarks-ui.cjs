@@ -13,7 +13,12 @@ app.whenReady().then(async () => {
  const js = code => win.webContents.executeJavaScript(code, true).catch(error=>{console.error('Bookmark UI operation:',code.slice(0,160));throw error;});
  const wait = () => new Promise(resolve => setTimeout(resolve, 150));
  try {
-  await win.loadFile(path.resolve('dist/index.html')); await wait();
+  await win.loadFile(path.resolve('dist/index.html'));
+    for (let i = 0; i < 100; i++) {
+      if (await win.webContents.executeJavaScript("!!document.querySelector('.onboarding-actions .quiet')")) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    await win.webContents.executeJavaScript("document.querySelector('.onboarding-actions .quiet')?.click()"); await wait();
   console.log('System reduced motion:',await js(`matchMedia('(prefers-reduced-motion: reduce)').matches`));
   win.webContents.debugger.attach('1.3');
   await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});

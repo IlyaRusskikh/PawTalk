@@ -58,7 +58,7 @@ app.whenReady().then(async () => {
 
     assert.equal(await run(`window.playSound('join',{sounds:false})`), undefined);
     assert.equal(await run(`window.playSound('join',{outputVolume:0})`), undefined);
-    for (const event of ['join','leave','message']) assert.equal(await run(`window.playSound('${event}',{notificationVolume:0})`), undefined, 'one notification volume mutes every cue');
+    for (const event of ['join','leave','message','mute','unmute','deafen','undeafen']) assert.equal(await run(`window.playSound('${event}',{notificationVolume:0})`), undefined, 'one notification volume mutes every cue');
     assert.equal(await run('window.audioPlays.length'), 0, 'mute settings do not start an audio source');
     assert.equal(await run(`window.playSound('join',{outputDevice:'pawtalk-nonexistent-output'})`), undefined, 'native sink errors are contained');
     assert.equal(await run('window.audioPlays.length'), 0, 'invalid output never falls back to an unintended device');
@@ -66,21 +66,41 @@ app.whenReady().then(async () => {
     assert.equal(await run(`window.playSound('leave')`), 'room-leave.wav');
     const names = [];
     for (let i = 0; i < 5; i++) {
-      if (i) await delay(1550);
+      if (i) await delay(30);
+      const previous = await run('window.audioPlays.length - 1');
       names.push(await run(`window.playSound('message')`));
-      assert.equal(await run(`window.playSound('message')`), undefined, 'message sound cooldown');
+      if(i) {
+        assert.equal((await run(`window.soundState(${previous})`)).ended,false,'old message is not cut off immediately');
+        await delay(35);
+        const fading=await run(`window.soundState(${previous})`);
+        assert.ok(fading.gain>0 && fading.gain<0.99,'previous message fades on the real AudioParam');
+        await until(`window.soundState(${previous}).ended`,'old message releases its source after fading');
+      }
     }
     assert.equal(new Set(names).size, 5, 'all five purrs play without repetition');
+    const burstStart=await run('window.audioPlays.length');
+    const burst=await run(`Promise.all(Array.from({length:8},()=>window.playSound('message')))`);
+    assert.ok(burst.every(name=>/^message-purr-0[1-5]\.wav$/.test(name)),'rapid messages are never discarded by cooldown or voice limit');
+    assert.equal(await run(`window.playSound('join')`),'room-join.wav','room entry is not dropped during a message burst');
+    assert.equal(await run(`window.playSound('leave')`),'room-leave.wav','room exit is not dropped during a message burst');
+    await until(`Array.from({length:7},(_,i)=>window.soundState(${burstStart}+i).ended).every(Boolean)`,'superseded burst sounds stop after fading');
+    assert.equal((await run(`window.soundState(${burstStart}+7)`)).ended,false,'newest message keeps playing');
+    for (const event of ['mute','unmute','deafen','undeafen']) {
+      await delay(2200);
+      assert.equal(await run(`window.playSound('${event}')`), event + '.wav');
+    }
     const plays = await run('window.audioPlays');
-    assert.equal(plays.length, 7, 'exactly seven actual native audio sources');
+    assert.equal(plays.length, 21, 'all twenty-one requested native audio sources start');
     assert.equal(plays[0].gain,0.5,'shared notification volume scales the selected output volume');
-    assert.ok(plays.every(play => play.channels === 1 && play.sink === '' && play.seconds > .3 && play.seconds < .9), 'native playback uses the expected decoded assets and default sink');
+    assert.ok(plays[0].offset>0.1 && plays[0].offset<plays[0].seconds,'room entry skips the quiet phone-recording lead-in');
+    assert.ok(plays[1].offset>0 && plays[1].offset<plays[1].seconds,'room exit starts at its audible attack');
+    assert.ok(plays.every(play => play.channels >= 1 && play.channels <= 2 && play.sink === '' && play.seconds > .3 && play.seconds < 4), 'native playback uses the expected decoded assets and default sink');
     assert.deepEqual(errors, []);
     // Check packaged file:// asset resolution, independent of Vite's dev server.
     await win.loadFile(path.resolve('dist/index.html'));
-    const decoded = await run(`(async()=>{const ctx=new OfflineAudioContext(1,1,48000);const results=[];for(const name of ${JSON.stringify(['room-join.wav', 'room-leave.wav', ...Array.from({length:5}, (_,i)=>`message-purr-0${i+1}.wav`)])}){const r=await fetch(new URL('./sounds/'+name,document.baseURI));if(!r.ok)throw Error(name);const b=await ctx.decodeAudioData(await r.arrayBuffer());results.push(b.duration);}return results;})()`);
-    assert.equal(decoded.length, 7);
-    console.log('PASS unseen-message conditions, own/history/replay/reconnect suppression, native audio playback, five purr variations, cooldown, mute settings and packaged file:// assets. Synthetic chat transport.');
+    const decoded = await run(`(async()=>{const ctx=new OfflineAudioContext(1,1,48000);const results=[];for(const name of ${JSON.stringify(['mute.wav', 'unmute.wav', 'deafen.wav', 'undeafen.wav', 'room-join.wav', 'room-leave.wav', ...Array.from({length:5}, (_,i)=>`message-purr-0${i+1}.wav`)])}){const r=await fetch(new URL('./sounds/'+name,document.baseURI));if(!r.ok)throw Error(name);const b=await ctx.decodeAudioData(await r.arrayBuffer());results.push(b.duration);}return results;})()`);
+    assert.equal(decoded.length, 11);
+    console.log('PASS unseen-message conditions, own/history/replay/reconnect suppression, native audio playback, five purr variations, smooth message replacement, burst-safe room cues, mute settings and packaged file:// assets. Synthetic chat transport.');
     app.exit(0);
   } catch (error) { console.error(error, errors); app.exit(1); }
 });

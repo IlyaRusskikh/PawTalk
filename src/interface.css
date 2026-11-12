@@ -246,7 +246,6 @@ button:hover:not(:disabled) { filter:none; }
 .settings-content .settings-card h1, .settings-content .settings-card h2:not(.appearance-section-title) { margin: 0 0 24px; }
 .settings-section + .settings-section, .settings-content > .settings-stack + .settings-section,
 .settings-content > .settings-section + .settings-stack { border-top: 1px solid var(--line); margin-top: 32px; padding-top: 32px; }
-.settings-content:has([id^="settings-anchor-"]) { padding-bottom: calc(100vh - 220px); }
 .settings-page-footer { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line); }
 .settings-page-footer .settings-reset { margin: 0; }
 .settings-nav-group { color: var(--muted); font-size: 11px; font-weight: 600; padding: 18px 13px 7px; border-top: 1px solid var(--line); margin-top: 10px; }
@@ -341,3 +340,12 @@ button:hover:not(:disabled) { filter:none; }
 .temporary-room-pin:hover, .temporary-room-pin:focus { color:var(--accent); }
 .temporary-room-pin:hover .temporary-room-timer, .temporary-room-pin:focus .temporary-room-timer { display:none; }
 .temporary-room-pin:hover .temporary-room-star, .temporary-room-pin:focus .temporary-room-star { display:grid; }
+
+.onboarding-progress { padding: 16px 28px 0; }
+.onboarding-progress p { margin: 0 0 8px; }
+.onboarding-actions { padding: 16px 28px; margin: 0; border-top: 1px solid var(--line); flex-shrink: 0; }
+.onboarding-modal .settings-panel { flex: 1; min-height: 0; }
+
+.settings-content > .settings-section:has(+ .settings-page-footer),
+.settings-content > .settings-stack:has(+ .settings-page-footer) > .settings-section:last-child { min-height: calc(var(--settings-last-height, 0px) + 33px); }
+.update-settings-actions { justify-content: flex-start; flex-wrap: wrap; }

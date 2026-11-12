@@ -55,7 +55,7 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
   async function start() {
     if (checkPending.current) return;
     if (!window.desktop) { onError(t("Создание комнаты доступно в десктопном приложении.")); return; }
-    setBusy(true); onBusy(true);
+    setFailure(''); setBusy(true); onBusy(true);
     try {
       const roomName = (name ?? "").trim() || t("{0} хостит", nickname);
       const next = await window.desktop.startHost({ password, port, name: roomName, e2ee }); setStatus(next);

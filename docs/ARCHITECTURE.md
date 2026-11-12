@@ -15,9 +15,11 @@ Server-only публикует серверный Windows ZIP, но не кли�
 ## Комната
 
 Windows: Electron/React UI, LiveKit client, локальные обработчики микрофона,
-native PTT/audio. Встроенная временная комната запускает Go API/LiveKit из pin
-`bundled-server.json`; текущий pin совместим по API protocol 1. Постоянный Windows-сервер
-использует актуальное ядро Go/LiveKit, службы Windows и общий Manager controller.
+native PTT/audio. В текущем дереве временная комната и постоянный Windows Server
+собирают один `server/` через `scripts/server-core.mjs`: бинарник общий, режимы
+`selfhost` и `serve` различают запуск и хранение. LiveKit также общий. Постоянный
+сервер использует службы Windows и Manager; временный — Electron и память.
+Опубликованный Client 0.10.1 сохраняет старый pin до следующего Client-релиза.
 
 VPS: один Debian 12 / Ubuntu 24.04 amd64/arm64 host, Docker Engine + Compose v2+,
 одна реплика Go API + LiveKit в одном контейнере, host networking. UID/GID 65532,
@@ -72,7 +74,7 @@ Authenticode-подпись Windows installer. Trust roots и ротация: [R
 ## English
 
 PawTalk keeps one monorepo with independent Client, Server and Manager releases.
-Windows temporary rooms remain pinned and bundled. Permanent Windows hosting uses
+Development builds bundle the same server/ core for temporary and permanent rooms. Permanent Windows hosting uses
 native Go/LiveKit binaries and Windows services with the shared Manager controller. Linux uses one non-root Go/LiveKit container under Compose, a persistent
 volume, host-only signed update tools and systemd timers. User config, managed
 state and room data are separate. Transactional updates use stopped consistent
