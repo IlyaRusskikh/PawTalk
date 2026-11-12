@@ -44,13 +44,16 @@ export function JoinRoom({ address, setAddress, nickname, busy, error, onConnect
       const result = await window.desktop.diagnose(target);
       if (id !== revision.current) return;
       if (!result.ok) throw new Error(result.message);
+      const saved = await window.desktop.loadPassword(target).catch(() => ({password:null,e2eeKey:null}));
+      if (id !== revision.current) return;
       const embeddedKey = target.startsWith('pawtalk://') ? new URLSearchParams(new URL(target).hash.slice(1)).get('e2ee') ?? '' : '';
-      if (embeddedPassword !== null && (!result.e2eeRequired || validMediaKey(embeddedKey))) {
+      const selectedKey=embeddedKey || saved.e2eeKey || '';
+      if (!error && embeddedPassword !== null && (!result.e2eeRequired || validMediaKey(embeddedKey))) {
         await onConnect({ address: target, nickname, password: embeddedPassword, ...(embeddedKey ? { e2eeKey: embeddedKey } : {}) });
         return;
       }
-      setE2EERequired(result.e2eeRequired === true); setE2EEKey(embeddedKey);
-      setPassword(embeddedPassword ?? (pastedInvitation.current?.address === target ? pastedInvitation.current.password : '')); pastedInvitation.current = null; setAskPassword(true);
+      setE2EERequired(result.e2eeRequired === true); setE2EEKey(selectedKey);
+      setPassword(embeddedPassword ?? (pastedInvitation.current?.address === target ? pastedInvitation.current.password : saved.password ?? '')); pastedInvitation.current = null; setAskPassword(true);
     } catch (e) { if (id === revision.current) setFailure(e instanceof Error ? e.message : String(e)); }
     finally { if (id === revision.current) setChecking(false); }
   }

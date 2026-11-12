@@ -5,6 +5,8 @@ let cancelCheck;
 let active = true, activeListener, presenceReads = 0, autoStart = false, inTray = false;
 let autoUpdate = true;
 let lockedPreviews = false;
+let connectNeedsCredentials=false;
+let savedCredentials={password:'saved-secret'};
 let updateChannel = 'preview';
 contextBridge.exposeInMainWorld('desktop', {
  windowActive: async () => active,
@@ -35,8 +37,8 @@ contextBridge.exposeInMainWorld('desktop', {
  cancelHostCheck: async () => { if (cancelCheck) { calls.push(['host-check-cancel']); cancelCheck(); } },
  onInvitation: noop, onPtt: noop, onAction: noop, onSuspend: noop, onHostChanged: noop,
  diagnose: async address => { calls.push(['diagnose', address]); return { ok: !address.includes('unreachable'), e2eeRequired: address.includes('encrypted.example.com') || address.includes('/' + 'e'.repeat(64)), message: 'Test server unavailable' }; },
- connect: async target => { calls.push(['connect', target]); return { error: 'Test connection stopped before media' }; },
- loadPassword: async address => { calls.push(['load', address]); return { password: 'saved-secret' }; },
+ connect: async target => { calls.push(['connect', target]); return { error: 'Test connection stopped before media',credentialsRequired:connectNeedsCredentials }; },
+ loadPassword: async address => { calls.push(['load', address]); return savedCredentials; },
  savePassword: async input => { calls.push(['save', input]); },
 });
 contextBridge.exposeInMainWorld('testCalls', () => calls);
@@ -44,3 +46,5 @@ contextBridge.exposeInMainWorld('testCalls', () => calls);
 contextBridge.exposeInMainWorld('testWindowActive', value => { active = value; activeListener?.(value); });
 contextBridge.exposeInMainWorld('testPresenceReads', () => presenceReads);
 contextBridge.exposeInMainWorld('testLockedPreviews', value => { lockedPreviews = value; });
+contextBridge.exposeInMainWorld('testConnectNeedsCredentials',value=>{connectNeedsCredentials=value;});
+contextBridge.exposeInMainWorld('testSavedCredentials',value=>{savedCredentials=value;});

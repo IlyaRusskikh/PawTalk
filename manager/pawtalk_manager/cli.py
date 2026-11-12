@@ -234,7 +234,7 @@ def main(argv=None):
         # The freshly started maintenance service may briefly own this lock.
         # Let the interactive invitation request wait; watchdog/mutations remain
         # nonblocking so stopping maintenance from a foreground operation cannot deadlock.
-        with lock(controller.directory/'operation.lock',timeout=10 if args.command=='invitation' else 0) as release_lock:
+        with lock(controller.directory/'operation.lock',timeout=10 if args.command in ('invitation','settings') else 0) as release_lock:
             if args.lang is None and controller.state_file.exists():
                 lang = controller.config()['PAWTALK_LANGUAGE']
             if args.command == 'settings':

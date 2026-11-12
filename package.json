@@ -1,6 +1,6 @@
 {
   "name": "pawtalk",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "private": true,
   "description": "Private, self-hosted voice room for Windows",
   "author": "PawTalk contributors",

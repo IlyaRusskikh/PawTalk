@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -129,23 +130,33 @@ func trayElevate(action, root, lang string) error {
 	for i, arg := range args {
 		quoted[i] = syscall.EscapeArg(arg)
 	}
-	return windows.ShellExecute(0, windows.StringToUTF16Ptr("runas"), windows.StringToUTF16Ptr(filepath.Join(base(), "pawtalk-server-tray.exe")), windows.StringToUTF16Ptr(strings.Join(quoted, " ")), nil, windows.SW_HIDE)
+	return windows.ShellExecute(0, windows.StringToUTF16Ptr("runas"), windows.StringToUTF16Ptr(filepath.Join(base(), "pawtalk-server-tray.exe")), windows.StringToUTF16Ptr(strings.Join(quoted, " ")), nil, windows.SW_SHOWNORMAL)
 }
 
 func trayError(lang string) {
 	trayCall("MessageBoxW", 0, wide(trayText(lang).Failure), wide("PawTalk Server"), 0x10)
 }
+func trayActionError(lang, action string, err error) {
+	// Service/window-control errors contain only fixed diagnostics or Win32
+	// error text, never invitation command output or room credentials.
+	message := fmt.Sprintf("%s\n\n%s: %v", trayText(lang).Failure, action, err)
+	trayCall("MessageBoxW", 0, wide(message), wide("PawTalk Server"), 0x10)
+}
 
+func serverTrayClass(root string) string {
+	absolute, _ := filepath.Abs(root)
+	hash := sha256.Sum256([]byte(strings.ToLower(filepath.Clean(absolute))))
+	return fmt.Sprintf("PawTalk.Server.Tray.%x", hash[:8])
+}
 func closeTray(root string) error {
 	absolute, err := filepath.Abs(root)
 	if err != nil {
 		return err
 	}
-	hash := sha256.Sum256([]byte(strings.ToLower(filepath.Clean(absolute))))
 	if err := closeServerWindow(settingsClass(root)); err != nil {
 		return err
 	}
-	return closeServerWindow(fmt.Sprintf("PawTalk.Server.Tray.%x", hash[:8]))
+	return closeServerWindow(serverTrayClass(absolute))
 }
 
 func closeServerWindow(class string) error {
@@ -155,19 +166,18 @@ func closeServerWindow(class string) error {
 	}
 	var pid uint32
 	trayCall("GetWindowThreadProcessId", window, unsafe.Pointer(&pid))
-	process, err := windows.OpenProcess(windows.SYNCHRONIZE, false, pid)
+	process, err := observeServiceProcess(pid)
 	if err != nil {
 		return err
 	}
-	defer windows.CloseHandle(process)
+	if process == nil {
+		return nil
+	}
+	defer process.close()
 	if trayCall("PostMessageW", window, 0x10, 0, 0) == 0 {
 		return errors.New("cannot close Server window")
 	}
-	result, err := windows.WaitForSingleObject(process, 5000)
-	if err != nil {
-		return err
-	}
-	if result != windows.WAIT_OBJECT_0 {
+	if err := process.wait(5 * time.Second); err != nil {
 		return errors.New("Server window is busy or did not exit")
 	}
 	return nil
@@ -300,6 +310,13 @@ func runTray(root, lang string) error {
 			}
 		case 0x113:
 			update() // WM_TIMER
+		case 0x8007:
+			lang = "ru"
+			if wparam == 1 {
+				lang = "en"
+			}
+			labels = trayText(lang)
+			update()
 		case 0x111:
 			command(wparam & 0xffff) // WM_COMMAND
 		case 0x10:
@@ -420,19 +437,21 @@ normalTray:
 			action = "stop"
 		}
 		if err := control(action+"-server", args[2]); err != nil {
-			trayError(args[3])
+			trayActionError(args[3], action+"-server", err)
 			return 1
 		}
-		if args[1] == "stop-exit" && closeTray(args[2]) != nil {
-			trayError(args[3])
-			return 1
+		if args[1] == "stop-exit" {
+			if err := closeTray(args[2]); err != nil {
+				trayActionError(args[3], "close-tray", err)
+				return 1
+			}
 		}
 		return 0
 	}
 	if len(args) != 0 {
 		return 1
 	}
-	if err := runTray(root, lang); err != nil {
+	if err := runTray(root, serverUILanguage(lang)); err != nil {
 		trayError(lang)
 		return 1
 	}

@@ -13,6 +13,13 @@ Unicode true
  FileWrite $R0 "${TEXT}"
  FileClose $R0
 !macroend
+!macro RemovalFailure STEP
+ DetailPrint "${STEP} failed (exit $0)"
+ IfSilent +2
+ MessageBox MB_ICONSTOP "$(RemoveFailure)$\r$\n${STEP}: $0"
+ SetErrorLevel 1
+ Abort
+!macroend
 Name "PawTalk Server Manager"
 OutFile "${OUTPUT}"
 InstallDir "$APPDATA\PawTalk Server Manager"
@@ -102,6 +109,8 @@ LangString Updates ${LANG_RUSSIAN} "Включить автообновлени�
 LangString Notice ${LANG_ENGLISH} "Server updates interrupt calls. Internet access requires reachable TCP/UDP ports."
 LangString Notice ${LANG_RUSSIAN} "Обновление сервера прерывает звонок. Для интернета нужны доступные TCP/UDP порты."
 LangString Failure ${LANG_ENGLISH} "Server setup failed. Use Status / Doctor to inspect the installation. Existing data has been preserved."
+LangString RemoveFailure ${LANG_ENGLISH} "Removal could not finish. Existing files and room data have been preserved. Use Status / Doctor, then run the uninstaller again."
+LangString RemoveFailure ${LANG_RUSSIAN} "Не удалось завершить удаление. Существующие файлы и данные комнаты сохранены. Откройте Status / Doctor, затем повторите удаление."
 LangString Failure ${LANG_RUSSIAN} "Не удалось настроить сервер. Проверьте установку через Status / Doctor. Существующие данные сохранены."
 
 Function .onInit
@@ -417,24 +426,20 @@ Section "Uninstall"
  ReadRegStr $DataRoot HKLM "Software\PawTalk\ServerManager" "DataRoot"
  ExecWait '"$INSTDIR\pawtalkctl.exe" close-tray "$DataRoot"' $0
  ${If} $0 != 0
-  SetErrorLevel 1
-  Abort
+  !insertmacro RemovalFailure "close-tray"
  ${EndIf}
  ExecWait '"$INSTDIR\pawtalkctl.exe" validate-install-removal "$INSTDIR"' $0
  ${If} $0 != 0
-  SetErrorLevel 1
-  Abort
+  !insertmacro RemovalFailure "validate-install-removal"
  ${EndIf}
  ExecWait '"$INSTDIR\pawtalkctl.exe" uninstall-services "$DataRoot"' $0
  ${If} $0 != 0
-  SetErrorLevel 1
-  Abort
+  !insertmacro RemovalFailure "uninstall-services"
  ${EndIf}
  ${If} $DeleteData == ${BST_CHECKED}
   ExecWait '"$INSTDIR\pawtalkctl.exe" purge-data "$DataRoot"' $0
   ${If} $0 != 0
-   SetErrorLevel 1
-   Abort
+   !insertmacro RemovalFailure "purge-data"
   ${EndIf}
   DeleteRegKey HKLM "Software\PawTalk\ServerManager"
  ${EndIf}

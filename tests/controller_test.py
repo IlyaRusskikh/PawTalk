@@ -135,6 +135,15 @@ class ControllerTests(unittest.TestCase):
 
         self.assertEqual(self.c.config(),config)
 
+    def test_settings_language_change_does_not_restart_room(self):
+        old=self.c.config()
+        values={key:old[key] for key in cli.SETTINGS_FIELDS}
+        values['PAWTALK_LANGUAGE']='en' if old['PAWTALK_LANGUAGE']=='ru' else 'ru'
+        starts=len(self.room.starts)
+        self.assertTrue(cli.apply_settings(self.c,dict(expected=old,values=values)))
+        self.assertEqual(len(self.room.starts),starts)
+        self.assertEqual(self.c.config(),{**old,'PAWTALK_LANGUAGE':values['PAWTALK_LANGUAGE']})
+
     def test_settings_reject_stale_window_and_preserve_advanced_fields(self):
         old=self.c.config()
         values={key:old[key] for key in cli.SETTINGS_FIELDS}

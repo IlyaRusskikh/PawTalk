@@ -1,5 +1,11 @@
 # Changelog / История изменений
 
+## Unreleased — Client 0.10.1 / Manager 0.2.1
+
+- Stop/wait for Windows service hosts without requiring SeDebugPrivilege; retain bounded process-exit verification when LocalService denies SYNCHRONIZE. Explain uninstaller failures instead of silently aborting. / Остановка службы и ожидание её процесса не требуют SeDebugPrivilege; отказ LocalService в SYNCHRONIZE обрабатывается через проверку завершения процесса. Деинсталлятор объясняет сбой вместо молчаливого прерывания.
+- Show Server settings on the first hidden-process launch. Change and persist language immediately, update the tray, preserve unrelated unsaved fields and wait for brief maintenance locks. / Настройки открываются с первого запуска из скрытого процесса. Язык переключается и сохраняется сразу, обновляет трей, сохраняет несвязанные черновые поля и ожидает краткое обслуживание.
+- Read/write saved password and E2EE key together. A stale locked preview cannot force a sign-in form, and late preview responses cannot overwrite refreshed access; actual credentials rejection still prompts for login. Prefill available saved credentials. / Пароль и ключ E2EE читаются и сохраняются совместно. Устаревший locked-preview не открывает форму входа, запоздавшие ответы не подменяют новый доступ; реальный отказ авторизации по-прежнему требует входа. Сохранённые поля подставляются.
+
 ## Client 0.10.0 / Server 0.10.1 / Manager 0.2.0 — 2026-11-12
 
 ### Verification fixes / Исправления проверок

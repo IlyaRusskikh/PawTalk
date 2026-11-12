@@ -16,14 +16,16 @@ function avatar(profile, key, feed, encrypted) {
   } catch {}
 }
 class RoomPreviews {
-  constructor({ fetcher, login }) { this.fetcher = fetcher; this.login = login; this.access = new Map(); }
-  forget(address) { this.access.delete(address); }
+  constructor({ fetcher, login }) { this.fetcher = fetcher; this.login = login; this.access = new Map(); this.revision=0; }
+  forget(address) { this.access.delete(address); this.revision++; }
   async read(address, base, cursor = {}) {
+    const revision=this.revision;
     const request = async (url, options = {}) => this.fetcher(base + url, { ...options, redirect: 'error', signal: AbortSignal.timeout(6000) });
     try {
       let access = this.access.get(address);
       if (!access || access.expires < Date.now()) {
         access = await this.login(address, base) ?? {};
+        if(revision!==this.revision)return {status:'locked'};
         access.expires = Date.now() + (access.token ? 10 * 60 * 1000 : 60000);
         if (this.access.size >= 50) this.access.delete(this.access.keys().next().value);
         this.access.set(address, access);
@@ -33,13 +35,14 @@ class RoomPreviews {
         const feed = /^[a-f0-9]{32}$/.test(cursor.feed || '') ? cursor.feed : '';
         const response = await request(`/api/preview?readAfter=${after}&readFeed=${feed}`, { headers: { Authorization: 'Bearer ' + access.token } });
         if (response.status === 401 || response.status === 403) {
-          this.access.set(address,{expires:Date.now()+60000});
+          if(revision===this.revision)this.access.set(address,{expires:Date.now()+60000});
           await response.body?.cancel();
           return { status: 'locked' };
         }
         if (response.ok) {
           const raw = await response.text(); if (raw.length > 60000) throw Error('Preview too large');
           const body = JSON.parse(raw);
+          if(revision!==this.revision)return {status:'locked'};
           if (!Number.isSafeInteger(body.participants) || body.participants < 0 || !Number.isSafeInteger(body.unread) || body.unread < 0 || !Array.isArray(body.people) || body.people.length > 3 || !/^[a-f0-9]{32}$/.test(body.feed)) throw Error('Invalid preview');
           return { status: 'online', participants: body.participants, unread: body.unread, feed: body.feed, ephemeral: access.ephemeral, details: true, people: body.people.map(person => ({ name: typeof person.name === 'string' ? person.name.slice(0, 64) : '', avatar: avatar(person.profile, access.key, body.feed, body.encrypted) })) };
         }

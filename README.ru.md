@@ -4,6 +4,8 @@
 
 Выпущены **Client 0.10.0 / Server 0.10.1 / Manager 0.2.0**. Переходный клиент `v0.8.1` обеспечивает обнаружение выпусков `client-v*` установленными клиентами 0.8.0. Постоянные серверы Linux и Windows используют независимые подписанные обновления. [Процесс выпуска](docs/RELEASING.md) · [Совместимость](docs/COMPATIBILITY.md).
 
+Готовится патч **Client 0.10.1 / Manager 0.2.1**: управление службой без debug-привилегии, мгновенная смена языка настроек и повторный вход с сохранёнными данными. [Изменения патча](docs/RELEASE-NOTES-0.10.1.md). Ссылки загрузки пока ведут на опубликованные версии.
+
 [Изменения и порядок обновления](docs/RELEASE-NOTES-0.10.0.md). Windows Server Manager получил управление через трей, настройки, миграцию в ProgramData и полное удаление данных по выбору. Для защиты активности обновите установленный Server до 0.10.1: переустановка Manager сохраняет установленную версию Server.
 
 [![Проверка и сборка](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)

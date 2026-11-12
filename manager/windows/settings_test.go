@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 	"unsafe"
@@ -29,6 +30,7 @@ func TestSettingsWindowHelper(t *testing.T) {
 		return
 	}
 	values := settingsFixture()
+	values["PAWTALK_LANGUAGE"] = os.Getenv("PAWTALK_SETTINGS_TEST_LANG")
 	backend := func(request *settingsRequest) (map[string]string, error) {
 		if request != nil {
 			raw, _ := json.Marshal(request)
@@ -77,6 +79,7 @@ func TestNativeSettingsWindow(t *testing.T) {
 			start := func() (*exec.Cmd, uintptr) {
 				child := exec.Command(executable(), "-test.run=^TestSettingsWindowHelper$")
 				child.Env = append(os.Environ(), "PAWTALK_SETTINGS_TEST_ROOT="+root, "PAWTALK_SETTINGS_TEST_LANG="+lang)
+				child.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 				if err := child.Start(); err != nil {
 					t.Fatal(err)
 				}
@@ -137,6 +140,38 @@ func TestNativeSettingsWindow(t *testing.T) {
 			}
 			child, window = start()
 			trayCall("SendMessageW", control(101), 0xc, 0, wide("198.51.100.20"))
+			newLang := "en"
+			selected := 1
+			if lang == "en" {
+				newLang = "ru"
+				selected = 0
+			}
+			trayCall("SendMessageW", control(108), 0x14e, selected, 0)
+			trayCall("SendMessageW", window, 0x111, 108|(1<<16), control(108))
+			labels = settingsText(newLang)
+			waitSettingsWindow(t, settingsClass(root), labels.Title)
+			for until := time.Now().Add(5 * time.Second); time.Now().Before(until); time.Sleep(20 * time.Millisecond) {
+				if trayCall("IsWindowEnabled", control(1)) != 0 {
+					break
+				}
+			}
+			rawLanguage, err := os.ReadFile(filepath.Join(root, "request.json"))
+			if err != nil {
+				t.Fatal("language required Apply", err)
+			}
+			var languageRequest settingsRequest
+			if json.Unmarshal(rawLanguage, &languageRequest) != nil || languageRequest.Values["PAWTALK_LANGUAGE"] != newLang || languageRequest.Values["PAWTALK_PUBLIC_IP"] != "192.0.2.10" {
+				t.Fatal("language change applied unsaved server settings")
+			}
+			if nativeControlText(control(101)) != "198.51.100.20" || nativeControlText(control(2)) != labels.Cancel {
+				t.Fatal("language switch discarded draft or failed to translate buttons")
+			}
+			if trayCall("FindWindowW", wide("#32770"), wide(labels.Title)) != 0 {
+				t.Fatal("language switch opened an Apply confirmation")
+			}
+			if err := os.Remove(filepath.Join(root, "request.json")); err != nil {
+				t.Fatal(err)
+			}
 			trayCall("SendMessageW", control(102), 0xc, 0, wide("19443"))
 			trayCall("SendMessageW", control(105), 0xc, 0, wide("64"))
 			trayCall("SendMessageW", control(106), 0xf5, 0, 0)

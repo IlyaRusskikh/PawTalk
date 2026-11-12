@@ -53,6 +53,9 @@ func settingsOperation(root string, request *settingsRequest) (map[string]string
 	if len(output) > 32768 || json.Unmarshal(output, &result) != nil || result.Values == nil {
 		return nil, errors.New("invalid settings response")
 	}
+	if request != nil {
+		saveUILanguage(root, result.Values["PAWTALK_LANGUAGE"])
+	}
 	return result.Values, nil
 }
 
@@ -142,14 +145,22 @@ func showSettings(root, lang string, backend settingsBackend) error {
 		trayCall("MessageBoxW", 0, wide(labels.Failure), wide(labels.Title), 0x10)
 		return err
 	}
+	if saved := values["PAWTALK_LANGUAGE"]; saved == "ru" || saved == "en" {
+		lang = saved
+		labels = settingsText(lang)
+	}
 	instance, _, _ := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetModuleHandleW").Call(0)
 	var window uintptr
 	controls := map[string]uintptr{}
+	textControls := map[string]uintptr{}
 	var apply, cancel uintptr
+	var relabel func()
+	var submit func(*settingsRequest, bool)
 	busy := false
 	type outcome struct {
-		values map[string]string
-		err    error
+		values       map[string]string
+		err          error
+		languageOnly bool
 	}
 	finished := make(chan outcome, 1)
 	callback := syscall.NewCallback(func(hwnd uintptr, message uint32, wparam, lparam uintptr) uintptr {
@@ -162,6 +173,19 @@ func showSettings(root, lang string, backend settingsBackend) error {
 				}
 			case 103:
 				trayCall("EnableWindow", controls["PAWTALK_E2EE_KEY_ID"], trayCall("SendMessageW", controls["PAWTALK_E2EE"], 0xf0, 0, 0))
+			case 108:
+				if wparam>>16 != 1 || busy {
+					return 0
+				} // CBN_SELCHANGE
+				lang = "en"
+				if trayCall("SendMessageW", controls["PAWTALK_LANGUAGE"], 0x147, 0, 0) == 0 {
+					lang = "ru"
+				}
+				labels = settingsText(lang)
+				relabel()
+				if lang != values["PAWTALK_LANGUAGE"] {
+					submit(settingsLanguageRequest(values, lang), true)
+				}
 			case 1:
 				if busy {
 					return 0
@@ -194,19 +218,8 @@ func showSettings(root, lang string, backend settingsBackend) error {
 				if trayCall("MessageBoxW", hwnd, wide(labels.Confirm), wide(labels.Title), 0x34) != 6 {
 					return 0
 				}
-				busy = true
-				trayCall("EnableWindow", apply, 0)
-				trayCall("EnableWindow", cancel, 0)
-				for _, control := range controls {
-					trayCall("EnableWindow", control, 0)
-				}
-				trayCall("SetWindowTextW", apply, wide(labels.Busy))
 				request := &settingsRequest{Expected: values, Values: next}
-				go func() {
-					updated, err := backend(request)
-					finished <- outcome{updated, err}
-					trayCall("PostMessageW", hwnd, 0x8006, 0, 0)
-				}()
+				submit(request, false)
 			}
 		case 0x8006:
 			result := <-finished
@@ -219,10 +232,23 @@ func showSettings(root, lang string, backend settingsBackend) error {
 			}
 			trayCall("EnableWindow", controls["PAWTALK_E2EE_KEY_ID"], trayCall("SendMessageW", controls["PAWTALK_E2EE"], 0xf0, 0, 0))
 			if result.err != nil {
+				if result.languageOnly {
+					lang = values["PAWTALK_LANGUAGE"]
+					labels = settingsText(lang)
+					relabel()
+					selected := 0
+					if lang == "en" {
+						selected = 1
+					}
+					trayCall("SendMessageW", controls["PAWTALK_LANGUAGE"], 0x14e, selected, 0)
+				}
 				trayCall("MessageBoxW", hwnd, wide(labels.Failure), wide(labels.Title), 0x10)
 			} else {
 				values = result.values
-				trayCall("MessageBoxW", hwnd, wide(labels.Success), wide(labels.Title), 0x40)
+				notifyTrayLanguage(root, values["PAWTALK_LANGUAGE"])
+				if !result.languageOnly {
+					trayCall("MessageBoxW", hwnd, wide(labels.Success), wide(labels.Title), 0x40)
+				}
 			}
 		case 0x10:
 			if !busy {
@@ -275,7 +301,7 @@ func showSettings(root, lang string, backend settingsBackend) error {
 		return control
 	}
 	field := func(key, label string, id, y int) {
-		create("STATIC", label, 0, 0, 24, y, 620, 23)
+		textControls[key] = create("STATIC", label, 0, 0, 24, y, 620, 23)
 		controls[key] = create("EDIT", values[key], 0x10000|0x80, id, 24, y+26, 620, 28)
 		trayCall("SendMessageW", controls[key], 0xc5, 128, 0)
 	}
@@ -292,7 +318,7 @@ func showSettings(root, lang string, backend settingsBackend) error {
 	field("PAWTALK_CHAT_MAX_MB", labels.History, 105, 274)
 	checkbox("PAWTALK_SERVER_AUTO_UPDATE", labels.ServerUpdate, 106, 344)
 	checkbox("PAWTALK_MANAGER_AUTO_UPDATE", labels.ManagerUpdate, 107, 382)
-	create("STATIC", labels.Language, 0, 0, 24, 426, 260, 25)
+	textControls["PAWTALK_LANGUAGE"] = create("STATIC", labels.Language, 0, 0, 24, 426, 260, 25)
 	controls["PAWTALK_LANGUAGE"] = create("COMBOBOX", "", 0x10000|3|0x200000, 108, 290, 422, 354, 160)
 	for _, name := range []string{"Русский", "English"} {
 		trayCall("SendMessageW", controls["PAWTALK_LANGUAGE"], 0x143, 0, wide(name))
@@ -302,11 +328,37 @@ func showSettings(root, lang string, backend settingsBackend) error {
 		selected = 1
 	}
 	trayCall("SendMessageW", controls["PAWTALK_LANGUAGE"], 0x14e, selected, 0)
-	create("STATIC", labels.Notice, 0, 0, 24, 470, 620, 98)
+	textControls["notice"] = create("STATIC", labels.Notice, 0, 0, 24, 470, 620, 98)
 	apply = create("BUTTON", labels.Apply, 0x10000|1, 1, 340, 594, 160, 34)
 	cancel = create("BUTTON", labels.Cancel, 0x10000, 2, 512, 594, 132, 34)
+	relabel = func() {
+		trayCall("SetWindowTextW", window, wide(labels.Title))
+		for key, text := range map[string]string{"PAWTALK_PUBLIC_IP": labels.IP, "PAWTALK_PORT": labels.Port, "PAWTALK_E2EE_KEY_ID": labels.Key, "PAWTALK_CHAT_MAX_MB": labels.History, "PAWTALK_LANGUAGE": labels.Language, "notice": labels.Notice} {
+			trayCall("SetWindowTextW", textControls[key], wide(text))
+		}
+		for key, text := range map[string]string{"PAWTALK_E2EE": labels.E2EE, "PAWTALK_SERVER_AUTO_UPDATE": labels.ServerUpdate, "PAWTALK_MANAGER_AUTO_UPDATE": labels.ManagerUpdate} {
+			trayCall("SetWindowTextW", controls[key], wide(text))
+		}
+		trayCall("SetWindowTextW", apply, wide(labels.Apply))
+		trayCall("SetWindowTextW", cancel, wide(labels.Cancel))
+	}
+	submit = func(request *settingsRequest, languageOnly bool) {
+		busy = true
+		trayCall("EnableWindow", apply, 0)
+		trayCall("EnableWindow", cancel, 0)
+		for _, control := range controls {
+			trayCall("EnableWindow", control, 0)
+		}
+		trayCall("SetWindowTextW", apply, wide(labels.Busy))
+		go func() {
+			updated, err := backend(request)
+			finished <- outcome{updated, err, languageOnly}
+			trayCall("PostMessageW", window, 0x8006, 0, 0)
+		}()
+	}
 	trayCall("EnableWindow", controls["PAWTALK_E2EE_KEY_ID"], trayCall("SendMessageW", controls["PAWTALK_E2EE"], 0xf0, 0, 0))
 	trayCall("ShowWindow", window, 5)
+	trayCall("ShowWindow", window, 5) // Also override an inherited STARTUPINFO SW_HIDE.
 	trayCall("SetForegroundWindow", window)
 	trayCall("SetFocus", controls["PAWTALK_PUBLIC_IP"])
 	var message trayMessage

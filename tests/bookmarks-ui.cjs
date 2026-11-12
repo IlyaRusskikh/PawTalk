@@ -8,7 +8,7 @@ app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 app.whenReady().then(async () => {
  session.defaultSession.setPermissionRequestHandler((_w,_p,done) => done(true));
  session.defaultSession.setPermissionCheckHandler(() => true);
- const win = new BrowserWindow({ show: false, width: 1100, height: 760, webPreferences: { preload: path.join(__dirname, 'ui-flow-preload.cjs'), contextIsolation: true, sandbox: true, offscreen: true } });
+ const win = new BrowserWindow({ show: false, width: 1100, height: 760, webPreferences: { preload: path.join(__dirname, 'ui-flow-preload.cjs'), contextIsolation: true, sandbox: true, offscreen: true, backgroundThrottling: false } });
  win.webContents.on('console-message',event=>{if(event.level==='error')console.error('renderer:',event.message);});
  const js = code => win.webContents.executeJavaScript(code, true).catch(error=>{console.error('Bookmark UI operation:',code.slice(0,160));throw error;});
  const wait = () => new Promise(resolve => setTimeout(resolve, 150));
@@ -42,7 +42,9 @@ app.whenReady().then(async () => {
       buttons.forEach(button=>button.removeEventListener('transitionrun',observe));
     };
   }; void 0;`;
-  await js(dragScript);await js('window.dragBookmark(0, 2)');
+  await js(dragScript);
+  await js(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+  await js('window.dragBookmark(0, 2)');
   assert.equal(await js(`getComputedStyle(document.querySelector('.bookmark-placeholder')).borderTopStyle`), 'dashed');
   await new Promise(resolve => setTimeout(resolve, 230));
   assert.ok(await js(`window.dragTransitions.some(name=>name!=='A')`),'neighbors run transform transitions before drop');
@@ -101,8 +103,11 @@ app.whenReady().then(async () => {
    assert.equal(await js(`document.querySelector('.server-preview small').textContent`),language==='ru'?'Требуется повторный вход':'Sign in again');
    assert.equal(await js(`document.querySelector('.server-preview').textContent.includes('Private fixture name')`),false,'locked tooltip reveals no participant names');
   }
-  await js(`document.querySelector('.bookmark-orb').click()`);await wait();
-  assert.ok(await js(`!!document.querySelector('dialog .join-submit')`),'locked bookmark opens a fresh sign-in form');
+  await js(`window.testSavedCredentials({password:'saved-secret',e2eeKey:'a'.repeat(64)});document.querySelector('.bookmark-orb').click()`);await wait();
+  assert.equal(await js(`!!document.querySelector('dialog .join-submit')`),false,'stale locked preview must not force a credentials form');
+  assert.equal(await js(`window.testCalls().filter(call=>call[0]==='connect').at(-1)[1].e2eeKey`),'a'.repeat(64),'bookmark retries with its saved E2EE key');
+  await js(`window.testConnectNeedsCredentials(true);document.querySelector('.home-saved-list button').click()`);await wait();
+  assert.ok(await js(`!!document.querySelector('dialog .join-submit')`),'actual credentials rejection opens sign-in');
   console.log('PASS bookmark identity migration, locked privacy in RU/EN and both motion modes, focus pause/resume and drag persistence');
   win.destroy();app.exit(0);
  } catch(error) { console.error(error);win.destroy();app.exit(1); }

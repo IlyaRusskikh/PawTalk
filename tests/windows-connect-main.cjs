@@ -57,8 +57,10 @@ app.on('browser-window-created',(_event,win)=>{
    }
    const wrong=await run(`window.desktop.connect(${JSON.stringify({address:link,nickname:'Native IPC',password,e2eeKey:'b'.repeat(64)})})`);
    assert.match(wrong.error,/E2EE/);
+   assert.equal(wrong.credentialsRequired,true,'wrong E2EE key is an actual credentials rejection');
    const wrongPassword=await run(`window.desktop.connect(${JSON.stringify({address:link,nickname:'Native IPC',password:'explicit-wrong-password',e2eeKey:key})})`);
    assert.match(wrongPassword.error,/пароль/i,'edited password must override the old password embedded in the URL');
+   assert.equal(wrongPassword.credentialsRequired,true);
    await run(`window.desktop.savePassword(${JSON.stringify({address:verified.bookmarkAddress,password:'stale-bookmark-password',e2eeKey:key})})`);
    const locked=await run(`window.desktop.roomPreview(${JSON.stringify(verified.bookmarkAddress)},${JSON.stringify({after:0,roomId:verified.roomId})})`);
    assert.deepEqual(locked,{status:'locked'},'a wrong bookmark may not borrow the active session token');

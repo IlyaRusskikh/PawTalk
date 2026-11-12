@@ -185,10 +185,9 @@ export function App() {
     if (!window.desktop || busy || hostBusy || bookmarkBusy) return;
     setMenu(null); setBookmarkBusy(true); setError('');
     try {
-      if(presence[item.address]?.status==='locked') { setAddress(item.address); setModal('join'); return; }
       const saved = await window.desktop.loadPassword(item.address);
       if (saved.password === null) { setAddress(item.address); setModal('join'); setError(t("Пароль закладки недоступен. Подключитесь заново.")); return; }
-      await connect({ address: item.address, nickname, password: saved.password, e2eeKey: saved.e2eeKey ?? undefined }, false, item.name);
+      await connect({ address: item.address, nickname, password: saved.password, e2eeKey: saved.e2eeKey ?? undefined }, false, item.name, true);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBookmarkBusy(false); }
   }
@@ -264,7 +263,7 @@ export function App() {
     const mic = testMic.current;
     if (mic) void mic.configure(settings).catch(error => { if (testMic.current === mic) setSettingsError(t("Не удалось применить настройки микрофона: {0}", error.message)); });
   }, [settings]);
-  async function connect(target: JoinTarget, hosting = false, displayName?: string) {
+  async function connect(target: JoinTarget, hosting = false, displayName?: string, fromBookmark = false) {
     if (!window.desktop) { setError(t("Подключение доступно в десктопном приложении. Эта страница — предпросмотр интерфейса.")); return; }
     if (settings.inputMode === 'ptt' && !native) { setError(t("Для Push-to-Talk нужно собрать нативный модуль Windows.")); return; }
     const id = ++attempt.current; setBusy(true); setConnectionStage('server'); setError(''); setConnectionError(''); stopPreview();
@@ -273,7 +272,10 @@ export function App() {
       const result = await window.desktop.connect(target);
       unusedChat = result.chat?.handle;
       if (id !== attempt.current) return;
-      if (result.error) throw new Error(result.error);
+      if (result.error) {
+        if(fromBookmark && result.credentialsRequired) { setAddress(target.address);setModal('join'); }
+        throw new Error(result.error);
+      }
       const password=target.password || (target.address.startsWith('pawtalk://') ? new URLSearchParams(new URL(target.address).hash.slice(1)).get('password') : '') || '';
       const verified = { ...target, password, address: result.bookmarkAddress || bookmarkAddress(target.address), roomId: result.roomId, e2eeKey: result.e2eeKey };
       const matches=bookmarks.filter(item=>sameBookmark(item,verified));

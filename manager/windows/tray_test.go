@@ -75,6 +75,21 @@ func TestNativeTrayLifecycle(t *testing.T) {
 			if window == 0 {
 				t.Fatal("native tray window/status not created")
 			}
+			other := "ru"
+			if lang == "ru" {
+				other = "en"
+			}
+			notifyTrayLanguage(root, other)
+			translated := false
+			for until := time.Now().Add(3 * time.Second); time.Now().Before(until); time.Sleep(20 * time.Millisecond) {
+				if strings.Contains(windowText(window), trayText(other).Unavailable) {
+					translated = true
+					break
+				}
+			}
+			if !translated {
+				t.Fatal("tray language did not change immediately")
+			}
 			duplicate := exec.Command(executable(), "-test.run=^TestTrayHelper$")
 			duplicate.Env = child.Env
 			doneDuplicate := make(chan error, 1)

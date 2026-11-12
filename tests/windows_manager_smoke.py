@@ -123,6 +123,14 @@ try:
             assert subprocess.run([sys.executable,'-X','utf8','-I','-c',check],capture_output=True).returncode==0
         c.install(config,manifest('server','0.9.0'),directory/'manager/compose.server.yaml','0.1.0')
         before=c.state()
+        if scm:
+            restricted=subprocess.run([str(fixtures/'clipboard-test.exe'),'-test.run=^TestStopSCMServiceWithoutDebugPrivilege$'],
+                                      env={**os.environ,'PAWTALK_SCM_NO_DEBUG_TEST_ROOT':str(root)},capture_output=True,timeout=90)
+            assert restricted.returncode==0,'Actual SCM stop failed with SeDebugPrivilege disabled'
+            assert control('status-server',root).returncode!=0
+            assert control('start-server',root).returncode==0
+            runtime.healthy(before,c.config(),before['identity'])
+            print('PASS actual LocalService SCM stop without debug privilege; explicit restart restores service')
         invitation=runtime.command(before,c.config(),'info')
         shared=runtime.invitation(before,c.config())
         password=shared['password'].encode()

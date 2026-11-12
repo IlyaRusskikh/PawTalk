@@ -21,3 +21,22 @@ test('credential storage isolates servers, delegates encryption and deletes on o
   assert.equal((await readdir(directory)).length,0);
  }finally{if(path.dirname(directory)===path.resolve(tmpdir())&&path.basename(directory).startsWith('pawtalk-credential-test-'))await rm(directory,{recursive:true,force:true});}
 });
+
+test('password/key snapshots cannot interleave with a bookmark credential replacement',async()=>{
+ const directory=await mkdtemp(path.join(tmpdir(),'pawtalk-credential-test-'));
+ let release,started;const gate=new Promise(r=>release=r),blocked=new Promise(r=>started=r);
+ const encryption={isEncryptionAvailable:()=>true,encryptString:async value=>{if(value==='new-key'){started();await gate;}return Buffer.from('encrypted:'+value);},decryptString:bytes=>bytes.toString().slice(10)};
+ try{
+  const store=new CredentialStore(directory,encryption);
+  await store.saveMany([['room','old-password'],['e2ee:room','old-key']]);
+  const write=store.saveMany([['room','new-password'],['e2ee:room','new-key']]);
+  await blocked;
+  let readFinished=false;const read=store.loadMany(['room','e2ee:room']).then(value=>{readFinished=true;return value;});
+  await new Promise(setImmediate);assert.equal(readFinished,false,'preview must wait for the entire credential pair');
+  release();await write;assert.deepEqual(await read,['new-password','new-key']);
+  encryption.encryptString=async value=>{if(value==='failed-key')throw Error('encryption failed');return Buffer.from('encrypted:'+value);};
+  await assert.rejects(store.saveMany([['room','uncommitted-password'],['e2ee:room','failed-key']]));
+  assert.deepEqual(await store.loadMany(['room','e2ee:room']),['new-password','new-key'],'failed encryption may not publish half a new pair');
+  await store.saveMany([['room',null],['e2ee:room',null]]);assert.deepEqual(await store.loadMany(['room','e2ee:room']),[null,null]);
+ }finally{release();await rm(directory,{recursive:true,force:true});}
+});

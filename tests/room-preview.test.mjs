@@ -50,3 +50,24 @@ test('preview avatars authenticate the profile/feed and are absent without an E2
   assert.equal(avatar(profile, key, 'd'.repeat(32), true), undefined);
   assert.equal(avatar({ ...profile, id: 'e'.repeat(64) }, key, feed, true), undefined);
 });
+
+test('an in-flight revoked preview cannot poison the new bookmark credentials',async()=>{
+ let release,started;const pending=new Promise(r=>release=r),requested=new Promise(r=>started=r);let logins=0;
+ const body=()=>new Response(JSON.stringify({participants:1,unread:0,people:[],feed:'a'.repeat(32)}));
+ const previews=new RoomPreviews({login:async()=>({token:++logins===1?'old':'new'}),fetcher:async(_url,options)=>{
+  if(options.headers?.Authorization==='Bearer old'){started();await pending;return new Response('revoked',{status:401});}
+  return body();
+ }});
+ const old=previews.read('room','https://example.invalid');await requested;
+ previews.forget('room');assert.equal((await previews.read('room','https://example.invalid')).participants,1);
+ release();assert.deepEqual(await old,{status:'locked'});
+ assert.equal((await previews.read('room','https://example.invalid')).participants,1,'old denial must not replace the authenticated cache');
+ assert.equal(logins,2);
+});
+
+test('removing credentials hides even an already in-flight successful activity response',async()=>{
+ let release,started;const pending=new Promise(r=>release=r),requested=new Promise(r=>started=r);
+ const previews=new RoomPreviews({login:async()=>({token:'old'}),fetcher:async()=>{started();await pending;return new Response(JSON.stringify({participants:99,unread:88,people:[{name:'private'}],feed:'a'.repeat(32)}));}});
+ const old=previews.read('room','https://example.invalid');await requested;previews.forget('room');release();
+ assert.deepEqual(await old,{status:'locked'});
+});

@@ -39,7 +39,7 @@ interface Window {
     checkHost(port: number): Promise<HostCheckResult>;
     cancelHostCheck(): Promise<void>;
     onHostChanged(callback: (status: HostStatus) => void): () => void;
-    connect(input: { address: string; nickname: string; password: string; e2eeKey?: string }): Promise<{ url: string; token: string; identity: string; roomId?: string; bookmarkAddress?: string; ownHost?: boolean; error?: string; e2eeRequired?: boolean; e2eeKey?: string; chat?: import('./chat').ChatAccess }>;
+    connect(input: { address: string; nickname: string; password: string; e2eeKey?: string }): Promise<{ url: string; token: string; identity: string; roomId?: string; bookmarkAddress?: string; ownHost?: boolean; error?: string; credentialsRequired?: boolean; e2eeRequired?: boolean; e2eeKey?: string; chat?: import('./chat').ChatAccess }>;
     chatRequest(handle: string, input: import('./chat').ChatHistoryRequest | { mutation: { id: number; packet?: import('./chat').ChatPacket } } | { packet: import('./chat').ChatPacket } | { profile: import('./chat').ChatProfilePacket } | { attachment: { id: string; data?: Uint8Array } }): Promise<unknown>;
     chatClose(handle: string): Promise<void>;
     capabilities(): Promise<{ native: boolean; platform: string; packaged: boolean; secureStorage: boolean }>;

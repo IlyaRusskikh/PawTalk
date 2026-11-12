@@ -328,36 +328,26 @@ func control(action, root string) error {
 		}
 		// SERVICE_STOPPED may precede process teardown. Wait for the old host
 		// to release Python/runtime files before a reinstall replaces its tree.
-		var process windows.Handle
+		var process *serviceProcess
 		defer func() {
-			if process != 0 {
-				windows.CloseHandle(process)
+			if process != nil {
+				process.close()
 			}
 		}()
 		query := func() (svc.Status, error) {
 			status, err := s.Query()
-			if err == nil && process == 0 && status.ProcessId != 0 {
-				process, err = windows.OpenProcess(windows.SYNCHRONIZE, false, status.ProcessId)
-				if errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
-					err = nil
-				}
+			if err == nil && process == nil && status.ProcessId != 0 {
+				process, err = observeServiceProcess(status.ProcessId)
 			}
 			return status, err
 		}
 		if err := waitServiceStopped(query, func() error { _, err := s.Control(svc.Stop); return err }, 40*time.Second); err != nil {
 			return err
 		}
-		if process == 0 {
+		if process == nil {
 			return nil
 		}
-		result, err := windows.WaitForSingleObject(process, 10000)
-		if err != nil {
-			return err
-		}
-		if result != windows.WAIT_OBJECT_0 {
-			return errors.New("service process did not exit")
-		}
-		return nil
+		return process.wait(10 * time.Second)
 	}
 	return errors.New("unknown service action")
 }

@@ -2,6 +2,10 @@
 
 **Server 0.10.1 / Manager 0.2.0 — released previews / предварительные выпуски.**
 [Установщик Manager 0.2.0](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.2.0/PawTalk.Server.Manager.Setup.0.2.0.exe) · [Изменения](RELEASE-NOTES-0.10.0.md).
+
+Готовящийся [патч Manager 0.2.1](RELEASE-NOTES-0.10.1.md) исправляет управление
+LocalService без debug-привилегии, открытие настроек и мгновенное переключение языка.
+До его публикации ссылка выше остаётся на 0.2.0.
 Целевые ОС: Windows 10/11 x64 и Windows Server 2019/2022/2025 x64.
 Это матрица целей, а не утверждение о проверке всех этих ОС.
 На локальной машине проверяется настоящий Go/LiveKit, SQLite, Ed25519 и Windows

@@ -34,8 +34,7 @@ const previews = new RoomPreviews({ fetcher: (...args) => net.fetch(...args), lo
     // Each bookmark must prove its own saved credentials. Never borrow an
     // active room's token simply because another invitation uses the same IP.
     const scope = credentialKey(address);
-    const password = await credentials.load(scope); if (password === null) return;
-    const key = await credentials.load('e2ee:' + scope);
+    const [password,key] = await credentials.loadMany([scope,'e2ee:' + scope]); if (password === null) return;
     const response = await net.fetch(base + '/api/connect', { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(6000),
       body: JSON.stringify({ nickname: 'Preview', password, ...(key ? { e2ee: true, e2eeKeyId: createHash('sha256').update(Buffer.from(key, 'hex')).digest('hex') } : {}) }) });
     if (!response.ok) { await response.body?.cancel(); return; }
@@ -210,15 +209,18 @@ function registerIPC() {
   ipcMain.handle('capabilities', async (event) => { authorized(event); return { native: !!native, platform: process.platform, packaged: app.isPackaged, secureStorage: await safeStorage.isAsyncEncryptionAvailable() }; });
   ipcMain.handle('credentials-load', async (event, address) => {
     authorized(event);
-    return { password: await credentials.load(credentialKey(address)), e2eeKey: await credentials.load('e2ee:' + credentialKey(address)) };
+    const scope=credentialKey(address);
+    const [password,e2eeKey]=await credentials.loadMany([scope,'e2ee:'+scope]);
+    return {password,e2eeKey};
   });
   ipcMain.handle('credentials-save', async (event, input) => {
     authorized(event);
     if (!input || (input.password !== null && (typeof input.password !== 'string' || input.password.length > 1024))) throw new Error(t("Неверный пароль"));
     if (input.e2eeKey != null && (typeof input.e2eeKey !== 'string' || !/^[a-f0-9]{64}$/.test(input.e2eeKey))) throw new Error(t("Неверный ключ E2EE"));
-    await credentials.save(credentialKey(input.address), input.password);
+    const scope=credentialKey(input.address), entries=[[scope,input.password]];
+    if ('e2eeKey' in input || input.password === null) entries.push(['e2ee:'+scope,input.password === null ? null : input.e2eeKey ?? null]);
+    await credentials.saveMany(entries);
     previews.forget(input.address);
-    if ('e2eeKey' in input || input.password === null) await credentials.save('e2ee:' + credentialKey(input.address), input.password === null ? null : input.e2eeKey ?? null);
   });
   ipcMain.handle('connect', async (event, input) => {
     authorized(event);
@@ -254,12 +256,12 @@ function registerIPC() {
         if (Number(response.headers.get('content-length') || 0) > 16384) throw new Error(t("Некорректный ответ сервера"));
         const raw = await response.text(); if (raw.length > 16384) throw new Error(t("Некорректный ответ сервера"));
         const body = JSON.parse(raw);
-        if (!response.ok) return { error: typeof body.error === 'string' ? t(body.error) : t("Ошибка сервера: {0}", response.status) };
+        if (!response.ok) return { error: typeof body.error === 'string' ? t(body.error) : t("Ошибка сервера: {0}", response.status), credentialsRequired: [401,403,426].includes(response.status) };
         return body;
       };
       const body = await join();
-      if (body.error) return { error: body.error };
-      if (body.e2eeRequired === true && !e2eeKey) return { error: t("Для комнаты нужен ключ E2EE из приглашения.") };
+      if (body.error) return {error:body.error,credentialsRequired:body.credentialsRequired===true};
+      if (body.e2eeRequired === true && !e2eeKey) return { error: t("Для комнаты нужен ключ E2EE из приглашения."), credentialsRequired: true };
       if (e2eeKey && body.e2eeRequired !== true) return { error: t("Приглашение требует E2EE, но сервер не подтвердил защищённый режим.") };
       const mediaURL = mediaEndpoint(body.url, base, !app.isPackaged);
       const expected = new URL(base);

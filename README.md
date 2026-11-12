@@ -4,6 +4,8 @@
 
 Released: **Client 0.10.0 / Server 0.10.1 / Manager 0.2.0**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v*` releases. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
 
+Patch in preparation: **Client 0.10.1 / Manager 0.2.1**, with service control without debug privilege, immediate settings language and reliable saved-room reconnects. [Patch notes](docs/RELEASE-NOTES-0.10.1.md). Current download links remain on published releases.
+
 [Release notes and upgrade order](docs/RELEASE-NOTES-0.10.0.md). Windows Server Manager adds tray controls, settings, ProgramData migration and optional full-data removal. Upgrade the installed Server to 0.10.1 for activity privacy; reinstalling Manager preserves the installed Server version.
 
 [![Verify and package](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)
