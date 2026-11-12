@@ -118,8 +118,9 @@ func selected(root string) (string, error) {
 func launch(ctx context.Context, root string, args []string, job windows.Handle, stdio bool) error {
 	var script string
 	var e error
-	// The native installer's Windows setup/credential UX comes from its shipped
-	// bootstrap. Signed Manager releases still drive periodic maintenance.
+	// Windows UI and services use the same shipped, protected controller. Full
+	// Windows updates replace it through the verified installer; a historical
+	// shared bundle must not silently put the old settings/update policy back.
 	if bootstrapCommand(args) {
 		script, e = filepath.Join(base(), "bootstrap", "manager", "pawtalkctl"), nil
 	} else {
@@ -185,7 +186,10 @@ func (s *service) Execute(_ []string, requests <-chan svc.ChangeRequest, status 
 		defer updates.Stop()
 		health := time.NewTicker(time.Minute)
 		defer health.Stop()
+		checks := desktopCheckRequests(ctx, s.root)
 		_ = launch(ctx, s.root, []string{"health"}, job, false)
+		_ = launch(ctx, s.root, []string{"periodic"}, job, false)
+		lastCheck := time.Now()
 		for {
 			select {
 			case <-ctx.Done():
@@ -193,6 +197,12 @@ func (s *service) Execute(_ []string, requests <-chan svc.ChangeRequest, status 
 				return
 			case <-updates.C:
 				_ = launch(ctx, s.root, []string{"periodic"}, job, false)
+				lastCheck = time.Now()
+			case <-checks:
+				if time.Since(lastCheck) > 30*time.Second {
+					_ = launch(ctx, s.root, []string{"periodic"}, job, false)
+					lastCheck = time.Now()
+				}
 			case <-health.C:
 				_ = launch(ctx, s.root, []string{"health"}, job, false)
 			}
@@ -447,6 +457,20 @@ func verify(args []string) error {
 }
 
 func main() {
+	if len(os.Args) == 5 && os.Args[1] == "--desktop-broker" {
+		if desktopBroker(os.Args[2], os.Args[3], os.Args[4]) != nil {
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 3 && os.Args[1] == "--desktop-check" {
+		_ = json.NewEncoder(os.Stdout).Encode(map[string]bool{"accepted": signalDesktopCheck(os.Args[2])})
+		return
+	}
+	if len(os.Args) == 3 && os.Args[1] == "--desktop-status" {
+		_ = json.NewEncoder(os.Stdout).Encode(desktopStatus(os.Args[2]))
+		return
+	}
 	if isTrayExecutable() {
 		os.Exit(trayMain(os.Args[1:]))
 	}

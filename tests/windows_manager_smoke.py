@@ -313,6 +313,21 @@ try:
             assert probe()=='original' and login()['e2eeRequired'] is True
             print('PASS native settings protocol: IP/port/history apply, password/SQLite retained, stale window rejected, actual rebind failure rolled back')
             print('PASS native settings E2EE off/on and key-ID replacement enforce the new login policy')
+            # Reproduce the reported tray stop -> edit -> save path with the
+            # real server/config/runtime, both with console hosting and SCM.
+            runtime.stop(c.state(),c.config())
+            assert not runtime.container(c.state(),c.config())['State']['Running']
+            stopped_config=c.config()
+            values={key:stopped_config[key] for key in cli.SETTINGS_FIELDS}
+            values['PAWTALK_CHAT_MAX_MB']='48'
+            assert cli.apply_settings(c,dict(expected=stopped_config,values=values))
+            assert not runtime.container(c.state(),c.config())['State']['Running']
+            prepared=json.loads((c.directory/'runtime.json').read_text())
+            assert prepared['config']['PAWTALK_CHAT_MAX_MB']=='48'
+            runtime.start(c.state(),c.config())
+            runtime.healthy(c.state(),c.config(),c.state()['identity'])
+            assert login()['e2eeRequired'] is True
+            print('PASS stop -> edit -> save retains stopped state and prepares new settings for the next real start')
         if not scm:
             process.kill()
             process.wait(timeout=10)

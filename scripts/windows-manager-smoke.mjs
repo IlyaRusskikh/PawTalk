@@ -1,7 +1,7 @@
 // Actual Windows binaries, Python runtime, Ed25519, SQLite and process-job lifecycle.
 import {mkdtemp,readFile,writeFile,cp,mkdir,rm} from 'node:fs/promises';
 import {generateKeyPairSync,sign,createHash} from 'node:crypto';
-import {execFileSync,spawn} from 'node:child_process';
+import {execFileSync,spawn,spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {createServer} from 'vite';
 import path from 'node:path';
@@ -43,7 +43,12 @@ try{
  vite=await createServer({server:{host:'127.0.0.1',port:0,strictPort:false}});await vite.listen();
  const uiAddress=`http://127.0.0.1:${vite.httpServer.address().port}`;
  const env={...process.env,PAWTALK_MANAGER_HOST:path.join(stage,'pawtalkctl.exe'),PAWTALK_UI_TEST_URL:uiAddress,PAWTALK_ELECTRON:createRequire(import.meta.url)('electron')};delete env.ELECTRON_RUN_AS_NODE;
- execFileSync(process.env.PAWTALK_GO||'go',['test','-c','-o',path.join(directory,'clipboard-test.exe')],{cwd:path.join(root,'manager/windows'),stdio:'inherit',windowsHide:true});
+ const go=process.env.PAWTALK_GO||'go';
+ if(spawnSync(go,['version'],{windowsHide:true}).status===0){
+  execFileSync(go,['test','-c','-o',path.join(directory,'clipboard-test.exe')],{cwd:path.join(root,'manager/windows'),stdio:'inherit',windowsHide:true});
+ }else{
+  execFileSync('docker',['run','--rm','--mount',`type=bind,source=${path.join(root,'manager/windows')},target=/src,readonly`,'--mount',`type=bind,source=${directory},target=/out`,'--mount','type=volume,source=pawtalk-go-mod,target=/go/pkg/mod','--mount','type=volume,source=pawtalk-go-build,target=/root/.cache/go-build','-w','/src','-e','GOOS=windows','-e','GOARCH=amd64','golang:1.27.3-alpine','go','test','-c','-o','/out/clipboard-test.exe'],{stdio:'inherit',windowsHide:true});
+ }
  await writeFile(path.join(directory,'clipboard.html'),'<!doctype html><meta charset="utf-8"><title>PawTalk clipboard fixture</title>');
  execFileSync(env.PAWTALK_ELECTRON,[path.join(root,'tests/windows-clipboard.cjs'),directory],{cwd:root,env,stdio:'inherit',windowsHide:true,timeout:30000});
  await new Promise((resolve,reject)=>{

@@ -150,12 +150,12 @@ func TestPurgeBoundaryAndOwnership(t *testing.T) {
 }
 
 func TestWindowsBootstrapRoutes(t *testing.T) {
-	for _, args := range [][]string{{"install"}, {"--lang", "ru", "install"}, {"invitation", "--url"}, {"--lang", "en", "invitation", "--reset-password", "--yes"}, {"settings"}, {"settings", "--apply"}} {
+	for _, args := range [][]string{{"install"}, {"--lang", "ru", "install"}, {"invitation", "--url"}, {"--lang", "en", "invitation", "--reset-password", "--yes"}, {"settings"}, {"settings", "--apply"}, {"desktop", "snapshot"}, {"periodic"}, {"--lang", "en", "health"}, {"run-server"}} {
 		if !bootstrapCommand(args) {
 			t.Fatal("Windows UX used a downloaded older Manager", args)
 		}
 	}
-	for _, args := range [][]string{{"periodic"}, {"--lang", "en", "health"}, {"manager", "now"}, {"--lang"}} {
+	for _, args := range [][]string{{"manager", "now"}, {"--lang"}} {
 		if bootstrapCommand(args) {
 			t.Fatal("maintenance bypassed selected signed Manager", args)
 		}

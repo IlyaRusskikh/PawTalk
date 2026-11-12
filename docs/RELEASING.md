@@ -15,7 +15,7 @@ server-only Electron smoke от Client dist. Тег не заменяется; �
 |---|---|---|---|
 | Client | `package.json` + обе версии `package-lock.json` | `client-vX.Y.Z` | EXE, `update-manifest.json`, SHA256SUMS, ZIP лицензий |
 | Server | `server/VERSION` | `server-vX.Y.Z` | GHCR Linux amd64/arm64 image, `PawTalk.Server.X.Y.Z.windows-x64.zip`, подписанный `server-manifest.json` |
-| Manager | `manager/VERSION` | `manager-vX.Y.Z` | Общий `PawTalk.Manager.X.Y.Z.tar.gz`, Windows `PawTalk.Server.Manager.Setup.X.Y.Z.exe`, подписанный `manager-manifest.json` |
+| Manager | `manager/VERSION` + `manager/desktop/package.json` | `manager-vX.Y.Z` | Общий `PawTalk.Manager.X.Y.Z.tar.gz`, Windows `PawTalk.Server.Manager.Setup.X.Y.Z.exe`, подписанный `manager-manifest.json` |
 
 Client, Server и Manager используют независимые версии. Patch — небольшие исправления,
 minor — существенные функции, major — очень крупные изменения; нижние компоненты
@@ -73,6 +73,9 @@ and file synchronized. Never backdate a later fix into an earlier release.
 Bridge commit `3747a0d` нужен для воспроизводимости старых выпусков: сохраняйте его
 доступность. Истечение подписанного bridge-манифеста может потребовать ручной
 установки актуального клиента; старые assets не заменяются.
+
+Manager 0.3.0 готовится отдельно от Client 0.11.0; новый Windows UI и полный installer
+доставляются Manager-тегом, не Client-тегом. [Контракт desktop и обновлений](MANAGER-DESKTOP.md).
 
 ## CI и публикация
 

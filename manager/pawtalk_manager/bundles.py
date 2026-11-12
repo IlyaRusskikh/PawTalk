@@ -143,6 +143,9 @@ def install_units(root,directory,config,no_systemd=False):
 def activate(controller,manifest,keys,file=None,no_systemd=False):
     root = controller.root
     state,config = controller.state(),controller.config()
+    if WINDOWS and 'windowsInstaller' in manifest:
+        from .native import queue_manager_installer
+        if queue_manager_installer(controller,manifest): return True
     if semver(manifest['version']) == semver(state['managerVersion']):
         receipt = root/'opt/pawtalk-manager/versions'/state['managerVersion']/'verified.json'
         if json.loads(receipt.read_text()).get('sha256') != manifest['sha256']:

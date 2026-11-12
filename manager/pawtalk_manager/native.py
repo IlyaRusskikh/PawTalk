@@ -10,10 +10,85 @@ import time
 import zipfile
 import secrets
 import urllib.parse
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from .config import atomic, save
 from .platforms import host, admin, protect, secure
 from .release import REPO, fetch
+
+
+def installed_desktop_version():
+    file=Path(os.environ['PAWTALK_MANAGER_HOST']).parent/'desktop-version.json'
+    from .release import semver
+    if not file.exists():
+        if os.name=='nt':
+            import winreg
+            try:
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawTalkServerManager',0,winreg.KEY_READ|winreg.KEY_WOW64_64KEY) as key:
+                    version=winreg.QueryValueEx(key,'DisplayVersion')[0];semver(version);return version
+            except FileNotFoundError: pass
+        return '0.0.0'
+    version=json.loads(file.read_text())['version']; semver(version)
+    return version
+
+
+def queue_manager_installer(controller,manifest):
+    """The SYSTEM task runs outside the maintenance service's kill-on-close job."""
+    from .release import verify, semver
+    keys=json.loads((controller.etc/'trust.json').read_text())
+    manifest=verify(manifest['_signed'], 'manager',keys)
+    if semver(manifest['version']) <= semver(installed_desktop_version()): return False
+    artifact=manifest.get('windowsInstaller')
+    if not artifact: raise ValueError('Manager release has no signed Windows installer')
+    directory=controller.directory/'updates'
+    directory.mkdir(parents=True,exist_ok=True); secure(directory)
+    installer=directory/artifact['name']
+    if installer.is_symlink() or installer.is_junction(): raise ValueError('Unsafe installer path')
+    if not installer.exists() or installer.stat().st_size!=artifact['size'] or hashlib.sha256(installer.read_bytes()).hexdigest()!=artifact['sha256']:
+        data=fetch(f'https://github.com/{REPO}/releases/download/manager-v{manifest["version"]}/{artifact["name"]}',artifact['size'])
+        if len(data)!=artifact['size'] or hashlib.sha256(data).hexdigest()!=artifact['sha256']: raise ValueError('Manager installer hash/size mismatch')
+        atomic(installer,data);secure(installer)
+    pending=directory/'pending.json'
+    if pending.exists():
+        saved=json.loads(pending.read_text())
+        if saved.get('version')==manifest['version'] and time.time()-saved.get('at',0)<900: return True
+    schedule_manager_installer(controller,installer)
+    save(pending,dict(version=manifest['version'],at=int(time.time())))
+    return True
+
+
+def schedule_manager_installer(controller,installer):
+    task='PawTalk-Manager-Update-'+hashlib.sha256(str(controller.root).lower().encode()).hexdigest()[:16]
+    quote=lambda value: subprocess.list2cmdline([str(value)])
+    arguments='/S /ROOT='+quote(controller.root)+' /CONFIG='+quote(controller.etc/'config.env')
+    scheduler=str(Path(os.environ.get('SystemRoot',r'C:\Windows'))/'System32/schtasks.exe')
+    # No clock trigger: /Run starts it exactly once. A near-future ONCE trigger
+    # would run the installer a second time after the immediate /Run.
+    namespace='http://schemas.microsoft.com/windows/2004/02/mit/task'
+    ET.register_namespace('',namespace)
+    def child(parent,name,text=None,**attributes):
+        element=ET.SubElement(parent,'{'+namespace+'}'+name,attributes)
+        element.text=text
+        return element
+    document=ET.Element('{'+namespace+'}Task',version='1.2')
+    child(document,'Triggers')
+    principal=child(child(document,'Principals'),'Principal',id='System')
+    child(principal,'UserId','S-1-5-18');child(principal,'RunLevel','HighestAvailable')
+    settings=child(document,'Settings')
+    child(settings,'MultipleInstancesPolicy','IgnoreNew')
+    child(settings,'DisallowStartIfOnBatteries','false');child(settings,'StopIfGoingOnBatteries','false')
+    child(settings,'AllowStartOnDemand','true');child(settings,'ExecutionTimeLimit','PT15M')
+    action=child(child(document,'Actions',Context='System'),'Exec')
+    child(action,'Command',str(installer));child(action,'Arguments',arguments)
+    xml=installer.parent/'install-task.xml'
+    atomic(xml,ET.tostring(document,encoding='utf-16',xml_declaration=True));secure(xml)
+    try:
+        created=subprocess.run([scheduler,'/Create','/TN',task,'/XML',str(xml),'/F'],capture_output=True,timeout=20)
+        if created.returncode: raise RuntimeError('Unable to schedule Manager installer')
+        started=subprocess.run([scheduler,'/Run','/TN',task],capture_output=True,timeout=20)
+        if started.returncode: raise RuntimeError('Unable to start Manager installer')
+    finally:
+        xml.unlink(missing_ok=True)
 
 
 class NativeRuntime:
@@ -161,10 +236,13 @@ class NativeRuntime:
         if not directory.is_dir() or (directory.parent/(state['volume']+'.owner')).read_text() != state['project']:
             raise ValueError('Data directory ownership mismatch')
 
-    def start(self,state,config):
+    def prepare(self,state,config):
         self.check_volume(state)
         self.verify_image(state)
         save(self.control/'runtime.json',dict(state=state,config=config))
+
+    def start(self,state,config):
+        self.prepare(state,config)
         for action in ['install-server','start-server']:
             if host(action,self.root).returncode:
                 raise RuntimeError('Unable to start PawTalk Windows service')

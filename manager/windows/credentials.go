@@ -28,7 +28,7 @@ func bootstrapCommand(args []string) bool {
 		case "--no-systemd":
 			args = args[1:]
 		default:
-			return args[0] == "install" || args[0] == "invitation" || args[0] == "settings"
+			return args[0] == "install" || args[0] == "invitation" || args[0] == "settings" || args[0] == "desktop" || args[0] == "periodic" || args[0] == "health" || args[0] == "run-server"
 		}
 	}
 	return false

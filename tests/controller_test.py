@@ -128,6 +128,22 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.c.configure({'PAWTALK_IMAGE':'old-image'})
 
+    def test_configuring_stopped_room_preserves_stopped_state(self):
+        self.room.running = False
+        before = len(self.room.starts)
+        self.assertTrue(self.c.configure({'PAWTALK_CHAT_MAX_MB':'64'}))
+        self.assertFalse(self.room.running)
+        self.assertEqual(len(self.room.starts),before)
+        self.assertEqual(self.c.config()['PAWTALK_CHAT_MAX_MB'],'64')
+
+    def test_failed_stopped_configuration_rolls_back_without_starting(self):
+        self.room.running = False
+        self.room.backup_error = True
+        with self.assertRaises(OSError):
+            self.c.configure({'PAWTALK_CHAT_MAX_MB':'64'})
+        self.assertFalse(self.room.running)
+        self.assertEqual(self.c.config()['PAWTALK_CHAT_MAX_MB'],'128')
+
     def test_reinstall_keeps_identity_data_and_config(self):
         state,config = self.c.state(),self.c.config()
         self.assertFalse(self.c.install({'PAWTALK_PUBLIC_IP':'198.51.100.12'},None,None,None))

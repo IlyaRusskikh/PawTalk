@@ -149,6 +149,12 @@ func serverTrayClass(root string) string {
 	return fmt.Sprintf("PawTalk.Server.Tray.%x", hash[:8])
 }
 func closeTray(root string) error {
+	return closeTrayMode(root, false)
+}
+func closeTrayMode(root string, restart bool) error {
+	if err := closeDesktop(root, restart); err != nil {
+		return err
+	}
 	absolute, err := filepath.Abs(root)
 	if err != nil {
 		return err
@@ -384,6 +390,12 @@ func trayMain(args []string) int {
 	if len(args) == 2 {
 		var err error
 		switch args[0] {
+		case "--server-stopped":
+			state, queryErr := trayState(args[1])
+			if queryErr == nil && state == svc.Stopped {
+				return 0
+			}
+			return 1
 		case "--prepare-install":
 			err = prepareInstall(args[1])
 		case "--uninstall-services":
@@ -396,6 +408,9 @@ func trayMain(args []string) int {
 		return installerExitCode(err)
 	}
 normalTray:
+	if len(args) == 2 && args[0] == "--close-tray-for-upgrade" {
+		return installerExitCode(closeTrayMode(args[1], true))
+	}
 	if len(args) == 2 && args[0] == "--close-tray" {
 		return installerExitCode(closeTray(args[1]))
 	}
@@ -415,13 +430,7 @@ normalTray:
 			return 1
 		}
 		if args[1] == "settings" {
-			if !windows.GetCurrentProcessToken().IsElevated() {
-				if trayElevate("settings", args[2], args[3]) != nil {
-					return 1
-				}
-				return 0
-			}
-			if showSettings(args[2], args[3], func(request *settingsRequest) (map[string]string, error) { return settingsOperation(args[2], request) }) != nil {
+			if launchDesktop(args[2], args[3], true) != nil {
 				return 1
 			}
 			return 0
@@ -451,7 +460,7 @@ normalTray:
 	if len(args) != 0 {
 		return 1
 	}
-	if err := runTray(root, serverUILanguage(lang)); err != nil {
+	if err := launchDesktop(root, serverUILanguage(lang), false); err != nil {
 		trayError(lang)
 		return 1
 	}
