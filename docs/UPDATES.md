@@ -1,7 +1,7 @@
 # Application language and updates / Язык и обновления
 
-Client/Server 0.9.0 and Manager 0.1.0 are published. Client/Server 0.10.0 and Manager 0.2.0 are in development; see the [release plan](RELEASE-NOTES-0.10.0.md).
-Опубликованы Client/Server 0.9.0 и Manager 0.1.0. Client/Server 0.10.0 и Manager 0.2.0 готовятся к выпуску; см. [план](RELEASE-NOTES-0.10.0.md).
+Client 0.10.0, Server 0.10.1 and Manager 0.2.0 are published previews; see the [release notes](RELEASE-NOTES-0.10.0.md).
+Опубликованы предварительные выпуски Client 0.10.0, Server 0.10.1 и Manager 0.2.0; см. [изменения](RELEASE-NOTES-0.10.0.md).
 
 ## Русский
 

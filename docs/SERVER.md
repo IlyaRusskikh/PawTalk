@@ -1,8 +1,8 @@
 # PawTalk Server — Linux и Windows
 
-**Server 0.9.0 / Manager 0.1.0 опубликованы.** Команды установки используют
+**Server 0.10.1 / Manager 0.2.0 опубликованы.** Команды установки используют
 подписанные релизы и настроенные публичные ключи из `manager/trust.json`.
-Клиент выпускается отдельно как `client-v0.9.0`. [Процесс выпуска](RELEASING.md).
+Клиент выпускается отдельно как `client-v0.10.0`. [Процесс выпуска](RELEASING.md).
 
 ## Требования
 
@@ -159,7 +159,7 @@ sudo python3 manager/pawtalkctl backup restore backup-012345abcdef --trust manag
 
 ## English
 
-Server 0.9.0 uses one Debian 12 / Ubuntu 24.04 amd64/arm64 host with Docker
+Server 0.10.1 uses one Debian 12 / Ubuntu 24.04 amd64/arm64 host with Docker
 Engine and Compose v2+, host networking and a persistent non-root Go/LiveKit room.
 Permanent Windows hosting uses native services and the shared Manager controller; see [Windows setup](WINDOWS-SERVER.md). Temporary rooms inside the Windows client remain.
 Start `sudo python3 manager/pawtalkctl --lang en install` from a trusted checkout

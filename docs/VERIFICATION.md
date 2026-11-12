@@ -1,5 +1,43 @@
 # Проверки
 
+## Опубликованы Client 0.10.0 / Server 0.10.1 / Manager 0.2.0 — 12 ноября 2026
+
+- Финальный код Client/Manager: `7a1a83d`; полный [branch CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43141283731),
+  [Manager-only](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43141301945) и
+  [Client-only](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43141307354) прошли
+  на Windows Server 2022/2025 и native Linux amd64/arm64. Все три branch artifacts
+  относятся к этому коммиту. Server выпущен из `b179de3`; следующие изменения
+  затронули только CI-загрузки и их регрессии.
+- Собственные tag workflow завершились успешно: [Server](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43137302074),
+  [Manager](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43143103343),
+  [Client](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43143215176).
+  Manager и Client выпущены параллельно из одного коммита; старые теги не заменялись.
+- Скачаны официальные assets каждого Release. Независимо проверены Ed25519,
+  component/version/channel/expiry, размер, SHA-256 и компактный набор файлов.
+  Client checksum связывает точный опубликованный EXE; архив лицензий содержит
+  LICENSE, THIRD_PARTY_NOTICES.md и licenses/. Server OCI index содержит amd64 и arm64;
+  скачанный digest соответствует подписанному манифесту, source/revision/version labels проверены.
+- Именно опубликованный Linux image прошёл lifecycle и два Electron-клиента с
+  синтетическим аудио; официальный Windows ZIP прошёл native console/job lifecycle,
+  вход, DPAPI, отзыв старых токенов, настройки/rebind, backup/rollback/restore.
+  SCM и настоящий NSIS installer/full uninstall проверены в обоих Windows CI.
+- Локально прошли 161 Node test без пропусков, Go tests/vet, Client build/NSIS и
+  packaged smoke, 46 Python tests в Linux (43 pass, 3 Windows-only skip), Windows
+  handoff/lock (4) и controller (15). Пройден реальный Compose lifecycle с E2EE и без;
+  первоначальный параллельный локальный запуск не дождался временного registry,
+  последовательный повтор завершился успешно. Проверены actionlint и website guard.
+- Регрессии охватывают StartPending/StopPending SCM, завершение NSIS handoff,
+  bounded invitation wait на настоящем межпроцессном lock, normal/reduced motion,
+  RU/EN и пустой/заполненный native clipboard. CI-запросы GitHub API авторизованы;
+  токены не уходят на asset/CDN-host, авторизованные metadata redirects запрещены.
+  Холодная загрузка LiveKit и выбор подписанного опубликованного Server проверены.
+
+Это автоматические и синтетические проверки. Локального native Linux/arm64,
+реальных микрофонов, внешних сетей, чистой установки Windows 10/11/Server 2019
+и UAC под другим пользователем не было; соответствующие аппаратные сценарии
+остаются в [ACCEPTANCE.md](ACCEPTANCE.md). Документальные ссылки обновлены после
+публикации; для этого отдельного docs-коммита используются локальные guards и `[skip ci]`.
+
 ## Server 0.10.1 — изолированный release scope
 
 Полная ветка 0.10.0 прошла CI и дала все три артефакта (run 43054557292).
@@ -8,7 +46,7 @@ Electron main smoke от отсутствующего Client dist в server-only
 публикации образов/релиза. Исправление загружает реальный renderer из Vite
 тестового harness и проверяет его origin; production dev-URL policy не меняется.
 Регрессия локально проверяется с временно убранными dist и native/build.
-Тег 0.10.0 не заменяется; следующий Server candidate — 0.10.1.
+Тег 0.10.0 не заменяется; исправление опубликовано как Server 0.10.1.
 Полный main CI дополнительно выявил гонку в наблюдении NSIS uninstall handoff:
 исчезновение ключа реестра ещё не означает завершение удаления программы.
 Регрессия ждёт исчезновения ключа и папки до следующей установки. Developer

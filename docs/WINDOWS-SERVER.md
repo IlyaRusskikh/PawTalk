@@ -1,8 +1,7 @@
 # Permanent Windows server / Постоянный Windows-сервер
 
-**Server 0.9.0 / Manager 0.1.0 — released / выпущены.**
-Описанные ниже новые функции готовятся в **Server 0.10.1 / Manager 0.2.0**, ветка
-`0.10.0`; эти версии ещё не опубликованы. [Изменения](RELEASE-NOTES-0.10.0.md).
+**Server 0.10.1 / Manager 0.2.0 — released previews / предварительные выпуски.**
+[Установщик Manager 0.2.0](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.2.0/PawTalk.Server.Manager.Setup.0.2.0.exe) · [Изменения](RELEASE-NOTES-0.10.0.md).
 Целевые ОС: Windows 10/11 x64 и Windows Server 2019/2022/2025 x64.
 Это матрица целей, а не утверждение о проверке всех этих ОС.
 На локальной машине проверяется настоящий Go/LiveKit, SQLite, Ed25519 и Windows
@@ -13,7 +12,7 @@ Windows CI-тестом на Windows Server 2022 и 2025: службы, EXE-ус
 
 ## Установка
 
-Скачайте `PawTalk.Server.Manager.Setup.X.Y.Z.exe` из `manager-vX.Y.Z`.
+Скачайте `PawTalk.Server.Manager.Setup.0.2.0.exe` из `manager-v0.2.0`.
 Запустите EXE с правами администратора, выберите язык и заполните настройки:
 публичный IPv4, порт, шифрование, SHA-256 key ID (не секретный ключ), лимит истории
 и общий переключатель автообновления сервера/Manager. Шифрование и обновления
@@ -82,7 +81,9 @@ SHA-256 key ID, лимит истории, автообновления Server �
 **Остановить сервер и выйти** останавливает сервер; **Закрыть значок** оставляет
 службу работать. Установщик предлагает ярлык на рабочем столе и показ значка при входе.
 Ярлыки **Status** и **Configure** в меню Пуск запрашивают повышение прав.
-Либо откройте PowerShell от администратора:
+Переустановка Manager сохраняет уже установленный Server. Для защиты активности
+нужен Server 0.10.1; после обновления EXE выполните `update now` из списка ниже.
+Откройте PowerShell от администратора:
 
 ```powershell
 $ctl = "$env:ProgramData\PawTalk Server Manager\pawtalkctl.exe"

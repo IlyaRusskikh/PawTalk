@@ -2,15 +2,15 @@
 
 [Русский](README.ru.md) · English
 
-Released: **Client 0.9.0 / Server 0.9.0 / Manager 0.1.0**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v0.9.0`. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
+Released: **Client 0.10.0 / Server 0.10.1 / Manager 0.2.0**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v*` releases. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
 
-In development: **Client 0.10.0 / Server 0.10.1 / Manager 0.2.0**. These versions are not published; download links below still point to the released builds. [Planned changes and upgrade order](docs/RELEASE-NOTES-0.10.0.md).
+[Release notes and upgrade order](docs/RELEASE-NOTES-0.10.0.md). Windows Server Manager adds tray controls, settings, ProgramData migration and optional full-data removal. Upgrade the installed Server to 0.10.1 for activity privacy; reinstalling Manager preserves the installed Server version.
 
 [![Verify and package](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)
 
 PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
 
-**[Download PawTalk 0.9.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.9.0/PawTalk.Setup.0.9.0.exe)** · [Get started](#get-started) · [Linux server](docs/SERVER.md)
+**[Download PawTalk 0.10.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.10.0/PawTalk.Setup.0.10.0.exe)** · [Get started](#get-started) · [Linux server](docs/SERVER.md) · [Windows server installer](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.2.0/PawTalk.Server.Manager.Setup.0.2.0.exe)
 
 ![PawTalk room with three participants, call controls and encrypted text chat](website/assets/room-chat-en.png)
 
@@ -18,7 +18,7 @@ PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows
 
 - **Get friends together for a game night.** Start a room on your PC and send an invitation. The room stays available while PawTalk runs, including in the system tray.
 - **Talk on your local network.** Share a LAN invitation when everyone is on the same network, whether you're at a LAN party or playing at home.
-- **Give your team a permanent room.** The upcoming release runs independently of the PawTalk app: Docker Compose on Linux or native services on Windows. The server computer stays on; the owner's PawTalk client can be closed. [Server guide](docs/SERVER.md).
+- **Give your team a permanent room.** The server runs independently of the PawTalk app: Docker Compose on Linux or native services on Windows. The server computer stays on; the owner's PawTalk client can be closed. [Server guide](docs/SERVER.md).
 
 ## Feature comparison
 
@@ -54,7 +54,7 @@ PawTalk takes inspiration from **Discord** for easy-to-join voice rooms and indi
 
 ## Get started
 
-1. **Install PawTalk.** [Download the installer](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.9.0/PawTalk.Setup.0.9.0.exe) on each Windows PC. Choose English or Russian.
+1. **Install PawTalk.** [Download the installer](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.10.0/PawTalk.Setup.0.10.0.exe) on each Windows PC. Choose English or Russian.
 2. **Pick a nickname.** Open **Settings → About me** and enter a nickname. You can test your microphone under **Voice**.
 3. **Get your friends together.** Select **Create a room**, give the room a name, and choose a password of at least 8 characters. Share the full invitation privately. Your friend opens **Join a room** and pastes the link.
 
@@ -79,7 +79,7 @@ $code = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/I
 <details>
 <summary>Which devices can run PawTalk?</summary>
 
-The desktop client runs on Windows 10/11 x64. The upcoming persistent server uses Docker Compose on Debian 12 / Ubuntu 24.04 amd64/arm64, or native services on Windows x64. See the [Windows setup and verification limits](docs/WINDOWS-SERVER.md). Voice travels through a LiveKit media server over WebRTC. [Server guide](docs/SERVER.md).
+The desktop client runs on Windows 10/11 x64. The persistent server uses Docker Compose on Debian 12 / Ubuntu 24.04 amd64/arm64, or native services on Windows x64. See the [Windows setup and verification limits](docs/WINDOWS-SERVER.md). Voice travels through a LiveKit media server over WebRTC. [Server guide](docs/SERVER.md).
 
 </details>
 
@@ -151,16 +151,17 @@ The [server configuration guide](docs/SERVER.md#конфигурация) covers
 
 ## Project status
 
-**Current public preview: [PawTalk Client 0.9.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.9.0)**. [Server 0.9.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.9.0) and [Manager 0.1.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.1.0) are released separately. This is not a stable release.
+**Current public preview: [PawTalk Client 0.10.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.10.0)**. [Server 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) and [Manager 0.2.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.2.0) are released separately. This is not a stable release.
 
-### Available in 0.9.0
+### Available in 0.10.0
 
 - Voice rooms with invitations, nickname-only entry, Push-to-Talk, per-user volume, RNNoise noise suppression and audio device selection.
 - Text chat with replies, Markdown, editing/deleting your own messages on updated servers, typing indicators, room previews, unread counts and static PNG/JPEG/WebP attachments up to 2 MiB.
 - Profiles and avatars, bookmarked rooms, light/dark/custom themes and Russian/English interfaces.
 - Notification sounds for joining, leaving and messages; adjustable shared notification volume and previews.
 - Optional experimental E2EE for voice and chat; the secret key is shared with participants via the invitation. [Security model](docs/E2EE.md).
-- Host a temporary room in the Windows app; the upcoming persistent Linux room uses Docker Compose. Persistent chat storage defaults to 128 MiB and evicts the oldest content when full. [Server guide](docs/SERVER.md).
+- Host a temporary room in the Windows app or a permanent Linux/Windows server with Server Manager. Persistent chat storage defaults to 128 MiB and evicts the oldest content when full. [Linux](docs/SERVER.md) · [Windows](docs/WINDOWS-SERVER.md).
+- Password-bearing invitations, missing E2EE-key prompts and deduplicated verified-room bookmarks. Updated servers require current access for activity previews and revoke old tokens after a native password reset.
 - Update checks and downloads with signed manifests, SHA-256 verification and fallback relays through compatible bookmarked rooms. [Update details](docs/UPDATES.md).
 
 ### Important limitations

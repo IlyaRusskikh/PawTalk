@@ -1,6 +1,6 @@
 # API v0.1
 
-## Независимые версии компонентов (Client/Server 0.10.0, Manager 0.2.0, unreleased)
+## Независимые версии компонентов (Client 0.10.0, Server 0.10.1, Manager 0.2.0)
 
 `GET /api/config` дополнен `apiProtocolVersion: 1` и массивом `capabilities`
 (`voice-v1`, `chat-v2`, `profiles-v1`). Legacy 0.8.0 не содержит поля
@@ -9,7 +9,7 @@
 Существующие поля/форматы подключения и chat negotiation сохранены.
 [Матрица совместимости](COMPATIBILITY.md).
 
-## Приватность активности — Server 0.10.0
+## Приватность активности — Server 0.10.1
 
 `GET /api/presence` и `GET /api/preview?readAfter=0&readFeed=…` требуют
 `Authorization: Bearer <chatToken>` текущего участника. Без действующего токена —
@@ -62,7 +62,7 @@ IP rebinding is a stopped, backed-up native maintenance operation, not an HTTP A
 - `GET /api/preview?readAfter=0&readFeed=...` требует `Authorization: Bearer`
   токена комнаты. Возвращает число участников, максимум три имени/профиля,
   feed и точный unread. В 0.5–0.9 `/api/presence` был публичным счётчиком;
-  с 0.10.0 он тоже требует токен комнаты.
+  с 0.10.1 он тоже требует токен комнаты.
 
 Ниже описан исходный API, сохранённый для совместимости.
 

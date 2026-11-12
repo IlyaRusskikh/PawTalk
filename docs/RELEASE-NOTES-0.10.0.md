@@ -1,11 +1,15 @@
-# Planned Client 0.10.0 / Server 0.10.1 / Manager 0.2.0
+# Client 0.10.0 / Server 0.10.1 / Manager 0.2.0 — 2026-11-12
 
 Server 0.10.0 tag verification stopped before publication: the server-only
 Electron harness incorrectly depended on Client `dist`. The tag remains unchanged;
-Server 0.10.1 carries the isolated-harness fix and will be verified separately.
+Server 0.10.1 carries the isolated-harness fix and passed its own release verification.
 
-Статус: **подготовка в ветке `0.10.0`, не опубликовано**. Ветки CI не являются
-проверками release tags. Merge и теги выполняются отдельно после принятия CI.
+Статус: **опубликованы предварительные выпуски**. Branch CI, отдельные component
+проверки и все три release-tag workflow прошли; подписи и хэши скачанных assets проверены.
+
+- [Server 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) · [CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43137302074)
+- [Manager 0.2.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.2.0) · [CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43143103343)
+- [Client 0.10.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.10.0) · [CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43143215176)
 
 ## Русский
 
@@ -23,18 +27,20 @@ Server 0.10.1 carries the isolated-harness fix and will be verified separately.
   Приглашение с паролем показывается один раз и защищается пользовательским DPAPI.
   Загрузка подписанных выпусков повторяется при временных сетевых ошибках.
 
-Порядок после отдельного разрешения: `server-v0.10.1` → `manager-v0.2.0` →
-`client-v0.10.0`. Каждая линия проходит собственный tag workflow. Исторические
-теги и опубликованные assets не заменяются. До публикации действуют прежние
-ссылки загрузки. На уже установленном сервере защита не включается от одного
+Сначала опубликован `server-v0.10.1`; затем `manager-v0.2.0` и `client-v0.10.0`
+выпущены параллельно из одного проверенного коммита. Каждая линия прошла собственный
+tag workflow. Исторические теги и опубликованные assets не заменяются.
+На уже установленном сервере защита не включается от одного
 обновления клиента или пересборки Manager; нужен обновлённый подписанный Server.
 Смена IP/порта требует нового приглашения и проверки проброса/брандмауэра.
 E2EE-секрет не восстанавливается из key ID и передаётся участникам отдельно.
+Переустановка Manager сохраняет версию установленного Server. Для обновления
+выполните `pawtalkctl update now` с правами администратора; [команды Windows](WINDOWS-SERVER.md).
 
 ## English
 
-Status: **development on `0.10.0`, unpublished**. Branch CI does not replace
-release-tag verification. Merge and component tags remain separate later steps.
+Status: **published previews**. Branch, isolated component and all three release-tag
+workflows passed; downloaded release signatures and hashes were verified.
 
 - **Client 0.10.0:** legacy Manager invitation/password paste, missing E2EE-key
   prompts and authenticated LAN `/rtc` routing. Verified rooms deduplicate across
@@ -47,11 +53,12 @@ release-tag verification. Merge and component tags remain separate later steps.
   config reuse and optional full-data uninstall. Password invitations appear once
   and use user DPAPI; signed-release downloads retry transient network failures.
 
-After separate approval, publish Server first, then Manager, then Client using
-`server-v0.10.1`, `manager-v0.2.0`, `client-v0.10.0`. Do not replace historical
-tags/assets or update download links before publication. Installed servers require
+Server was published first; `manager-v0.2.0` and `client-v0.10.0` then ran in parallel
+from the same verified commit. Do not replace historical tags/assets. Installed servers require
 an actual signed Server upgrade for privacy enforcement; rebuilding Manager or
 updating Client alone does not change the running binary. IP/port changes require
 new invitations and network-rule checks. Share the E2EE secret separately from its
 key ID. The embedded temporary-room API retains its pinned historical source plus
 the hash-pinned security backport in `bundled-server.json`.
+Reinstalling Manager preserves the installed Server version. Run `pawtalkctl update now`
+with administrative privileges to upgrade it; see the [Windows commands](WINDOWS-SERVER.md).

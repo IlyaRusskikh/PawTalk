@@ -1,12 +1,14 @@
 # Changelog / История изменений
 
-## Unreleased / Не выпущено
+## Client 0.10.0 / Server 0.10.1 / Manager 0.2.0 — 2026-11-12
 
-### Server 0.10.1
+### Verification fixes / Исправления проверок
 
 - Make the native login integration harness use its actual isolated Vite renderer without a Client dist/native build; expose redacted diagnostics on failure. Server 0.10.0 tag verification failed before publication; preserve that tag. / Проверка native-входа использует свой Vite-renderer без Client dist/native-сборки; при ошибке доступны очищенные от секретов подробности. Проверка тега Server 0.10.0 остановилась до публикации; тег сохранён.
 
-### Client 0.10.0 / Server 0.10.0 / Manager 0.2.0
+- Authenticate CI GitHub API downloads while withholding tokens from asset/CDN origins and refusing authenticated metadata redirects. Verify cold LiveKit downloads and signed published Server selection. / CI-загрузка GitHub API использует авторизацию; токен не передаётся на asset/CDN-host, редиректы авторизованных метаданных запрещены. Проверены холодная загрузка LiveKit и выбор подписанного опубликованного Server.
+
+### Features and migration / Возможности и миграция
 
 - Handle service startup/pending transitions before migration stops; let invitation requests briefly wait for startup maintenance without changing nonblocking watchdog locks. Cover native SCM transitions and actual cross-process Windows locking. / Миграция ждёт перехода запускаемой службы в состояние, принимающее Stop; запрос приглашения кратковременно ждёт стартовое обслуживание, сохраняя неблокирующие locks watchdog. Добавлены проверки переходов SCM и настоящей межпроцессной блокировки Windows.
 

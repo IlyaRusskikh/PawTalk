@@ -1,12 +1,13 @@
 # Независимые выпуски / Independent releases
 
-**Выпущены Client 0.9.0, Server 0.9.0, Manager 0.1.0 и Client bridge v0.8.1.**
-Подготовка: Client **0.10.0**, Server **0.10.1**, Manager **0.2.0**.
+**Выпущены Client 0.10.0, Server 0.10.1, Manager 0.2.0 и Client bridge v0.8.1.**
+Все три текущие линии опубликованы как preview; подписи и скачанные assets проверены.
 Проверка тега `server-v0.10.0` остановилась до публикации из-за зависимости
-server-only Electron smoke от Client dist. Тег не заменяется; исправление идёт в 0.10.1.
-Версии независимы; Manager получает собственный следующий minor.
+server-only Electron smoke от Client dist. Тег не заменяется; исправление выпущено в 0.10.1.
+Версии независимы. После принятого Server Manager и Client можно выпускать параллельно
+из одного проверенного коммита; каждый тег сохраняет собственный workflow и artifacts.
 Сначала branch/PR CI и ревью, затем отдельное разрешение на merge и component tags.
-План и порядок server-first: [RELEASE-NOTES-0.10.0](RELEASE-NOTES-0.10.0.md).
+Изменения и порядок server-first: [RELEASE-NOTES-0.10.0](RELEASE-NOTES-0.10.0.md).
 Локальные сборки используют `--publish never`. Push/tag/release требуют отдельного
 разрешения владельца. Опубликованные теги, EXE и образы не заменяются.
 
@@ -169,8 +170,9 @@ Client assets: `PawTalk.Setup.X.Y.Z.exe`, `update-manifest.json`, `SHA256SUMS.tx
 Не прикладывать отдельные лицензии или дубликат source archive; GitHub оставляет
 автоматические Source code ZIP/TAR. Все источники и сторонние notices сохраняются.
 README/site должны ссылаться на фактическую **клиентскую** загрузку, Server/Manager
-указываются отдельно. До публикации сохранять действующие ссылки на Client/Server
-0.9.0 и Manager 0.1.0; 0.10.0/0.2.0 обозначать как разработку. Не публиковать сайт обычным push/tag.
+указываются отдельно. Текущие ссылки: Client 0.10.0, Server 0.10.1 и Manager 0.2.0.
+Для следующего выпуска сохранять их до фактической публикации новых assets.
+Не публиковать сайт обычным push/tag.
 
 ## English
 
@@ -179,10 +181,11 @@ Client, Server and Manager have independent version sources and `client-v*`,
 from commit `3747a0d`, published before `client-v0.9.0` after separate review.
 Never replace historical tags or assets. The component release workflow validates
 its own source, runs verification and publishes only its component's assets.
-Stable/preview flags must match signed metadata. Keep current public Client/Server
-0.9.0 and Manager 0.1.0 links until new artifacts actually exist. The `0.10.0`
-development line prepares Client 0.10.0, Server 0.10.1 and Manager 0.2.0; branch CI does
-not authorize merging or publishing component tags.
+Stable/preview flags must match signed metadata. Client 0.10.0, Server 0.10.1 and
+Manager 0.2.0 are published previews. Keep their links until later assets actually
+exist. After accepting the Server release, independent Manager and Client tags may
+run in parallel from the same verified commit; each retains its own verification
+and artifacts. Branch CI alone does not authorize merging or publishing component tags.
 
 Release verification receives the selected component scope; branch/PR checks
 default to `all`. Client tags package only the Client, Server tags package only
