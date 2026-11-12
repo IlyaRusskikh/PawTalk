@@ -1,10 +1,8 @@
 # PawTalk Client 0.11.0 — First-run setup, shared server core and responsive sounds
 
-Подготовка preview, ещё не опубликован / Prepared preview, not yet published.
+Preview для Windows x64 / Preview for Windows x64.
 
-Планируемый установщик / Planned installer: `PawTalk.Setup.0.11.0.exe`.
-До публикации используйте [Client 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.10.1).
-Until publication use the linked published Client 0.10.1.
+[Скачать установщик / Download installer](https://github.com/IlyaRusskikh/PawTalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe).
 
 ## Русский
 
@@ -25,7 +23,7 @@ Until publication use the linked published Client 0.10.1.
 
 ### Установка и обновление
 
-После публикации полностью закройте Client через трей и установите новый EXE поверх текущей версии. Настройки и закладки сохраняются; первый запуск предлагает мастер новым профилям. Выход хоста закрывает временную комнату; после её пересоздания передайте новое приглашение. Постоянный Server 0.10.1 и Manager 0.2.1 обновлять ради этого Client не требуется. Новое встроенное ядро доставляется именно с Client, а не отдельным обновлением Server.
+Полностью закройте Client через трей и установите новый EXE поверх текущей версии. Настройки и закладки сохраняются; первый запуск предлагает мастер новым профилям. Выход хоста закрывает временную комнату; после её пересоздания передайте новое приглашение. Постоянный Server 0.10.1 и Manager 0.2.1 обновлять ради этого Client не требуется. Новое встроенное ядро доставляется именно с Client, а не отдельным обновлением Server.
 
 ## English
 
@@ -46,7 +44,7 @@ Until publication use the linked published Client 0.10.1.
 
 ### Install or update
 
-After publication quit Client from its tray and install over the current version. Settings/bookmarks remain; new profiles receive the setup guide. Quitting the host closes its temporary room; share a new invitation after recreating it. Permanent Server 0.10.1 and Manager 0.2.1 require no upgrade for this Client. The new embedded core arrives with Client, not a separate Server update.
+Quit Client from its tray and install over the current version. Settings/bookmarks remain; new profiles receive the setup guide. Quitting the host closes its temporary room; share a new invitation after recreating it. Permanent Server 0.10.1 and Manager 0.2.1 require no upgrade for this Client. The new embedded core arrives with Client, not a separate Server update.
 
 ## Ограничения и файлы / Limitations and assets
 
@@ -54,6 +52,13 @@ Preview. Синтетические аудиотесты не заменяют �
 
 Preview. Synthetic audio tests do not establish physical microphone, game/PTT, external-network or load acceptance. The EXE is not Authenticode-signed; the Ed25519 manifest and SHA-256 do not replace a Windows publisher signature.
 
-Планируемые файлы / Planned files: `PawTalk.Setup.0.11.0.exe`, `update-manifest.json`, `SHA256SUMS.txt`, `PawTalk.Licenses.0.11.0.zip` (LICENSE, THIRD_PARTY_NOTICES.md, licenses/). Hash the exact published EXE. Source remains AGPL-3.0-only; preserve third-party notices and GitHub's automatic source ZIP/TAR.
+- [PawTalk.Setup.0.11.0.exe](https://github.com/IlyaRusskikh/PawTalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe) — установщик / installer.
+- [SHA256SUMS.txt](https://github.com/IlyaRusskikh/PawTalk/releases/download/client-v0.11.0/SHA256SUMS.txt) — SHA-256 точного EXE / exact installer hash. Проверка / verify: `Get-FileHash .\PawTalk.Setup.0.11.0.exe -Algorithm SHA256`.
+- [update-manifest.json](https://github.com/IlyaRusskikh/PawTalk/releases/download/client-v0.11.0/update-manifest.json) — подписанный Ed25519 манифест для Client updater / signed Ed25519 manifest for the Client updater.
+- [PawTalk.Licenses.0.11.0.zip](https://github.com/IlyaRusskikh/PawTalk/releases/download/client-v0.11.0/PawTalk.Licenses.0.11.0.zip) — LICENSE, THIRD_PARTY_NOTICES.md, licenses/.
 
-До тега добавить точные ссылки на опубликованные файлы, исходники тега и подтверждённый tag CI; branch CI не является tag CI. / Before tagging, add exact asset/source links and confirmed tag CI when available; branch CI is not tag CI.
+[Исходники / Source](https://github.com/IlyaRusskikh/PawTalk/tree/client-v0.11.0) — AGPL-3.0-only; GitHub Source code ZIP/TAR относятся к этому тегу. Сторонние компоненты сохраняют свои лицензии / third-party components retain their licenses.
+
+[CHANGELOG](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.11.0/CHANGELOG.md) · [Совместимость / Compatibility](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.11.0/docs/COMPATIBILITY.md) · [Встроенный сервер / Bundled server](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.11.0/docs/BUNDLED-SERVER.md).
+
+[Успешный branch CI / Successful branch CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43210048330) проверил исходный кандидат, включая Windows 2022/2025 и Linux/Docker. Выпускной tag workflow выполняется отдельно; этот branch run не подтверждает публикацию. / This branch run verified the original candidate, including Windows 2022/2025 and Linux/Docker. The release-tag workflow runs separately; this branch run does not establish publication.

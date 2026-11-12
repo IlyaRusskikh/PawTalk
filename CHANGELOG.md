@@ -1,6 +1,6 @@
 # Changelog / История изменений
 
-## Client 0.11.0 — 2026-11-12 (prepared, not published / подготовлен, не опубликован)
+## Client 0.11.0 — 2026-11-12 (preview)
 
 - First-run guide for language, nickname, avatar and microphone setup; better settings scrolling and explicit reopening of update offers. / Мастер первого запуска для языка, никнейма, аватара и микрофона; улучшена прокрутка настроек и повторное открытие предложения обновления.
 - Project-owner Manya recordings for room/message notifications and microphone/audio toggles; preserve notification volume and chosen output. / Записи Мани, кошки автора проекта, для комнаты, сообщений и переключения микрофона/входящего звука с общей громкостью и выбранным выходом.
