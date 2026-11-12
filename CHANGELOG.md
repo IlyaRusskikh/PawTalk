@@ -1,6 +1,6 @@
 # Changelog / История изменений
 
-## Manager 0.3.0 — prepared, not published / подготовлен, не опубликован
+## Manager 0.3.0 — 2026-11-12 (preview)
 
 - Replace the active native settings/tray frontend with Electron/React. Show live SCM states and green/yellow/red server icons; move access, network/E2EE/history, backups, diagnostics and updates into one window. Exit stops Server; hiding removes only the tray icon. / Новый интерфейс Electron/React вместо прежнего активного Win32-окна: реальный статус SCM и зелёный/жёлтый/красный значок, доступ, сеть/E2EE/история, копии, диагностика и обновления в одном окне. Выход останавливает Server; скрытие убирает только значок.
 - Preserve stopped state when saving settings, backing up, restoring or updating Windows Server. Keep UI operations asynchronous and bounded; permit closing the window while work continues. / Сохранение настроек, создание/восстановление копии и обновление Windows Server сохраняют остановленное состояние. Операции имеют таймауты и не блокируют закрытие окна.
