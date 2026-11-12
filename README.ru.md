@@ -6,6 +6,8 @@
 
 Client 0.11.0 добавляет мастер первого запуска, отзывчивые звуки уведомлений и общее ядро встроенного сервера. [Заметки выпуска Client](docs/releases/client-v0.11.0.md).
 
+Manager **0.3.0 готовится** в отдельной ветке разработки: окно настроек Electron/React, цвета реального статуса в трее, управление доступом/копиями/диагностикой и автоматическая установка Windows Manager с проверкой подписи и хеша. Опубликованные загрузки выше не меняются. [Поведение и проверки нового Manager](docs/MANAGER-DESKTOP.md).
+
 [Изменения и порядок обновления](docs/RELEASE-NOTES-0.10.1.md). Windows Server Manager получил управление через трей, настройки, миграцию в ProgramData и полное удаление данных по выбору. Для защиты активности обновите установленный Server до 0.10.1: переустановка Manager сохраняет установленную версию Server.
 
 [![Проверка и сборка](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)

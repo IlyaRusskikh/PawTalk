@@ -207,6 +207,12 @@ jobs:
       - name: Build Windows Manager installer
         if: steps.scope.outputs.manager == 'true'
         run: node scripts/build-manager-windows.mjs
+      - name: Verify Manager desktop UI and native tray
+        if: steps.scope.outputs.manager == 'true'
+        run: node scripts/manager-desktop-smoke.mjs
+      - name: Packaged Manager hidden startup
+        if: steps.scope.outputs.manager == 'true'
+        run: node scripts/manager-packaged-smoke.mjs
       - name: Prepare Manager test host without an installer
         if: steps.scope.outputs.host == 'true' && steps.scope.outputs.manager != 'true'
         run: node scripts/build-manager-windows.mjs --runtime-only

@@ -143,15 +143,18 @@ class Controller:
                 raise ValueError('Backup has no room identity')
         return meta,archive
 
-    def restore_data(self,name):
+    def restore_data(self,name,resume=True):
         meta,archive = self.snapshot(name)
         previous = meta['state']
         restored = {**previous,'volume':previous['project']+'-restore-'+uuid.uuid4().hex[:12]}
         self.runtime.import_backup(restored,archive)
         atomic(self.template,base64.b64decode(meta['template'],validate=True))
         write_config(self.etc/'config.env',meta['config'])
-        self.runtime.start(restored,meta['config'])
-        self.runtime.healthy(restored,meta['config'],previous.get('identity'))
+        if resume:
+            self.runtime.start(restored,meta['config'])
+            self.runtime.healthy(restored,meta['config'],previous.get('identity'))
+        elif hasattr(self.runtime,'prepare'):
+            self.runtime.prepare(restored,meta['config'])
         save(self.state_file,restored)
         return restored
 
@@ -169,12 +172,15 @@ class Controller:
                 self.runtime.stop(state,config)
             except (RuntimeError,ValueError):
                 pass
-            self.restore_data(entry['backup'])
+            self.restore_data(entry['backup'],resume=entry.get('resume',True))
         else:
             atomic(self.template,base64.b64decode(entry['template'],validate=True))
             write_config(self.etc/'config.env',config)
-            self.runtime.start(state,config)
-            self.runtime.healthy(state,config,state.get('identity'))
+            if entry.get('resume',True):
+                self.runtime.start(state,config)
+                self.runtime.healthy(state,config,state.get('identity'))
+            elif hasattr(self.runtime,'prepare'):
+                self.runtime.prepare(state,config)
             save(self.state_file,state)
         if entry['kind'] == 'manager-update':
             for name,target in entry.get('pointers',{}).items():
@@ -211,8 +217,11 @@ class Controller:
             if 'identity' not in state:
                 self.runtime.create_volume(state)
             # Reinstall never resets data, identities, configuration or installed digest.
-            self.runtime.start(state,self.config())
-            state['identity'] = self.runtime.healthy(state,self.config(),state.get('identity'))
+            if WINDOWS and os.environ.get('PAWTALK_INSTALL_KEEP_STOPPED') == '1':
+                self.runtime.prepare(state,self.config())
+            else:
+                self.runtime.start(state,self.config())
+                state['identity'] = self.runtime.healthy(state,self.config(),state.get('identity'))
             save(self.state_file,state)
             return False
         state = dict(project='pawtalk-'+uuid.uuid4().hex[:12],version=manifest['version'],
@@ -234,8 +243,10 @@ class Controller:
     def create_backup(self):
         self.recover()
         entry = self.transaction(self.state(),self.config(),'backup')
+        entry['resume'] = bool(self.runtime.container(self.state(),self.config())['State'].get('Running'))
+        save(self.journal,entry)
         try:
-            name = self.backup(entry)
+            name = self.backup(entry,resume=entry['resume'])
         except Exception:
             self.recover()
             raise
@@ -265,13 +276,19 @@ class Controller:
         self.runtime.pull(candidate)
         # Validate old digest is still locally usable before stopping anything.
         self.runtime.verify_image(state)
+        was_running = bool(self.runtime.container(state,config)['State'].get('Running')) if WINDOWS else True
         entry = self.transaction(state,config,'server-update')
+        entry['resume'] = was_running
+        save(self.journal,entry)
         try:
             self.backup(entry,resume=False)
             entry['phase'] = 'applying'
             save(self.journal,entry)
-            self.runtime.start(candidate,config)
-            self.runtime.healthy(candidate,config,state['identity'])
+            if was_running:
+                self.runtime.start(candidate,config)
+                self.runtime.healthy(candidate,config,state['identity'])
+            elif hasattr(self.runtime,'prepare'):
+                self.runtime.prepare(candidate,config)
             save(self.state_file,candidate)
             self.finish()
             self.prune()
@@ -291,7 +308,10 @@ class Controller:
         if all(new[key] == old[key] for key in runtime_keys):
             write_config(self.etc/'config.env',new)
             return False
+        was_running = bool(self.runtime.container(state,old)['State'].get('Running'))
         entry = self.transaction(state,old,'configure')
+        entry['resume'] = was_running
+        save(self.journal,entry)
         try:
             self.backup(entry,resume=False)
             entry['phase'] = 'applying'
@@ -300,8 +320,11 @@ class Controller:
             if network_changed:
                 candidate['identity'] = self.runtime.reconfigure_network(state,old,new)
             write_config(self.etc/'config.env',new)
-            self.runtime.start(candidate,new) # Always the installed digest, never a config pin.
-            self.runtime.healthy(candidate,new,candidate['identity'])
+            if was_running:
+                self.runtime.start(candidate,new) # Always the installed digest, never a config pin.
+                self.runtime.healthy(candidate,new,candidate['identity'])
+            elif hasattr(self.runtime,'prepare'):
+                self.runtime.prepare(candidate,new)
             save(self.state_file,candidate)
             self.finish()
             self.prune()
@@ -319,11 +342,13 @@ class Controller:
         if self.state_file.exists():
             installed_manager = self.state()['managerVersion']
             entry = self.transaction(self.state(),self.config(),'restore')
+            entry['resume'] = bool(self.runtime.container(self.state(),self.config())['State'].get('Running'))
+            save(self.journal,entry)
             try:
                 self.backup(entry,resume=False)
                 entry['phase'] = 'applying'
                 save(self.journal,entry)
-                self.restore_data(name)
+                self.restore_data(name,resume=entry['resume'])
                 save(self.state_file,{**self.state(),'managerVersion':installed_manager})
             except Exception:
                 self.recover()

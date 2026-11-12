@@ -1,5 +1,12 @@
 # Changelog / История изменений
 
+## Manager 0.3.0 — prepared, not published / подготовлен, не опубликован
+
+- Replace the active native settings/tray frontend with Electron/React. Show live SCM states and green/yellow/red server icons; move access, network/E2EE/history, backups, diagnostics and updates into one window. Exit stops Server; hiding removes only the tray icon. / Новый интерфейс Electron/React вместо прежнего активного Win32-окна: реальный статус SCM и зелёный/жёлтый/красный значок, доступ, сеть/E2EE/история, копии, диагностика и обновления в одном окне. Выход останавливает Server; скрытие убирает только значок.
+- Preserve stopped state when saving settings, backing up, restoring or updating Windows Server. Keep UI operations asynchronous and bounded; permit closing the window while work continues. / Сохранение настроек, создание/восстановление копии и обновление Windows Server сохраняют остановленное состояние. Операции имеют таймауты и не блокируют закрытие окна.
+- Check Manager availability at startup and every ten minutes even with auto-install off. Verify signed installer metadata, exact size/SHA-256 and queue installation outside the maintenance service job; auto-install needs no additional consent. / Manager проверяет доступность обновлений при запуске и каждые 10 минут, в том числе без автоустановки. Подписанный установщик проверяется по размеру/SHA-256 и запускается вне job службы; автоустановка не требует дополнительного согласия.
+
+
 ## Client 0.11.0 — 2026-11-12 (preview)
 
 - First-run guide for language, nickname, avatar and microphone setup; better settings scrolling and explicit reopening of update offers. / Мастер первого запуска для языка, никнейма, аватара и микрофона; улучшена прокрутка настроек и повторное открытие предложения обновления.

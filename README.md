@@ -6,6 +6,8 @@ Released: **Client 0.11.0 / Server 0.10.1 / Manager 0.2.1**. The `v0.8.1` bridge
 
 Client 0.11.0 adds first-run setup, responsive notification sounds and a shared embedded server core. [Client release notes](docs/releases/client-v0.11.0.md).
 
+Manager **0.3.0 is being prepared** on a separate development branch: an Electron/React settings window, live status colors in the tray, access/backup/diagnostic actions and automatic Windows Manager installation with signature and hash checks. Published downloads above remain unchanged. [New Manager behavior and verification](docs/MANAGER-DESKTOP.md).
+
 [Release notes and upgrade order](docs/RELEASE-NOTES-0.10.1.md). Windows Server Manager adds tray controls, settings, ProgramData migration and optional full-data removal. Upgrade the installed Server to 0.10.1 for activity privacy; reinstalling Manager preserves the installed Server version.
 
 [![Verify and package](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)

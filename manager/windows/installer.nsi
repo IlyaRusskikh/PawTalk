@@ -76,8 +76,8 @@ LangString InviteNotice ${LANG_ENGLISH} "This invitation includes the room passw
 LangString InviteNotice ${LANG_RUSSIAN} "В приглашение включён пароль комнаты. Вставьте ссылку в PawTalk или отправьте лично. При включённом E2EE секретный ключ передаётся отдельно."
 LangString InviteCopy ${LANG_ENGLISH} "Copy invitation with password"
 LangString InviteCopy ${LANG_RUSSIAN} "Скопировать приглашение с паролем"
-LangString InviteMissing ${LANG_ENGLISH} "The old password was not saved. Use 'Reset password and copy invitation' in the server tray menu. Resetting the password interrupts calls."
-LangString InviteMissing ${LANG_RUSSIAN} "Старый пароль не сохранён. Выберите «Сменить пароль и скопировать приглашение» в меню сервера в трее. Смена пароля прерывает звонки."
+LangString InviteMissing ${LANG_ENGLISH} "The old password was not saved. Use Reset password in Server Manager settings. Resetting the password interrupts calls."
+LangString InviteMissing ${LANG_RUSSIAN} "Старый пароль не сохранён. Откройте настройки Manager и сбросьте пароль в разделе «Обзор». Смена пароля прерывает звонки."
 LangString DeleteTitle ${LANG_ENGLISH} "Settings and room data"
 LangString DeleteTitle ${LANG_RUSSIAN} "Настройки и данные комнаты"
 LangString DeleteOption ${LANG_ENGLISH} "Delete settings and data (including room history, keys and backups)"
@@ -92,8 +92,8 @@ LangString StartupOption ${LANG_ENGLISH} "Show the server in the tray when signi
 LangString StartupOption ${LANG_RUSSIAN} "Показывать сервер в трее при входе в Windows"
 LangString TrayRun ${LANG_ENGLISH} "Show PawTalk Server in the tray"
 LangString TrayRun ${LANG_RUSSIAN} "Показать PawTalk Server в трее"
-LangString TrayNotice ${LANG_ENGLISH} "The tray menu starts and stops the server. Choose 'Stop server and exit' to finish, or 'Close tray' to leave the Windows service running."
-LangString TrayNotice ${LANG_RUSSIAN} "Меню в трее включает и отключает сервер. «Остановить сервер и выйти» завершает работу; «Закрыть значок» оставляет службу Windows работающей."
+LangString TrayNotice ${LANG_ENGLISH} "The tray shows live server status. Exit Manager stops the server; Hide Manager hides only its icon. Settings contain access, backups and updates."
+LangString TrayNotice ${LANG_RUSSIAN} "Трей показывает статус сервера. «Выйти из менеджера» останавливает сервер; «Скрыть менеджер» убирает только значок. Доступ, копии и обновления находятся в настройках."
 LangString Settings ${LANG_ENGLISH} "Server settings"
 LangString Settings ${LANG_RUSSIAN} "Настройки сервера"
 LangString Address ${LANG_ENGLISH} "Reachable public IPv4 / Base port"
@@ -108,10 +108,10 @@ LangString Updates ${LANG_ENGLISH} "Enable automatic server and maintenance upda
 LangString Updates ${LANG_RUSSIAN} "Включить автообновление сервера и средства обслуживания"
 LangString Notice ${LANG_ENGLISH} "Server updates interrupt calls. Internet access requires reachable TCP/UDP ports."
 LangString Notice ${LANG_RUSSIAN} "Обновление сервера прерывает звонок. Для интернета нужны доступные TCP/UDP порты."
-LangString Failure ${LANG_ENGLISH} "Server setup failed. Use Status / Doctor to inspect the installation. Existing data has been preserved."
-LangString RemoveFailure ${LANG_ENGLISH} "Removal could not finish. Existing files and room data have been preserved. Use Status / Doctor, then run the uninstaller again."
-LangString RemoveFailure ${LANG_RUSSIAN} "Не удалось завершить удаление. Существующие файлы и данные комнаты сохранены. Откройте Status / Doctor, затем повторите удаление."
-LangString Failure ${LANG_RUSSIAN} "Не удалось настроить сервер. Проверьте установку через Status / Doctor. Существующие данные сохранены."
+LangString Failure ${LANG_ENGLISH} "Server setup failed. Open Diagnostics in Manager settings to inspect the installation. Existing data has been preserved."
+LangString RemoveFailure ${LANG_ENGLISH} "Removal could not finish. Existing files and room data have been preserved. Open Diagnostics in Manager settings, then run the uninstaller again."
+LangString RemoveFailure ${LANG_RUSSIAN} "Не удалось завершить удаление. Существующие файлы и данные комнаты сохранены. Откройте «Диагностику» в настройках Manager, затем повторите удаление."
+LangString Failure ${LANG_RUSSIAN} "Не удалось настроить сервер. Проверьте установку через «Диагностику» в настройках Manager. Существующие данные сохранены."
 
 Function .onInit
  SetRegView 64
@@ -269,8 +269,12 @@ Section "PawTalk Server Manager"
  InitPluginsDir
  SetOutPath "$PLUGINSDIR"
  File "/oname=pawtalk-server-tray.exe" "${STAGE}\pawtalk-server-tray.exe"
+ ExecWait '"$PLUGINSDIR\pawtalk-server-tray.exe" --server-stopped "$DataRoot"' $0
+ ${If} $0 == 0
+  System::Call 'kernel32::SetEnvironmentVariableW(w "PAWTALK_INSTALL_KEEP_STOPPED", w "1")'
+ ${EndIf}
  WriteRegStr HKLM "Software\PawTalk\ServerManager" "InstallStatus" "close-tray"
- ExecWait '"$PLUGINSDIR\pawtalk-server-tray.exe" --close-tray "$DataRoot"' $0
+ ExecWait '"$PLUGINSDIR\pawtalk-server-tray.exe" --close-tray-for-upgrade "$DataRoot"' $0
  ${If} $0 != 0
   WriteRegStr HKLM "Software\PawTalk\ServerManager" "InstallStatus" "close-tray failed (exit $0)"
   SetErrorLevel 1
@@ -303,7 +307,7 @@ Section "PawTalk Server Manager"
   SetErrorLevel 1
   Abort
  ${EndIf}
- CreateShortcut "$SMPROGRAMS\PawTalk Server Manager\Status.lnk" "$INSTDIR\pawtalkctl.exe" '--elevate --pause --root "$DataRoot" status'
+ Delete "$SMPROGRAMS\PawTalk Server Manager\Status.lnk"
  CreateShortcut "$SMPROGRAMS\PawTalk Server Manager\Configure.lnk" "$INSTDIR\pawtalk-server-tray.exe" '--tray-control settings "$DataRoot" $LanguageValue'
  InitPluginsDir
  FileOpen $0 "$PLUGINSDIR\setup.env" w

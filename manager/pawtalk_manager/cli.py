@@ -1,4 +1,4 @@
-"""Interactive host CLI; disabled automatic updates perform no network requests."""
+"""Shared host CLI. Windows checks Manager availability independently of auto-install."""
 import argparse
 import contextlib
 import json
@@ -173,6 +173,8 @@ def arguments(argv):
         sub.add_parser(name)
     settings = sub.add_parser('settings')
     settings.add_argument('--apply',action='store_true')
+    desktop = sub.add_parser('desktop')
+    desktop.add_argument('action',choices=['snapshot','apply','invitation','reset-password','backup-create','backup-restore','diagnostics','logs','check-updates','install-manager-update','install-server-update'])
     config = sub.add_parser('configure')
     config.add_argument('values',nargs='+',help='PAWTALK_FIELD=value')
     config.add_argument('--yes',action='store_true')
@@ -205,9 +207,102 @@ def handoff(command):
     os.execv(command[0],command)
 
 
+def desktop_updates(controller,keys,install=False):
+    config,state = controller.config(),controller.state()
+    try:
+        found = release.discover('manager',keys)
+    except (OSError,ValueError,RuntimeError):
+        save(controller.directory/'manager-update.json',dict(status='check-failed',checkedAt=int(time.time())))
+        publish_desktop_status(controller)
+        raise
+    from .native import installed_desktop_version
+    current=installed_desktop_version() if WINDOWS else state['managerVersion']
+    available = found is not None and release.semver(found['version']) > release.semver(current)
+    status = dict(status='available' if available else 'current',version=found['version'] if available else None,checkedAt=int(time.time()))
+    save(controller.directory/'manager-update.json',status)
+    if available and install:
+        bundles.activate(controller,found,keys)
+        status['status']='installing'
+        save(controller.directory/'manager-update.json',status)
+    publish_desktop_status(controller)
+    return status
+
+
+def publish_desktop_status(controller):
+    if not WINDOWS: return
+    import hashlib
+    file=controller.directory/'manager-update.json'
+    status=json.loads(file.read_text()) if file.exists() else dict(status='idle')
+    config=controller.config()
+    name=hashlib.sha256(os.path.normcase(os.path.normpath(str(controller.root))).encode()).hexdigest()[:16]
+    save(Path(os.environ['PAWTALK_MANAGER_HOST']).parent/('status-'+name+'.json'),dict(update=status,language=config['PAWTALK_LANGUAGE'],autoManager=config['PAWTALK_MANAGER_AUTO_UPDATE']=='true',serverVersion=controller.state()['version'],managerVersion=controller.state()['managerVersion']))
+
+
+def desktop_execute(controller,action,request):
+    if action == 'snapshot':
+        publish_desktop_status(controller)
+        updates=controller.directory/'manager-update.json'
+        return dict(values=controller.config(),serverVersion=controller.state()['version'],
+                    managerVersion=controller.state()['managerVersion'],
+                    update=json.loads(updates.read_text()) if updates.exists() else dict(status='idle'),
+                    backups=[dict(name=p.name,created=int(p.stat().st_mtime)) for p in sorted(controller.backups.glob('backup-*'),reverse=True) if p.is_dir() and re.fullmatch(r'backup-[a-f0-9]{12}',p.name)])
+    if action == 'apply':
+        apply_settings(controller,request)
+        return desktop_execute(controller,'snapshot',{})
+    if action in ('invitation','reset-password'):
+        value=controller.runtime.invitation(controller.state(),controller.config(),reset=action=='reset-password')
+        if value is None: return dict(unavailable=True)
+        return value
+    if action == 'backup-create': return dict(name=controller.create_backup())
+    if action == 'backup-restore':
+        name=request.get('name','')
+        if not re.fullmatch(r'backup-[a-f0-9]{12}',name): raise ValueError('Invalid backup name')
+        controller.restore(name)
+        return desktop_execute(controller,'snapshot',{})
+    if action == 'diagnostics': return doctor(controller,controller.config()['PAWTALK_LANGUAGE'])
+    if action == 'logs':
+        file=controller.root/'var/log/pawtalk/server.log'
+        if not file.exists(): return dict(text='')
+        with file.open('rb') as stream:
+            stream.seek(max(0,file.stat().st_size-65536)); text=stream.read().decode(errors='replace')
+        text=re.sub(r'Initial room password[^\n]*','[redacted]',text)
+        return dict(text=re.sub(r'pawtalk://\S+','[invitation redacted]',text))
+    keys=json.loads((controller.etc/'trust.json').read_text())
+    if action == 'check-updates': return desktop_updates(controller,keys,install=controller.config()['PAWTALK_MANAGER_AUTO_UPDATE']=='true')
+    if action == 'install-manager-update': return desktop_updates(controller,keys,install=True)
+    if action == 'install-server-update':
+        found=release.discover('server',keys)
+        if found: controller.update_server(found)
+        return desktop_execute(controller,'snapshot',{})
+    raise ValueError('Unknown desktop operation')
+
+
+def desktop_main(root,action):
+    if not WINDOWS or not admin():
+        print(json.dumps(dict(error='permission'))); return 1
+    try:
+        raw=sys.stdin.buffer.read(65537)
+        if len(raw)>65536: raise ValueError('Request too large')
+        request=json.loads(raw or b'{}')
+        if not isinstance(request,dict): raise ValueError('Invalid request')
+        protect(root)
+        controller=Controller(root)
+        with lock(controller.directory/'operation.lock',timeout=10):
+            if not controller.state_file.exists(): raise ValueError('No installed room')
+            controller.recover()
+            value=desktop_execute(controller,action,request)
+        print(json.dumps(dict(value=value),ensure_ascii=False)); return 0
+    except (OSError,ValueError,RuntimeError,KeyError) as error:
+        message=str(error)
+        code='conflict' if 'changed elsewhere' in message else 'busy' if 'lock' in message.lower() or 'operation is' in message.lower() else 'failed'
+        print(json.dumps(dict(error=code))); return 1
+
+
 def main(argv=None):
     args = arguments(argv)
     lang,source = args.lang or 'ru',Path(__file__).resolve().parent.parent
+    if args.command == 'desktop':
+        return desktop_main(args.root,args.action)
     if args.self_test:
         for module in bundles.MODULES:
             compile((source/'pawtalk_manager'/f'{module}.py').read_text(encoding='utf-8'),module,'exec')
@@ -372,7 +467,14 @@ def main(argv=None):
             config = controller.config()
             keys = json.loads((controller.etc/'trust.json').read_text())
             if args.command == 'periodic':
+                if WINDOWS:
+                    try:
+                        desktop_updates(controller,keys,install=config['PAWTALK_MANAGER_AUTO_UPDATE']=='true')
+                    except (OSError,ValueError,RuntimeError):
+                        pass # A Manager network failure must not block independent Server maintenance.
                 for component in ['manager','server']:
+                    if WINDOWS and component == 'manager':
+                        continue
                     if config[f'PAWTALK_{component.upper()}_AUTO_UPDATE'] != 'true':
                         continue
                     found = release.discover(component,keys)

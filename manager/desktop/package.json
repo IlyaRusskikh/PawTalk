@@ -1,0 +1,8 @@
+{
+  "name": "pawtalk-server-manager",
+  "version": "0.3.0",
+  "description": "PawTalk Server Manager",
+  "author": "PawTalk contributors",
+  "license": "AGPL-3.0-only",
+  "main": "main.cjs"
+}

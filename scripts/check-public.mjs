@@ -19,7 +19,7 @@ try {
   process.exit(1);
 }
 
-const forbidden = /(?:^|\/)(?:plans|node_modules|release|dist|manager\/generated|native\/build|resources\/server|src\/generated)(?:\/|$)|(?:^|\/)CONTINUE\.md$|(?:^|\/)connection-report[^/]*\.json$|\.(?:log|exe|test|key|pem|pfx|p12|crt|cer)$/i;
+const forbidden = /(?:^|\/)(?:plans|node_modules|release|dist|manager\/generated|manager\/desktop\/(?:dist|icons)|native\/build|resources\/server|src\/generated)(?:\/|$)|(?:^|\/)CONTINUE\.md$|(?:^|\/)connection-report[^/]*\.json$|\.(?:log|exe|test|key|pem|pfx|p12|crt|cer)$/i;
 const secretPatterns = [
   ['private key', /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/],
   ['GitHub token', /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b/],
@@ -54,6 +54,8 @@ for (const name of candidates) {
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
+const desktopVersion=JSON.parse(await readFile(path.join(root,'manager/desktop/package.json'),'utf8')).version;
+if(desktopVersion!==(await readFile(path.join(root,'manager/VERSION'),'utf8')).trim())issues.add('Manager desktop and VERSION differ');
 if (pkg.version !== lock.version || pkg.version !== lock.packages[''].version) issues.add('Package and lockfile versions differ');
 if (pkg.license !== 'AGPL-3.0-only' || lock.packages[''].license !== pkg.license) issues.add('Expected consistent AGPL-3.0-only metadata');
 if (!parseVersion(pkg.version)) issues.add('Expected X.Y.Z or X.Y.Z-prerelease version');

@@ -20,6 +20,7 @@ Client 0.11.0, Server 0.10.1 and Manager 0.2.1 are published. See the [Client re
 | Раздел | Описание |
 | --- | --- |
 | [Установка VPS](SERVER.md) | Docker Compose, мастер, отдельные подписанные обновления, backup/restore |
+| [Manager desktop](MANAGER-DESKTOP.md) | Новый Windows UI, трей, обновления и границы проверки / New Windows UI and verification |
 | [Совместимость](COMPATIBILITY.md) | API protocol, Client ↔ Server, переход 0.8.1 и Windows self-host |
 | [Обновления клиента и язык](UPDATES.md) | Подписанные обновления клиента и резервная передача через комнаты |
 
