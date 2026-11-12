@@ -2,6 +2,10 @@
 
 ## Unreleased / Не выпущено
 
+### Server 0.10.1
+
+- Make the native login integration harness use its actual isolated Vite renderer without a Client dist/native build; expose redacted diagnostics on failure. Server 0.10.0 tag verification failed before publication; preserve that tag. / Проверка native-входа использует свой Vite-renderer без Client dist/native-сборки; при ошибке доступны очищенные от секретов подробности. Проверка тега Server 0.10.0 остановилась до публикации; тег сохранён.
+
 ### Client 0.10.0 / Server 0.10.0 / Manager 0.2.0
 
 - Wait for Windows service processes and pending SCM deletion before reinstalling; record only fixed installer phases for diagnostics. Exercise drag behavior under explicit normal/reduced motion instead of inheriting runner settings. / Повторная установка ждёт завершения процессов служб и удаления записи SCM; диагностика сохраняет только фиксированные этапы установки. Drag-проверки явно задают обычные/уменьшенные анимации вместо настроек runner.

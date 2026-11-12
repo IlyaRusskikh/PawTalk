@@ -11,6 +11,9 @@ const bare = process.env.PAWTALK_TEST_INVITATION;
 const password = process.env.PAWTALK_TEST_PASSWORD;
 const key = process.env.PAWTALK_TEST_MEDIA_KEY;
 assert.ok(bare && password && key,'requires isolated native smoke fixture');
+const ui = new URL(process.env.PAWTALK_UI_TEST_URL);
+assert.equal(ui.protocol,'http:');assert.equal(ui.hostname,'127.0.0.1');
+assert.equal(ui.pathname,'/');assert.ok(!ui.username&&!ui.password&&!ui.search&&!ui.hash);
 const fetch = net.fetch.bind(net);
 net.fetch = async (value,options) => {
  const response = await fetch(value,options);
@@ -22,10 +25,17 @@ net.fetch = async (value,options) => {
  return response;
 };
 app.on('browser-window-created',(_event,win)=>{
+ // Keep production main/preload/IPC intact, but load this harness's real Vite
+ // renderer. Server-only verification intentionally has no Client dist/native
+ // build, and must not accidentally succeed by finding a stale dist directory.
+ const loadFile=win.loadFile.bind(win);
+ win.loadFile=(file,...args)=>path.resolve(file)===path.resolve(__dirname,'../dist/index.html')?win.loadURL(ui.href):loadFile(file,...args);
+ win.webContents.on('did-fail-load',(_event,code,description)=>console.error('Native renderer load failed:',code,description));
  win.webContents.once('did-finish-load',async()=>{
   const run=code=>win.webContents.executeJavaScript(code,true);
-  const until=async code=>{for(let i=0;i<120;i++){if(await run(code))return;await new Promise(r=>setTimeout(r,50));}throw Error('native connect UI timed out');};
+  const until=async code=>{for(let i=0;i<400;i++){if(await run(code))return;await new Promise(r=>setTimeout(r,50));}throw Error('native connect UI timed out');};
   try {
+   assert.equal(new URL(win.webContents.getURL()).origin,ui.origin,'actual harness renderer, independent of Client dist');
    await until(`!!document.querySelector('.home-actions')`);
    const link=bare+'#password='+encodeURIComponent(password);
    await run(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent.startsWith('Присоединиться к комнате')).click()`);

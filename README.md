@@ -4,7 +4,7 @@
 
 Released: **Client 0.9.0 / Server 0.9.0 / Manager 0.1.0**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v0.9.0`. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
 
-In development on `0.10.0`: **Client 0.10.0 / Server 0.10.0 / Manager 0.2.0**. These versions are not published; download links below still point to the released builds. [Planned changes and upgrade order](docs/RELEASE-NOTES-0.10.0.md).
+In development: **Client 0.10.0 / Server 0.10.1 / Manager 0.2.0**. These versions are not published; download links below still point to the released builds. [Planned changes and upgrade order](docs/RELEASE-NOTES-0.10.0.md).
 
 [![Verify and package](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)
 

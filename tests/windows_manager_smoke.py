@@ -156,10 +156,13 @@ try:
         env.pop('ELECTRON_RUN_AS_NODE',None)
         backend=subprocess.run([os.environ['PAWTALK_ELECTRON'],str(Path(__file__).resolve().parent/'windows-connect-main.cjs')],env=env,capture_output=True,timeout=90,creationflags=subprocess.CREATE_NO_WINDOW)
         if backend.returncode:
+            import re
             report=(backend.stdout+backend.stderr).decode(errors='replace')
             for value in [password.decode().strip(),media_key,invitation.decode().strip()]:report=report.replace(value,'[redacted]')
+            report=re.sub(r'eyJ[A-Za-z0-9._-]+','[token redacted]',report)
             file=Path(__file__).resolve().parents[1]/'release/qa/native-windows-main-failure.txt'
             file.parent.mkdir(parents=True,exist_ok=True);file.write_text(report,encoding='utf-8')
+            print(report,file=sys.stderr)
             raise RuntimeError('Native Electron login check failed; see release/qa/native-windows-main-failure.txt')
         print('PASS real restricted Electron login: E2EE prompt, password link, manual IP/key and LAN proxy hostname regression')
         runtime.compose(c.state(),c.config(),'restart','server')
@@ -405,7 +408,10 @@ try:
                 removed=subprocess.run([str(program/'Uninstall.exe'),'/S'],capture_output=True,timeout=120)
                 if removed.returncode:raise RuntimeError('Actual EXE uninstall failed')
                 for attempt in range(100):
-                    if not exists_key(uninstall_key):break
+                    # NSIS hands uninstall off to its temporary executable.
+                    # The registry key disappears before its final directory
+                    # cleanup; wait for both before starting the next installer.
+                    if not exists_key(uninstall_key) and not program.exists():break
                     time.sleep(0.2)
                 else:raise RuntimeError('Windows uninstaller did not finish')
                 assert (install_root/'var/lib/pawtalk-manager/installed.json').is_file()

@@ -4,7 +4,7 @@
 
 Выпущены **Client 0.9.0 / Server 0.9.0 / Manager 0.1.0**. Переходный клиент `v0.8.1` обеспечивает обнаружение `client-v0.9.0` установленными клиентами 0.8.0. Постоянные серверы Linux и Windows используют независимые подписанные обновления. [Процесс выпуска](docs/RELEASING.md) · [Совместимость](docs/COMPATIBILITY.md).
 
-В разработке в ветке `0.10.0`: **Client 0.10.0 / Server 0.10.0 / Manager 0.2.0**. Эти версии ещё не опубликованы; ссылки ниже ведут на выпущенные сборки. [План изменений и порядок обновления](docs/RELEASE-NOTES-0.10.0.md).
+В разработке: **Client 0.10.0 / Server 0.10.1 / Manager 0.2.0**. Эти версии ещё не опубликованы; ссылки ниже ведут на выпущенные сборки. [План изменений и порядок обновления](docs/RELEASE-NOTES-0.10.0.md).
 
 [![Проверка и сборка](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml/badge.svg)](https://github.com/IlyaRusskikh/PawTalk/actions/workflows/check.yml)
 

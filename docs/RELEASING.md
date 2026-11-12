@@ -1,7 +1,9 @@
 # Независимые выпуски / Independent releases
 
 **Выпущены Client 0.9.0, Server 0.9.0, Manager 0.1.0 и Client bridge v0.8.1.**
-Ветка подготовки `0.10.0`: Client/Server **0.10.0**, Manager **0.2.0**.
+Подготовка: Client **0.10.0**, Server **0.10.1**, Manager **0.2.0**.
+Проверка тега `server-v0.10.0` остановилась до публикации из-за зависимости
+server-only Electron smoke от Client dist. Тег не заменяется; исправление идёт в 0.10.1.
 Версии независимы; Manager получает собственный следующий minor.
 Сначала branch/PR CI и ревью, затем отдельное разрешение на merge и component tags.
 План и порядок server-first: [RELEASE-NOTES-0.10.0](RELEASE-NOTES-0.10.0.md).
@@ -179,7 +181,7 @@ Never replace historical tags or assets. The component release workflow validate
 its own source, runs verification and publishes only its component's assets.
 Stable/preview flags must match signed metadata. Keep current public Client/Server
 0.9.0 and Manager 0.1.0 links until new artifacts actually exist. The `0.10.0`
-development branch prepares Client/Server 0.10.0 and Manager 0.2.0; branch CI does
+development line prepares Client 0.10.0, Server 0.10.1 and Manager 0.2.0; branch CI does
 not authorize merging or publishing component tags.
 
 Release verification receives the selected component scope; branch/PR checks

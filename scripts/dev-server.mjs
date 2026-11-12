@@ -16,7 +16,7 @@ if (flags.some(flag => !['--build', '--smoke'].includes(flag)) ||
 }
 const build = flags.includes('--build');
 const smoke = flags.includes('--smoke');
-const version = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+const version = readFileSync(new URL('../server/VERSION', import.meta.url), 'utf8').trim();
 // CI builds this exact standalone image first (scripts/server-smoke.mjs).
 const image = smoke ? 'pawtalk-server:local' : build ? 'pawtalk-server:dev'
   : `ghcr.io/ilyarusskikh/pawtalk-server:${version}`;

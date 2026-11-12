@@ -1,4 +1,8 @@
-# Planned Client 0.10.0 / Server 0.10.0 / Manager 0.2.0
+# Planned Client 0.10.0 / Server 0.10.1 / Manager 0.2.0
+
+Server 0.10.0 tag verification stopped before publication: the server-only
+Electron harness incorrectly depended on Client `dist`. The tag remains unchanged;
+Server 0.10.1 carries the isolated-harness fix and will be verified separately.
 
 Статус: **подготовка в ветке `0.10.0`, не опубликовано**. Ветки CI не являются
 проверками release tags. Merge и теги выполняются отдельно после принятия CI.
@@ -9,7 +13,7 @@
   Manager, запрос недостающего E2EE-ключа, LAN-подключение через проверенный `/rtc`.
   Проверенные комнаты объединяются в одну закладку независимо от текста ссылки
   и пароля. Закладка с устаревшим доступом не раскрывает активность и просит вход.
-- **Server 0.10.0:** счётчик, участники и непрочитанное требуют текущей авторизации.
+- **Server 0.10.1:** счётчик, участники и непрочитанное требуют текущей авторизации.
   Сброс пароля native-сервера отзывает старые голосовые/чат/preview токены.
   Новая команда `serve rebind` меняет IP и сертификат с сохранением пароля и истории.
 - **Manager 0.2.0:** Windows-трей, ярлыки и серверный значок; окно текущих настроек
@@ -19,7 +23,7 @@
   Приглашение с паролем показывается один раз и защищается пользовательским DPAPI.
   Загрузка подписанных выпусков повторяется при временных сетевых ошибках.
 
-Порядок после отдельного разрешения: `server-v0.10.0` → `manager-v0.2.0` →
+Порядок после отдельного разрешения: `server-v0.10.1` → `manager-v0.2.0` →
 `client-v0.10.0`. Каждая линия проходит собственный tag workflow. Исторические
 теги и опубликованные assets не заменяются. До публикации действуют прежние
 ссылки загрузки. На уже установленном сервере защита не включается от одного
@@ -35,7 +39,7 @@ release-tag verification. Merge and component tags remain separate later steps.
 - **Client 0.10.0:** legacy Manager invitation/password paste, missing E2EE-key
   prompts and authenticated LAN `/rtc` routing. Verified rooms deduplicate across
   invitations/password changes. Locked bookmarks disclose no room activity.
-- **Server 0.10.0:** current authorization for occupancy, participants and unread
+- **Server 0.10.1:** current authorization for occupancy, participants and unread
   counts; native password reset revokes previous voice/chat/preview tokens.
   `serve rebind` changes IP/certificate while preserving password and history.
 - **Manager 0.2.0:** native Windows tray, shortcuts/server badge, current-settings
@@ -44,7 +48,7 @@ release-tag verification. Merge and component tags remain separate later steps.
   and use user DPAPI; signed-release downloads retry transient network failures.
 
 After separate approval, publish Server first, then Manager, then Client using
-`server-v0.10.0`, `manager-v0.2.0`, `client-v0.10.0`. Do not replace historical
+`server-v0.10.1`, `manager-v0.2.0`, `client-v0.10.0`. Do not replace historical
 tags/assets or update download links before publication. Installed servers require
 an actual signed Server upgrade for privacy enforcement; rebuilding Manager or
 updating Client alone does not change the running binary. IP/port changes require

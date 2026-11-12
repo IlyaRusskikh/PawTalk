@@ -1,5 +1,19 @@
 # Проверки
 
+## Server 0.10.1 — изолированный release scope
+
+Полная ветка 0.10.0 прошла CI и дала все три артефакта (run 43054557292).
+Проверка тега server-v0.10.0 (run 43057408623) выявила зависимость нового
+Electron main smoke от отсутствующего Client dist в server-only scope, до
+публикации образов/релиза. Исправление загружает реальный renderer из Vite
+тестового harness и проверяет его origin; production dev-URL policy не меняется.
+Регрессия локально проверяется с временно убранными dist и native/build.
+Тег 0.10.0 не заменяется; следующий Server candidate — 0.10.1.
+Полный main CI дополнительно выявил гонку в наблюдении NSIS uninstall handoff:
+исчезновение ключа реестра ещё не означает завершение удаления программы.
+Регрессия ждёт исчезновения ключа и папки до следующей установки. Developer
+Docker launcher берёт версию из server/VERSION независимо от версии Client.
+
 ## Client/Server 0.10.0, Manager 0.2.0 — подготовка ветки, 12 ноября 2026
 
 Первый PR CI подтвердил Linux amd64/arm64 и Windows 2025 SCM/EXE lifecycle,
