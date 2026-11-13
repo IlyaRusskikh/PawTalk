@@ -1,6 +1,6 @@
 # Changelog / История изменений
 
-## Manager 0.4.0 — in preparation / в подготовке
+## Manager 0.4.0 — 2026-11-13 (preview)
 
 - Open the Manager window on the first tray double-click or Settings command. Launch the GUI without Windows SW_HIDE overriding its first show, including restart after an update. / Окно Manager открывается с первого двойного клика по трею или команды настроек; запуск GUI и перезапуск после обновления больше не передают SW_HIDE, подавляющий первый показ окна.
 

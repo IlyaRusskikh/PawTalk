@@ -1,6 +1,6 @@
 # Server Manager 0.4.0 desktop
 
-В подготовке / In preparation: [Manager 0.4.0](releases/manager-v0.4.0.md). Последний опубликованный / Latest published: [Manager 0.3.0](releases/manager-v0.3.0.md).
+Опубликован preview / Published preview: [Manager 0.4.0](releases/manager-v0.4.0.md). Предыдущий выпуск / Previous release: [Manager 0.3.0](releases/manager-v0.3.0.md).
 Downloads and installation: [Windows Server](WINDOWS-SERVER.md).
 
 ## Русский
@@ -84,7 +84,7 @@ signed-bundle update mechanism.
 
 ## Local Server packages / Локальные пакеты Server
 
-In development, not yet released / В разработке, ещё не опубликовано.
+Available in Manager 0.4.0 / Доступно в Manager 0.4.0.
 
 **Удаление копий / Delete backups.** В разделе «Резервные копии» у каждой записи
 есть «Удалить». Подтверждение показывает дату и имя выбранной копии. После

@@ -1,5 +1,29 @@
 # Проверки
 
+## Manager 0.4.0 — 2026-11-13 (preview)
+
+[Branch CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43367751636) и
+[отдельный выпускной tag CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43371241627)
+успешны на Linux amd64/arm64 и Windows 2022/2025. Выпускной workflow подписал
+Manager-манифест и опубликовал EXE, общий bundle и манифест.
+
+Скачанные три файла проверены: подпись Ed25519 по корням доверия из неизменённого
+тега, component/version/schemas/preview/срок действия, размеры, SHA-256 и GitHub
+digests совпадают. Все 21 файл bundle, включая LICENSE и THIRD_PARTY_NOTICES.md,
+совпадает с исходниками тега с учётом перевода строк.
+
+Both branch and separate release-tag workflows passed on Linux amd64/arm64 and
+Windows 2022/2025. The release workflow signed and published all three assets.
+Downloaded files passed trusted Ed25519, version/schema/channel/expiry,
+size/SHA-256/GitHub digest and complete bundle source/license comparison checks.
+
+EXE SHA-256: `dbfbd01f8ccc9b0f761393f4146750cf0488d2ae91ac65844997b46b0430ecff`.
+Bundle SHA-256: `36fc2f3e5f7bb0acb52e91e5f033e18ffd752a2620a1a2611820f6dc7159234e`.
+
+Внешняя сеть, физические аудиоустройства и фактическая автоустановка задачей
+SYSTEM остаются отдельными сценариями приёмки. / External-network, physical-device
+and actual SYSTEM auto-installer acceptance remain separate.
+
 ## Manager 0.3.0 — preview
 
 [Выпускной tag CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43228717099)

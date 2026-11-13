@@ -75,4 +75,12 @@ Local-build backup migration to a fresh installation through Linux/CLI is unsupp
 
 [Успешный branch CI / Successful branch verification](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43367751636) проверил Linux amd64/arm64 и Windows 2022/2025. Выпускной workflow заново проверяет Manager перед подписью и публикацией через этот файл заметок. / Branch verification passed on Linux amd64/arm64 and Windows 2022/2025. The release workflow verifies Manager again before signing and publishing with this notes file.
 
+[Успешный выпускной tag CI / Successful release-tag workflow](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43371241627) проверил Manager на Linux amd64/arm64 и Windows 2022/2025, подписал манифест и опубликовал три ассета. / Verified Manager on Linux amd64/arm64 and Windows 2022/2025, signed its manifest and published all three assets.
+
+После публикации скачанные EXE, bundle и манифест проверены: доверенная Ed25519-подпись, версия/схемы/preview-канал, размеры, SHA-256 и GitHub digests совпадают. Все 21 файл исходников и лицензий bundle соответствует тегу с учётом перевода строк. / Downloaded release assets passed trusted Ed25519 signature, version/schema/preview channel, size, SHA-256 and GitHub digest checks. All 21 bundle source/license files match the tag after newline normalization.
+
+SHA-256 Windows EXE: `dbfbd01f8ccc9b0f761393f4146750cf0488d2ae91ac65844997b46b0430ecff`.
+
+SHA-256 Linux bundle: `36fc2f3e5f7bb0acb52e91e5f033e18ffd752a2620a1a2611820f6dc7159234e`.
+
 Existing 0.3.0 files and release notes remain unchanged. / Опубликованные файлы и заметки 0.3.0 не меняются.

@@ -1,7 +1,7 @@
 # Независимые выпуски / Independent releases
 
-**Выпущены Client 0.11.0, Server 0.10.1, Manager 0.3.0 и Client bridge v0.8.1.**
-Manager 0.4.0 готовится локально: [заметки](releases/manager-v0.4.0.md); тег и файлы ещё не опубликованы. Client/Server не меняют версии вместе с ним.
+**Выпущены Client 0.11.0, Server 0.10.1, Manager 0.4.0 и Client bridge v0.8.1.**
+Manager 0.4.0 опубликован: [заметки и файлы](releases/manager-v0.4.0.md), [успешный tag CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43371241627). Client/Server не меняют версии вместе с ним.
 
 Все три текущие линии опубликованы как preview; подписи и скачанные assets проверены.
 Проверка тега `server-v0.10.0` остановилась до публикации из-за зависимости
@@ -9,7 +9,7 @@ server-only Electron smoke от Client dist. Тег не заменяется; �
 Версии независимы. После принятого Server Manager и Client можно выпускать параллельно
 из одного проверенного коммита; каждый тег сохраняет собственный workflow и artifacts.
 Сначала branch/PR CI и ревью, затем отдельное разрешение на merge и component tags.
-Текущий Client: [client-v0.11.0](releases/client-v0.11.0.md); текущий Manager: [manager-v0.3.0](releases/manager-v0.3.0.md); патч Server: [RELEASE-NOTES-0.10.1](RELEASE-NOTES-0.10.1.md); исходный порядок server-first: [RELEASE-NOTES-0.10.0](RELEASE-NOTES-0.10.0.md).
+Текущий Client: [client-v0.11.0](releases/client-v0.11.0.md); текущий Manager: [manager-v0.4.0](releases/manager-v0.4.0.md); патч Server: [RELEASE-NOTES-0.10.1](RELEASE-NOTES-0.10.1.md); исходный порядок server-first: [RELEASE-NOTES-0.10.0](RELEASE-NOTES-0.10.0.md).
 Локальные сборки используют `--publish never`. Push/tag/release требуют отдельного
 разрешения владельца. Опубликованные теги, EXE и образы не заменяются.
 
@@ -76,7 +76,7 @@ Bridge commit `3747a0d` нужен для воспроизводимости с�
 доступность. Истечение подписанного bridge-манифеста может потребовать ручной
 установки актуального клиента; старые assets не заменяются.
 
-Manager 0.3.0 опубликован отдельно от Client 0.11.0; новый Windows UI и полный installer
+Manager 0.4.0 опубликован отдельно от Client 0.11.0; новый Windows UI и полный installer
 доставляются Manager-тегом, не Client-тегом. [Контракт desktop и обновлений](MANAGER-DESKTOP.md).
 
 ## CI и публикация

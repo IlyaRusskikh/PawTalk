@@ -2,11 +2,11 @@
 
 [Русский](README.ru.md) · English
 
-Released: **Client 0.11.0 / Server 0.10.1 / Manager 0.3.0**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v*` releases. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
+Released: **Client 0.11.0 / Server 0.10.1 / Manager 0.4.0**. The `v0.8.1` bridge enables installed 0.8.0 clients to discover `client-v*` releases. Permanent Linux and Windows servers use independent signed updates. [Release process](docs/RELEASING.md) · [Compatibility](docs/COMPATIBILITY.md).
 
 Client 0.11.0 adds first-run setup, responsive notification sounds and a shared embedded server core. [Client release notes](docs/releases/client-v0.11.0.md).
 
-Manager **0.3.0 preview is released**: an Electron/React settings window, live status colors in the tray, access/backup/diagnostic actions and automatic Windows Manager installation with signature and hash checks. [New Manager behavior and verification](docs/MANAGER-DESKTOP.md).
+Manager **0.4.0 preview is released**: an Electron/React settings window, live status colors in the tray, access/backup/diagnostic actions and automatic Windows Manager installation with signature and hash checks. [New Manager behavior and verification](docs/MANAGER-DESKTOP.md).
 
 [Release notes and upgrade order](docs/RELEASE-NOTES-0.10.1.md). Windows Server Manager adds tray controls, settings, ProgramData migration and optional full-data removal. Upgrade the installed Server to 0.10.1 for activity privacy; reinstalling Manager preserves the installed Server version.
 
@@ -14,7 +14,7 @@ Manager **0.3.0 preview is released**: an Electron/React settings window, live s
 
 PawTalk is an **alternative to Discord and TeamSpeak for voice chat** on Windows. Get friends together before a match, talk to your team while you play, or give your community a room it can come back to. Join with an invitation and a nickname. No account required.
 
-**[Download PawTalk 0.11.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe)** · [Get started](#get-started) · [Linux server](docs/SERVER.md) · [Windows server installer](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.3.0/PawTalk.Server.Manager.Setup.0.3.0.exe)
+**[Download PawTalk 0.11.0 for Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe)** · [Get started](#get-started) · [Linux server](docs/SERVER.md) · [Windows server installer](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.4.0/PawTalk.Server.Manager.Setup.0.4.0.exe)
 
 ![PawTalk room with three participants, call controls and encrypted text chat](website/assets/room-chat-en.png)
 
@@ -115,13 +115,13 @@ For setup or connection issues, see the [troubleshooting guide (Russian)](docs/G
 
 Server Manager setup downloads signed releases from GitHub. Temporary connection resets, timeouts and incomplete downloads are retried up to three attempts. If setup still fails with a download error (including Windows error 10054), check access to `api.github.com`, `github.com` and `release-assets.githubusercontent.com` through your network/VPN, then run setup again.
 
-**Manager 0.4.0 is in preparation.** It opens on the first tray double-click or Settings command, fixes settings loading, removes the installer invitation page, and keeps network update checks from blocking backups or diagnostics. Manager and Server have separate check/install actions. Backups can be deleted from the UI after confirmation. **Updates → Server → Install from file…** accepts a Windows Server ZIP or portable package, with signature status, explicit approval and rollback. See [local packages](docs/MANAGER-DESKTOP.md#local-server-packages--локальные-пакеты-server).
+**Manager 0.4.0 preview is released.** It opens on the first tray double-click or Settings command, fixes settings loading, removes the installer invitation page, and keeps network update checks from blocking backups or diagnostics. Manager and Server have separate check/install actions. Backups can be deleted from the UI after confirmation. **Updates → Server → Install from file…** accepts a Windows Server ZIP or portable package, with signature status, explicit approval and rollback. See [local packages](docs/MANAGER-DESKTOP.md#local-server-packages--локальные-пакеты-server).
 
 On Windows, Server Manager installs a separate **PawTalk Server** tray icon with a small server badge in the upper-right corner. Right-click it to start or stop the server. **Stop server and exit** stops the server and closes the icon; **Close tray** keeps the Windows service running. The installer offers desktop and sign-in startup shortcuts; the Start menu shortcut is always installed. Starting or stopping the service may request administrator approval.
 
 **Server settings…** in the tray opens a window with the current IPv4 address, port, E2EE/key ID, history limit, Server/Manager automatic updates and language. Applying runtime changes creates a backup, restarts the room and checks its health; failures restore the previous configuration/data. Changing IP or port requires a new invitation and updated forwarding/firewall rules; IP changes require the updated Server with `serve rebind` support. A window opened before another configuration change must be reopened before saving.
 
-In the development build, Windows Manager copies the password-bearing invitation (`#password=…`) from **Overview**, and the installer does not display credentials. Overview can also explicitly reset a forgotten password; resetting interrupts active calls and invalidates old password-bearing invitations. A local copy is protected with Windows DPAPI and the private data-root permissions. Older installations without a saved password require a reset. If E2EE is enabled, the client asks for the shared secret separately; the installer’s key ID is not that secret. The client also separates the old Manager’s two unlabelled lines when pasted together.
+Windows Manager copies the password-bearing invitation (`#password=…`) from **Overview**, and the installer does not display credentials. Overview can also explicitly reset a forgotten password; resetting interrupts active calls and invalidates old password-bearing invitations. A local copy is protected with Windows DPAPI and the private data-root permissions. Older installations without a saved password require a reset. If E2EE is enabled, the client asks for the shared secret separately; the installer’s key ID is not that secret. The client also separates the old Manager’s two unlabelled lines when pasted together.
 
 The Windows program is installed in `%ProgramData%\PawTalk Server Manager`, with room settings, history and backups in `%ProgramData%\PawTalk`. It remains a service that runs before user sign-in. Reinstallation reuses an existing config and skips the settings form; it preserves the room identity. The EXE uninstaller always removes program files and services. Its **Delete settings and data** checkbox is off by default; enabling it also removes the room, keys, history and backups. For scripted full removal, use `Uninstall.exe /S /DELETE-DATA`. The Manager installer and uninstaller use the server badge too. LAN clients use the authenticated server’s `/rtc` proxy even if a published standalone server advertises its public IP.
 
@@ -158,7 +158,7 @@ The [server configuration guide](docs/SERVER.md#конфигурация) covers
 
 ## Project status
 
-**Current public preview: [PawTalk Client 0.11.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.11.0)**. [Server 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) and [Manager 0.3.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.3.0) are released separately. This is not a stable release.
+**Current public preview: [PawTalk Client 0.11.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.11.0)**. [Server 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) and [Manager 0.4.0](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.4.0) are released separately. This is not a stable release.
 
 ### Available in 0.11.0
 
