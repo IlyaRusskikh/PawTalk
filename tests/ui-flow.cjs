@@ -108,11 +108,16 @@ app.whenReady().then(async () => {
   await wait();
   assert.match(await run(`document.querySelector('.host-check-result.success').textContent`), /через интернет/);
   assert.equal(await run(`window.testCalls().filter(v=>v[0]==='host-check').at(-1)[1]`), 18443);
+  assert.ok(await run(`document.querySelector('.host-check').textContent.includes('WAN и внешний IPv4 совпадают')`));
+  assert.ok(await run(`document.querySelector('.host-check').textContent.includes('192.168.1.20') && document.querySelector('.host-check').textContent.includes('203.0.113.20')`));
   await require('node:fs/promises').writeFile(path.join(output,'host-check-success.png'),(await win.webContents.capturePage()).toPNG());
   await setPort(18444); await wait();
   assert.equal(await run(`document.querySelector('.host-check-result')`), null, 'changing the port invalidates previous success');
   await click('Проверить'); await wait(); await wait();
   assert.match(await run(`document.querySelector('.host-check-result.warning').textContent`), /локальную сеть/);
+  assert.ok(await run(`document.querySelector('.host-check').textContent.includes('NAT/CGNAT')`));
+  assert.ok(await run(`document.querySelector('.host-check').textContent.includes('не доказывает невозможность')`));
+  assert.equal(await run(`document.querySelector('.host-check-result.success')`), null, 'observing an external IP does not imply reachability');
   await setPort(18445); await wait(); await click('Проверить'); await wait(); await wait();
   assert.ok(await run(`document.querySelector('.host-check').textContent.includes('ошибка внешней проверки')`),'checker outage has a specific explanation');
   assert.match(await run(`document.querySelector('.host-check-result.warning').textContent`), /неизвестна/);
@@ -143,6 +148,32 @@ app.whenReady().then(async () => {
   await run(`document.querySelector('dialog:last-of-type .join-submit').click()`);await wait();
   assert.equal(await run(`window.testCalls().filter(v=>v[0]==='connect').at(-1)[1].e2eeKey`),serverKey);
   await require('node:fs/promises').writeFile(path.join(output,'e2ee-vps-join.png'),(await win.webContents.capturePage()).toPNG());
+  for (const language of ['ru','en']) for (const reduced of [false,true]) {
+   await run(`localStorage.setItem('pawtalk.language',${JSON.stringify(language)})`);
+   win.reload();
+   for (let i=0;i<100;i++) {
+    if (await run(`document.documentElement.lang===${JSON.stringify(language)} && !!document.querySelector('.home-actions')`)) break;
+    await wait();
+   }
+   win.setSize(940,760);
+   win.webContents.debugger.attach('1.3');
+   await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:reduced?'reduce':'no-preference'}]});
+   win.webContents.debugger.detach();
+   await click(language==='en'?'Create a room':'Создать комнату'); await wait();
+   for (const port of [18443,18444,18447,18445]) {
+    await setPort(port); await wait(); await click(language==='en'?'Check':'Проверить'); await wait(); await wait();
+    assert.ok(await run(`!!document.querySelector('.host-check-result')`));
+    assert.ok(await run(`document.querySelector('.host-check-network').textContent.includes('203.0.113.20')`));
+    assert.equal(await run(`document.querySelector('.modal-body').scrollWidth <= document.querySelector('.modal-body').clientWidth + 1`),true,'no horizontal overflow');
+    const centers=await run(`(()=>{const [a,b]=document.querySelector('.host-check-heading').children;const ar=a.getBoundingClientRect(),br=b.getBoundingClientRect();return Math.abs((ar.top+ar.height/2)-(br.top+br.height/2))})()`);
+    assert.ok(centers<=2,'check action aligned with heading');
+    if (language==='en') assert.equal(await run(`/[А-Яа-яЁё]/.test(document.querySelector('.host-check').textContent)`),false,'network diagnostics fully localized');
+    await run(`(()=>{document.querySelector('.host-check-network').open=true;document.querySelector('.host-check').scrollIntoView({block:'start'})})()`); await wait();
+    await require('node:fs/promises').writeFile(path.join(output,`host-ip-${language}-${reduced?'reduced':'normal'}-${port}.png`),(await win.webContents.capturePage()).toPNG());
+   }
+   await run(`document.querySelector('dialog form > button.primary').scrollIntoView({block:'center'})`); await wait();
+   assert.equal(await run(`(()=>{const r=document.querySelector('dialog form > button.primary').getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight})()`),true,'create action stays reachable');
+  }
   console.log('UI flow passed: nested password dialog, invite, bookmark reconnect/delete, settings.');
   win.destroy(); app.exit(0);
  } catch(e) { console.error(e); win.destroy(); app.exit(1); }

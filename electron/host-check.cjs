@@ -2,6 +2,7 @@ const { HostError } = require('./host-errors.cjs');
 const { t } = require('../shared/i18n.cjs');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const { isIP } = require('node:net');
 
 function parseResult(line) {
   if (!line.startsWith('PAWTALK_PREFLIGHT_RESULT:')) return null;
@@ -12,6 +13,14 @@ function parseResult(line) {
     throw new HostError(t("Неверный результат проверки сети."));
   }
   const value = { state: result.state, tcp: result.tcp, udp: result.udp };
+  if (result.network !== undefined) {
+    const network = result.network;
+    if (!network || !['same', 'additional-nat', 'different', 'unavailable'].includes(network.comparison) ||
+        ['lanIP', 'wanIP', 'externalIP', 'probeIP'].some(key => typeof network[key] !== 'string' || (network[key] !== '' && isIP(network[key]) !== 4))) {
+      throw new HostError(t("Неверный результат проверки сети."));
+    }
+    value.network = Object.fromEntries(['lanIP', 'wanIP', 'externalIP', 'probeIP', 'comparison'].map(key => [key, network[key]]));
+  }
   if (['no-interface', 'no-public-ip', 'ports-in-use', 'check-failed', 'checker-unavailable'].includes(result.reason)) value.reason = result.reason;
   return value;
 }

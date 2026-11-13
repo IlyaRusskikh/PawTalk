@@ -603,5 +603,13 @@
   "Настроить позже": "Set up later",
   "Назад": "Back",
   "Далее": "Next",
-  "Готово": "Done"
+  "Готово": "Done",
+  "Адреса и внешние сервисы": "Addresses and external services",
+  "WAN и внешний IPv4 совпадают. Доступность портов проверяется отдельно.": "WAN and external IPv4 match. Port reachability is checked separately.",
+  "WAN роутера непубличный. Перед ним может быть другой домашний роутер или NAT/CGNAT провайдера. Одного проброса на этом роутере может быть недостаточно; это не доказывает невозможность хостинга.": "The router WAN is not public. Another home router or provider NAT/CGNAT may be upstream. Forwarding on this router alone may be insufficient; this does not prove hosting impossible.",
+  "Публичный WAN отличается от внешнего IPv4. Проверьте VPN, прокси, несколько интернет-подключений или NAT выше роутера. Проверяем порты на WAN-адресе.": "Public WAN differs from external IPv4. Check VPN, proxy, multiple internet connections or upstream NAT. Ports are tested at the WAN address.",
+  "Сравнение WAN и внешнего IPv4 не выполнено полностью. Это не означает, что хостинг недоступен.": "WAN/external IPv4 comparison is incomplete. This does not mean hosting is unavailable.",
+  "LAN: {0} · WAN роутера: {1} · Внешний IPv4: {2}": "LAN: {0} · Router WAN: {1} · External IPv4: {2}",
+  "Адрес проверки портов: {0}": "Port-check address: {0}",
+  "Сравнение IP обращается к ipify, при сбое — к icanhazip. Внешний IPv4 отражает маршрут HTTPS-запроса, включая VPN/прокси. Сервисы получают IP запроса; проверка check-host.net создаёт публичные отчёты об IP и портах. Настройки сервера и приглашения не меняются.": "IP comparison contacts ipify, with icanhazip as fallback. External IPv4 reflects the HTTPS request route, including VPN/proxy. Services receive the request IP; check-host.net creates public IP/port reports. Server settings and invitations are unchanged."
 }

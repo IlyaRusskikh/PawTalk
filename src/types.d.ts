@@ -2,7 +2,11 @@ interface UpdateState { status: 'idle' | 'checking' | 'check-failed' | 'availabl
 // Chromium supports AudioContext.setSinkId; TypeScript's DOM declarations lag it.
 interface AudioContext { setSinkId(sinkId: string): Promise<void>; }
 interface HostStatus { running: boolean; e2ee?: boolean; name?: string; port?: number; mapped?: boolean; internet?: boolean; localAddress?: string; invitations?: string[]; message?: string; }
-interface HostCheckResult { state: 'internet' | 'unconfirmed' | 'error' | 'cancelled'; tcp: [boolean, boolean]; udp: boolean; reason?: 'no-interface' | 'no-public-ip' | 'ports-in-use' | 'check-failed' | 'checker-unavailable'; }
+interface HostCheckResult {
+  state: 'internet' | 'unconfirmed' | 'error' | 'cancelled'; tcp: [boolean, boolean]; udp: boolean;
+  reason?: 'no-interface' | 'no-public-ip' | 'ports-in-use' | 'check-failed' | 'checker-unavailable';
+  network?: { lanIP: string; wanIP: string; externalIP: string; probeIP: string; comparison: 'same' | 'additional-nat' | 'different' | 'unavailable' };
+}
 interface Window {
   desktop?: {
     copyChatText?(text: string): Promise<void>;

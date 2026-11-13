@@ -29,8 +29,8 @@ contextBridge.exposeInMainWorld('desktop', {
  checkHost: port => {
   calls.push(['host-check', port]);
   return new Promise(resolve => {
-   const finish = state => { clearTimeout(timer); cancelCheck = null; resolve({ state, tcp: [state === 'internet', state === 'internet'], udp: state === 'internet', ...(state === 'error' ? {reason:'checker-unavailable'} : {}) }); };
-   const timer = setTimeout(() => finish(port === 18443 ? 'internet' : port === 18444 ? 'unconfirmed' : 'error'), port === 18446 ? 10000 : 200);
+   const finish = state => { clearTimeout(timer); cancelCheck = null; resolve({ state, tcp: [state === 'internet', state === 'internet'], udp: state === 'internet', network: {lanIP:'192.168.1.20',wanIP:port === 18444 ? '100.64.1.20' : '203.0.113.20',externalIP:port === 18445 ? '' : port === 18447 ? '198.51.100.20' : '203.0.113.20',probeIP:'203.0.113.20',comparison:port === 18444 ? 'additional-nat' : port === 18445 ? 'unavailable' : port === 18447 ? 'different' : 'same'}, ...(state === 'error' ? {reason:'checker-unavailable'} : {}) }); };
+   const timer = setTimeout(() => finish(port === 18443 ? 'internet' : [18444,18447].includes(port) ? 'unconfirmed' : 'error'), port === 18446 ? 10000 : 200);
    cancelCheck = () => finish('cancelled');
   });
  },

@@ -139,6 +139,39 @@ function Test-PublicIPv4([string]$Address) {
         ($b[0] -eq 192 -and $b[1] -eq 168) -or ($b[0] -eq 100 -and $b[1] -ge 64 -and $b[1] -le 127))
 }
 
+function Get-ObservedPublicIPv4([string[]]$Services = @('https://api4.ipify.org', 'https://ipv4.icanhazip.com')) {
+    Add-Type -AssemblyName System.Net.Http
+    $handler = New-Object Net.Http.HttpClientHandler
+    $handler.AllowAutoRedirect = $false
+    $client = New-Object Net.Http.HttpClient($handler)
+    $client.Timeout = [TimeSpan]::FromSeconds(3)
+    $client.MaxResponseContentBufferSize = 128
+    try {
+        foreach ($service in $Services) {
+            try {
+                $value = $client.GetStringAsync($service).GetAwaiter().GetResult().Trim()
+                if ($value -match '^\d{1,3}(\.\d{1,3}){3}$' -and (Test-PublicIPv4 $value)) { return $value }
+            } catch { }
+        }
+    } finally { $client.Dispose() }
+    return ''
+}
+
+function Get-IPComparison([string]$WAN, [string]$Observed) {
+    $parsed = $null
+    if ([Net.IPAddress]::TryParse($WAN, [ref]$parsed) -and $parsed.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork -and -not (Test-PublicIPv4 $WAN)) { return 'additional-nat' }
+    if (-not (Test-PublicIPv4 $WAN) -or -not (Test-PublicIPv4 $Observed)) { return 'unavailable' }
+    if ($WAN -eq $Observed) { return 'same' }
+    return 'different'
+}
+
+function Get-PortCheckAddress([string]$WAN, [string]$Observed, [string]$Override) {
+    if ($Override) { if (Test-PublicIPv4 $Override) { return $Override }; return '' }
+    if (Test-PublicIPv4 $WAN) { return $WAN }
+    if (Test-PublicIPv4 $Observed) { return $Observed }
+    return ''
+}
+
 function New-PortProbe([string]$Address, [int]$TestPort, [ValidateSet('TCP', 'UDP')][string]$Protocol, [string]$ApiBase = 'https://check-host.net') {
     Add-Type -AssemblyName System.Net.Http
     $handler = New-Object Net.Http.HttpClientHandler
@@ -286,6 +319,7 @@ function Start-SelfHostCheck {
     $cancelled = $false
     $checkError = $false
     $reason = ''
+    $network = @{ lanIP = ''; wanIP = ''; externalIP = ''; probeIP = ''; comparison = 'unavailable' }
     $cancelRead = $null
     if ($Application) {
         $cancelBuffer = New-Object byte[] 1
@@ -300,6 +334,7 @@ function Start-SelfHostCheck {
         $configuration = $configurations | Sort-Object @{ Expression = { $_.NetAdapter.HardwareInterface -eq $true }; Descending = $true }, @{ Expression = { $_.IPv4Interface.InterfaceMetric } } | Select-Object -First 1
         if (-not $configuration) { $reason = 'no-interface'; throw 'No IPv4 interface with a default gateway found.' }
         $localIP = $configuration.IPv4Address[0].IPAddress
+        $network.lanIP = $localIP
         Write-Host "LAN address: $localIP (disable VPN for this test)"
         foreach ($number in @($Port, ($Port + 1))) {
             $listener = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Any, $number)
@@ -318,8 +353,19 @@ function Start-SelfHostCheck {
             $external = Invoke-UPnPAction $service 'GetExternalIPAddress' ([ordered]@{})
             $wan = $external.SelectSingleNode('//*[local-name()="NewExternalIPAddress"]').InnerText
             Write-Host "Router WAN IPv4: $wan"
-            Write-Host 'Using router WAN IPv4. If upstream NAT/VPN changes your public IP, rerun with -PublicIP <IPv4>.'
         } catch { Write-Warning $_.Exception.Message }
+        $network.wanIP = $wan
+        Write-Host 'Comparing WAN with the IPv4 observed by an HTTPS service (ipify; icanhazip fallback). These services receive your request IP.'
+        $network.externalIP = Get-ObservedPublicIPv4
+        if ($network.externalIP) { Write-Host "HTTPS-observed external IPv4: $($network.externalIP)" }
+        else { Write-Warning 'External IPv4 lookup unavailable. Router WAN or -PublicIP will still be used when public.' }
+        $network.comparison = Get-IPComparison $wan $network.externalIP
+        switch ($network.comparison) {
+            'same' { Write-Host 'WAN and HTTPS-observed IPv4 match. Port reachability still needs checking.' }
+            'additional-nat' { Write-Warning 'Router WAN is not public. There may be another home router or provider NAT/CGNAT upstream. Forwarding on this router alone may be insufficient; this does not prove hosting impossible.' }
+            'different' { Write-Warning 'Public WAN and HTTPS-observed IPv4 differ. Check VPN, proxy, multiple uplinks or upstream NAT. Testing the router WAN unless -PublicIP is supplied.' }
+            'unavailable' { Write-Warning 'WAN/external IPv4 comparison is incomplete. This does not prove hosting impossible.' }
+        }
         if ($cancelRead -and $cancelRead.IsCompleted) { $cancelled = $true; return }
         if ($service) {
             foreach ($mapping in @(@{ Port = $Port; Protocol = 'TCP' }, @{ Port = $Port + 1; Protocol = 'TCP' }, @{ Port = $Port + 2; Protocol = 'UDP' })) {
@@ -339,9 +385,10 @@ function Start-SelfHostCheck {
         Write-Host 'TCP and UDP are checked automatically via check-host.net; no browser is needed.'
         Write-Host 'The service receives your public IP and ports, and creates public reports.'
         Write-Host 'Manual TCP fallback: https://2ip.io/ru/check-port/ (press T only if BOTH ports are open there).'
-        $address = $wan
-        if ($PublicIP) { $address = $PublicIP }
+        $address = Get-PortCheckAddress $wan $network.externalIP $PublicIP
         if (Test-PublicIPv4 $address) {
+            $network.probeIP = $address
+            Write-Host "External port-check target: $address (HTTPS lookup may use a VPN/proxy; -PublicIP overrides this target)."
             if (-not $SkipTcpCheck) {
                 foreach ($number in @($Port, ($Port + 1))) {
                     try { $tcpProbes += New-TcpProbe $address $number } catch { Write-Warning "TCP checker unavailable on $number`: $($_.Exception.Message)" }
@@ -362,7 +409,7 @@ function Start-SelfHostCheck {
                         $number = $listener.LocalEndpoint.Port
                         $remote = $connection.Client.RemoteEndPoint.Address.ToString()
                         Write-Host "TCP connection accepted on $number."
-                        if ((Test-PublicIPv4 $remote) -and $remote -ne $wan -and $remote -ne $PublicIP) { $tcpSeen[$number] = $true }
+                        if ((Test-PublicIPv4 $remote) -and $remote -ne $wan -and $remote -ne $PublicIP -and $remote -ne $network.externalIP) { $tcpSeen[$number] = $true }
                     }
                     finally { $connection.Dispose() }
                 }
@@ -423,7 +470,7 @@ function Start-SelfHostCheck {
                 $testPort = $_
                 [bool]($tcpConfirmed -or $tcpSeen[$testPort] -or @($tcpProbes | Where-Object { $_.Port -eq $testPort -and $_.Confirmed }).Count -gt 0)
             }
-            $result = @{ state = $state; tcp = @($tcpResults); udp = $udpConfirmed }
+            $result = @{ state = $state; tcp = @($tcpResults); udp = $udpConfirmed; network = $network }
             if ($reason -and $state -notin @('internet', 'cancelled')) { $result.reason = $reason }
             Write-Output ('PAWTALK_PREFLIGHT_RESULT:' + ($result | ConvertTo-Json -Compress))
         }

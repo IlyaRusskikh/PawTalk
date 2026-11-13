@@ -88,6 +88,12 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
     'checker-unavailable': t('Сервис check-host.net не завершил проверку после повторных запросов. Это ошибка внешней проверки, а не запрет хостинга.'),
     'check-failed': t('Не удалось запустить локальную часть проверки сети.'),
   };
+  const ipComparisons: Record<NonNullable<HostCheckResult['network']>['comparison'], string> = {
+    same: t('WAN и внешний IPv4 совпадают. Доступность портов проверяется отдельно.'),
+    'additional-nat': t('WAN роутера непубличный. Перед ним может быть другой домашний роутер или NAT/CGNAT провайдера. Одного проброса на этом роутере может быть недостаточно; это не доказывает невозможность хостинга.'),
+    different: t('Публичный WAN отличается от внешнего IPv4. Проверьте VPN, прокси, несколько интернет-подключений или NAT выше роутера. Проверяем порты на WAN-адресе.'),
+    unavailable: t('Сравнение WAN и внешнего IPv4 не выполнено полностью. Это не означает, что хостинг недоступен.'),
+  };
   return <Modal title={status.running ? t("Поделиться комнатой") : t("Создать комнату")} onClose={onClose}>
     {failure && <p role="alert" className="text-error">{failure}</p>}{status.running ? <>
       <div className="form-fields"><label className="host-invite">{t("Уровень сети")}<select value={level} onChange={e => setLevel(e.target.value)}><option value="global">{t("Глобальный")}</option><option value="local">{t("Локальный")}</option></select></label>
@@ -116,9 +122,20 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
           {checking && <p className="host-hint">{t("Проверяем TCP и UDP из интернета. Это может занять около минуты…")}</p>}
           {checkResult && <p className={`host-check-result ${checkResult.state === 'internet' ? 'success' : 'warning'}`}>{checkResult.state === 'internet' ? t("Да, ко мне можно подключиться через интернет :)") : checkResult.state === 'unconfirmed' ? t("Доступ через интернет не подтверждён. Пока используйте локальную сеть :(") : t("Не удалось завершить проверку. Доступность из интернета пока неизвестна — попробуйте ещё раз.")}</p>}
           {checkResult && checkResult.state !== 'cancelled' && <p className="host-hint host-check-ports">TCP {port}: {checkResult.tcp[0] ? '✓' : '—'} · TCP {port + 1}: {checkResult.tcp[1] ? '✓' : '—'} · UDP {port + 2}: {checkResult.udp ? '✓' : '—'}</p>}
+          {checkResult?.network && checkResult.state !== 'cancelled' && <>
+            <p className="host-hint">{ipComparisons[checkResult.network.comparison]}</p>
+          </>}
           {(checkFailure || checkResult?.reason) && <p className="host-hint" role="status">{checkFailure || checkReasons[checkResult!.reason!]}</p>}
         </div>
         <p className="host-hint">{t("Попробуем открыть порты и проверить соединение из сети интернет")}</p>
+        <details className="host-hint host-check-network">
+          <summary>{t('Адреса и внешние сервисы')}</summary>
+          {checkResult?.network && checkResult.state !== 'cancelled' && <>
+            <p>{t('LAN: {0} · WAN роутера: {1} · Внешний IPv4: {2}', checkResult.network.lanIP || '—', checkResult.network.wanIP || '—', checkResult.network.externalIP || '—')}</p>
+            {checkResult.network.probeIP && <p>{t('Адрес проверки портов: {0}', checkResult.network.probeIP)}</p>}
+          </>}
+          <p>{t('Сравнение IP обращается к ipify, при сбое — к icanhazip. Внешний IPv4 отражает маршрут HTTPS-запроса, включая VPN/прокси. Сервисы получают IP запроса; проверка check-host.net создаёт публичные отчёты об IP и портах. Настройки сервера и приглашения не меняются.')}</p>
+        </details>
       </section>
       <button className="primary" disabled={busy || checking || active || !nickname.trim()}>{busy ? t("Создаём комнату…") : t("Создать и войти →")}</button></form>}
   </Modal>;

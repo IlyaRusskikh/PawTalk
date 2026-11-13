@@ -20,6 +20,42 @@ PowerShell. Результат появляется после завершен�
 Скрипт проверяет сеть из PowerShell: разрешение брандмауэра для него не заменяет
 разрешение для самого PawTalk после создания комнаты.
 
+## Автоматическое сравнение IP / Automatic IP comparison
+
+Проверка показывает LAN IPv4 компьютера, WAN IPv4 из UPnP роутера, внешний IPv4,
+наблюдаемый HTTPS-сервисом, и адрес, на котором проверяются порты. Для внешнего
+адреса используется `api4.ipify.org`, при сбое — `ipv4.icanhazip.com`; каждый запрос
+ограничен тремя секундами, принимается только короткий ответ с публичным IPv4.
+Сервисы получают IP HTTPS-запроса. Он может относиться к VPN/прокси и не совпадать
+с адресом входящих подключений. Недоступность сервисов не означает запрет хостинга.
+
+- Совпадение публичного WAN и внешнего IP не доказывает доступность портов.
+- Непубличный WAN (включая `100.64.0.0/10`) указывает на возможный дополнительный
+  домашний роутер или NAT/CGNAT провайдера. Один проброс может быть недостаточен;
+  по этому признаку хостинг не объявляется невозможным.
+- Разные публичные адреса требуют проверки VPN/прокси, нескольких подключений
+  или NAT выше роутера. Публичный WAN сохраняется целью проверки портов.
+- Если публичного WAN нет, проверяется наблюдаемый внешний IPv4. `-PublicIP`
+  вручную задаёт цель с наивысшим приоритетом; получение адреса не создаёт проброс
+  на оборудовании выше домашнего роутера. IP сервера и приглашения не меняются.
+
+После переподключения PPPoE адрес может измениться. Перезагрузка роутера не
+гарантирует публичный IPv4. Сравните WAN с внешним адресом заново, затем отдельно
+проверьте порты и звонок из другой сети. Не добавляйте личные отчёты в Git.
+
+The check reports LAN, router WAN, HTTPS-observed external IPv4 and the port-check
+target. It contacts `api4.ipify.org`, falling back to `ipv4.icanhazip.com`, with a
+three-second limit per request and a bounded, validated IPv4 response. These
+services see the request IP, which may be a VPN/proxy exit. Lookup failure does
+not mean hosting is unavailable. A non-public WAN suggests another home router
+or provider NAT/CGNAT; it does not prove hosting impossible. Matching public
+addresses do not prove port reachability. A public WAN remains the probe target
+even when HTTPS observes another address; otherwise the observed address is used.
+`-PublicIP` overrides the probe target. Server settings and invitations are never
+changed. PPPoE reconnection may change the IP; rebooting does not guarantee a
+public address. Recheck ports and an actual external call separately. Keep
+personal diagnostic reports out of Git.
+
 Скопируйте команду в **Windows PowerShell**:
 
 ```powershell
@@ -70,8 +106,8 @@ $code = (Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/I
    скрипт получил пакет, отправил ответ и сервис подтвердил получение ответа.
    Сервис получает публичный IP и порт, создаёт публичный отчёт; ссылка выводится
    в консоли. Пароли и ключи не передаются. Отключить внешний UDP-тест можно
-   параметром `-SkipUdpCheck`, TCP-тест — `-SkipTcpCheck`. Если WAN-адрес роутера не публичный или отличается
-   от адреса на 2ip, задайте `-PublicIP <IPv4 с 2ip>`.
+   параметром `-SkipUdpCheck`, TCP-тест — `-SkipTcpCheck`. Внешний IPv4 определяется
+   автоматически; если нужно проверить другой адрес, задайте `-PublicIP <IPv4>`.
 5. При недоступном UPnP можно вручную пробросить TCP-порты и UDP 18445 на выведенный
    LAN-адрес и выполнить проверку, пока скрипт слушает порты.
    Автоматический UDP-тест запускается один раз в начале: после ручной настройки
