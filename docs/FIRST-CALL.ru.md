@@ -6,23 +6,18 @@
 
 ## 1. Установите клиент
 
-На обоих ПК скачайте [PawTalk.Setup.0.10.1.exe](https://github.com/IlyaRusskikh/PawTalk/releases/download/client-v0.10.1/PawTalk.Setup.0.10.1.exe) из
-[выпуска Client 0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.10.1).
+На обоих ПК скачайте [актуальный установщик PawTalk](https://ilyarusskikh.github.io/PawTalk/downloads/#client).
 Архив Source code содержит исходники, а не готовое приложение. Для установки
 не нужны Node.js, Go, Docker или права администратора на роутере.
 
 Установщик пока не подписан: Windows может показать предупреждение о неизвестном
-издателе. Сверьте источник скачивания и SHA-256 с [SHA256SUMS.txt](https://github.com/IlyaRusskikh/PawTalk/releases/download/client-v0.10.1/SHA256SUMS.txt) из того же
-релиза. Опубликованный SHA-256 установщика Client 0.10.1:
+издателе. Сверьте источник скачивания и SHA-256 с [SHA256SUMS.txt на странице загрузки](https://ilyarusskikh.github.io/PawTalk/downloads/#client) из того же
+релиза. Для новой версии используйте её собственный checksum, а не хеш старого выпуска.
 
-```text
-3aefb23b9cd67d988702cfde68b83ce1e1fba34cf32d1d7430e76423230b70c3  PawTalk.Setup.0.10.1.exe
-```
-
-В PowerShell в папке скачивания:
+В PowerShell укажите путь к скачанному файлу:
 
 ```powershell
-Get-FileHash -LiteralPath '.\PawTalk.Setup.0.10.1.exe' -Algorithm SHA256
+Get-FileHash -LiteralPath (Read-Host 'Путь к скачанному установщику') -Algorithm SHA256
 ```
 
 Сравните полученный `Hash` со строкой установщика в `SHA256SUMS.txt` (регистр

@@ -2,7 +2,7 @@
 
 Русский · [English](README.md)
 
-Выпущены **Client 0.11.0 / Server 0.10.1 / Manager 0.4.0**. Переходный клиент `v0.8.1` обеспечивает обнаружение выпусков `client-v*` установленными клиентами 0.8.0. Постоянные серверы Linux и Windows используют независимые подписанные обновления. [Процесс выпуска](docs/RELEASING.md) · [Совместимость](docs/COMPATIBILITY.md).
+Выпущены [Client, Server и Manager](https://ilyarusskikh.github.io/PawTalk/downloads/). Переходный клиент `v0.8.1` обеспечивает обнаружение выпусков `client-v*` установленными клиентами 0.8.0. Постоянные серверы Linux и Windows используют независимые подписанные обновления. [Процесс выпуска](docs/RELEASING.md) · [Совместимость](docs/COMPATIBILITY.md).
 
 Client 0.11.0 добавляет мастер первого запуска, отзывчивые звуки уведомлений и общее ядро встроенного сервера. [Заметки выпуска Client](docs/releases/client-v0.11.0.md).
 
@@ -14,7 +14,7 @@ Manager **0.4.0 опубликован как preview**: окно настрое
 
 PawTalk — **альтернатива Discord и TeamSpeak для голосового общения** на Windows. Соберите друзей перед матчем, общайтесь с командой во время игры или заведите постоянную голосовую комнату для своего сообщества. Чтобы присоединиться, достаточно приглашения и никнейма. Регистрация не нужна.
 
-**[Скачать PawTalk 0.11.0 для Windows 10/11 (x64)](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe)** · [Как начать](#как-начать) · [Сервер на Linux](docs/SERVER.md) · [Установщик сервера Windows](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.4.0/PawTalk.Server.Manager.Setup.0.4.0.exe)
+**[Скачать PawTalk для Windows 10/11 (x64)](https://ilyarusskikh.github.io/PawTalk/downloads/#client)** · [Как начать](#как-начать) · [Сервер на Linux](docs/SERVER.md) · [Установщик сервера Windows](https://ilyarusskikh.github.io/PawTalk/downloads/#manager)
 
 ![Комната PawTalk с тремя участниками, кнопками звонка и зашифрованным текстовым чатом](website/assets/room-chat.png)
 
@@ -59,7 +59,7 @@ PawTalk — **альтернатива Discord и TeamSpeak для голосо�
 
 ## Как начать
 
-1. **Установите PawTalk.** [Скачайте установщик](https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.11.0/PawTalk.Setup.0.11.0.exe) на каждый Windows-ПК. Выберите русский или английский язык.
+1. **Установите PawTalk.** [Скачайте установщик](https://ilyarusskikh.github.io/PawTalk/downloads/#client) на каждый Windows-ПК. Выберите русский или английский язык.
 2. **Представьтесь.** Откройте **Настройки → Обо мне** и укажите никнейм. В разделе **Голос** можно сразу проверить микрофон.
 3. **Соберите друзей.** Нажмите **Создать комнату**, задайте название и пароль от 8 символов. Отправьте полное приглашение лично. Друг открывает **Присоединиться к комнате** и вставляет ссылку.
 

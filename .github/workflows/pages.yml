@@ -1,7 +1,12 @@
 name: Publish project website
-# Publishing is deliberate: ordinary pushes and release tags do not deploy the site.
+# Only successful publication (or deliberate manual recovery) deploys Pages.
 on:
   workflow_dispatch:
+  release:
+    types: [published]
+  workflow_run:
+    workflows: ['Publish component release']
+    types: [completed]
 permissions:
   contents: read
 concurrency:
@@ -9,7 +14,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'release' &&
+      (startsWith(github.event.release.tag_name, 'client-v') || startsWith(github.event.release.tag_name, 'server-v') || startsWith(github.event.release.tag_name, 'manager-v'))) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,10 +29,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: main
       - uses: actions/setup-node@v6
         with:
           node-version: '24.22.1'
-      - run: node scripts/check-website.mjs
+      - name: Generate complete catalog from published releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-catalog.mjs
+      - run: node scripts/check-website.mjs --catalog
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

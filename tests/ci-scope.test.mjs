@@ -34,13 +34,13 @@ function enabled(step, component, runner = 'windows-2025') {
     { component }, (value, prefix) => value.startsWith(prefix));
 }
 
-test('component scope fails closed and branch/PR default retains all components', () => {
+test('component scope fails closed and PR default retains all components', () => {
   assert.deepEqual(ciScope(), { component: 'all', client: true, server: true, manager: true, host: true, publishedServer: false });
   for (const input of ['', 'other', 'Client', 'all\n']) assert.throws(() => ciScope(input));
   assert.equal(check.on.workflow_call.inputs.component.default, 'all');
   assert.equal(check.on.workflow_dispatch.inputs.component.default, 'all');
   assert.equal(release.jobs.verify.with.component, '${{ needs.plan.outputs.component }}');
-  for (const job of Object.values(check.jobs)) {
+  for (const job of [check.jobs.server, check.jobs.windows]) {
     const scope = job.steps.find(step => step.id === 'scope');
     assert.equal(scope.run, 'node scripts/ci-scope.mjs');
     assert.equal(scope.env.PAWTALK_CI_COMPONENT, "${{ inputs.component || 'all' }}");
@@ -82,18 +82,23 @@ for (const component of ['all', 'client', 'server', 'manager']) {
   });
 }
 
-test('publisher artifact names and extraction paths match independent uploads', () => {
+test('prepared publisher artifact names and extraction paths match independent uploads', () => {
   for (const component of ['server', 'manager']) {
     const upload = check.jobs.windows.steps.find(step => step.with?.name === `pawtalk-${component}-windows`);
-    const download = release.jobs[component].steps.find(step => step.uses?.startsWith('actions/download-artifact@'));
+    const preparation = release.jobs[`prepare-${component}`];
+    const download = preparation.steps.find(step => step.uses?.startsWith('actions/download-artifact@'));
     assert.equal(download.with.name, upload.with.name);
     assert.equal(download.with.path, `release/${component}`);
     assert.ok(upload.with.path.startsWith(`release/${component}/`));
     assert.ok(!upload.with.path.includes('\n'));
+    const prepared = preparation.steps.find(step => step.uses?.startsWith('actions/upload-artifact@'));
+    const publisher = release.jobs[component].steps.find(step => step.with?.name === prepared.with.name);
+    assert.ok(publisher, `${component} consumes complete prepared output`);
+    assert.equal(publisher.with.path, component === 'server' ? 'release' : 'release/manager');
   }
 });
 
-test('duplicate push/PR checks cancel each other without cancelling other components or manual checks', () => {
+test('obsolete PR checks cancel without cancelling other components, forks or manual checks', () => {
   const group = (event, component = 'all', branch = '0.9.0', repository = 'IlyaRusskikh/PawTalk') => {
     const github = { repository: 'IlyaRusskikh/PawTalk', ref_name: event === 'pull_request' ? '9/merge' : branch,
       event_name: event, event: { pull_request: { head: { ref: event === 'pull_request' ? branch : '',
@@ -102,7 +107,8 @@ test('duplicate push/PR checks cancel each other without cancelling other compon
       Function('github', 'inputs', `return (${expression});`)(github, { component }));
   };
   assert.equal(check.concurrency['cancel-in-progress'], true);
-  assert.equal(group('push'), group('pull_request'));
+  assert.equal(check.on.push, undefined);
+  assert.equal(group('pull_request'), group('pull_request'));
   assert.notEqual(group('push', 'server'), group('push', 'manager'));
   assert.notEqual(group('push'), group('workflow_dispatch'));
   assert.notEqual(group('push'), group('push', 'all', 'other-branch'));

@@ -39,3 +39,7 @@ connection-report*.json
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Generated public catalog (prepared for Pages, never committed)
+/website/releases.json
+/website/releases.json.tmp

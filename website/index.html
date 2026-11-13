@@ -12,7 +12,7 @@
   <link rel="alternate" hreflang="x-default" href="https://ilyarusskikh.github.io/PawTalk/">
   <meta property="og:type" content="website">
   <meta property="og:title" content="PawTalk — a voice room of your own">
-  <meta property="og:description" content="Open-source voice chat for Windows. No accounts. Host on your PC or a Linux VPS. PawTalk 0.10.1 public preview.">
+  <meta property="og:description" content="Open-source voice chat for Windows. No accounts. Host on your PC or a Linux VPS. PawTalk public preview.">
   <meta property="og:url" content="https://ilyarusskikh.github.io/PawTalk/">
   <meta property="og:image" content="https://ilyarusskikh.github.io/PawTalk/assets/room-chat-en.png">
   <meta property="og:image:alt" content="PawTalk room with three participants, call controls and encrypted text chat">
@@ -20,6 +20,7 @@
   <meta property="og:locale:alternate" content="ru_RU">
   <link rel="icon" href="assets/pawtalk.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
+  <script type="module" src="releases.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -32,16 +33,17 @@
     <div class="eyebrow">Open source · Self-hosted · Windows</div>
     <h1>Your friends.<br>Your server.<br><span>Your voice room.</span></h1>
     <p class="lead">Voice and text chat for a game night or a small community. Create a room on your PC or keep it running on a Linux VPS. Join with an invitation and a nickname. No accounts.</p>
-    <div class="actions"><a class="button" href="https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.10.1/PawTalk.Setup.0.10.1.exe">Download PawTalk for Windows x64 ↓</a><a class="button secondary" href="https://github.com/IlyaRusskikh/pawtalk/blob/main/docs/SERVER.md">Host a Linux server ↗</a></div>
-    <p class="fine">PawTalk 0.10.1 public preview · Windows 10/11 x64 · English / Русский interface</p>
-    <p class="fine">Server 0.10.1 and Manager 0.2.1 are also released: persistent Linux/Windows rooms, Windows tray/settings, ProgramData migration and verified backup/update recovery. Existing servers need a Server upgrade for activity privacy. <a href="https://github.com/IlyaRusskikh/PawTalk/blob/main/docs/WINDOWS-SERVER.md">Windows server setup and upgrade →</a></p>
-    <p class="fine">Unsigned installer · Verified automatic updates · <a href="https://github.com/IlyaRusskikh/pawtalk/releases/tag/client-v0.10.1">Release notes, checksums and source</a></p>
+    <div class="actions"><a class="button" href="downloads/#client" data-release="client" data-asset="PawTalk.Setup.">Download PawTalk for Windows x64 ↓</a><a class="button secondary" href="https://github.com/IlyaRusskikh/pawtalk/blob/main/docs/SERVER.md">Host a Linux server ↗</a></div>
+    <p class="fine">PawTalk public preview · Windows 10/11 x64 · English / Русский interface</p>
+    <p class="fine">Published versions: <a href="downloads/#client" data-release="client" data-version>Client</a> · <a href="downloads/#server" data-release="server" data-version>Server</a> · <a href="downloads/#manager" data-release="manager" data-version>Manager</a></p>
+    <p class="fine">Unsigned installer · Verified automatic updates · <a href="downloads/#client" data-release="client">Release notes, checksums and source</a></p>
+    <p class="fine" data-status></p>
   </section>
   <figure class="hero-shot"><a href="assets/room-chat-en.png"><img src="assets/room-chat-en.png" width="1240" height="860" fetchpriority="high" alt="PawTalk room with three participants, call controls and encrypted text chat"></a><figcaption>PawTalk 0.7.1 with demo participants and messages.</figcaption></figure>
   <section class="section" aria-labelledby="features"><h2 id="features">A small room. The controls you need.</h2>
     <div class="features"><article><h3>Host it yourself</h3><p>Temporary rooms on a Windows PC, or a persistent Docker server on Linux amd64/arm64. Your guests just install the client.</p></article><article><h3>Keep the noise down</h3><p>Local RNNoise noise suppression, echo cancellation and automatic gain control. Adjust devices, sensitivity and volume.</p></article><article><h3>Speak your way</h3><p>Voice activation or push-to-talk, global shortcuts, mute/deafen and per-person volume. Keep the app in the tray.</p></article></div>
   </section>
-  <section class="section split"><div><div class="eyebrow">In the room</div><h2>Keep talking. Share a message.</h2><p>Resize the voice and chat panels. Share images up to 2 MiB, reply to messages and copy text. Format selected text, use Markdown, and edit or delete your own messages on updated servers. Links open in your browser. History loads as you scroll, with a configurable client window. VPS storage uses PAWTALK_CHAT_MAX_MB: 128 MiB by default, 0 for unlimited. There is no seven-day expiry.</p><p>Typing status uses animated paws. Optional CC0 cat sounds mark room arrivals and departures, and alert you to unseen messages when the app is inactive or chat is scrolled up.</p><p>Choose a profile picture and preview the circular crop before saving.</p></div><figure><a href="assets/avatar-crop-en.png"><img src="assets/avatar-crop-en.png" width="1240" height="860" loading="lazy" alt="Circular avatar preview with zoom and repositioning."></a><figcaption>Circular avatar preview with zoom and repositioning.</figcaption></figure></section>
+  <section class="section split"><div><div class="eyebrow">In the room</div><h2>Keep talking. Share a message.</h2><p>Resize the voice and chat panels. Share images up to 2 MiB, reply to messages and copy text. Format selected text, use Markdown, and edit or delete your own messages on updated servers. Links open in your browser. History loads as you scroll, with a configurable client window. VPS storage uses PAWTALK_CHAT_MAX_MB: 128 MiB by default, 0 for unlimited. There is no seven-day expiry.</p><p>Typing status uses animated paws. Optional cat recordings mark room arrivals and departures, and alert you to unseen messages when the app is inactive or chat is scrolled up.</p><p>Choose a profile picture and preview the circular crop before saving.</p></div><figure><a href="assets/avatar-crop-en.png"><img src="assets/avatar-crop-en.png" width="1240" height="860" loading="lazy" alt="Circular avatar preview with zoom and repositioning."></a><figcaption>Circular avatar preview with zoom and repositioning.</figcaption></figure></section>
   <section class="section" id="start"><h2>From download to first conversation.</h2>
     <ol class="steps"><li><strong>Install &amp; check your mic</strong><p>Install the Windows client on each PC and choose English or Russian. In Settings, choose a nickname, select audio devices and test your microphone. No developer tools are needed.</p></li><li><strong>Create a room</strong><p>Choose Create room (Создать комнату), enter a name and a password of at least 8 characters. The room stays up while the host app runs.</p></li><li><strong>Invite a friend</strong><p>Share the full invitation privately. Your friend pastes it into Join room (Присоединиться к комнате). On the same network, use the LAN invitation.</p></li></ol>
     <p>Across the internet, the host needs reachable ports. Automatic port mapping may not work behind CGNAT. A Linux VPS with a public IP is an alternative. <a href="https://github.com/IlyaRusskikh/pawtalk/blob/main/README.md">Read the full setup guide →</a></p>

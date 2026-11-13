@@ -1,47 +1,25 @@
-# PawTalk project website
+# PawTalk website
 
-Static English (`index.html`) and Russian (`ru/index.html`) pages. No JavaScript,
-external fonts, trackers, package install or application server is required.
-This is a project/download page, not a web voice client.
+Static English/Russian presentation pages and permanent [downloads](https://ilyarusskikh.github.io/PawTalk/downloads/)
+addresses: /downloads/#client, #server, #manager. These open a catalog page, not
+an HTTP binary redirect. JavaScript loads untracked releases.json; no hardcoded
+versioned asset links or global /releases/latest. Latest includes previews;
+stable and preview are separately selected. Missing channels stay unavailable.
 
-## Preview and verify
+Before deployment, run node scripts/release-catalog.mjs with optional GH_TOKEN,
+then node scripts/check-website.mjs --catalog. API requests paginate, time out and
+fail on HTTP/JSON errors; incomplete releases are excluded. If any component has
+no complete release, preparation fails without deploying. The last successful
+Pages deployment stays live. Browser catalog failure shows an error without
+inventing download URLs. The catalog does not replace updater signatures.
 
-From the repository root:
-
-```powershell
-node scripts/check-website.mjs
-node scripts/preview-website.mjs
-```
-
-Open `http://127.0.0.1:5187` (Ctrl+C stops the local server), or serve the `website`
-directory with another static HTTP server. Check both languages, narrow screens,
-keyboard focus, FAQ and downloads.
-The intended canonical base is `https://ilyarusskikh.github.io/PawTalk/`.
-It is a deployment target, not a claim that the site has already been published.
-Before using a custom domain, change canonical, alternate and Open Graph URLs
-in both pages and the URL check in `scripts/check-website.mjs`.
-
-## Publish to GitHub Pages
-
-1. Commit and push the reviewed site and workflow to `main`.
-2. In the repository, select **Settings → Pages → Source → GitHub Actions**.
-3. In **Actions → Publish project website → Run workflow**, select `main`.
-4. Wait for success and open the deployment URL. Check `/` and `/ru/`, downloads
-   and images before adding the URL to GitHub About or announcing the website.
-
-The workflow publishes only `website/`, never the Electron app, repository root,
-local server settings or `release/`. It runs manually; normal pushes and tags do
-not publish a website. GitHub documents this flow in
-[Using custom workflows with GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
-Language links follow Google's
-[localized page guidance](https://developers.google.com/search/docs/specialty/international/localized-versions).
-
-## Update after a release
-
-Update both pages' version, download filename and release-notes URL to the actual
-published release. Preview downloads use exact tags, not `/releases/latest`.
-Keep Russian/English features and limitations aligned with the root READMEs.
-Do not advertise unreleased behavior as available in the installer.
+Pages deploys from main after successful component release workflow completion,
+manual release publication, or manual dispatch. GITHUB_TOKEN-triggered release
+events alone cannot be relied on to chain Actions. No full CI runs on main push,
+no generated catalog commits. See [owner settings](../agents/rules/github.md).
+For offline checks run node scripts/check-website.mjs and the fixture-based tests.
+Keep RU/EN presentation and limitations aligned with README; technical detail is
+in docs/ and SECURITY.md.
 
 ## Screenshots
 

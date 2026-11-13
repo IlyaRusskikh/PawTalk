@@ -6,13 +6,13 @@
 
 ### Поддерживаемые версии
 
-PawTalk находится в стадии **публичного предварительного выпуска**, а не стабильного релиза. Версии компонентов независимы. На 12 ноября 2026 года:
+PawTalk находится в стадии **публичного предварительного выпуска**, а не стабильного релиза. Версии компонентов независимы. Актуальные опубликованные версии:
 
-| Компонент | Текущий опубликованный preview |
+| Компонент | Актуальный опубликованный выпуск |
 | --- | --- |
-| Client | [0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.10.1) |
-| Server (постоянные комнаты Linux/Windows) | [0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) |
-| Manager | [0.2.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.2.1) |
+| Client | [Client](https://ilyarusskikh.github.io/PawTalk/downloads/#client) |
+| Server (постоянные комнаты Linux/Windows) | [Server](https://ilyarusskikh.github.io/PawTalk/downloads/#server) |
+| Manager | [Manager](https://ilyarusskikh.github.io/PawTalk/downloads/#manager) |
 
 Исправления безопасности выпускаются новыми версиями затронутых компонентов.
 Поддерживается последний опубликованный выпуск каждой линии; отдельное исправление
@@ -29,7 +29,7 @@ PawTalk находится в стадии **публичного предвар
 Опубликованный Client 0.10.1 ещё использует Go Server 0.8.0 с security backport:
 [исторический pin](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/bundled-server.json)
 и [патч](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/build/bundled-server-security.patch).
-Переход общего ядра к пользователям требует нового Client-релиза.
+Client 0.11.0 уже доставляет общее ядро; исторический Client 0.10.1 не меняется.
 [Сборка и проверки](docs/BUNDLED-SERVER.md), [совместимость](docs/COMPATIBILITY.md).
 
 ### Как сообщить об уязвимости
@@ -53,13 +53,13 @@ PawTalk находится в стадии **публичного предвар
 
 ### Supported versions
 
-PawTalk is a **public preview**, not a stable release. Component versions are independent. As of November 12, 2026:
+PawTalk is a **public preview**, not a stable release. Component versions are independent. Current published versions:
 
-| Component | Current published preview |
+| Component | Current published release |
 | --- | --- |
-| Client | [0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.10.1) |
-| Server (permanent Linux/Windows rooms) | [0.10.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.10.1) |
-| Manager | [0.2.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.2.1) |
+| Client | [client](https://ilyarusskikh.github.io/PawTalk/downloads/#client) |
+| Server (permanent Linux/Windows rooms) | [server](https://ilyarusskikh.github.io/PawTalk/downloads/#server) |
+| Manager | [manager](https://ilyarusskikh.github.io/PawTalk/downloads/#manager) |
 
 Security fixes ship as new releases of affected components. The latest published
 release of each component is supported; backports to older releases are **not
@@ -76,7 +76,7 @@ update the other component's installed binaries.
 Published Client 0.10.1 still uses Go Server 0.8.0 with a security backport:
 [historical pin](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/bundled-server.json)
 and [patch](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/build/bundled-server-security.patch).
-Delivering the shared core requires a new Client release. See
+Client 0.11.0 delivers the shared core; historical Client 0.10.1 is unchanged. See
 [build and verification details](docs/BUNDLED-SERVER.md) and [compatibility](docs/COMPATIBILITY.md).
 
 ### Reporting a vulnerability

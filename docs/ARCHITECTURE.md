@@ -1,4 +1,4 @@
-# Архитектура / Architecture — Client 0.10.1 / Server 0.10.1 / Manager 0.2.1
+# Архитектура / Architecture
 
 Один монорепозиторий, три независимых выпуска:
 
@@ -19,7 +19,7 @@ native PTT/audio. В текущем дереве временная комнат
 собирают один `server/` через `scripts/server-core.mjs`: бинарник общий, режимы
 `selfhost` и `serve` различают запуск и хранение. LiveKit также общий. Постоянный
 сервер использует службы Windows и Manager; временный — Electron и память.
-Опубликованный Client 0.10.1 сохраняет старый pin до следующего Client-релиза.
+Client 0.11.0 доставляет общее ядро; исторический Client 0.10.1 сохраняет старый pin.
 
 VPS: один Debian 12 / Ubuntu 24.04 amd64/arm64 host, Docker Engine + Compose v2+,
 одна реплика Go API + LiveKit в одном контейнере, host networking. UID/GID 65532,

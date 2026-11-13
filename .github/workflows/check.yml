@@ -1,8 +1,5 @@
 name: Verify and package
 on:
-  push:
-    branches: ['**']
-    tags: ['v0.8.1']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -13,18 +10,34 @@ on:
   workflow_call:
     inputs:
       component:
-        description: Component to package; all for branch/PR verification
+        description: Component to package; all for PR verification
         type: string
         default: all
       client-prerelease:
         type: boolean
         default: true
+    secrets:
+      PAWTALK_UPDATE_PRIVATE_KEY:
+        required: false
 permissions:
   contents: read
 concurrency:
   group: verify-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ inputs.component || 'all' }}-${{ github.event_name == 'workflow_dispatch' && 'manual' || 'automatic' }}
   cancel-in-progress: true
 jobs:
+  infrastructure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+      - run: npm ci --ignore-scripts
+      - run: node scripts/check-agents.mjs
+      - run: node scripts/check-website.mjs
+      - run: node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs tests/release-routing.test.mjs tests/release-metadata.test.mjs
+      - name: Verify prepared OCI digest through isolated local registry
+        run: node scripts/release-image-smoke.mjs
   server:
     strategy:
       fail-fast: false
@@ -146,6 +159,8 @@ jobs:
         env:
           electron_config_cache: ${{ runner.temp }}\electron-cache
         run: node scripts/install-electron.mjs
+      - name: Verify actual website downloads in English and Russian
+        run: node scripts/website-smoke.mjs
       - run: npm run check:public
       - name: Test release routing and CI component contracts
         if: steps.scope.outputs.client != 'true'
