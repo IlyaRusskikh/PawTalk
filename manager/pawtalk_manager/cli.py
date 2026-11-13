@@ -174,7 +174,7 @@ def arguments(argv):
     settings = sub.add_parser('settings')
     settings.add_argument('--apply',action='store_true')
     desktop = sub.add_parser('desktop')
-    desktop.add_argument('action',choices=['snapshot','apply','invitation','reset-password','backup-create','backup-restore','diagnostics','logs','check-updates','install-manager-update','install-server-update'])
+    desktop.add_argument('action',choices=['snapshot','apply','invitation','reset-password','backup-create','backup-restore','backup-delete','diagnostics','logs','check-updates','check-server-updates','install-manager-update','install-server-update','inspect-server-package','install-server-package'])
     config = sub.add_parser('configure')
     config.add_argument('values',nargs='+',help='PAWTALK_FIELD=value')
     config.add_argument('--yes',action='store_true')
@@ -207,53 +207,113 @@ def handoff(command):
     os.execv(command[0],command)
 
 
-def desktop_updates(controller,keys,install=False):
+UNFETCHED = object()
+
+
+def discover_desktop(component,keys):
+    deadline=time.monotonic()+15
+    def get(url,limit=1024*1024,api=False):
+        remaining=deadline-time.monotonic()
+        if remaining<=0: raise TimeoutError('Update check timed out')
+        return release.fetch(url,limit,api,timeout=min(5,remaining),attempts=1)
+    return release.discover(component,keys,get=get)
+
+
+def desktop_updates(controller,keys,install=False,*,component='manager',found=UNFETCHED):
     config,state = controller.config(),controller.state()
     try:
-        found = release.discover('manager',keys)
+        if found is UNFETCHED: found = discover_desktop(component,keys)
     except (OSError,ValueError,RuntimeError):
-        save(controller.directory/'manager-update.json',dict(status='check-failed',checkedAt=int(time.time())))
+        save(controller.directory/(component+'-update.json'),dict(status='check-failed',checkedAt=int(time.time())))
         publish_desktop_status(controller)
         raise
     from .native import installed_desktop_version
-    current=installed_desktop_version() if WINDOWS else state['managerVersion']
-    available = found is not None and release.semver(found['version']) > release.semver(current)
+    current=(installed_desktop_version() if WINDOWS else state['managerVersion']) if component=='manager' else state['version']
+    available = found is not None and (release.semver(found['version']) > release.semver(current) or (component=='server' and state.get('localPackage') and release.semver(found['version'])==release.semver(current)))
     status = dict(status='available' if available else 'current',version=found['version'] if available else None,checkedAt=int(time.time()))
-    save(controller.directory/'manager-update.json',status)
+    save(controller.directory/(component+'-update.json'),status)
     if available and install:
-        bundles.activate(controller,found,keys)
+        if component=='manager': bundles.activate(controller,found,keys)
+        else: controller.update_server(found)
         status['status']='installing'
-        save(controller.directory/'manager-update.json',status)
+        if component=='server': status=dict(status='current',checkedAt=int(time.time()))
+        save(controller.directory/(component+'-update.json'),status)
     publish_desktop_status(controller)
     return status
 
 
+def desktop_check(controller,component,install=False,force=False):
+    # Metadata requests must never hold the room's mutation/recovery lock.
+    with lock(controller.directory/'operation.lock',timeout=10):
+        keys=json.loads((controller.etc/'trust.json').read_text())
+    try:
+        found=discover_desktop(component,keys)
+    except (OSError,ValueError,RuntimeError):
+        with lock(controller.directory/'operation.lock',timeout=10):
+            save(controller.directory/(component+'-update.json'),dict(status='check-failed',checkedAt=int(time.time())))
+            publish_desktop_status(controller)
+        raise
+    with lock(controller.directory/'operation.lock',timeout=10):
+        controller.recover()
+        # Configuration may have changed while GitHub was being contacted.
+        auto=install and (force or controller.config()['PAWTALK_'+component.upper()+'_AUTO_UPDATE']=='true')
+        return desktop_updates(controller,keys,install=auto,component=component,found=found)
+
+
+def windows_periodic(controller):
+    for component in ('manager','server'):
+        try:
+            status=desktop_check(controller,component,install=True)
+            if status['status']=='installing': break
+        except (OSError,ValueError,RuntimeError):
+            pass # Independent checks retry on the next service tick.
+    return 0
+
+
 def publish_desktop_status(controller):
     if not WINDOWS: return
-    import hashlib
     file=controller.directory/'manager-update.json'
     status=json.loads(file.read_text()) if file.exists() else dict(status='idle')
     config=controller.config()
-    name=hashlib.sha256(os.path.normcase(os.path.normpath(str(controller.root))).encode()).hexdigest()[:16]
-    save(Path(os.environ['PAWTALK_MANAGER_HOST']).parent/('status-'+name+'.json'),dict(update=status,language=config['PAWTALK_LANGUAGE'],autoManager=config['PAWTALK_MANAGER_AUTO_UPDATE']=='true',serverVersion=controller.state()['version'],managerVersion=controller.state()['managerVersion']))
+    value=dict(update=status,language=config['PAWTALK_LANGUAGE'],autoManager=config['PAWTALK_MANAGER_AUTO_UPDATE']=='true',serverVersion=controller.state()['version'],managerVersion=controller.state()['managerVersion'])
+    # The install directory has a different ACL policy from private room data.
+    # Only the host publishes this allowlisted, nonsecret document for the UI.
+    if host('publish-desktop-status',controller.root,input=json.dumps(value).encode()).returncode:
+        raise ValueError('Unable to publish Manager status')
 
 
 def desktop_execute(controller,action,request):
     if action == 'snapshot':
         publish_desktop_status(controller)
         updates=controller.directory/'manager-update.json'
+        server_updates=controller.directory/'server-update.json'
         return dict(values=controller.config(),serverVersion=controller.state()['version'],
+                    serverLocal=bool(controller.state().get('localPackage')),
                     managerVersion=controller.state()['managerVersion'],
                     update=json.loads(updates.read_text()) if updates.exists() else dict(status='idle'),
+                    serverUpdate=json.loads(server_updates.read_text()) if server_updates.exists() else dict(status='idle'),
                     backups=[dict(name=p.name,created=int(p.stat().st_mtime)) for p in sorted(controller.backups.glob('backup-*'),reverse=True) if p.is_dir() and re.fullmatch(r'backup-[a-f0-9]{12}',p.name)])
     if action == 'apply':
         apply_settings(controller,request)
+        return desktop_execute(controller,'snapshot',{})
+    if action=='inspect-server-package':
+        from .native import inspect_server_package
+        return inspect_server_package(controller,request.get('path',''))
+    if action=='install-server-package':
+        from .native import install_server_package
+        install_server_package(controller,request.get('id'))
+        save(controller.directory/'server-update.json',dict(status='idle'))
         return desktop_execute(controller,'snapshot',{})
     if action in ('invitation','reset-password'):
         value=controller.runtime.invitation(controller.state(),controller.config(),reset=action=='reset-password')
         if value is None: return dict(unavailable=True)
         return value
-    if action == 'backup-create': return dict(name=controller.create_backup())
+    if action == 'backup-create':
+        name=controller.create_backup()
+        return dict(**desktop_execute(controller,'snapshot',{}),name=name)
+    if action == 'backup-delete':
+        controller.delete_backup(request.get('name'))
+        return desktop_execute(controller,'snapshot',{})
     if action == 'backup-restore':
         name=request.get('name','')
         if not re.fullmatch(r'backup-[a-f0-9]{12}',name): raise ValueError('Invalid backup name')
@@ -268,11 +328,12 @@ def desktop_execute(controller,action,request):
         text=re.sub(r'Initial room password[^\n]*','[redacted]',text)
         return dict(text=re.sub(r'pawtalk://\S+','[invitation redacted]',text))
     keys=json.loads((controller.etc/'trust.json').read_text())
-    if action == 'check-updates': return desktop_updates(controller,keys,install=controller.config()['PAWTALK_MANAGER_AUTO_UPDATE']=='true')
+    if action in ('check-updates','check-server-updates'): raise ValueError('Update checks require an unlocked network phase')
     if action == 'install-manager-update': return desktop_updates(controller,keys,install=True)
     if action == 'install-server-update':
         found=release.discover('server',keys)
-        if found: controller.update_server(found)
+        if found and release.semver(found['version'])>release.semver(controller.state()['version']): controller.update_server(found)
+        save(controller.directory/'server-update.json',dict(status='current',checkedAt=int(time.time())))
         return desktop_execute(controller,'snapshot',{})
     raise ValueError('Unknown desktop operation')
 
@@ -287,6 +348,20 @@ def desktop_main(root,action):
         if not isinstance(request,dict): raise ValueError('Invalid request')
         protect(root)
         controller=Controller(root)
+        if not controller.state_file.exists(): raise ValueError('No installed room')
+        if action in ('snapshot','logs','diagnostics'):
+            # Atomic documents and read-only diagnostics do not need to wait for
+            # a backup, service health probe or an installer holding the lock.
+            value=desktop_execute(controller,action,request)
+            print(json.dumps(dict(value=value),ensure_ascii=False)); return 0
+        if action in ('check-updates','check-server-updates'):
+            value=desktop_check(controller,'server' if action=='check-server-updates' else 'manager')
+            print(json.dumps(dict(value=value),ensure_ascii=False)); return 0
+        if action in ('install-manager-update','install-server-update'):
+            component='server' if action=='install-server-update' else 'manager'
+            value=desktop_check(controller,component,install=True,force=True)
+            if component=='server': value=desktop_execute(controller,'snapshot',{})
+            print(json.dumps(dict(value=value),ensure_ascii=False)); return 0
         with lock(controller.directory/'operation.lock',timeout=10):
             if not controller.state_file.exists(): raise ValueError('No installed room')
             controller.recover()
@@ -322,6 +397,8 @@ def main(argv=None):
         if WINDOWS:
             protect(args.root)
         controller = Controller(args.root)
+        if WINDOWS and args.command=='periodic':
+            return windows_periodic(controller)
         if args.command == 'install' and args.server_bundle:
             if not WINDOWS:
                 raise ValueError('--server-bundle is for Windows; Linux uses the signed image digest')

@@ -157,6 +157,35 @@ sudo python3 manager/pawtalkctl backup restore backup-012345abcdef --trust manag
 `--server-manifest`, `--manager-manifest`, `--bundle`, `--trust`. Это не обход подписей.
 `tests/compose_integration.py` использует отдельный локальный registry и тестовые ключи.
 
+### Проверка текущего кода в Linux-контейнере
+
+Сборка ниже берёт текущий `server/`, а проверка использует текущие исходники
+Linux Manager. Она не скачивает старый опубликованный Manager вместо вашего
+кода. Из корня репозитория в PowerShell с Docker Desktop в режиме Linux containers:
+
+```powershell
+docker build -f server/standalone.Dockerfile -t pawtalk-server:local .
+docker build -f tests/vps.Dockerfile --build-arg DISTRO=ubuntu:24.04 -t pawtalk-linux-test .
+docker run --rm --network host --mount "type=bind,source=$($PWD.Path),target=/work" --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -e PYTHONUNBUFFERED=1 pawtalk-linux-test python3 tests/compose_integration.py
+```
+
+В Linux shell замените `$($PWD.Path)` на `$(pwd)`. Для повторного прогона с E2EE
+добавьте `-e PAWTALK_COMPOSE_TEST_E2EE=true` перед `pawtalk-linux-test`.
+Для Docker Desktop включите **Settings → Resources → Network → Enable host
+networking**; эта возможность есть в Desktop 4.34+ ([документация Docker](https://docs.docker.com/engine/network/drivers/host/)).
+Проверка создаёт временные контейнеры, registry и тома и проверяет install,
+update, backup, restore, SQLite/идентичность и восстановление после SIGKILL.
+Это Linux userspace + настоящий Docker/Compose, но не проверка systemd, загрузки
+ОС или внешней сети. Для проверки systemd можно отдельно подготовить Ubuntu-контейнер с systemd как PID 1 и настроенными cgroups; обычный образ Ubuntu этого не делает. Загрузку ОС и поведение реального хоста проверяют отдельно в VM/VPS Debian 12 или Ubuntu 24.04. Графический Electron Manager относится к Windows;
+Linux Manager остаётся консольным.
+
+**EN.** The commands above build the current Server and test the current Linux
+Manager source in Ubuntu userspace, using the actual Docker engine and temporary
+signed fixtures. Use `$(pwd)` in a Linux shell; add
+`-e PAWTALK_COMPOSE_TEST_E2EE=true` for E2EE. Desktop requires Linux containers
+and host networking enabled. The test covers install/update/backup/restore and
+crash recovery, but it does not start systemd. Systemd can be tested in a separately configured Ubuntu container with PID 1/cgroup support; OS boot and real-host behavior need separate VM/VPS checks. The graphical Electron Manager is Windows-only.
+
 ## English
 
 Server 0.10.1 uses one Debian 12 / Ubuntu 24.04 amd64/arm64 host with Docker

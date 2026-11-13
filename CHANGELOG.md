@@ -1,5 +1,15 @@
 # Changelog / История изменений
 
+## Manager 0.4.0 — in preparation / в подготовке
+
+- Open the Manager window on the first tray double-click or Settings command. Launch the GUI without Windows SW_HIDE overriding its first show, including restart after an update. / Окно Manager открывается с первого двойного клика по трею или команды настроек; запуск GUI и перезапуск после обновления больше не передают SW_HIDE, подавляющий первый показ окна.
+
+- Delete selected backups from the UI with date/name confirmation and an immediate refreshed list; preserve pending recovery sources and reject unsafe paths/links. / Удаление выбранных копий из UI с подтверждением даты/имени и обновлением списка; защита копии незавершённого восстановления и проверка путей/ссылок.
+
+- Wait for the first rendered window; fix settings status publication across Windows ACL boundaries. Remove the installer invitation page; keep access in Manager. / Ожидание отрисовки окна, исправление публикации статуса и загрузки настроек. Страница приглашения удалена из установщика; доступ находится в Manager.
+- Release the room lock during metadata downloads, bound manual checks, separate Server checking from installation and scope progress to its page. Read settings/logs and diagnostics during maintenance; return refreshed backup lists atomically. / Проверки метаданных не удерживают блокировку комнаты; ожидание ограничено, проверка Server отделена от установки, индикатор относится к своей странице. Чтение настроек, журнала и диагностика доступны во время обслуживания; создание копии сразу возвращает обновлённый список.
+- Import offline Windows Server ZIPs and portable packages with explicit signature status and approval, protected staging, backup/rollback and isolated local build directories. / Установка ZIP и переносимых пакетов Windows Server без интернета с показом подписи, подтверждением, защищённой копией пакета, резервированием/откатом и отдельными каталогами локальных сборок.
+
 ## Manager 0.3.0 — 2026-11-12 (preview)
 
 - Replace the active native settings/tray frontend with Electron/React. Show live SCM states and green/yellow/red server icons; move access, network/E2EE/history, backups, diagnostics and updates into one window. Exit stops Server; hiding removes only the tray icon. / Новый интерфейс Electron/React вместо прежнего активного Win32-окна: реальный статус SCM и зелёный/жёлтый/красный значок, доступ, сеть/E2EE/история, копии, диагностика и обновления в одном окне. Выход останавливает Server; скрытие убирает только значок.

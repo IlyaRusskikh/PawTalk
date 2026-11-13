@@ -8,11 +8,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -23,6 +25,86 @@ import (
 
 var brokerTokenPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
+// Deliberately typed: private configuration and credentials cannot be published.
+type desktopPublicStatus struct {
+	Update struct {
+		Status    string  `json:"status"`
+		Version   *string `json:"version,omitempty"`
+		CheckedAt int64   `json:"checkedAt,omitempty"`
+	} `json:"update"`
+	Language       string `json:"language"`
+	AutoManager    bool   `json:"autoManager"`
+	ServerVersion  string `json:"serverVersion"`
+	ManagerVersion string `json:"managerVersion"`
+}
+
+func decodeDesktopStatus(input io.Reader) (desktopPublicStatus, error) {
+	var value desktopPublicStatus
+	data, err := io.ReadAll(io.LimitReader(input, 4097))
+	if err != nil {
+		return value, err
+	}
+	if len(data) > 4096 {
+		return value, errors.New("public status document too large")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return value, err
+	}
+	var extra any
+	if decoder.Decode(&extra) != io.EOF {
+		return value, errors.New("invalid public status document")
+	}
+	allowed := map[string]bool{"idle": true, "available": true, "current": true, "installing": true, "check-failed": true}
+	if !allowed[value.Update.Status] || (value.Language != "ru" && value.Language != "en") || !versionPattern.MatchString(value.ServerVersion) || !versionPattern.MatchString(value.ManagerVersion) || (value.Update.Version != nil && !versionPattern.MatchString(*value.Update.Version)) {
+		return value, errors.New("invalid public status values")
+	}
+	return value, nil
+}
+
+func publishDesktopStatus(root string, input io.Reader) error {
+	if !windows.GetCurrentProcessToken().IsElevated() {
+		return errors.New("administrator required")
+	}
+	value, err := decodeDesktopStatus(input)
+	if err != nil {
+		return err
+	}
+	if err = noLinks(base()); err != nil {
+		return err
+	}
+	marker, err := os.ReadFile(filepath.Join(base(), ".pawtalk-manager-install"))
+	if err != nil {
+		return err
+	}
+	if string(marker) != "pawtalk-manager-install-v1" {
+		return errors.New("unowned Manager installation")
+	}
+	file, err := os.CreateTemp(base(), ".desktop-status-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	// Set the public read-only ACL before replacing the published document.
+	err = applySecurity(file.Name(), "GRGX", true)
+	if err == nil {
+		err = json.NewEncoder(file).Encode(value)
+	}
+	if err == nil {
+		err = file.Sync()
+	}
+	closeErr := file.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	name := "status-" + strings.TrimPrefix(serverTrayClass(root), "PawTalk.Server.Tray.") + ".json"
+	return os.Rename(file.Name(), filepath.Join(base(), name))
+}
+
 func desktopBroker(pipe, token, root string) error {
 	if !windows.GetCurrentProcessToken().IsElevated() || !strings.HasPrefix(pipe, `\\.\pipe\PawTalk.Manager.Broker.`) || !brokerTokenPattern.MatchString(strings.TrimPrefix(pipe, `\\.\pipe\PawTalk.Manager.Broker.`)) || !brokerTokenPattern.MatchString(token) {
 		return errors.New("invalid privileged desktop session")
@@ -31,10 +113,13 @@ func desktopBroker(pipe, token, root string) error {
 	if err != nil {
 		return err
 	}
-	connection, err := os.OpenFile(pipe, os.O_RDWR, 0)
+	// A synchronous Windows pipe serializes I/O on its handle: the scanner's
+	// next read would prevent a concurrent metadata worker from writing back.
+	handle, err := windows.CreateFile(wide(pipe), windows.GENERIC_READ|windows.GENERIC_WRITE, 0, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OVERLAPPED, 0)
 	if err != nil {
 		return err
 	}
+	connection := os.NewFile(uintptr(handle), pipe)
 	defer connection.Close()
 	encoder := json.NewEncoder(connection)
 	if err = encoder.Encode(map[string]string{"token": token}); err != nil {
@@ -42,6 +127,9 @@ func desktopBroker(pipe, token, root string) error {
 	}
 	scanner := bufio.NewScanner(connection)
 	scanner.Buffer(make([]byte, 4096), 131072)
+	session, cancelSession := context.WithCancel(context.Background())
+	defer cancelSession()
+	var writing sync.Mutex
 	for scanner.Scan() {
 		var request struct {
 			ID      int             `json:"id"`
@@ -51,40 +139,53 @@ func desktopBroker(pipe, token, root string) error {
 		if json.Unmarshal(scanner.Bytes(), &request) != nil || request.ID <= 0 {
 			return errors.New("invalid desktop request")
 		}
-		result := map[string]any{"id": request.ID}
-		if request.Action == "start" || request.Action == "stop" {
-			if err = control(request.Action+"-server", root); err != nil {
-				result["error"] = "service"
-			} else {
-				result["value"] = true
-			}
-		} else {
-			allowed := map[string]bool{"snapshot": true, "apply": true, "invitation": true, "reset-password": true, "backup-create": true, "backup-restore": true, "diagnostics": true, "logs": true, "check-updates": true, "install-manager-update": true, "install-server-update": true}
-			if !allowed[request.Action] {
-				result["error"] = "invalid"
-			} else {
-				ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
-				command := python(ctx, filepath.Join(base(), "bootstrap", "manager", "pawtalkctl"), "--root", root, "desktop", request.Action)
-				command.Stdin = bytes.NewReader(request.Payload)
-				output, runErr := command.Output()
-				timedOut := ctx.Err() != nil
-				cancel()
-				var response map[string]any
-				if timedOut {
-					result["error"] = "timeout"
-				} else if len(output) > 1024*1024 || json.Unmarshal(output, &response) != nil {
-					result["error"] = "failed"
-				} else if response["error"] != nil {
-					result["error"] = response["error"]
-				} else if runErr != nil {
-					result["error"] = "failed"
+		handle := func() {
+			result := map[string]any{"id": request.ID}
+			if request.Action == "start" || request.Action == "stop" {
+				if control(request.Action+"-server", root) != nil {
+					result["error"] = "service"
 				} else {
-					result["value"] = response["value"]
+					result["value"] = true
+				}
+			} else {
+				allowed := map[string]bool{"snapshot": true, "apply": true, "invitation": true, "reset-password": true, "backup-create": true, "backup-restore": true, "backup-delete": true, "diagnostics": true, "logs": true, "check-updates": true, "check-server-updates": true, "install-manager-update": true, "install-server-update": true, "inspect-server-package": true, "install-server-package": true}
+				if !allowed[request.Action] {
+					result["error"] = "invalid"
+				} else {
+					limit := 180 * time.Second
+					if request.Action == "check-updates" || request.Action == "check-server-updates" {
+						limit = 25 * time.Second
+					}
+					ctx, cancel := context.WithTimeout(session, limit)
+					command := python(ctx, filepath.Join(base(), "bootstrap", "manager", "pawtalkctl"), "--root", root, "desktop", request.Action)
+					command.Stdin = bytes.NewReader(request.Payload)
+					output, runErr := command.Output()
+					timedOut := ctx.Err() != nil
+					cancel()
+					var response map[string]any
+					if timedOut {
+						result["error"] = "timeout"
+					} else if len(output) > 1024*1024 || json.Unmarshal(output, &response) != nil {
+						result["error"] = "failed"
+					} else if response["error"] != nil {
+						result["error"] = response["error"]
+					} else if runErr != nil {
+						result["error"] = "failed"
+					} else {
+						result["value"] = response["value"]
+					}
 				}
 			}
+			writing.Lock()
+			defer writing.Unlock()
+			if encoder.Encode(result) != nil {
+				_ = connection.Close()
+			}
 		}
-		if err = encoder.Encode(result); err != nil {
-			return err
+		if request.Action == "check-updates" || request.Action == "check-server-updates" {
+			go handle()
+		} else {
+			handle()
 		}
 	}
 	return scanner.Err()
@@ -130,7 +231,7 @@ func closeDesktop(root string, restart bool) error {
 	return nil
 }
 
-func launchDesktop(root, lang string, settings bool) error {
+func desktopLaunchCommand(root, lang string, settings bool) *exec.Cmd {
 	args := []string{"--root", root, "--lang", lang}
 	if settings {
 		args = append(args, "--settings")
@@ -138,7 +239,15 @@ func launchDesktop(root, lang string, settings bool) error {
 		args = append(args, "--tray")
 	}
 	command := exec.Command(filepath.Join(base(), "desktop", "PawTalk Server Manager.exe"), args...)
-	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	// CREATE_NO_WINDOW suppresses a console without setting STARTF_USESHOWWINDOW
+	// to SW_HIDE. That startup override consumes Electron's first window.show().
+	// The GUI itself stays hidden in tray mode through BrowserWindow.show=false.
+	command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
+	return command
+}
+
+func launchDesktop(root, lang string, settings bool) error {
+	command := desktopLaunchCommand(root, lang, settings)
 	if err := command.Start(); err != nil {
 		return err
 	}

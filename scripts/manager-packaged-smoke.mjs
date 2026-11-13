@@ -12,7 +12,9 @@ const root=await mkdtemp(path.join(os.tmpdir(),'pawtalk-manager-packaged-'));
 const key=createHash('sha256').update(root.toLowerCase()).digest('hex').slice(0,16);
 const pipe=String.raw`\\.\pipe\PawTalk.Manager.UI.${key}`;
 const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
-const child=spawn(path.resolve('release/manager/windows/desktop/PawTalk Server Manager.exe'),['--root',root,'--tray'],{env,windowsHide:true,stdio:'ignore'});
+// The GUI stays hidden via BrowserWindow options, matching the native launcher.
+// SW_HIDE on process startup would suppress the first explicit window.show().
+const child=spawn(path.resolve('release/manager/windows/desktop/PawTalk Server Manager.exe'),['--root',root,'--tray'],{env,windowsHide:false,stdio:'ignore'});
 let ended=false;
 const exit=new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>{ended=true;resolve(code);});});
 const request=()=>new Promise((resolve,reject)=>{

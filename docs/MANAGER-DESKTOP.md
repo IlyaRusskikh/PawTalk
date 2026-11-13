@@ -1,11 +1,11 @@
-# Server Manager 0.3.0 desktop
+# Server Manager 0.4.0 desktop
 
-Опубликован preview / Published preview: [Manager 0.3.0](releases/manager-v0.3.0.md).
+В подготовке / In preparation: [Manager 0.4.0](releases/manager-v0.4.0.md). Последний опубликованный / Latest published: [Manager 0.3.0](releases/manager-v0.3.0.md).
 Downloads and installation: [Windows Server](WINDOWS-SERVER.md).
 
 ## Русский
 
-Manager использует отдельное окно Electron/React. Оно содержит состояние службы,
+Manager использует отдельное окно Electron/React. Первый двойной клик по трею и первая команда «Открыть настройки» показывают уже отрисованное окно; процесс GUI запускается без принудительного SW_HIDE. Оно содержит состояние службы,
 копирование пароля и приглашения, сеть, E2EE, историю, обновления, резервные копии
 и диагностику. Секреты копируются непосредственно в системный буфер обмена и не
 попадают в снимок настроек или текст страницы. Сброс пароля требует подтверждения.
@@ -45,7 +45,7 @@ Renderer изолирован и получает только ограниче�
 
 ## English
 
-Manager has a dedicated Electron/React window for service status, password and
+The first tray double-click or Settings command shows the rendered window. GUI startup does not force SW_HIDE over its first show. Manager has a dedicated Electron/React window for service status, password and
 invitation copying, networking, E2EE, history, updates, backups and diagnostics.
 Secrets go directly to the system clipboard, never into the settings snapshot
 or page text. Password reset requires confirmation.
@@ -81,6 +81,81 @@ the controller shipped in the protected installation directory so an older
 selected bundle cannot restore obsolete behavior. The complete Windows installer
 updates the window, Go host and controller together. Linux retains its existing
 signed-bundle update mechanism.
+
+## Local Server packages / Локальные пакеты Server
+
+In development, not yet released / В разработке, ещё не опубликовано.
+
+**Удаление копий / Delete backups.** В разделе «Резервные копии» у каждой записи
+есть «Удалить». Подтверждение показывает дату и имя выбранной копии. После
+удаления список обновляется сразу, без перезапуска сервера. Копия, нужная для
+незавершённого восстановления, не удаляется; выход за каталог копий и ссылки
+внутри него отклоняются. / Each backup has a Delete action with its date/name
+shown for confirmation. The list updates immediately without restarting Server.
+Backups needed for pending recovery cannot be deleted; paths outside the backup
+directory and nested links are rejected.
+
+**RU.** На вкладке «Обновления» Server сначала проверяется, затем предлагается
+установка найденной версии. Ручная проверка Manager не включает автоустановку.
+Сеть не удерживает блокировку комнаты; индикатор проверки остаётся на своей
+вкладке. Настройки, журнал и диагностика читаются во время обслуживания.
+Приглашение копируется в «Обзоре»; установщик больше не показывает его.
+
+«Установить из файла…» принимает `PawTalk.Server.X.Y.Z.windows-x64.zip` или
+`PawTalk.Server.X.Y.Z.pawtalk-server.zip`. Для скачанного вручную релиза положите
+его `server-manifest.json` рядом с обычным ZIP либо включите его в переносимый
+пакет. Подпись проверяется установленными корнями доверия, а размер и SHA-256
+должны совпасть. Повреждённая/неверная подпись не заменяется режимом без подписи.
+
+Без манифеста пакет считается локальной сборкой: Manager явно предупреждает,
+что подпись опубликованного выпуска не подтверждена, и требует подтверждения
+перед исполнением. До подтверждения архив только проверяется и копируется в
+защищённый каталог; код из него не запускается. Проверка целостности не
+подтверждает автора. Устанавливайте только доверенные локальные сборки.
+Версия и SHA-256 показаны в подтверждении. Повторная сборка с тем же номером
+хранится в отдельном каталоге; опубликованные бинарники не заменяются. Автообновление Server выключается после успешной установки локальной сборки, чтобы фоновая служба не заменила её опубликованным релизом. Его можно включить обратно в UI.
+
+Перед установкой создаётся копия комнаты; неудачный запуск откатывает данные и
+бинарники. Остановленный Server остаётся остановленным. Локальные резервные
+копии можно восстановить через UI этого Manager; перенос такой копии в новую
+установку через CLI пока не поддержан. Сохраните исходный пакет. Работа с пакетом
+после его скачивания не требует GitHub; первоначальная установка самого Manager
+по-прежнему использует опубликованные подписанные зависимости.
+
+**EN.** On Updates, Server availability is checked before an installation is
+offered. Manual Manager checks never trigger installation. Metadata requests do
+not hold the room lock and progress stays on Updates. Settings, logs and
+diagnostics remain readable during maintenance. Invitations are copied in
+Overview; the installer no longer displays them.
+
+Install from file accepts the regular Windows Server ZIP or the portable package
+named above. Include the release's `server-manifest.json` beside the regular ZIP
+or inside the portable package to verify it using existing trust roots, exact
+size and SHA-256. Invalid signatures never fall back to unsigned installation.
+Without a manifest, the UI identifies a local build and requires explicit
+approval. Inspection only validates and privately stages bytes; it never runs
+the package. Checksums establish integrity, not authorship. Only approve local
+code you trust. Same-version local builds have separate directories and do not
+replace published binaries. Successful local installation disables Server auto-updates so background maintenance does not replace the test build; re-enable them in the UI when desired. Installation backs up the room, preserves stopped
+state and rolls back failed starts. Local-build backups can be restored in this
+Manager's UI; fresh-install CLI migration is not supported yet. Keep the original
+package. Package installation needs no GitHub connection, while initial Manager
+setup still needs its signed published dependencies.
+
+The Windows Server build also creates a portable package. To package an existing
+archive manually / Сборка Windows Server создаёт переносимый пакет. Для уже
+готового архива:
+
+```powershell
+node scripts/package-local-server.mjs --archive release/server/PawTalk.Server.0.10.1.windows-x64.zip
+# Optional signed release metadata / Необязательный подписанный манифест:
+node scripts/package-local-server.mjs --archive release/server/PawTalk.Server.0.10.1.windows-x64.zip --manifest release/server/server-manifest.json
+```
+
+The outer ZIP contains `package.json` and `server.zip`, optionally
+`server-manifest.json`. Metadata format is `pawtalk-server-package-v1` with
+`version`, `apiProtocol: 1`, `dataSchema: 1` and the inner ZIP's `sha256`.
+The regular ZIP retains its existing seven-file allowlist and license notices.
 
 ## Build and verification / Сборка и проверка
 
