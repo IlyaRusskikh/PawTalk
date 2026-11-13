@@ -8,10 +8,10 @@ behavior and how you checked it. Add or update tests when behavior changes.
 Keep both root READMEs current when changing setup or user-facing features.
 Contributions are made under the project's `AGPL-3.0-only` license.
 
-Before a pull request, run `npm run build`, `npm test`, `npm run check:public`,
-and `go test ./...` / `go vet ./...` inside `server`. For desktop/audio changes,
-also run `npm run smoke` and the relevant integration or hardware checks in
-[docs/ACCEPTANCE.md](docs/ACCEPTANCE.md). Describe checks you could not run.
+Use [AGENTS.md](AGENTS.md) and [verification routing](agents/testing/README.md)
+for affected checks before pushing. Open a focused PR from current main; squash
+merge requires successful PR CI and explicit owner approval. Report unavailable
+checks. Do not watch CI unless asked.
 
 Never include room passwords, invitations, E2EE keys, TLS private keys, personal
 recordings, local diagnostics or `manager/generated/`. Replace real addresses
@@ -28,10 +28,10 @@ Release steps are in [docs/RELEASING.md](docs/RELEASING.md).
 запуска или возможностей обновляйте оба корневых README. Вклад в проект
 предоставляется под его лицензией `AGPL-3.0-only`.
 
-Перед pull request выполните `npm run build`, `npm test`, `npm run check:public`,
-а в `server` — `go test ./...` и `go vet ./...`. Для интерфейса и звука также
-запустите `npm run smoke` и подходящие интеграционные/аппаратные проверки из
-[docs/ACCEPTANCE.md](docs/ACCEPTANCE.md). Укажите, что не удалось проверить.
+Следуйте [AGENTS.md](AGENTS.md) и [маршрутизации проверок](agents/testing/README.md)
+перед push. Ветка — от актуального main; squash merge требует успешного PR CI и
+отдельного разрешения владельца. Укажите недоступные проверки. Не отслеживайте CI
+без поручения.
 
 Не добавляйте пароли комнат, приглашения, ключи E2EE, приватные TLS-ключи,
 личные записи, локальные отчёты и `manager/generated/`. Реальные адреса заменяйте

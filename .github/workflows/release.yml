@@ -16,6 +16,12 @@ jobs:
       channel: ${{ steps.route.outputs.channel }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Require tag commit contained in main
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/main
       - uses: actions/setup-node@v6
         with:
           node-version: '24.22.1'
@@ -47,8 +53,79 @@ jobs:
     with:
       component: ${{ needs.plan.outputs.component }}
       client-prerelease: ${{ needs.plan.outputs.channel == 'preview' }}
-    secrets: inherit
+    secrets:
+      PAWTALK_UPDATE_PRIVATE_KEY: ${{ secrets.PAWTALK_UPDATE_PRIVATE_KEY }}
+  prepare-server:
+    if: needs.plan.outputs.component == 'server'
+    needs: [plan, verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+      - uses: actions/download-artifact@v7
+        with:
+          name: pawtalk-server-windows
+          path: release/server
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - run: sudo apt-get update && sudo apt-get install -y skopeo
+      - name: Build complete multi-platform image without publishing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: server/standalone.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          outputs: type=oci,dest=release/server-image.tar
+          labels: |
+            org.opencontainers.image.source=https://github.com/IlyaRusskikh/PawTalk
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.plan.outputs.version }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+      - name: Sign prepared Server digest and Windows package
+        env:
+          PAWTALK_SERVER_PRIVATE_KEY: ${{ secrets.PAWTALK_SERVER_PRIVATE_KEY }}
+          PAWTALK_PRERELEASE: ${{ needs.plan.outputs.channel == 'preview' && 'true' || 'false' }}
+        run: |
+          skopeo inspect --raw oci-archive:release/server-image.tar > /tmp/server-index.json
+          digest=$(sha256sum /tmp/server-index.json | cut -d ' ' -f 1)
+          export PAWTALK_IMAGE_DIGEST="sha256:$digest"
+          node scripts/release-metadata.mjs
+      - uses: actions/upload-artifact@v6
+        with:
+          name: pawtalk-server-prepared
+          if-no-files-found: error
+          path: |
+            release/server-image.tar
+            release/server/server-manifest.json
+            release/server/PawTalk.Server.*.windows-x64.zip
+  prepare-manager:
+    if: needs.plan.outputs.component == 'manager'
+    needs: [plan, verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+      - uses: actions/download-artifact@v7
+        with:
+          name: pawtalk-manager-windows
+          path: release/manager
+      - name: Sign complete Manager bundle
+        env:
+          PAWTALK_MANAGER_PRIVATE_KEY: ${{ secrets.PAWTALK_MANAGER_PRIVATE_KEY }}
+          PAWTALK_PRERELEASE: ${{ needs.plan.outputs.channel == 'preview' && 'true' || 'false' }}
+        run: node scripts/release-metadata.mjs
+      - uses: actions/upload-artifact@v6
+        with:
+          name: pawtalk-manager-prepared
+          if-no-files-found: error
+          path: release/manager/*
   client:
+    environment: release-publish
     if: needs.plan.outputs.component == 'client'
     needs: [plan, verify]
     runs-on: ubuntu-latest
@@ -65,14 +142,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CHANNEL: ${{ needs.plan.outputs.channel }}
         run: |
-          flags=(--latest=true)
+          flags=(--latest=false)
           if [ "$CHANNEL" = preview ]; then flags=(--prerelease --latest=false); fi
           title=$(head -n 1 "docs/releases/$GITHUB_REF_NAME.md")
           title="${title#\# }"
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/PawTalk.Setup.*.exe release/PawTalk.Licenses.*.zip release/SHA256SUMS.txt release/update-manifest.json
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/PawTalk.Setup.*.exe release/PawTalk.Licenses.*.zip release/SHA256SUMS.txt release/update-manifest.json
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false "${flags[@]}"
   server:
+    environment: release-publish
     if: needs.plan.outputs.component == 'server'
-    needs: [plan, verify]
+    needs: [plan, verify, prepare-server]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -82,21 +161,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24.22.1'
-      - uses: docker/setup-qemu-action@v4
       - uses: actions/download-artifact@v7
         with:
-          name: pawtalk-server-windows
-          path: release/server
-      - uses: docker/setup-buildx-action@v4
-      - name: Validate Server signing key before publishing any image
-        env:
-          PAWTALK_SERVER_PRIVATE_KEY: ${{ secrets.PAWTALK_SERVER_PRIVATE_KEY }}
-        run: node scripts/release-metadata.mjs --check-key
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          name: pawtalk-server-prepared
+          path: release
+      - run: sudo apt-get update && sudo apt-get install -y skopeo
       - name: Refuse replacing image version
         env:
           GH_TOKEN: ${{ github.token }}
@@ -106,25 +175,12 @@ jobs:
           token=$(curl --fail -sS -u "$GITHUB_ACTOR:$GH_TOKEN" 'https://ghcr.io/token?service=ghcr.io&scope=repository:ilyarusskikh/pawtalk-server:pull' | node -pe 'JSON.parse(fs.readFileSync(0)).token')
           code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $token" -H 'Accept: application/vnd.oci.image.index.v1+json' "https://ghcr.io/v2/ilyarusskikh/pawtalk-server/manifests/$VERSION")
           test "$code" = 404
-      - uses: docker/build-push-action@v7
-        id: image
-        with:
-          context: .
-          file: server/standalone.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ghcr.io/ilyarusskikh/pawtalk-server:${{ needs.plan.outputs.version }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/IlyaRusskikh/PawTalk
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ needs.plan.outputs.version }}
-            org.opencontainers.image.licenses=AGPL-3.0-only
-      - name: Sign server metadata
+      - name: Publish prepared image without changing its digest
         env:
-          PAWTALK_SERVER_PRIVATE_KEY: ${{ secrets.PAWTALK_SERVER_PRIVATE_KEY }}
-          PAWTALK_IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
-          PAWTALK_PRERELEASE: ${{ needs.plan.outputs.channel == 'preview' && 'true' || 'false' }}
-        run: node scripts/release-metadata.mjs
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          skopeo copy --all --preserve-digests --dest-creds "$GITHUB_ACTOR:$GH_TOKEN" oci-archive:release/server-image.tar "docker://ghcr.io/ilyarusskikh/pawtalk-server:$VERSION"
       - name: Publish Server metadata and Windows package
         env:
           GH_TOKEN: ${{ github.token }}
@@ -134,10 +190,12 @@ jobs:
           if [ "$CHANNEL" = preview ]; then flags+=(--prerelease); fi
           title=$(head -n 1 "docs/releases/$GITHUB_REF_NAME.md")
           title="${title#\# }"
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/server/server-manifest.json release/server/PawTalk.Server.*.windows-x64.zip
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/server/server-manifest.json release/server/PawTalk.Server.*.windows-x64.zip
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false "${flags[@]}"
   manager:
+    environment: release-publish
     if: needs.plan.outputs.component == 'manager'
-    needs: [plan, verify]
+    needs: [plan, verify, prepare-manager]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -148,13 +206,8 @@ jobs:
           node-version: '24.22.1'
       - uses: actions/download-artifact@v7
         with:
-          name: pawtalk-manager-windows
+          name: pawtalk-manager-prepared
           path: release/manager
-      - name: Sign complete Manager bundle
-        env:
-          PAWTALK_MANAGER_PRIVATE_KEY: ${{ secrets.PAWTALK_MANAGER_PRIVATE_KEY }}
-          PAWTALK_PRERELEASE: ${{ needs.plan.outputs.channel == 'preview' && 'true' || 'false' }}
-        run: node scripts/release-metadata.mjs
       - name: Publish Manager assets only
         env:
           GH_TOKEN: ${{ github.token }}
@@ -164,4 +217,5 @@ jobs:
           if [ "$CHANNEL" = preview ]; then flags+=(--prerelease); fi
           title=$(head -n 1 "docs/releases/$GITHUB_REF_NAME.md")
           title="${title#\# }"
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/manager/PawTalk.Manager.*.tar.gz release/manager/manager-manifest.json release/manager/PawTalk.Server.Manager.Setup.*.exe
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/manager/PawTalk.Manager.*.tar.gz release/manager/manager-manifest.json release/manager/PawTalk.Server.Manager.Setup.*.exe
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false "${flags[@]}"

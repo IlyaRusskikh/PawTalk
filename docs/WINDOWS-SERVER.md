@@ -1,7 +1,7 @@
 # Permanent Windows server / Постоянный Windows-сервер
 
 **Server 0.10.1 / Manager 0.4.0 — released previews / предварительные выпуски.**
-[Установщик Manager 0.4.0](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.4.0/PawTalk.Server.Manager.Setup.0.4.0.exe) · [Изменения](releases/manager-v0.4.0.md).
+[Актуальный установщик Manager](https://ilyarusskikh.github.io/PawTalk/downloads/#manager) · [Изменения](releases/manager-v0.4.0.md).
 
 Выпущенный [патч Manager 0.2.1](RELEASE-NOTES-0.10.1.md) исправляет управление
 LocalService без debug-привилегии, открытие настроек и мгновенное переключение языка.
@@ -34,7 +34,7 @@ Windows CI-тестом на Windows Server 2022 и 2025: службы, EXE-ус
 
 ## Установка
 
-Скачайте `PawTalk.Server.Manager.Setup.0.4.0.exe` из `manager-v0.4.0`.
+Скачайте актуальный установщик Manager со [страницы загрузки](https://ilyarusskikh.github.io/PawTalk/downloads/#manager).
 Запустите EXE с правами администратора, выберите язык и заполните настройки:
 публичный IPv4, порт, шифрование, SHA-256 key ID (не секретный ключ), лимит истории
 и общий переключатель автообновления сервера/Manager. Шифрование и обновления

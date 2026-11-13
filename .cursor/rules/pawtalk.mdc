@@ -1,0 +1,6 @@
+---
+description: PawTalk repository entry point
+alwaysApply: true
+---
+Read [AGENTS.md](../../AGENTS.md) and follow its mandatory rules. Use
+[agents/README.md](../../agents/README.md) to select relevant rules and skills.

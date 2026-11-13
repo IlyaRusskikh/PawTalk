@@ -1,17 +1,43 @@
 # Независимые выпуски / Independent releases
 
-**Выпущены Client 0.11.0, Server 0.10.1, Manager 0.4.0 и Client bridge v0.8.1.**
-Manager 0.4.0 опубликован: [заметки и файлы](releases/manager-v0.4.0.md), [успешный tag CI](https://github.com/IlyaRusskikh/PawTalk/actions/runs/43371241627). Client/Server не меняют версии вместе с ним.
+Current public versions / Актуальные публичные версии:
+[Client, Server, Manager](https://ilyarusskikh.github.io/PawTalk/downloads/).
+GitHub Releases is authoritative; manifests describe source versions. Historical
+notes below do not authorize repeating old publication steps.
 
-Все три текущие линии опубликованы как preview; подписи и скачанные assets проверены.
-Проверка тега `server-v0.10.0` остановилась до публикации из-за зависимости
-server-only Electron smoke от Client dist. Тег не заменяется; исправление выпущено в 0.10.1.
-Версии независимы. После принятого Server Manager и Client можно выпускать параллельно
-из одного проверенного коммита; каждый тег сохраняет собственный workflow и artifacts.
-Сначала branch/PR CI и ревью, затем отдельное разрешение на merge и component tags.
-Текущий Client: [client-v0.11.0](releases/client-v0.11.0.md); текущий Manager: [manager-v0.4.0](releases/manager-v0.4.0.md); патч Server: [RELEASE-NOTES-0.10.1](RELEASE-NOTES-0.10.1.md); исходный порядок server-first: [RELEASE-NOTES-0.10.0](RELEASE-NOTES-0.10.0.md).
-Локальные сборки используют `--publish never`. Push/tag/release требуют отдельного
-разрешения владельца. Опубликованные теги, EXE и образы не заменяются.
+## Approval sequence / Этапы согласования
+
+1. Prepare work/{service}-v{version} from current main (multi-component branches:
+   work/client-vX.Y.Z__server-vX.Y.Z). Update version sources, CHANGELOG and bilingual
+   docs/releases/<tag>.md. Release versions start at 0.1.0; do not bump docs-only work.
+2. Run affected final-state checks, review staged/public diff, push the work branch
+   and open PR. Development CI runs on PR only, not branch/main pushes. Manual
+   component scopes and reusable tag checks remain. Hand off the CI URL without
+   watching unless asked. Merge needs successful current PR CI and explicit owner
+   permission; squash and delete the branch.
+3. Ask separately for tag permission. Only tag a commit contained in main; push
+   the matching immutable component tag. The plan verifies ancestry and refuses
+   an existing GitHub release. A failed pushed tag is not reused: prepare a new version.
+4. Tag CI verifies the component, builds packages and prepares/signs metadata.
+   Server builds a multi-platform OCI archive without pushing; its exact digest
+   is signed. Manager bundle is signed before publication. Client retains the
+   trusted-tag signing step and its existing key. Preparation has no write token.
+5. Owner separately approves the **release-publish** environment after all checks
+   and preparations succeed. Only then publish the prepared assets/image. GitHub
+   assets upload into a draft first; publish only after upload succeeds. Server
+   digest is preserved on registry copy. No tag, binary or image replacement.
+6. Successful release workflow triggers Pages regeneration from main. A release
+   published manually also triggers Pages. API/catalog failure leaves existing
+   Pages live; recover via Pages workflow_dispatch, without a catalog commit.
+
+Merge, tag and publication are separate permissions. / Merge, тег и публикация
+требуют отдельных разрешений; молчание не является согласием. До подтверждения
+публикации все проверки, сборки и подписи уже должны быть готовы. Репозиторий
+не может сам включить Required reviewers: [настройки владельца](../agents/rules/github.md).
+Подписи доступны trusted tag preparation, не PR; не переносите signing secrets
+в release-publish без изменения границ workflow. Registry/GitHub publication is
+not atomic: an orphan image/draft after failure requires investigation and a new
+version, never replacement. Do not approve an incomplete/failed release.
 
 | Компонент | Источник версии | Тег | Артефакты |
 |---|---|---|---|
@@ -81,15 +107,15 @@ Manager 0.4.0 опубликован отдельно от Client 0.11.0; нов
 
 ## CI и публикация
 
-`.github/workflows/check.yml` проверяет ветки/PR и вызывается release workflow.
+`.github/workflows/check.yml` проверяет PR, ручные scopes и вызывается release workflow.
 Он не публикует серверные образы. `.github/workflows/release.yml` выбирает **ровно
 один** компонент по тегу через `scripts/release-contract.mjs`, проверяет его версию,
 запускает проверки и только затем публикует свои артефакты.
 
-Release workflow передаёт выбранный компонент в reusable `check.yml`. Ветки и PR
+Release workflow передаёт выбранный компонент в reusable `check.yml`. PR
 по умолчанию используют `all`; ручной `workflow_dispatch` позволяет проверить
 `all`, `client`, `server` или `manager` без публикации.
-Повторные push/PR-проверки одной ветки и scope отменяют устаревший запуск;
+Новые PR-проверки одной ветки и scope отменяют устаревший запуск;
 разные компоненты и ручные проверки имеют отдельные concurrency groups.
 
 | Scope | Выпускные сборки и загружаемые CI artifacts | Зависимости интеграционных тестов |
@@ -97,11 +123,11 @@ Release workflow передаёт выбранный компонент в reusa
 | `client` | Только Client EXE, лицензии, checksum и подписанный манифест при tag push | Опубликованный подписанный Server; встроенный сервер из общего `server/` |
 | `server` | Только Server ZIP; release job публикует Linux image и манифест | Минимальный Manager host/runtime без NSIS-установщика; полный серверный lifecycle |
 | `manager` | Только Manager EXE; release job собирает bundle и подписывает metadata | Опубликованный подписанный Server ZIP/image, без пересборки Server; SCM/EXE и Compose lifecycle |
-| `all` | Все три пакета | Полные исходники и полный набор проверок ветки/PR |
+| `all` | Все три пакета | Полные исходники и полный набор проверок PR |
 
 Windows artifacts разделены: `pawtalk-windows`, `pawtalk-server-windows` и
-`pawtalk-manager-windows`. Каждый publisher скачивает только свой artifact в
-соответствующий каталог. Зависимости тестов не загружаются как чужие release assets.
+`pawtalk-manager-windows`. Preparation скачивает только свой artifact; publisher получает полный подготовленный
+пакет своего компонента (Server также OCI archive), без повторной сборки. Зависимости тестов не загружаются как чужие release assets.
 Server dependency выбирается по подписанному опубликованному манифесту и digest,
 а не по потенциально ещё не выпущенному `server/VERSION` из дерева Manager/Client.
 Подмена ZIP, неверный hash/size или отсутствие доверенного Server прерывают проверку.
@@ -116,8 +142,7 @@ Server dependency выбирается по подписанному опубл�
 - Канал каждой линии задаётся независимо repository variable `PAWTALK_CLIENT_CHANNEL`,
   `PAWTALK_SERVER_CHANNEL`, `PAWTALK_MANAGER_CHANNEL`: `stable` или `preview` (default).
   SemVer prerelease всегда принудительно `preview`. Workflow передаёт один и тот же
-  выбор в signing и GitHub Release flags; stable Client получает отметку Latest,
-  Server/Manager её не перехватывают. Updater всё равно не использует общий Latest.
+  выбор в signing и GitHub Release flags; все компоненты публикуются с --latest=false. Общий Latest не является контрактом.
 
 Updater каждого компонента просматривает список Releases с пагинацией и фильтрует
 своё семейство, SemVer, draft, подпись и ассеты. Client дополнительно учитывает
@@ -194,7 +219,7 @@ protocol 1. [Матрица](COMPATIBILITY.md). Breaking API/schema требую
    настоящие микрофоны/две сети. Контейнерные synthetic tests не доказывают их успех.
 5. Проверить Client-only/Server-only/Manager-only маршруты, подмену metadata/assets,
    каналы, backup/restore, нездоровый rollout, SIGKILL recovery, Manager fallback.
-6. Получить отдельное разрешение на публикацию.
+6. Получить отдельные разрешения на merge, тег и публикацию на соответствующих этапах.
 
 Client, Server и Manager выпускаются независимо. Изменения общего API требуют
 проверки обеих сторон и совместимого server-first перехода по [матрице](COMPATIBILITY.md).
@@ -206,9 +231,9 @@ Client assets: `PawTalk.Setup.X.Y.Z.exe`, `update-manifest.json`, `SHA256SUMS.tx
 Не прикладывать отдельные лицензии или дубликат source archive; GitHub оставляет
 автоматические Source code ZIP/TAR. Все источники и сторонние notices сохраняются.
 README/site должны ссылаться на фактическую **клиентскую** загрузку, Server/Manager
-указываются отдельно. Текущие ссылки: Client 0.11.0, Server 0.10.1 и Manager 0.3.0.
-Для следующего выпуска сохранять их до фактической публикации новых assets.
-Не публиковать сайт обычным push/tag.
+указываются отдельно. Актуальные ссылки генерируются из опубликованных GitHub Releases; README и
+руководства используют постоянные /downloads/#client, #server, #manager.
+Не используйте /releases/latest и не меняйте ссылки коммитом после релиза.
 
 ## English
 
@@ -220,13 +245,12 @@ do not repeat its publication steps. Preserve the bridge source commit for bundl
 historical self-host builds. An expired bridge manifest may require manual Client installation.
 Never replace historical tags or assets. The component release workflow validates
 its own source, runs verification and publishes only its component's assets.
-Stable/preview flags must match signed metadata. Client 0.11.0, Server 0.10.1 and
-Manager 0.3.0 are published previews. Keep their links until later assets actually
-exist. After accepting the Server release, independent Manager and Client tags may
+Stable/preview flags must match signed metadata. Current public versions and stable/preview channels come from GitHub Releases
+and the generated downloads catalog, not version pins in this guide. After accepting the Server release, independent Manager and Client tags may
 run in parallel from the same verified commit; each retains its own verification
 and artifacts. Branch CI alone does not authorize merging or publishing component tags.
 
-Release verification receives the selected component scope; branch/PR checks
+Release verification receives the selected component scope; PR checks
 default to `all`. Client tags package only the Client, Server tags package only
 the Server, and Manager tags package only the Manager. Windows artifacts and
 publisher extraction paths are separate. Integration tests retain required test

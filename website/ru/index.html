@@ -12,7 +12,7 @@
   <link rel="alternate" hreflang="x-default" href="https://ilyarusskikh.github.io/PawTalk/">
   <meta property="og:type" content="website">
   <meta property="og:title" content="PawTalk — ваша голосовая комната">
-  <meta property="og:description" content="Голосовой чат для Windows с открытым кодом. Без аккаунтов. На вашем ПК или Linux VPS. Предварительный выпуск PawTalk 0.10.1.">
+  <meta property="og:description" content="Голосовой чат для Windows с открытым кодом. Без аккаунтов. На вашем ПК или Linux VPS. Предварительный выпуск PawTalk.">
   <meta property="og:url" content="https://ilyarusskikh.github.io/PawTalk/ru/">
   <meta property="og:image" content="https://ilyarusskikh.github.io/PawTalk/assets/room-chat.png">
   <meta property="og:image:alt" content="Комната PawTalk с тремя участниками, кнопками звонка и зашифрованным текстовым чатом">
@@ -20,6 +20,7 @@
   <meta property="og:locale:alternate" content="en_US">
   <link rel="icon" href="../assets/pawtalk.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../style.css">
+  <script type="module" src="../releases.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">Перейти к содержимому</a>
@@ -32,16 +33,17 @@
     <div class="eyebrow">Открытый код · Свой сервер · Windows</div>
     <h1>Ваши друзья.<br>Ваш сервер.<br><span>Ваша комната.</span></h1>
     <p class="lead">Голос и текстовый чат для совместных игр и небольших сообществ. Создайте комнату на своём ПК или оставьте её работать на Linux VPS. Для входа — приглашение и никнейм. Без аккаунтов.</p>
-    <div class="actions"><a class="button" href="https://github.com/IlyaRusskikh/pawtalk/releases/download/client-v0.10.1/PawTalk.Setup.0.10.1.exe">Скачать PawTalk для Windows x64 ↓</a><a class="button secondary" href="https://github.com/IlyaRusskikh/pawtalk/blob/main/docs/SERVER.md">Установить Linux-сервер ↗</a></div>
-    <p class="fine">PawTalk 0.10.1 — предварительный выпуск · Windows 10/11 x64 · Интерфейс Русский / English</p>
-    <p class="fine">Также выпущены Server 0.10.1 и Manager 0.2.1: постоянные комнаты Linux/Windows, трей и настройки Windows, миграция в ProgramData и проверенные backup/обновления/восстановление. Для защиты активности существующим серверам нужно обновить Server. <a href="https://github.com/IlyaRusskikh/PawTalk/blob/main/docs/WINDOWS-SERVER.md">Установка и обновление сервера Windows →</a></p>
-    <p class="fine">Установщик без цифровой подписи · Проверяемое автообновление · <a href="https://github.com/IlyaRusskikh/pawtalk/releases/tag/client-v0.10.1">Описание выпуска, SHA-256 и исходники</a></p>
+    <div class="actions"><a class="button" href="../downloads/#client" data-release="client" data-asset="PawTalk.Setup.">Скачать PawTalk для Windows x64 ↓</a><a class="button secondary" href="https://github.com/IlyaRusskikh/pawtalk/blob/main/docs/SERVER.md">Установить Linux-сервер ↗</a></div>
+    <p class="fine">PawTalk — предварительный выпуск · Windows 10/11 x64 · Интерфейс Русский / English</p>
+    <p class="fine">Опубликованные версии: <a href="../downloads/#client" data-release="client" data-version>Client</a> · <a href="../downloads/#server" data-release="server" data-version>Server</a> · <a href="../downloads/#manager" data-release="manager" data-version>Manager</a></p>
+    <p class="fine">Установщик без цифровой подписи · Проверяемое автообновление · <a href="../downloads/#client" data-release="client">Описание выпуска, SHA-256 и исходники</a></p>
+    <p class="fine" data-status></p>
   </section>
   <figure class="hero-shot"><a href="../assets/room-chat.png"><img src="../assets/room-chat.png" width="1240" height="860" fetchpriority="high" alt="Комната PawTalk с тремя участниками, кнопками звонка и зашифрованным текстовым чатом"></a><figcaption>PawTalk 0.7.1 с тестовыми участниками и перепиской.</figcaption></figure>
   <section class="section" aria-labelledby="features"><h2 id="features">Небольшая комната. Нужные настройки.</h2>
     <div class="features"><article><h3>Размещайте у себя</h3><p>Временная комната на Windows-ПК или постоянный Docker-сервер на Linux amd64/arm64. Гостям достаточно установить клиент.</p></article><article><h3>Убирайте лишний шум</h3><p>Локальное шумоподавление RNNoise, эхоподавление и автоусиление. Выбирайте устройства, чувствительность и громкость.</p></article><article><h3>Говорите как удобно</h3><p>Активация голосом или push-to-talk, глобальные сочетания, mute/deafen и громкость каждого участника. Приложение работает в трее.</p></article></div>
   </section>
-  <section class="section split"><div><div class="eyebrow">В комнате</div><h2>Говорите и пишите в одной комнате.</h2><p>Меняйте высоту голосовой панели и чата. Отправляйте картинки до 2 МиБ, отвечайте на сообщения и копируйте текст. Форматируйте выделение, используйте Markdown, редактируйте и удаляйте свои сообщения на обновлённых серверах. Ссылки открываются в браузере. История подгружается при прокрутке; размер окна задаётся в настройках. На VPS объём хранения задаётся через PAWTALK_CHAT_MAX_MB: 128 МиБ по умолчанию, 0 — без лимита. Ограничения в семь дней нет.</p><p>При наборе текста анимируются лапки. Необязательные звуки CC0 отмечают вход и выход из комнаты и сообщают о непросмотренных сообщениях, если приложение неактивно или чат прокручен вверх.</p><p>Выберите аватар и оцените круглый кадр перед сохранением.</p></div><figure><a href="../assets/avatar-crop.png"><img src="../assets/avatar-crop.png" width="1240" height="860" loading="lazy" alt="Круглый предпросмотр с масштабированием и сдвигом изображения."></a><figcaption>Круглый предпросмотр с масштабированием и сдвигом изображения.</figcaption></figure></section>
+  <section class="section split"><div><div class="eyebrow">В комнате</div><h2>Говорите и пишите в одной комнате.</h2><p>Меняйте высоту голосовой панели и чата. Отправляйте картинки до 2 МиБ, отвечайте на сообщения и копируйте текст. Форматируйте выделение, используйте Markdown, редактируйте и удаляйте свои сообщения на обновлённых серверах. Ссылки открываются в браузере. История подгружается при прокрутке; размер окна задаётся в настройках. На VPS объём хранения задаётся через PAWTALK_CHAT_MAX_MB: 128 МиБ по умолчанию, 0 — без лимита. Ограничения в семь дней нет.</p><p>При наборе текста анимируются лапки. Необязательные записи кошачьих звуков отмечают вход и выход из комнаты и сообщают о непросмотренных сообщениях, если приложение неактивно или чат прокручен вверх.</p><p>Выберите аватар и оцените круглый кадр перед сохранением.</p></div><figure><a href="../assets/avatar-crop.png"><img src="../assets/avatar-crop.png" width="1240" height="860" loading="lazy" alt="Круглый предпросмотр с масштабированием и сдвигом изображения."></a><figcaption>Круглый предпросмотр с масштабированием и сдвигом изображения.</figcaption></figure></section>
   <section class="section" id="start"><h2>От скачивания до первого разговора.</h2>
     <ol class="steps"><li><strong>Установите и проверьте звук</strong><p>Установите клиент на каждый Windows-ПК и выберите Русский или English. В настройках задайте никнейм, выберите устройства и проверьте микрофон. Инструменты разработчика не нужны.</p></li><li><strong>Создайте комнату</strong><p>Нажмите «Создать комнату», введите название и пароль от 8 символов. Комната доступна, пока приложение хоста запущено.</p></li><li><strong>Пригласите друга</strong><p>Передайте полное приглашение лично. Друг вставляет его в «Присоединиться к комнате». В одной локальной сети используйте LAN-приглашение.</p></li></ol>
     <p>Для связи через интернет нужны доступные порты хоста. Автопроброс может не сработать при CGNAT. Альтернатива — Linux VPS с публичным IP. <a href="https://github.com/IlyaRusskikh/pawtalk/blob/main/README.ru.md">Полная инструкция →</a></p>
