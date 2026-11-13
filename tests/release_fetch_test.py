@@ -15,6 +15,15 @@ from pawtalk_manager import cli, release
 class FetchTests(unittest.TestCase):
     url = f'https://github.com/{release.REPO}/releases/download/manager-v0.1.0/manager-manifest.json'
 
+    def test_interactive_metadata_request_has_short_timeout_without_retries(self):
+        with patch.object(release.urllib.request,'build_opener') as build,patch.object(release.time,'sleep') as sleep:
+            build.return_value.open.side_effect=TimeoutError()
+            with self.assertRaises(release.DownloadError):
+                release.fetch(self.url,timeout=5,attempts=1)
+            self.assertEqual(build.return_value.open.call_count,1)
+            self.assertEqual(build.return_value.open.call_args.kwargs['timeout'],5)
+            sleep.assert_not_called()
+
     def response(self, data=b'complete', length=None):
         response = MagicMock()
         response.__enter__.return_value = response

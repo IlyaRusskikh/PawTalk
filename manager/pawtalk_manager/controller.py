@@ -254,18 +254,42 @@ class Controller:
         self.prune()
         return name
 
-    def update_server(self,manifest):
+    def delete_backup(self,name):
+        # Caller holds operation.lock. A rollback source must remain available.
+        if not isinstance(name,str) or not re.fullmatch(r'backup-[a-f0-9]{12}',name):
+            raise ValueError('Invalid backup name')
+        directory=self.backups/name
+        target=directory.resolve()
+        def is_link(path):
+            return path.is_symlink() or (WINDOWS and path.is_junction())
+        if not self.backups.resolve().is_relative_to(self.root.resolve()) or is_link(directory) or target.parent!=self.backups.resolve() or not directory.is_dir():
+            raise ValueError('Unsafe or missing backup directory')
+        if self.journal.exists() and json.loads(self.journal.read_text()).get('backup')==name:
+            raise ValueError('Backup is required for pending recovery')
+        # Reject nested links before recursive removal; never traverse out of
+        # this exact, resolved backup directory (including Windows junctions).
+        for current,dirs,files in os.walk(directory,followlinks=False):
+            for item in (Path(current)/entry for entry in dirs+files):
+                if is_link(item) or not item.resolve().is_relative_to(target):
+                    raise ValueError('Backup contains an unsafe link')
+        shutil.rmtree(target)
+
+    def update_server(self,manifest,local=False):
         self.recover()
         state,config = self.state(),self.config()
-        if semver(manifest['version']) == semver(state['version']) and state['image'] != IMAGE+'@'+manifest['digest']:
+        if local and (not WINDOWS or manifest.get('_local') is not True): raise ValueError('Local packages require explicit Windows approval')
+        replacing_local=local or bool(state.get('localPackage'))
+        if not replacing_local and semver(manifest['version']) == semver(state['version']) and state['image'] != IMAGE+'@'+manifest['digest']:
             raise ValueError('Published Server version was replaced; refusing changed digest')
-        if WINDOWS and semver(manifest['version']) == semver(state['version']) and state.get('windows') != manifest.get('windows'):
+        if WINDOWS and not replacing_local and semver(manifest['version']) == semver(state['version']) and state.get('windows') != manifest.get('windows'):
             raise ValueError('Published Windows Server version was replaced')
-        if semver(manifest['version']) <= semver(state['version']):
+        if not replacing_local and semver(manifest['version']) <= semver(state['version']):
             return False
         if manifest['dataSchema'] != state['dataSchema'] or manifest['apiProtocol'] != 1:
             raise ValueError('Unsupported server data/protocol transition')
         candidate = {**state,'version':manifest['version'],'image':IMAGE+'@'+manifest['digest'],'serverManifest':manifest['_signed']}
+        candidate.pop('localPackage',None)
+        if local: candidate['localPackage']=manifest['windows']['sha256']
         if 'windows' in manifest:
             candidate['windows'] = manifest['windows']
         elif WINDOWS:

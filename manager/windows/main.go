@@ -512,6 +512,8 @@ func main() {
 		err = protectInstall(args[1])
 	} else if len(args) == 2 && args[0] == "secure-tree" {
 		err = secureTree(args[1])
+	} else if len(args) == 2 && args[0] == "publish-desktop-status" {
+		err = publishDesktopStatus(args[1], os.Stdin)
 	} else if len(args) == 3 && args[0] == "--console-service" && (args[1] == "server" || args[1] == "manager") {
 		requests := make(chan svc.ChangeRequest, 1)
 		status := make(chan svc.Status, 8)

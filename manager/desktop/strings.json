@@ -80,7 +80,7 @@
     "updateServer": "Обновить сервер сейчас",
     "updateAvailable": "Доступна версия",
     "updateCurrent": "Установлена актуальная версия.",
-    "updateFailed": "Не удалось проверить обновления. Повторим при следующей проверке.",
+    "updateFailed": "Не удалось проверить обновления. Проверьте подключение и повторите попытку.",
     "updateIdle": "Проверка доступности обновлений работает и при выключенной автоустановке.",
     "updateInstalling": "Обновление передано установщику. Manager перезапустится после завершения.",
     "updateSecurity": "Установщик проверяется по подписанному манифесту, размеру и SHA-256.",
@@ -118,7 +118,21 @@
       "starting": "Запускается",
       "stopping": "Останавливается",
       "unavailable": "Статус недоступен"
-    }
+    },
+    "checkingUpdates": "Проверяем обновления…",
+    "selectServerPackage": "Установить из файла…",
+    "localPackageHint": "Готовый пакет или ZIP сервера для Windows. Интернет для установки не нужен.",
+    "installLocalTitle": "Установить выбранный Server?",
+    "packageVersion": "Версия",
+    "packageVerified": "Подпись выпуска проверена.",
+    "packageUnverified": "Подпись опубликованного выпуска не подтверждена. Устанавливайте только сборку из источника, которому доверяете. Автообновление Server будет выключено для проверки локальной сборки.",
+    "packageInstallWarning": "Перед изменениями будет создана резервная копия. Работающий сервер перезапустится; при неудаче восстановится предыдущая сборка.",
+    "packageInstalled": "Пакет сервера установлен.",
+    "localBuild": "Локальная сборка",
+    "deleteBackup": "Удалить",
+    "deleteBackupTitle": "Удалить резервную копию?",
+    "deleteBackupBody": "Выбранная копия будет удалена безвозвратно:",
+    "backupDeleted": "Резервная копия удалена."
   },
   "en": {
     "app": "Server Manager",
@@ -201,7 +215,7 @@
     "updateServer": "Update Server now",
     "updateAvailable": "Version available",
     "updateCurrent": "You are up to date.",
-    "updateFailed": "Could not check for updates. The next scheduled check will retry.",
+    "updateFailed": "Could not check for updates. Check your connection and try again.",
     "updateIdle": "Availability checks continue when automatic installation is disabled.",
     "updateInstalling": "The installer has been scheduled. Manager will restart when it finishes.",
     "updateSecurity": "The installer is verified against a signed manifest, size and SHA-256.",
@@ -239,6 +253,20 @@
       "starting": "Starting",
       "stopping": "Stopping",
       "unavailable": "Status unavailable"
-    }
+    },
+    "checkingUpdates": "Checking for updates…",
+    "selectServerPackage": "Install from file…",
+    "localPackageHint": "A complete package or Windows Server ZIP. Installation needs no internet connection.",
+    "installLocalTitle": "Install the selected Server?",
+    "packageVersion": "Version",
+    "packageVerified": "Release signature verified.",
+    "packageUnverified": "No published release signature is confirmed. Only install a build from a source you trust. Server auto-updates will be disabled while testing the local build.",
+    "packageInstallWarning": "A backup will be created first. A running server will restart; a failed installation will restore the previous build.",
+    "packageInstalled": "Server package installed.",
+    "localBuild": "Local build",
+    "deleteBackup": "Delete",
+    "deleteBackupTitle": "Delete this backup?",
+    "deleteBackupBody": "The selected backup will be permanently deleted:",
+    "backupDeleted": "Backup deleted."
   }
 }

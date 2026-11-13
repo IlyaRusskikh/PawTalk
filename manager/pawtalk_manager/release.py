@@ -75,12 +75,12 @@ class DownloadError(RuntimeError):
         super().__init__(f'Download failed from {self.host} after {attempts} attempts')
 
 
-def fetch(url, limit=1024 * 1024, api=False):
+def fetch(url, limit=1024 * 1024, api=False, *, timeout=30, attempts=3):
     allowed_url(url, api)
     request = urllib.request.Request(url, headers={"User-Agent": "PawTalk-host", "Accept": "application/vnd.github+json"})
-    for attempt in range(1, 4):
+    for attempt in range(1, attempts+1):
         try:
-            with urllib.request.build_opener(Redirect()).open(request, timeout=30) as response:
+            with urllib.request.build_opener(Redirect()).open(request, timeout=timeout) as response:
                 data = response.read(limit + 1)
                 if len(data) > limit:
                     raise ValueError("Release response too large")
@@ -98,7 +98,7 @@ def fetch(url, limit=1024 * 1024, api=False):
             if not isinstance(reason, (ConnectionError, TimeoutError, http.client.IncompleteRead, ssl.SSLEOFError)):
                 raise
             failure = error
-        if attempt == 3:
+        if attempt == attempts:
             raise DownloadError(url, attempt) from failure
         time.sleep(attempt)
 

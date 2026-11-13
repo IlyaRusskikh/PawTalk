@@ -17,6 +17,83 @@ from .platforms import host, admin, protect, secure
 from .release import REPO, fetch
 
 
+SERVER_FILES={'pawtalk-server.exe','livekit-server.exe','LICENSE','THIRD_PARTY_NOTICES.md','GO-LICENSE','LIVEKIT-LICENSE','GO-DEPENDENCIES-LICENSE'}
+
+
+def inspect_server_package(controller,file):
+    """Stage immutable bytes before asking the user to approve executable code."""
+    import io
+    from . import release
+    file=Path(file)
+    if not file.is_file() or file.stat().st_size>256*1024*1024: raise ValueError('Invalid Server package')
+    with file.open('rb') as stream: raw=stream.read(256*1024*1024+1)
+    if len(raw)>256*1024*1024: raise ValueError('Server package too large')
+    signed=None
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        names=archive.namelist()
+        if 'package.json' in names:
+            if len(names)!=len(set(names)) or set(names) not in ({'package.json','server.zip'},{'package.json','server.zip','server-manifest.json'}): raise ValueError('Invalid Server package contents')
+            if archive.getinfo('package.json').file_size>16384 or archive.getinfo('server.zip').file_size>256*1024*1024: raise ValueError('Server package too large')
+            meta=json.loads(archive.read('package.json'))
+            if meta.get('format')!='pawtalk-server-package-v1' or meta.get('apiProtocol')!=1 or meta.get('dataSchema')!=1: raise ValueError('Unsupported Server package')
+            version=meta['version']; raw=archive.read('server.zip')
+            if hashlib.sha256(raw).hexdigest()!=meta['sha256']: raise ValueError('Server package checksum mismatch')
+            if 'server-manifest.json' in names:
+                if archive.getinfo('server-manifest.json').file_size>16384: raise ValueError('Manifest too large')
+                signed=archive.read('server-manifest.json')
+        else:
+            match=re.fullmatch(r'PawTalk\.Server\.(.+)\.windows-x64\.zip',file.name)
+            if not match: raise ValueError('Use a PawTalk Server package or named Windows Server archive')
+            version=match[1]
+            companion=file.with_name('server-manifest.json')
+            if companion.exists():
+                if companion.stat().st_size>16384: raise ValueError('Manifest too large')
+                signed=companion.read_bytes()
+    release.semver(version)
+    digest=hashlib.sha256(raw).hexdigest()
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        entries=archive.infolist()
+        if len(entries)!=len(SERVER_FILES) or {e.filename for e in entries}!=SERVER_FILES or sum(e.file_size for e in entries)>512*1024*1024: raise ValueError('Invalid Server archive contents')
+        for entry in entries:
+            if entry.is_dir() or (entry.external_attr>>16)&0o170000==0o120000: raise ValueError('Unsafe Server archive entry')
+            # CRC/decompression validation does not execute the selected programs.
+            with archive.open(entry) as stream:
+                while stream.read(1024*1024): pass
+    artifact=dict(name=f'PawTalk.Server.{version}.windows-x64.zip',size=len(raw),sha256=digest)
+    if signed is not None:
+        keys=json.loads((controller.etc/'trust.json').read_text())
+        manifest=release.verify(signed,'server',keys)
+        if manifest['version']!=version or manifest.get('windows')!=artifact: raise ValueError('Server package does not match signed manifest')
+    else:
+        manifest=dict(version=version,dataSchema=1,apiProtocol=1,digest='sha256:'+digest,windows=artifact,_signed='',_local=True)
+    directory=controller.directory/'packages'
+    directory.mkdir(parents=True,exist_ok=True);secure(directory)
+    atomic(directory/(digest+'.zip'),raw)
+    save(directory/(digest+'.json'),manifest)
+    return dict(id=digest,version=version,sha256=digest,verified=signed is not None,size=len(raw))
+
+
+def install_server_package(controller,identifier):
+    if not isinstance(identifier,str) or not re.fullmatch(r'[a-f0-9]{64}',identifier): raise ValueError('Invalid Server package identifier')
+    directory=controller.directory/'packages'
+    manifest=json.loads((directory/(identifier+'.json')).read_text())
+    archive=directory/(identifier+'.zip')
+    if manifest['windows']['sha256']!=identifier or hashlib.sha256(archive.read_bytes()).hexdigest()!=identifier: raise ValueError('Staged Server package changed')
+    if manifest.get('_local') is not True:
+        from .release import verify
+        manifest=verify(manifest['_signed'],'server',json.loads((controller.etc/'trust.json').read_text()))
+        if manifest['windows']['sha256']!=identifier: raise ValueError('Signed package changed')
+    previous=getattr(controller.runtime,'server_bundle',None)
+    controller.runtime.server_bundle=archive
+    try:
+        changed=controller.update_server(manifest,local=manifest.get('_local') is True)
+        if manifest.get('_local') is True:
+            controller.configure({'PAWTALK_SERVER_AUTO_UPDATE':'false'})
+        return changed
+    finally:
+        controller.runtime.server_bundle=previous
+
+
 def installed_desktop_version():
     file=Path(os.environ['PAWTALK_MANAGER_HOST']).parent/'desktop-version.json'
     from .release import semver
@@ -107,7 +184,11 @@ class NativeRuntime:
     def binary(self,state):
         from .release import semver
         semver(state['version'])
-        return self.root/'opt/pawtalk-server'/state['version']/'pawtalk-server.exe'
+        directory=state['version']
+        if state.get('localPackage'):
+            if not re.fullmatch(r'[a-f0-9]{64}',state['localPackage']): raise ValueError('Invalid local Server identity')
+            directory+='-local-'+state['localPackage']
+        return self.root/'opt/pawtalk-server'/directory/'pawtalk-server.exe'
 
     def env(self,state,config):
         return {**os.environ,**config,'PAWTALK_DATA_DIR':str(self.data(state)),
@@ -177,6 +258,11 @@ class NativeRuntime:
         if destination.exists():
             self.verify_image(state)
             return
+        bundle=getattr(self,'server_bundle',None)
+        if state.get('localPackage') and not bundle:
+            cached=self.control/'packages'/(state['localPackage']+'.zip')
+            if not cached.is_file(): raise ValueError('Reimport the original local Server package before restoring this backup')
+            bundle=cached
         destination.parent.mkdir(parents=True,exist_ok=True)
         import tempfile
         with tempfile.TemporaryDirectory(prefix='.server-',dir=destination.parent) as temporary:
@@ -184,8 +270,8 @@ class NativeRuntime:
             secure(temporary)
             archive = temporary/'server.zip'
             url = f'https://github.com/{REPO}/releases/download/server-v{state["version"]}/{artifact["name"]}'
-            if getattr(self,'server_bundle',None):
-                shutil.copyfile(self.server_bundle,archive)
+            if bundle:
+                shutil.copyfile(bundle,archive)
             else:
                 atomic(archive,fetch(url,artifact['size']))
             with archive.open('rb') as stream:
@@ -195,7 +281,7 @@ class NativeRuntime:
             content = temporary/'content'
             content.mkdir()
             secure(content)
-            allowed = {'pawtalk-server.exe','livekit-server.exe','LICENSE','THIRD_PARTY_NOTICES.md','GO-LICENSE','LIVEKIT-LICENSE','GO-DEPENDENCIES-LICENSE'}
+            allowed = SERVER_FILES
             hashes = {}
             with zipfile.ZipFile(archive) as source:
                 entries = source.infolist()

@@ -124,6 +124,27 @@ try:
         c.install(config,manifest('server','0.9.0'),directory/'manager/compose.server.yaml','0.1.0')
         before=c.state()
         if scm:
+            snapshot=cli.desktop_execute(c,'snapshot',{})
+            public_file=stage/('status-'+hashlib.sha256(str(root).lower().encode()).hexdigest()[:16]+'.json')
+            public=json.loads(public_file.read_text())
+            assert public['serverVersion']==snapshot['serverVersion']
+            assert set(public)=={'update','language','autoManager','serverVersion','managerVersion'}
+            assert 'values' not in public and 'password' not in public
+            print('PASS actual desktop snapshot and public status publication through native host ACL boundary')
+            launcher=stage/'bootstrap/manager/pawtalkctl'
+            original=launcher.read_bytes()
+            # Fault injection is confined to this disposable, protected test host.
+            slow=b"\nfrom pawtalk_manager import cli\nif 'desktop' in sys.argv:\n import time\n def slow(*args,**kwargs):\n  time.sleep(4)\n  return None\n cli.discover_desktop=slow\n"
+            try:
+                launcher.write_bytes(original.replace(b'from pawtalk_manager.cli import main',slow+b'\nfrom pawtalk_manager.cli import main'))
+                broker=subprocess.run(['node',str(Path(__file__).with_name('manager-broker.cjs')),str(stage),str(root)],capture_output=True,timeout=150)
+                assert broker.returncode==0,broker.stderr.decode(errors='replace')
+                print(broker.stdout.decode().strip())
+            finally:launcher.write_bytes(original)
+            if '--desktop-backups-only' in sys.argv:
+                runtime.healthy(c.state(),c.config(),before['identity'])
+                print('PASS targeted desktop backup integration with actual SCM and retained room identity')
+                raise SystemExit(0)
             restricted=subprocess.run([str(fixtures/'clipboard-test.exe'),'-test.run=^TestStopSCMServiceWithoutDebugPrivilege$'],
                                       env={**os.environ,'PAWTALK_SCM_NO_DEBUG_TEST_ROOT':str(root)},capture_output=True,timeout=90)
             assert restricted.returncode==0,'Actual SCM stop failed with SeDebugPrivilege disabled'
@@ -381,6 +402,20 @@ try:
         assert c.state()['managerVersion']=='0.1.0'
         login()
         print('PASS native fresh-root restore authenticates archived Server/Manager and preserves SQLite/TLS/password identity')
+        with lock(c.directory/'operation.lock'):
+            before_local=c.create_backup()
+            package=native.inspect_server_package(c,fixtures/'PawTalk.Server.0.9.2.windows-x64.zip')
+            with patch.object(native,'fetch',side_effect=AssertionError('local installation must stay offline')):
+                native.install_server_package(c,package['id'])
+            assert c.state()['localPackage']==package['id']
+            runtime.healthy(c.state(),c.config(),c.state()['identity'])
+            local_backup=c.create_backup()
+            c.restore(local_backup)
+            assert c.state()['localPackage']==package['id']
+            c.restore(before_local)
+            assert not c.state().get('localPackage')
+            assert runtime.command(c.state(),c.config(),'info')==invitation and probe()=='original'
+        print('PASS actual offline local Server installation, isolated binaries, local backup restore and return to signed Server; SQLite/TLS identity retained')
         if '--installer' in sys.argv:
             import time
             import winreg

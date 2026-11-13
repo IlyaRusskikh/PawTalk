@@ -52,7 +52,7 @@ try{
  await writeFile(path.join(directory,'clipboard.html'),'<!doctype html><meta charset="utf-8"><title>PawTalk clipboard fixture</title>');
  execFileSync(env.PAWTALK_ELECTRON,[path.join(root,'tests/windows-clipboard.cjs'),directory],{cwd:root,env,stdio:'inherit',windowsHide:true,timeout:30000});
  await new Promise((resolve,reject)=>{
-  const child=spawn(path.join(stage,'runtime/python.exe'),['-B','-X','utf8','-I',path.join(root,'tests/windows_manager_smoke.py'),directory,stage,...process.argv.slice(2)],{cwd:root,stdio:'inherit',windowsHide:true,env});
+  const child=spawn(path.join(stage,'runtime/python.exe'),['-u','-B','-X','utf8','-I',path.join(root,'tests/windows_manager_smoke.py'),directory,stage,...process.argv.slice(2)],{cwd:root,stdio:'inherit',windowsHide:true,env});
   child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(Error('Windows Manager smoke failed: '+code)));
  });
 }finally{

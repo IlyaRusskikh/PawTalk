@@ -21,4 +21,5 @@ try{
  // Windows bsdtar creates a ZIP explicitly; no shell interpolation of paths.
  run('tar.exe',['-a','-cf',file,'-C',stage,'pawtalk-server.exe','livekit-server.exe','LICENSE','THIRD_PARTY_NOTICES.md','GO-LICENSE','LIVEKIT-LICENSE','GO-DEPENDENCIES-LICENSE']);
  console.log('Permanent Windows Server built:',file);
+ run(process.execPath,['scripts/package-local-server.mjs','--archive',file]);
 }finally{await rm(stage,{recursive:true,force:true});}

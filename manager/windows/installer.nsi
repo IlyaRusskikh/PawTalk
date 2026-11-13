@@ -33,7 +33,6 @@ SetCompressor /SOLID lzma
 Page custom SettingsCreate SettingsLeave
 Page custom ShortcutsCreate ShortcutsLeave
 !insertmacro MUI_PAGE_INSTFILES
-Page custom InvitationCreate
 !define MUI_FINISHPAGE_RUN "$INSTDIR\pawtalk-server-tray.exe"
 !define MUI_FINISHPAGE_RUN_FUNCTION LaunchTray
 !define MUI_FINISHPAGE_RUN_TEXT "$(TrayRun)"
@@ -66,18 +65,9 @@ Var DesktopField
 Var StartupField
 Var DesktopValue
 Var StartupValue
-Var InviteField
 Var DeleteField
 Var DeleteData
 Var PreviousInstall
-LangString InviteTitle ${LANG_ENGLISH} "Room invitation"
-LangString InviteTitle ${LANG_RUSSIAN} "Приглашение в комнату"
-LangString InviteNotice ${LANG_ENGLISH} "This invitation includes the room password. Copy it into PawTalk or send it privately. If E2EE is enabled, share its secret key separately."
-LangString InviteNotice ${LANG_RUSSIAN} "В приглашение включён пароль комнаты. Вставьте ссылку в PawTalk или отправьте лично. При включённом E2EE секретный ключ передаётся отдельно."
-LangString InviteCopy ${LANG_ENGLISH} "Copy invitation with password"
-LangString InviteCopy ${LANG_RUSSIAN} "Скопировать приглашение с паролем"
-LangString InviteMissing ${LANG_ENGLISH} "The old password was not saved. Use Reset password in Server Manager settings. Resetting the password interrupts calls."
-LangString InviteMissing ${LANG_RUSSIAN} "Старый пароль не сохранён. Откройте настройки Manager и сбросьте пароль в разделе «Обзор». Смена пароля прерывает звонки."
 LangString DeleteTitle ${LANG_ENGLISH} "Settings and room data"
 LangString DeleteTitle ${LANG_RUSSIAN} "Настройки и данные комнаты"
 LangString DeleteOption ${LANG_ENGLISH} "Delete settings and data (including room history, keys and backups)"
@@ -319,7 +309,7 @@ Section "PawTalk Server Manager"
  ${If} $LanguageValue == ""
   StrCpy $LanguageValue "en"
  ${EndIf}
- ; Capture output privately: the invitation has its own copyable wizard page.
+ ; Capture output privately; access data is available only in Manager UI.
  ; Never log the captured password-bearing output into the installer details.
  !insertmacro InstallStage "manager-install"
  nsExec::ExecToStack /TIMEOUT=600000 '"$INSTDIR\pawtalkctl.exe" --root "$DataRoot" --lang $LanguageValue install --config "$ExternalConfig" $ExtraArgs'
@@ -363,34 +353,6 @@ Section "PawTalk Server Manager"
  ${EndIf}
  !insertmacro InstallStage "complete"
 SectionEnd
-
-Function InvitationCreate
- !insertmacro MUI_HEADER_TEXT "$(InviteTitle)" "PawTalk Server"
- nsDialogs::Create 1018
- Pop $Dialog
- nsExec::ExecToStack /TIMEOUT=30000 '"$INSTDIR\pawtalkctl.exe" --root "$DataRoot" --lang $LanguageValue invitation --url'
- Pop $0
- Pop $1
- ${If} $0 == "0"
-  ${NSD_CreateLabel} 0 0 100% 42u "$(InviteNotice)"
-  Pop $0
-  ${NSD_CreateText} 0 52u 100% 24u "$1"
-  Pop $InviteField
-  SendMessage $InviteField ${EM_SETREADONLY} 1 0
-  ${NSD_CreateButton} 0 94u 100% 24u "$(InviteCopy)"
-  Pop $0
-  ${NSD_OnClick} $0 CopyInvitation
- ${Else}
-  ${NSD_CreateLabel} 0 0 100% 70u "$(InviteMissing)"
-  Pop $0
- ${EndIf}
- nsDialogs::Show
-FunctionEnd
-
-Function CopyInvitation
- SendMessage $InviteField ${EM_SETSEL} 0 -1
- SendMessage $InviteField ${WM_COPY} 0 0
-FunctionEnd
 
 Function un.onInit
  SetRegView 64
