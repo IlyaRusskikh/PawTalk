@@ -35,7 +35,12 @@ New VPS installations use Docker Compose through the verified host controller. P
 | --- | --- |
 | [Разработка и локальный запуск](DEVELOPMENT.md) | `docker run`, сборка клиента, тесты; без Compose / Local development |
 | [Архитектура](ARCHITECTURE.md) | Компоненты клиента, сервера, голосового тракта и обновлений |
-| [API](API.md) | Протокол подключения и чата |
+| [API 1, история](API.md) | Исторический опубликованный протокол / Historical published protocol |
+| [Новый контракт API 2](API-V2.md) | Контракт текущих исходников: членство, каналы, обязательное E2EE / Current source contract |
+| [Сервер API 2](SERVER-API2.md) | Настройка текущих исходников Windows/Linux/selfhost / Current source operator guide |
+| [БД API 2](DATABASE-V2.md) | Физические таблицы, ключи и диаграмма связей / Physical schema and relationships |
+| [Будущие идеи / Future ideas](FUTURE-IDEAS.md) | Идеи для обсуждения, не утверждённый план / Proposals, not an approved roadmap |
+| [План многоканальных серверов](MULTICHANNEL-PLAN.md) | Согласованные требования, физическая схема, выполненные этапы и текущие проверки / Durable implementation journal |
 | [Проверки](VERIFICATION.md) | Технический журнал выполненных проверок; историческая QA-запись, не инструкция |
 | [План аппаратной приёмки](ACCEPTANCE.md) | Что ещё не подтверждено на реальном оборудовании |
 | [Публикация релиза](RELEASING.md) | Версия, CI, GitHub Releases и GHCR |

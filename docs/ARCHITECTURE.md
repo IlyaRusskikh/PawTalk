@@ -39,7 +39,7 @@ systemd update/health timers вызывают стабильный launcher. Н�
   содержит digest/version и никогда не выполняется как shell.
 - Managed state/journal хранит фактически установленный образ, Server/Manager
   версии, project/volume и хэш идентичности. Atomic write + fsync, общий flock.
-- Volume сохраняет сертификат/ключ, пароль-хеш и SQLite. Новый manager создаёт
+- Volume сохраняет TLS/media credentials и membership-v2.sqlite (schema 2). Чистая установка создаёт
   новую комнату. Reinstall/update не пересоздаёт её идентичность.
 - Backup останавливает комнату и архивирует все данные, config, template и
   image reference; завершённая копия публикуется только после checksum.
@@ -57,13 +57,12 @@ watchdog с ограничением попыток/backoff. Контролле�
 
 ## Протокол и безопасность
 
-API protocol 1 и capabilities объявляются через `/api/config`. Отсутствие поля
-означает legacy protocol 1. [Совместимость](COMPATIBILITY.md), [API](API.md).
+API protocol 2 и capabilities объявляются через `/api/config`. Отсутствующий/старый/неизвестный протокол отклоняется до доказательства личности. [Совместимость](COMPATIBILITY.md), [API](API-V2.md).
 Release numbers не сравниваются для определения API-совместимости.
 
-Приглашение закрепляет TLS fingerprint; пароль передаётся после pin check.
-E2EE остаётся opt-in экспериментальным режимом; VPS хранит только SHA-256 key ID,
-не секретный client key. [Ограничения E2EE](E2EE.md). Updater signatures не заменяют
+Приглашение закрепляет TLS fingerprint до HTTP. Подписанные устройства и членство
+отделены от голоса; E2EE обязательно. Клиенты создают root и производные ключи каналов,
+хост хранит opaque encrypted packages и key ID. [Ограничения E2EE](E2EE.md). Updater signatures не заменяют
 Authenticode-подпись Windows installer. Trust roots и ротация: [RELEASING](RELEASING.md).
 
 Серверный update допускает краткий обрыв звонка. Неподдерживаемые схемы данных
@@ -80,5 +79,5 @@ volume, host-only signed update tools and systemd timers. User config, managed
 state and room data are separate. Transactional updates use stopped consistent
 backups and restore the image/data pair after failure. Manager has versioned code,
 atomic switching and a stable fallback launcher; unchanged runtime means no Server
-restart. API protocol 1 is independent of release numbers. No real VPS or external
+restart. API protocol 2 and data schema 2 are independent of release numbers. Device-signed membership is independent of voice; E2EE is mandatory, with client-only roots and opaque server packages. No real VPS or external
 network/device acceptance is claimed by local Docker tests.

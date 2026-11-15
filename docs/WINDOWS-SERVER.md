@@ -1,5 +1,7 @@
 # Permanent Windows server / Постоянный Windows-сервер
 
+> Историческое руководство опубликованных API 1 выпусков. Для текущих исходников API 2 используйте [новое руководство](SERVER-API2.md), [контракт API](API-V2.md) и [совместимость](COMPATIBILITY.md). Пароли и ручной генератор E2EE ниже к API 2 не относятся.
+
 **Server 0.10.1 / Manager 0.4.0 — released previews / предварительные выпуски.**
 [Актуальный установщик Manager](https://ilyarusskikh.github.io/PawTalk/downloads/#manager) · [Изменения](releases/manager-v0.4.0.md).
 
@@ -35,31 +37,33 @@ Windows CI-тестом на Windows Server 2022 и 2025: службы, EXE-ус
 ## Установка
 
 Скачайте актуальный установщик Manager со [страницы загрузки](https://ilyarusskikh.github.io/PawTalk/downloads/#manager).
-Запустите EXE с правами администратора, выберите язык и заполните настройки:
-публичный IPv4, порт, шифрование, SHA-256 key ID (не секретный ключ), лимит истории
-и общий переключатель автообновления сервера/Manager. Шифрование и обновления
-по умолчанию включены. После установки откройте «Обзор» Manager и скопируйте приглашение
-с паролем в `#password=…`. Установщик больше не показывает приглашение. Не публикуйте эту ссылку.
-При включённом E2EE секретный ключ участников передаётся отдельно; key ID из мастера
-не заменяет его. Клиент подставляет пароль из ссылки и при необходимости просит ключ E2EE.
-Пароль комнаты, отпечаток сертификата TLS в пути приглашения и секретный ключ E2EE —
-разные значения. Сервер генерирует пароль и TLS-сертификат, но не секрет E2EE.
-Клиент вычисляет SHA-256 введённого E2EE-секрета и передаёт серверу только key ID;
-сервер сравнивает его с настройкой. Получить секрет из отпечатка невозможно.
-Для LAN и loopback клиент сохраняет голосовой `/rtc` на том же проверенном HTTPS-адресе,
-не перенаправляя соединение на публичный IP из ответа standalone-сервера.
-Повторная установка пропускает форму при найденном конфиге и сохраняет комнату,
-настройки и приглашение. Пароль не меняется автоматически.
-Данные доступа копируются из окна Manager. Вывод служебного процесса установщика
-перехватывается без отдельного окна консоли и без записи пароля в детали установки.
+В текущих исходниках API 2 установщик спрашивает только язык Manager.
+Он устанавливает Manager без скачивания ZIP ядра, конфигурации Server и создания
+служб нового сервера. При первом запуске UI выберите локальный ZIP/переносимый пакет
+или явную загрузку опубликованной совместимой версии. Затем задайте IPv4, порт,
+лимит истории и независимые автообновления; подтвердите «Установить и запустить».
+По умолчанию оба автообновления выключены. Для локального неподписанного пакета
+UI показывает предупреждение и SHA-256; автообновление Server отключается.
+Опубликованная загрузка проверяется по подписи, размеру и SHA-256. При отсутствии
+совместимого API 2 выпуска используйте локальный пакет; API 1 не устанавливается.
+
+После запуска ядра откройте «Обзор» и скопируйте одноразовое приглашение первого
+администратора. Его клиент создаёт секрет обязательного E2EE автоматически.
+Отдельного окна генерации/ввода ключа нет. После первого вступления обычные
+приглашения создаются в клиенте администраторами и модераторами.
+Смена IP и остальных настроек доступна позже в UI Manager.
+Неудачная первая настройка сохраняет данные и журнал для явной повторной попытки.
+Повторная установка Manager сохраняет настройки, идентичность и остановленное
+или работающее состояние существующего Server. Старые данные API 1 автоматически
+не мигрируются; для API 2 нужен отдельный root.
 При повторной установке EXE службы временно останавливаются для замены bootstrap
 runtime/host; это прерывает звонок. В Windows автообновление Manager тоже использует
 полный EXE и может прервать звонок. В Linux обновление bundle не перезапускает Server.
 
 Python встроен в установщик. Docker, WSL, Node.js и отдельная установка Python
-не требуются. Настоящие подписанные Server/Manager релизы и заранее настроенные
-корни доверия обязательны. Публичные ключи в `manager/trust.json` настроены;
-подписанные релизы опубликованы, как и для Linux.
+не требуются. Для загрузки опубликованных выпусков действуют подписи и заранее
+настроенные публичные ключи `manager/trust.json`; локальный пакет требует явного
+подтверждения в UI. API 2 в этой ветке ещё не опубликован.
 
 По умолчанию программа находится в `%ProgramData%\PawTalk Server Manager`,
 данные/конфигурация/backup — в `%ProgramData%\PawTalk`.
@@ -223,13 +227,17 @@ x64. It bundles Python and needs no Docker/WSL/Node installation. These OS targe
 still require actual OS-specific verification.
 Windows Server 2022/2025 CI passed actual SCM service and EXE install/uninstall
 checks; Windows 10/11 and Server 2019 remain unverified. Run the EXE as Administrator and
-configure IP, ports, E2EE key ID, history and automatic updates. Save the invitation
-and one-time password shown at the end. Configure external TCP/UDP and Windows
+choose only the Manager language. In the API 2 source installer no Server ZIP
+is downloaded and no new Server service is created. First-run Manager UI offers
+a local Server package or an explicit signed-release download, then IP, ports,
+history and independent updates (off by default). Only confirmation installs and
+starts Server. Later settings changes use the same UI. The Overview creates the
+one-time first-administrator link; the client initializes mandatory E2EE invisibly. Configure external TCP/UDP and Windows
 Firewall yourself. The same Manager controller handles signatures, backup,
 transactions, rollback and updates on both OSes; only runtime/service adapters
 differ. Windows uses native Go/LiveKit executables, not the Linux Docker image.
 Use the commands above from elevated PowerShell or the Start-menu shortcuts.
 The stable bootstrap runtime/SCM host is serviced by reinstalling the Manager EXE;
-automatic Manager bundle updates replace its shared Python policy code.
+Windows commands use the installed protected controller; Manager updates replace the full EXE installation.
 Uninstall retains tools, config, data and backups. Cross-OS backup migration and
 real-device external-network verification are not claimed.
