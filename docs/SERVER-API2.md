@@ -47,6 +47,40 @@ Linux использует Compose и постоянный том, Windows — �
 
 ## Приглашения, роли и выход
 
+### Локальный и внешний адрес постоянного сервера
+
+Для сервера, развёрнутого через Manager, клиент создаёт приглашения с адресом
+своего текущего подключения. Внешний IP из настроек Manager не подставляется
+автоматически, если в клиенте сохранён локальный IP.
+
+Чтобы новые приглашения содержали внешний IP, выйдите из голосового канала,
+откройте меню сервера (три точки или ПКМ) → «Изменить адрес сервера» и замените
+только IP в текущем адресе `pawtalk://IP:порт/отпечаток`. Сохраните порт и
+TLS-отпечаток сертификата без изменений. При сохранении клиент подключается по
+новому адресу и проверяет прежнюю идентичность сервера и членство; это не новое
+вступление и не изменение настроек Manager.
+
+Если из локальной сети внешний адрес недоступен, смена может завершиться
+`PAWTALK_TLS_TIMEOUT`. Одна из возможных причин — отсутствие NAT loopback
+(обращения из LAN к собственному внешнему IP) на роутере. Сам тайм-аут не доказывает
+эту причину и не определяет, доступен ли сервер из интернета. При неудачной смене
+клиент сохраняет прежний адрес.
+
+В таком случае оставьте локальный адрес в клиенте и создавайте приглашения обычным
+способом. Перед отправкой внешнему участнику в скопированной ссылке замените
+**только IP** на внешний IP того же сервера. Порт, отпечаток и весь фрагмент после
+`#` должны остаться без изменений; это применимо, когда внешний и внутренний порты
+совпадают. При перенаправлении на другой внешний порт укажите и соответствующий
+внешний порт. Для участников в той же LAN оставьте локальный IP. Повторяйте замену
+для каждой новой внешней ссылки: клиент продолжит генерировать локальные.
+Уже отправленные ссылки автоматически не изменяются; замена адреса не продлевает
+срок приглашения и не создаёт отдельное приглашение.
+
+Проверьте подключение по внешней ссылке из другой сети, а также работу голоса.
+Успешное локальное подключение не подтверждает доступность внешних TCP/UDP-портов.
+Передавайте полные приглашения только предполагаемым участникам: фрагмент после
+`#` содержит данные для вступления и получения ключа E2EE.
+
 Администратор и модератор создают одноразовые ссылки на 24 часа или многоразовые
 на час. По 100 активных ссылок каждого типа на сервер. Модератор отзывает свои,
 администратор — любые. Сервер хранит encrypted key package; приглашающий может
@@ -120,6 +154,40 @@ key packages; clients save keys before confirming. Device links are server-local
 share current rights and message ownership, and permit one voice device per group.
 Server backups preserve host/membership identity and encrypted history, but contain
 no client root. See [API-V2.md](API-V2.md) and [E2EE.md](E2EE.md).
+
+### LAN and public addresses for a permanent server
+
+For a server deployed through Manager, the client generates invitations using its
+current connection address. It does not automatically substitute Manager's public
+IP when the client has saved a LAN IP.
+
+To generate public invitations, leave the voice channel, open the server menu
+(three dots or right-click) → **Change server address**, and replace only the IP in
+the current `pawtalk://IP:port/fingerprint` address. Keep the port and certificate's
+TLS fingerprint unchanged. Saving connects to the new address and verifies the
+existing server identity and membership; it neither rejoins nor changes Manager's
+settings.
+
+If the public address is unreachable from your LAN, saving may fail with
+`PAWTALK_TLS_TIMEOUT`. One possible cause is a router without NAT loopback
+(accessing its own public IP from the LAN). The timeout alone neither establishes
+that cause nor determines internet reachability. A failed change preserves the
+client's previous address.
+
+In that case, keep the LAN address in the client and generate invitations normally.
+Before sending a copied invitation to an external participant, replace **only the
+IP** with the same server's public IP. Preserve the port, fingerprint and entire
+fragment after `#`; this assumes the internal and external ports match. If port
+forwarding uses a different external port, set that external port as well. Keep
+the LAN IP for participants on the same LAN. Repeat the replacement for each new
+external invitation: the client will keep generating LAN links. Previously sent
+links do not update automatically; changing the address does not extend an
+invitation's lifetime or create a separate invitation.
+
+Test the public invitation from another network, including voice. A successful LAN
+connection does not verify external TCP/UDP reachability. Share full invitations
+only with intended participants: the fragment after `#` contains admission and
+E2EE key delivery material.
 
 ## Локальная проверка Windows до выпуска API 2
 
