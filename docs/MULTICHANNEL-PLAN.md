@@ -1012,3 +1012,20 @@ Docker/Compose и native Windows проверками. Linux race/arm64, реа�
   including the slow-renderer resize case. Application chat code is unchanged.
   Public guard/staged review precede commit/push; Windows 2022 confirmation
   belongs to the new CI run.
+
+### PR #13 Ubuntu Compose port follow-up
+
+- [x] Ubuntu amd64 job 132712806215 in run 43681467376 failed on fresh Compose
+  installation because a previously selected room port group was occupied.
+  The fixture chose ephemeral ports before registry/image preparation.
+- [x] Select the complete room port group immediately before installation,
+  outside the actual Linux ephemeral source-port range and excluding the
+  fixture registry. Probe all production TCP/UDP bindings without weakening
+  the real preflight check. Log the selected fixture port group for diagnosis.
+- [x] Four targeted Linux tests passed, including actual occupied TCP/UDP
+  listeners, group overlap with the ephemeral range and registry exclusion.
+- [x] Real Debian/Linux Docker+Compose lifecycle passed: fresh install/admission,
+  encrypted history, rollout, unhealthy-image data rollback, controller SIGKILL
+  recovery, Manager-only update, backup restore and fresh-root restore.
+  Public guard/staged review precede commit/push to the same PR; native Ubuntu
+  runner confirmation belongs to the new CI run. Only test code changed.

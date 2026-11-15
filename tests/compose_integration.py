@@ -11,6 +11,7 @@ import http.client
 import io
 import json
 import os
+import random
 import signal
 import ssl
 import socket
@@ -43,6 +44,26 @@ def origin(repository):
     release.IMAGE = runtime.IMAGE = controller.IMAGE = repository
 
 
+def choose_room_port(*,exclude=(),ephemeral_range=None,candidates=None):
+    """Keep the fixture's listeners outside Linux's outgoing source-port pool."""
+    if ephemeral_range is None:
+        ephemeral_range=tuple(map(int,Path('/proc/sys/net/ipv4/ip_local_port_range').read_text().split()))
+    low,high=ephemeral_range
+    def eligible(port):
+        return 10000<=port<=65532 and (port+3<low or port>high) and not any(port<=used<=port+3 for used in exclude)
+    if candidates is None:
+        pool=[port for port in range(10000,65533) if eligible(port)]
+        candidates=random.SystemRandom().sample(pool,min(100,len(pool)))
+    for port in candidates:
+        if not eligible(port):continue
+        try:
+            preflight.check_ports(port)
+            return port
+        except ValueError:
+            pass
+    raise RuntimeError('No free room port group outside the ephemeral range')
+
+
 def worker(root,repository,manifest_path):
     origin(repository)
     class CrashRuntime(ShortRuntime):
@@ -64,18 +85,6 @@ def main():
         raise SystemExit(cli.main(sys.argv[3:]))
     source = Path(__file__).resolve().parents[1]
     prefix = 'pawtalk-ci-'+uuid.uuid4().hex[:12]
-    for _ in range(100):
-        with socket.socket() as free:
-            free.bind(('127.0.0.1',0))
-            room_port = free.getsockname()[1]
-        if room_port <= 65532:
-            try:
-                preflight.check_ports(room_port)
-                break
-            except ValueError:
-                pass
-    else:
-        raise RuntimeError('No free room port group')
     base = os.environ.get('PAWTALK_COMPOSE_TEST_IMAGE','pawtalk-server:local')
     if not subprocess.run(['docker','image','inspect',base],capture_output=True).returncode == 0:
         docker('build','-f',str(source/'server/standalone.Dockerfile'),'-t',base,str(source))
@@ -158,6 +167,10 @@ def main():
             trust = root/'trust.json'
             trust.write_text(json.dumps(fixture.keys))
             config_file = root/'config.env'
+            # Choose after registry/image preparation: those operations create
+            # outgoing connections and the registry itself owns a host port.
+            room_port=choose_room_port(exclude=(port,))
+            print(f'QA Server ports {room_port}..{room_port+3}; registry port {port}')
             write_config(config_file,{'PAWTALK_PUBLIC_IP':'127.0.0.1','PAWTALK_PORT':str(room_port)})
             command = ['--root',str(c.root),'--lang','en','--no-systemd','install','--config',str(config_file),
                        '--trust',str(trust),'--server-manifest',str(server_manifest),'--manager-manifest',str(initial_manifest),'--bundle',str(initial_bundle)]
