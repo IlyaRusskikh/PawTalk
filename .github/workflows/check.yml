@@ -153,8 +153,9 @@ jobs:
         if: steps.scope.outputs.client == 'true'
       - run: node scripts/native-smoke.cjs
         if: steps.scope.outputs.client == 'true'
-      - run: npm run build
-        if: steps.scope.outputs.client == 'true'
+      - name: Build Client renderer for Client and host integration
+        if: steps.scope.outputs.client == 'true' || steps.scope.outputs.host == 'true'
+        run: npm run build
       - run: npm run test:sounds
         if: steps.scope.outputs.client == 'true'
       - name: Test Client including real Windows TLS diagnostics
@@ -187,7 +188,7 @@ jobs:
         if: steps.scope.outputs.host == 'true' && steps.scope.outputs.client != 'true'
         run: node scripts/prepare-rnnoise.mjs
       - name: Prepare LiveKit without the bundled Client API
-        if: steps.scope.outputs.server == 'true' && steps.scope.outputs.client != 'true'
+        if: steps.scope.outputs.host == 'true' && steps.scope.outputs.client != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/prepare-server.mjs --livekit-only
