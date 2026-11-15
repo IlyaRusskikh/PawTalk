@@ -257,7 +257,9 @@ try:
         assert c.state()['version']=='0.9.2'
         assert not c.configure({'PAWTALK_SERVER_AUTO_UPDATE':'true','PAWTALK_MANAGER_AUTO_UPDATE':'true'})
         count=calls.count('start-server')
-        with lock(c.directory/'operation.lock'):
+        # Sequential test transactions may meet the real SCM health/periodic
+        # worker. Wait only for ownership; never replay the transaction body.
+        with lock(c.directory/'operation.lock',timeout=10):
             assert bundles.activate(c,manifest('manager','0.1.1'),keys,fixtures/'PawTalk.Manager.0.1.1.tar.gz')
             assert calls.count('start-server')==count
             assert c.state()['managerVersion']=='0.1.1'
@@ -371,7 +373,7 @@ try:
         directory=bundles.stage(root,manager,keys,target/'manager.tar.gz')
         bundles.switch(root,directory)
         atomic(c.etc/'trust.json',json.dumps(keys).encode())
-        with lock(c.directory/'operation.lock'):
+        with lock(c.directory/'operation.lock',timeout=10):
             c.restore(backup)
             bundles.install_units(root,directory,c.config())
         assert runtime.command(c.state(),c.config(),'info')==invitation
@@ -379,7 +381,7 @@ try:
         assert c.state()['managerVersion']=='0.1.0'
         run_client('verify')
         print('PASS native fresh-root restore authenticates archived Server/Manager and preserves encrypted SQLite/TLS/profile identity')
-        with lock(c.directory/'operation.lock'):
+        with lock(c.directory/'operation.lock',timeout=10):
             before_local=c.create_backup()
             package=native.inspect_server_package(c,fixtures/'PawTalk.Server.0.9.2.windows-x64.zip')
             with patch.object(native,'fetch',side_effect=AssertionError('local installation must stay offline')):
