@@ -18,7 +18,7 @@ try{
  await writeFile(path.join(directory,'trust.json'),JSON.stringify(keys));
  const now=Math.floor(Date.now()/1000);
  async function manifest(component,version,extra){
-  const payload=Buffer.from(JSON.stringify({schema:1,component,repository:'IlyaRusskikh/PawTalk',version,channel:'preview',publishedAt:now,expiresAt:now+3600,apiProtocol:1,dataSchema:1,...extra}));
+  const payload=Buffer.from(JSON.stringify({schema:1,component,repository:'IlyaRusskikh/PawTalk',version,channel:'preview',publishedAt:now,expiresAt:now+3600,apiProtocol:2,dataSchema:2,...extra}));
   await writeFile(path.join(directory,`${component}-${version}.json`),JSON.stringify({keyId:'test',payload:payload.toString('base64'),signature:sign(null,payload,privateKeys[component]).toString('base64')}));
  }
  const version=(await readFile(path.join(root,'server/VERSION'),'utf8')).trim();
@@ -35,7 +35,7 @@ try{
   await writeFile(path.join(content,'manager/trust.json'),JSON.stringify(keys));
   for(const file of ['LICENSE','THIRD_PARTY_NOTICES.md'])await cp(path.join(root,file),path.join(content,file));
   const bundle=`PawTalk.Manager.${v}.tar.gz`;
-  const files=['manager/VERSION','manager/trust.json','manager/compose.server.yaml','manager/launcher','manager/pawtalkctl','manager/pawtalk-update.service','manager/pawtalk-update.timer','manager/pawtalk-health.service','manager/pawtalk-health.timer','LICENSE','THIRD_PARTY_NOTICES.md',...['__init__','release','config','runtime','controller','preflight','bundles','cli','platforms','native'].map(n=>`manager/pawtalk_manager/${n}.py`)];
+  const files=['manager/VERSION','manager/trust.json','manager/compose.server.yaml','manager/launcher','manager/pawtalkctl','manager/pawtalk-update.service','manager/pawtalk-update.timer','manager/pawtalk-health.service','manager/pawtalk-health.timer','LICENSE','THIRD_PARTY_NOTICES.md',...['__init__','release','config','runtime','controller','preflight','bundles','cli','platforms','native','admission'].map(n=>`manager/pawtalk_manager/${n}.py`)];
   execFileSync('tar.exe',['-czf',path.join(directory,bundle),'-C',content,...files],{windowsHide:true});
   const bytes=await readFile(path.join(directory,bundle));
   await manifest('manager',v,{bundle,size:bytes.length,sha256:hash(bytes),launcherProtocol:1,configSchema:1});

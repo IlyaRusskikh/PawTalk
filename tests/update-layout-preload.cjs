@@ -1,6 +1,7 @@
 const { contextBridge } = require('electron');
 let listener;
 contextBridge.exposeInMainWorld('desktop', {
+  membership: async action=>({value:action==='identity'?{profileId:'a'.repeat(64),deviceId:'b'.repeat(64)}:[]}),
   capabilities: async () => ({ native: false, platform: 'win32', packaged: false }),
   configureKeys: async () => ({ failed: [] }),
   onPtt: () => () => {}, onAction: () => () => {}, onSuspend: () => () => {},

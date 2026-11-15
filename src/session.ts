@@ -10,14 +10,10 @@ import { RtcDiagnosticsMeter } from '../shared/rtc-diagnostics.mjs';
 import { RttMeter } from '../shared/rtt.mjs';
 import { PacketLossMeter } from '../shared/packet-loss.mjs';
 import { avatarPayloadLimit, validAvatar } from './avatarImage';
-import { chatSendsPerSecond } from './chat';
 
-const chatTopic = 'pawtalk.chat.v1';
-const typingTopic = 'pawtalk.typing.v1';
 const avatarTopic = 'pawtalk.avatar.v1';
 const nicknameTopic = 'pawtalk.nickname.v1';
 const profileRequestTopic = 'pawtalk.profile-request.v1';
-const chatRefreshTopic = 'pawtalk.chat-refresh.v1';
 
 export interface Person { id: string; name: string; avatar?: string; speaking: boolean; muted: boolean; deafened?: boolean; local: boolean; rtt?: number; packetLoss?: number; diagnostics?: ConnectionHistory; }
 export interface Snapshot { state: string; people: Person[]; db: number; speaking: boolean; threshold?: number; rtt?: number; packetLoss?: number; e2ee?: boolean; }
@@ -50,9 +46,6 @@ export class VoiceSession {
   private lossMeter = new PacketLossMeter();
   onUpdate: (snapshot: Snapshot) => void = () => {};
   onError: (message: string) => void = () => {};
-  onChat?: (payload: Uint8Array, author: string, authorIdentity: string) => void;
-  onTyping?: (identity: string, typing: boolean) => void;
-  onChatRefresh?: () => void;
   constructor(public settings: Settings, private transport: { sharedAudioContext?: boolean } = {}) {}
   private playRoomCue(connected: boolean) {
     if (!this.deafened) void playSound(connected ? 'join' : 'leave', this.settings);
@@ -100,6 +93,7 @@ export class VoiceSession {
     });
   }
   async connect(url: string, token: string, encryption: { required?: boolean; key?: string } = {}) {
+    if (encryption.required !== true) throw new Error(t('Сервер не подтвердил обязательное E2EE.'));
     if (encryption.required && !isE2EESupported()) throw new Error(t("Этот клиент не поддерживает E2EE. Обновите PawTalk."));
     if (encryption.required) { try { mediaKeyBytes(encryption.key); } catch { throw new Error(t('Нужен ключ E2EE из приглашения: 64 шестнадцатеричных символа.')); } }
     if (encryption.key && !encryption.required) throw new Error(t("Сервер не подтвердил обязательное E2EE."));
@@ -138,33 +132,17 @@ export class VoiceSession {
     });
     room.on(RoomEvent.ActiveSpeakersChanged, speakers => { this.speakers = new Set(speakers.map(p => p.identity)); this.emit(); });
     room.on(RoomEvent.ParticipantConnected, p => { this.publishAudioState(); if (this.avatar) this.publishAvatar(p.identity); this.publishNickname(p.identity); this.playRoomCue(true); this.emit(); });
-    const peerChatTimes = new Map<string, number[]>();
     const peerProfileRequests = new Map<string, number>();
     room.on(RoomEvent.ParticipantDisconnected, p => {
       this.peerNetwork.delete(p.identity); this.peerDeafened.delete(p.identity); this.peerAvatars.delete(p.identity); this.peerNicknames.delete(p.identity);
-      peerChatTimes.delete(p.identity);
       peerProfileRequests.delete(p.identity);
     });
     room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
-      if (participant && payload.length === 0 && (topic === profileRequestTopic || topic === chatRefreshTopic)) {
-        if (topic === chatRefreshTopic) { this.onChatRefresh?.(); return; }
+      if (participant && payload.length === 0 && topic === profileRequestTopic) {
         const now = performance.now();
         if (now - (peerProfileRequests.get(participant.identity) ?? -Infinity) < 1000) return;
         peerProfileRequests.set(participant.identity, now);
         this.publishAvatar(participant.identity); this.publishNickname(participant.identity);
-        return;
-      }
-      if (topic === typingTopic && participant && payload.length === 1 && (payload[0] === 0 || payload[0] === 1)) {
-        this.onTyping?.(participant.identity, payload[0] === 1);
-        return;
-      }
-      if (topic === chatTopic && participant && payload.length <= 18432) {
-        const { identity } = participant;
-        const now = performance.now();
-        const recent = (peerChatTimes.get(identity) ?? []).filter(time => now - time < 1000);
-        if (recent.length >= chatSendsPerSecond) return;
-        peerChatTimes.set(identity, [...recent, now]);
-        this.onChat?.(payload, this.peerNicknames.get(identity) || participant.name || t("Участник"), identity);
         return;
       }
       if (topic === nicknameTopic && participant && payload.length <= 128) {
@@ -279,10 +257,6 @@ export class VoiceSession {
     const room = this.room;
     if (room?.state === ConnectionState.Connected) void room.localParticipant.publishData(new Uint8Array(), { reliable: true, topic: profileRequestTopic }).catch(() => {});
   }
-  publishChatRefresh() {
-    const room = this.room;
-    if (room?.state === ConnectionState.Connected) void room.localParticipant.publishData(new Uint8Array(), { reliable: true, topic: chatRefreshTopic }).catch(() => {});
-  }
   setAvatar(avatar?: string) {
     if (avatar === this.avatar || (avatar && !validAvatar(avatar))) return;
     this.avatar = avatar;
@@ -301,15 +275,6 @@ export class VoiceSession {
     this.nickname = nickname;
     this.publishNickname();
     this.emit();
-  }
-  async sendChat(payload: Uint8Array<ArrayBuffer>, identity: string) {
-    if (this.room?.state !== ConnectionState.Connected || this.room.localParticipant.identity !== identity) throw new Error('Chat is disconnected');
-    await this.room.localParticipant.publishData(payload, { reliable: true, topic: chatTopic });
-  }
-  publishTyping(identity: string, typing: boolean) {
-    const room = this.room;
-    if (room?.state !== ConnectionState.Connected || room.localParticipant.identity !== identity) return;
-    void room.localParticipant.publishData(Uint8Array.of(typing ? 1 : 0), { reliable: false, topic: typingTopic }).catch(() => {});
   }
   setMute(muted: boolean, deafened: boolean) { this.muted = muted; this.deafened = deafened; this.publishAudioState(); this.emit(); this.syncGate(); this.applyVolumes(); void this.syncMute().catch(error => this.onError(String(error))); }
   setPtt(down: boolean) { this.ptt = down; this.syncGate(); }

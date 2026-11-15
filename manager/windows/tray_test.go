@@ -17,6 +17,12 @@ import (
 	"golang.org/x/sys/windows/svc"
 )
 
+func windowText(window uintptr) string {
+	var text [4096]uint16
+	trayCall("GetWindowTextW", window, unsafe.Pointer(&text[0]), len(text))
+	return windows.UTF16ToString(text[:])
+}
+
 func TestTrayHelper(t *testing.T) {
 	if root := os.Getenv("PAWTALK_TRAY_TEST_ROOT"); root != "" {
 		if err := runTray(root, os.Getenv("PAWTALK_TRAY_TEST_LANG")); err != nil {

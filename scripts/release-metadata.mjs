@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { versions } from './release-contract.mjs';
 const { releasePlan } = createRequire(import.meta.url)('../shared/release.cjs');
+const {apiProtocolVersion,dataSchemaVersion}=createRequire(import.meta.url)('../shared/membership.cjs');
 const root = path.resolve(import.meta.dirname, '..');
 const plan = releasePlan(process.env.GITHUB_REF_NAME, await versions());
 if (plan.client) throw Error('Use sign-update.mjs for Client');
@@ -26,7 +27,7 @@ await mkdir(output, {recursive:true});
 const now = Math.floor(Date.now()/1000);
 const payload = {schema:1,component,repository:'IlyaRusskikh/PawTalk',version:plan.version,
   channel:process.env.PAWTALK_PRERELEASE === 'false' && !plan.version.includes('-') ? 'stable' : 'preview',
-  publishedAt:now,expiresAt:now+365*86400,apiProtocol:1,dataSchema:1};
+  publishedAt:now,expiresAt:now+365*86400,apiProtocol:apiProtocolVersion,dataSchema:dataSchemaVersion};
 if (plan.server) {
   if (!/^sha256:[a-f0-9]{64}$/.test(process.env.PAWTALK_IMAGE_DIGEST || '')) throw Error('Exact GHCR digest required');
   Object.assign(payload,{image:'ghcr.io/ilyarusskikh/pawtalk-server',digest:process.env.PAWTALK_IMAGE_DIGEST});
@@ -39,7 +40,7 @@ if (plan.server) {
   const files = ['manager/VERSION','manager/trust.json','manager/compose.server.yaml','manager/launcher',
     'manager/pawtalkctl','manager/pawtalk-update.service','manager/pawtalk-update.timer','manager/pawtalk-health.service',
     'manager/pawtalk-health.timer','LICENSE','THIRD_PARTY_NOTICES.md'];
-  for (const name of ['__init__','release','config','runtime','controller','preflight','bundles','cli','platforms','native']) files.push(`manager/pawtalk_manager/${name}.py`);
+  for (const name of ['__init__','release','config','runtime','controller','preflight','bundles','cli','platforms','native','admission']) files.push(`manager/pawtalk_manager/${name}.py`);
   if (!(await stat(path.join(root,'manager/pawtalk_manager/cli.py'))).isFile()) throw Error('Manager implementation is missing');
   execFileSync('tar',['-czf',path.join(output,bundle),'-C',root,...files],{windowsHide:true});
   const bytes = await readFile(path.join(output,bundle));

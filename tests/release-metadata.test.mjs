@@ -11,7 +11,7 @@ test('real component artifact builder signs exact digests/bundle bytes with sepa
   const directory = await mkdtemp(path.join(os.tmpdir(),'pawtalk-component-signing-'));
   try {
     await mkdir(path.join(directory,'scripts')); await mkdir(path.join(directory,'shared')); await mkdir(path.join(directory,'server'));
-    for (const name of ['scripts/release-metadata.mjs','scripts/release-contract.mjs','shared/release.cjs','LICENSE','THIRD_PARTY_NOTICES.md']) {
+    for (const name of ['scripts/release-metadata.mjs','scripts/release-contract.mjs','shared/release.cjs','shared/membership.cjs','shared/framing.mjs','LICENSE','THIRD_PARTY_NOTICES.md']) {
       await cp(new URL('../'+name,import.meta.url),path.join(directory,name));
     }
     await cp(new URL('../manager/',import.meta.url),path.join(directory,'manager'),{recursive:true,filter:source=>!['__pycache__','generated'].includes(path.basename(source))});

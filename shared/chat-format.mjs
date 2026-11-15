@@ -51,3 +51,11 @@ export function messageMarkdown(text) {
   }
   return nodes;
 }
+
+// Notifications have no Markdown renderer. Use the same parse tree as the chat
+// so escaped punctuation and literal code survive while formatting marks do not.
+export function messagePreview(text, spoiler = '•••') {
+  const flatten = nodes => nodes.map(node => typeof node === 'string' ? node :
+    node.type === 'spoiler' ? spoiler : node.children ? flatten(node.children) : node.text || '').join('');
+  return messageMarkdown(text).map(node => flatten([node])).join(' ').replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim();
+}

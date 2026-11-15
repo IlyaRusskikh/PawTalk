@@ -1,6 +1,7 @@
 import { t } from './i18n';
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from './Modal';
+import { membership } from './membership';
 export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatus, onJoin, onStop, onError, onBusy }: {
   nickname: string; active: boolean; modal: 'join' | 'create' | 'host-share' | 'share' | 'settings' | 'server-key' | null;
   onClose(): void; onCreated(name: string): void; onStatus(running: boolean): void;
@@ -10,16 +11,15 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
   const [status, setStatus] = useState<HostStatus>({ running: false });
   const [name, setName] = useState<string | null>(null);
   const [failure, setFailure] = useState('');
-  const [password, setPassword] = useState('');
-  const [port, setPort] = useState(18443);
-  const [e2ee, setE2EE] = useState(false);
+  const port = 18443;
+  const [inviteKind, setInviteKind] = useState('single');
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<HostCheckResult | null>(null);
   const [checkFailure, setCheckFailure] = useState('');
   const checkAttempt = useRef(0);
   const checkPending = useRef(false);
-  const [copied, setCopied] = useState('');
+  const [copied, setCopied] = useState(false);
   const [copiedScript, setCopiedScript] = useState('');
   const [level, setLevel] = useState('local');
   const [local, setLocal] = useState('');
@@ -58,16 +58,15 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
     setFailure(''); setBusy(true); onBusy(true);
     try {
       const roomName = (name ?? "").trim() || t("{0} хостит", nickname);
-      const next = await window.desktop.startHost({ password, port, name: roomName, e2ee }); setStatus(next);
+      const next = await window.desktop.startHost({ port, name: roomName, nickname }); setStatus(next);
       setLevel(next.internet ? 'global' : 'local');
-      await onJoin({ address: next.localAddress!, nickname, password });
-      onCreated(roomName); setPassword('');
+      onCreated(roomName);
     } catch (error) { setFailure(error instanceof Error ? error.message : String(error)); onError(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); onBusy(false); }
   }
   async function stop() {
     setBusy(true);
-    try { await onStop(); await window.desktop?.stopHost(); setPassword(''); onClose(); }
+    try { await onStop(); await window.desktop?.stopHost(); setCopied(false); onClose(); }
     catch (error) { setFailure(error instanceof Error ? error.message : String(error)); onError(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   }
@@ -75,12 +74,14 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
     if (!status.localAddress) return;
     setBusy(true);
     try {
-      await onJoin({ address: status.localAddress, nickname, password: '' });
+      if (status.serverId) await membership('connect', { serverId: status.serverId });
+      onCreated(status.name || '');
     } finally { setBusy(false); }
   }
   if ((modal !== 'create' && modal !== 'host-share') || (modal === 'host-share' && !status.running)) return null;
   const lan = (status.invitations || []).slice(status.internet ? 1 : 0).sort((a, b) => Number(!a.startsWith('pawtalk://192.168.')) - Number(!b.startsWith('pawtalk://192.168.')));
-  const selected = level === 'global' ? status.internet ? status.invitations?.[0] || '' : '' : lan.includes(local) ? local : lan[0] || '';
+  const selectedBase = level === 'global' ? status.internet ? status.invitations?.[0] || '' : '' : lan.includes(local) ? local : lan[0] || '';
+  const selected = selectedBase;
   const checkReasons: Record<string, string> = {
     'ports-in-use': t('Порты проверки заняты. Закройте другую комнату или выберите другой порт.'),
     'no-interface': t('Не найден сетевой адаптер с IPv4-шлюзом. Проверьте подключение и настройки VPN.'),
@@ -88,12 +89,21 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
     'checker-unavailable': t('Сервис check-host.net не завершил проверку после повторных запросов. Это ошибка внешней проверки, а не запрет хостинга.'),
     'check-failed': t('Не удалось запустить локальную часть проверки сети.'),
   };
+  const ipComparisons: Record<NonNullable<HostCheckResult['network']>['comparison'], string> = {
+    same: t('WAN и внешний IPv4 совпадают. Доступность портов проверяется отдельно.'),
+    'additional-nat': t('WAN роутера непубличный. Перед ним может быть другой домашний роутер или NAT/CGNAT провайдера. Одного проброса на этом роутере может быть недостаточно; это не доказывает невозможность хостинга.'),
+    different: t('Публичный WAN отличается от внешнего IPv4. Проверьте VPN, прокси, несколько интернет-подключений или NAT выше роутера. Проверяем порты на WAN-адресе.'),
+    unavailable: t('Сравнение WAN и внешнего IPv4 не выполнено полностью. Это не означает, что хостинг недоступен.'),
+  };
   return <Modal title={status.running ? t("Поделиться комнатой") : t("Создать комнату")} onClose={onClose}>
     {failure && <p role="alert" className="text-error">{failure}</p>}{status.running ? <>
       <div className="form-fields"><label className="host-invite">{t("Уровень сети")}<select value={level} onChange={e => setLevel(e.target.value)}><option value="global">{t("Глобальный")}</option><option value="local">{t("Локальный")}</option></select></label>
-      {level === 'local' && lan.length > 1 && <label>{t("Адрес в локальной сети")}<select value={selected} onChange={e => setLocal(e.target.value)}>{lan.map(value => <option key={value} value={value}>{value.split('/')[2]}</option>)}</select></label>}
-      {selected ? <label className="host-invite">{t("Ссылка приглашения")}<div><input readOnly value={selected} onFocus={e => e.target.select()}/><button className="primary" onClick={() => void (window.desktop ? window.desktop.copyInvitation(selected) : navigator.clipboard.writeText(selected)).then(() => setCopied(selected)).catch(() => onError(t("Не удалось скопировать приглашение.")))}>{copied === selected ? t("Скопировано") : t("Копировать")}</button></div></label> : <p role="status" className="host-hint">{level === 'global' ? t("Глобальная ссылка недоступна: порты не открыты или у провайдера дополнительный NAT. Выберите локальный уровень сети.") : t("Локальный адрес недоступен.")}</p>}
-      </div><p className="host-hint">{t("Другу нужен PawTalk. Пароль уже включён в ссылку. Комната работает, пока приложение запущено, в том числе в трее.")}</p>
+      {level === 'local' && lan.length > 1 && <label>{t("Адрес в локальной сети")}<select value={selectedBase} onChange={e => setLocal(e.target.value)}>{lan.map(value => <option key={value} value={value}>{value.split('/')[2]}</option>)}</select></label>}
+      <label>{t('Тип приглашения')}<select value={inviteKind} onChange={event => setInviteKind(event.target.value)}><option value="single">{t('Одноразовое · 24 часа')}</option><option value="reusable">{t('Многоразовое · 1 час')}</option></select></label>
+      <button disabled={busy || !status.serverId || !selectedBase} className="primary" onClick={() => { setBusy(true); void membership<string>('invite', { serverId: status.serverId, kind: inviteKind }).then(value=>membership('copy',{text:selectedBase.split('#')[0]+'#'+new URL(value).hash.slice(1)})).then(()=>setCopied(true)).catch(error => setFailure(error.message)).finally(() => setBusy(false)); }}>{t('Создать ссылку')}</button>
+      {copied&&<p className="member-invite-notice" role="status">{t('Ссылка скопирована в буфер обмена. Не потеряйте её: повторно скопировать не получится.')}</p>}
+      {!selected&&<p className="host-hint">{level==='global'?t('Глобальная ссылка недоступна: порты не открыты или у провайдера дополнительный NAT. Выберите локальный уровень сети.'):t('Локальный адрес недоступен.')}</p>}
+      </div><p className="host-hint">{t('Другу нужен PawTalk. Приглашение действует ограниченное время. Сервер работает, пока приложение запущено, в том числе в трее.')}</p>
       <div className="diagnostic-row"><span>{t("Не уверены, что друг сможет зайти? Отправьте ему скрипт для проверки")}</span><button className="diagnostic-copy" disabled={!selected} onClick={() => void window.desktop?.copyDiagnosticCommand(selected).then(() => setCopiedScript(selected)).catch(() => setFailure(t("Не удалось скопировать скрипт проверки подключения.")))}>{copiedScript === selected ? t("Скрипт скопирован") : t("Копировать")}</button></div>
       <div className="modal-actions">
         {!active && <button className="primary" disabled={busy || !nickname.trim()} onClick={() => void rejoin()}>{t("Войти в комнату")}</button>}
@@ -101,10 +111,8 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
       </div>
     </> : <form onSubmit={e => { e.preventDefault(); void start(); }}><div className="form-fields"><div className="form-grid">
       <label className="wide">{t("Название комнаты")}<input required maxLength={80} value={name ?? t("{0} хостит", nickname)} onChange={e => setName(e.target.value)} disabled={busy}/></label>
-      <label>{t("Пароль комнаты")}<input required type="password" minLength={8} maxLength={1024} value={password} onChange={e => setPassword(e.target.value)} disabled={busy} autoComplete="new-password" placeholder={t("Не менее 8 символов")}/></label>
-      <label>{t("Порт комнаты")}<input required type="number" min={1024} max={65532} value={port} onChange={e => { setPort(Number(e.target.value)); setCheckResult(null); setCheckFailure(''); }} disabled={busy || checking}/></label>
     </div>
-      <label className="encryption-toggle"><input type="checkbox" checked={e2ee} disabled={busy} onChange={e => setE2EE(e.target.checked)}/>{t("Сквозное шифрование E2EE")}</label>
+      <p className="host-hint">{t('Сквозное шифрование включено. Вы станете администратором сервера.')}</p>
     </div>
       <div className="host-chat-hints" aria-live="polite">
         <p className="host-chat-kept">{t("Сообщения не пропадут при перезаходе в комнату")}</p>
@@ -116,9 +124,20 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
           {checking && <p className="host-hint">{t("Проверяем TCP и UDP из интернета. Это может занять около минуты…")}</p>}
           {checkResult && <p className={`host-check-result ${checkResult.state === 'internet' ? 'success' : 'warning'}`}>{checkResult.state === 'internet' ? t("Да, ко мне можно подключиться через интернет :)") : checkResult.state === 'unconfirmed' ? t("Доступ через интернет не подтверждён. Пока используйте локальную сеть :(") : t("Не удалось завершить проверку. Доступность из интернета пока неизвестна — попробуйте ещё раз.")}</p>}
           {checkResult && checkResult.state !== 'cancelled' && <p className="host-hint host-check-ports">TCP {port}: {checkResult.tcp[0] ? '✓' : '—'} · TCP {port + 1}: {checkResult.tcp[1] ? '✓' : '—'} · UDP {port + 2}: {checkResult.udp ? '✓' : '—'}</p>}
+          {checkResult?.network && checkResult.state !== 'cancelled' && <>
+            <p className="host-hint">{ipComparisons[checkResult.network.comparison]}</p>
+          </>}
           {(checkFailure || checkResult?.reason) && <p className="host-hint" role="status">{checkFailure || checkReasons[checkResult!.reason!]}</p>}
         </div>
         <p className="host-hint">{t("Попробуем открыть порты и проверить соединение из сети интернет")}</p>
+        <details className="host-hint host-check-network">
+          <summary>{t('Адреса и внешние сервисы')}</summary>
+          {checkResult?.network && checkResult.state !== 'cancelled' && <>
+            <p>{t('LAN: {0} · WAN роутера: {1} · Внешний IPv4: {2}', checkResult.network.lanIP || '—', checkResult.network.wanIP || '—', checkResult.network.externalIP || '—')}</p>
+            {checkResult.network.probeIP && <p>{t('Адрес проверки портов: {0}', checkResult.network.probeIP)}</p>}
+          </>}
+          <p>{t('Сравнение IP обращается к ipify, при сбое — к icanhazip. Внешний IPv4 отражает маршрут HTTPS-запроса, включая VPN/прокси. Сервисы получают IP запроса; проверка check-host.net создаёт публичные отчёты об IP и портах. Настройки сервера и приглашения не меняются.')}</p>
+        </details>
       </section>
       <button className="primary" disabled={busy || checking || active || !nickname.trim()}>{busy ? t("Создаём комнату…") : t("Создать и войти →")}</button></form>}
   </Modal>;

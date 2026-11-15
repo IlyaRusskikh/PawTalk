@@ -19,25 +19,29 @@ app.whenReady().then(async()=>{
    await setInput('.language-select select',language);
    await until(`document.documentElement.lang===${JSON.stringify(language)}`,'language');
    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:reduced?'reduce':'no-preference'}]});
-   await run(`window.managerFixture.state({state:'stopped',update:{status:'available',version:'0.5.0'}})`);
+   await run(`window.managerFixture.state({state:'stopped',initialized:false,update:{status:'available',version:'0.5.0'}})`);
    await click(t('overview'));await delay(80);
    assert.ok(await run(`document.querySelector('.server-hero').textContent.includes(${JSON.stringify(t('stoppedTitle'))})`));
-   await click(t('copyPassword'));await delay(50);await click(t('copyInvitation'));await delay(50);
-   assert.equal(await run(`window.managerFixture.calls().slice(-2).map(c=>c.action).join(',')`),'copy-password,copy-invitation');
+   await click(t('createInitialAdmin'));await delay(50);
+   assert.equal(await run(`window.managerFixture.calls().at(-1).action`),'copy-initial-admin');
+   await run(`window.managerFixture.state({initialized:true})`);await delay(40);
+   assert.equal(await run(`document.querySelector('.access-card button').disabled`),true,'no admin links after setup');
+   await run(`window.managerFixture.state({initialized:false})`);
    await capture(`release/qa/manager-${language}-${reduced?'reduced':'normal'}-overview.png`);
    await click(t('network'));await setInput('input[type=number]','1');await click(t('save'));await delay(50);
    assert.equal(await run(`document.querySelector('[role=alert] strong').textContent`),t('invalid'));
    await setInput('input[type=number]','18443');
-   await click(t('security'));await run(`document.querySelector('[role=switch]').click()`);await delay(50);
+
    const geometry=await run(`(()=>{const group=document.querySelector('.form-fields');const fields=Array.from(group.children);return {gap:fields[1].getBoundingClientRect().top-fields[0].getBoundingClientRect().bottom,inside:fields[1].closest('.form-fields')===group};})()`);
-   assert.ok(geometry.inside&&Math.abs(geometry.gap-20)<1,'conditional E2EE key shares the 20px field container');
-   await setInput('.monospace','e'.repeat(64));
+   assert.ok(geometry.inside&&Math.abs(geometry.gap-20)<1,'network inputs share the 20px field container');
+   await click(t('security'));await delay(50);
+   assert.equal(await run(`document.querySelectorAll('[role=switch],.monospace').length`),0,'mandatory E2EE has no toggle or manual key field');
    await capture(`release/qa/manager-${language}-${reduced?'reduced':'normal'}-security.png`);
    await setInput('input[type=number]','64');
    await click(t('save'));await until(`!!document.querySelector('.banner.success')`,'stopped save');
    assert.equal(await run(`window.managerFixture.calls().filter(c=>c.action==='start').length`),0,'editing stopped room never starts it');
    assert.equal(await run(`document.querySelector('dialog')`),null,'stopped save needs no restart confirmation');
-   await run(`document.querySelector('[role=switch]').click()`);await delay(40);await click(t('save'));await delay(60);
+
    await run(`window.managerFixture.state({state:'running'})`);
    await until(`!!document.querySelector('.sidebar-bottom .status-dot.running')`,'running state rendered');
    await setInput('input[type=number]','128');await click(t('save'));
@@ -97,6 +101,34 @@ app.whenReady().then(async()=>{
   await until(`!!document.querySelector('dialog[open]')`,'local install approval');await click(words.en.confirm);
   await until(`document.body.textContent.includes(${JSON.stringify(words.en.localBuild)})`,'local build shown');
   assert.equal(await run(`window.managerFixture.calls().filter(c=>c.action==='install-server-package').at(-1).payload.id`),'a'.repeat(64));
+  for(const language of ['ru','en'])for(const reduced of [false,true]){
+   const t=key=>words[language][key];
+   await win.loadFile(path.resolve('manager/desktop/dist/index.html'),{query:{setup:'1',lang:language}});
+   await until('!!document.querySelector(".first-setup")','first-run wizard');
+   await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:reduced?'reduce':'no-preference'}]});
+   assert.deepEqual(await run('window.managerFixture.calls().filter(c=>c.action!=="snapshot")'),[],'first render does not install, start or discover releases');
+   assert.equal(await run('document.querySelector(".first-setup .modal-actions button").disabled'),true,'local source requires a selected package');
+   const geometry=await run('(()=>{const fields=Array.from(document.querySelector(".first-setup .form-fields").children);return fields.slice(1).map((el,i)=>el.getBoundingClientRect().top-fields[i].getBoundingClientRect().bottom)})()');
+   assert.ok(geometry.every(gap=>Math.abs(gap-20)<1),'first-run shared field geometry');
+   await click(t('diagnostics'));await click(t('checkHealth'));await until('!!document.querySelector(".diagnostic-grid")','diagnostics before server setup');
+   await click(t('overview'));
+   await run('document.querySelectorAll("input[name=setup-source]")[1].click()');
+   assert.equal(await run('window.managerFixture.calls().some(c=>c.action==="setup-server")'),false,'source selection alone does not download');
+   await click(t('setupInstall'));await until('!!document.querySelector("dialog[open]")','published setup consent');
+   await run('window.managerFixture.failNext("noCompatibleServer")');await click(t('confirm'));
+   await until('!!document.querySelector("[role=alert]")','no compatible release message');
+   assert.equal(await run('!!document.querySelector(".first-setup")'),true,'failed download preserves wizard');
+   await run('document.querySelectorAll("input[name=setup-source]")[0].click()');
+   await click(t('selectServerPackage'));await until('!!document.querySelector(".setup-package code")','local staged package');
+   await setInput('.first-setup .form-fields input','203.0.113.20');
+   await capture('release/qa/manager-first-setup-'+language+'-'+(reduced?'reduced':'normal')+'.png');
+   await click(t('setupInstall'));await until('!!document.querySelector("dialog[open]")','local setup consent');
+   assert.ok(await run('document.querySelector("dialog").textContent.includes('+JSON.stringify(t('packageUnverified'))+')'),'local execution explicitly approved');
+   await click(t('confirm'));await until('!!document.querySelector(".server-hero")','server configured');
+   const request=await run('window.managerFixture.calls().filter(c=>c.action==="setup-server").at(-1).payload');
+   assert.equal(request.source,'local');assert.equal(request.id,'a'.repeat(64));assert.equal(request.values.PAWTALK_PUBLIC_IP,'203.0.113.20');
+   await click(t('network'));await setInput('.form-fields input','203.0.113.21');await click(t('save'));await until('!!document.querySelector("dialog[open]")','later network edit');await click(t('confirm'));await until('!!document.querySelector(".banner.success")','network edit saved');
+  }
   assert.deepEqual(errors,[]);console.log('PASS Manager React UI: RU/EN, motion, startup busy retry, stopped save/retry, access actions, field/button geometry, page-scoped checks, backups/logs during checks and explicit local package approval. Management transport is synthetic.');
   win.destroy();app.exit(0);
  }catch(error){console.error(error,errors);win.destroy();app.exit(1);}

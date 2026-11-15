@@ -3,3 +3,5 @@
 .confirm-dialog{color:#e9ecf6}.confirm-dialog::backdrop{background:#090b13b8;backdrop-filter:blur(6px)}
 
 .danger{color:#f3b9c8;border-color:#663e50}.danger:hover:not(:disabled){background:#38242e}
+
+.setup-sources{display:flex;flex-direction:column;gap:16px;margin:24px 0}.setup-sources>label{display:flex;flex-direction:row;align-items:center;gap:10px;cursor:pointer}.setup-sources input{width:16px;height:16px;flex:none}.setup-package{display:flex;flex-direction:column;gap:16px}.setup-package code{overflow-wrap:anywhere;font-size:12px}.first-setup .form-fields{display:flex;flex-direction:column;gap:20px}

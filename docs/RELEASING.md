@@ -166,7 +166,7 @@ Server/Manager публичные ключи внесены в `manager/trust.js
 
 Envelope: `keyId`, Base64 `payload`, Ed25519 `signature` над точными байтами payload.
 Server/Manager schema 1 содержит `component`, `repository`, `version`, `channel`,
-`publishedAt`/`expiresAt` (Unix seconds), `apiProtocol:1`, `dataSchema:1`.
+`publishedAt`/`expiresAt` (Unix seconds), `apiProtocol:2`, `dataSchema:2`.
 Server добавляет фиксированное имя GHCR image и immutable digest, а также
 `windows: {name, sha256, size}` для точного Windows ZIP. Manager добавляет
 точное имя bundle, SHA-256, размер, `launcherProtocol:1`, `configSchema:1` и

@@ -17,7 +17,7 @@ from .platforms import WINDOWS, host, sync_directory, admin, protect, secure
 FILES = {'manager/VERSION','manager/trust.json','manager/compose.server.yaml','manager/launcher','manager/pawtalkctl',
          'manager/pawtalk-update.service','manager/pawtalk-update.timer','manager/pawtalk-health.service','manager/pawtalk-health.timer',
          'LICENSE','THIRD_PARTY_NOTICES.md'}
-MODULES = {'__init__','release','config','runtime','controller','preflight','bundles','cli','platforms','native'}
+MODULES = {'__init__','release','config','runtime','controller','preflight','bundles','cli','platforms','native','admission'}
 FILES |= {'manager/pawtalk_manager/'+name+'.py' for name in MODULES}
 
 

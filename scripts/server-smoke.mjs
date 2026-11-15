@@ -5,6 +5,9 @@ import { createRequire } from 'node:module';
 import https from 'node:https';
 import { X509Certificate } from 'node:crypto';
 import { checkServerIdentity } from 'node:tls';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
 const require = createRequire(import.meta.url);
 const name = `pawtalk-server-smoke-${process.pid}`;
 const volume = `${name}-data`;
@@ -46,6 +49,15 @@ function request(endpoint, body) {
   });
 }
 let vite;
+const directory=await mkdtemp(path.join(os.tmpdir(),'pawtalk-api2-container-'));
+const input=path.join(directory,'input.json'),output=path.join(directory,'output.json');
+async function client(mode,address){
+ if(process.platform==='win32'){
+  await writeFile(input,JSON.stringify({mode,address}),{mode:0o600});
+  await run(require('electron'),['tests/manager-membership-client.cjs'],{childEnv:{...env,PAWTALK_APP_TEST_DIR:directory,PAWTALK_APP_TEST_INPUT:input,PAWTALK_APP_TEST_OUTPUT:output}});
+ }else await run(process.execPath,['tests/membership-host-client.cjs',mode,directory,address||'']);
+}
+
 const image = process.env.PAWTALK_TEST_IMAGE || 'pawtalk-server:local';
 try {
   if (!process.env.PAWTALK_TEST_IMAGE) await docker(['build', '-f', 'server/standalone.Dockerfile', '-t', image, '.']);
@@ -55,26 +67,28 @@ try {
   // Use info rather than scraping logs for secrets.
   const invite = await docker(['exec', name, '/pawtalk', 'serve', 'info'], { quiet: true });
   fingerprint = invite.split('/').at(-1);
-  // Rotate the generated password via stdin to avoid retaining it in test output.
-  const password = 'container-smoke-' + process.pid;
-  await docker(['exec', '-i', name, '/pawtalk', 'serve', 'reset-password'], { input: password, quiet: true });
-  await docker(['restart', name], { quiet: true });
-  await until(async () => { try { return (await request('/healthz')).status === 200; } catch { return false; } }, 'HTTPS readiness');
-  await docker(['exec', name, '/pawtalk', 'serve', 'healthcheck'], { quiet: true });
-  assert.equal((await request('/api/connect', { nickname: 'Smoke', password: 'wrong-password' })).status, 401);
-  const joined = await request('/api/connect', { nickname: 'Smoke', password });
-  assert.equal(joined.status, 200);
-  assert.equal(JSON.parse(joined.text).url, 'wss://127.0.0.1:31443/rtc');
-  assert.equal((await request('/rtc')).status, 200);
-  const correct = fingerprint; fingerprint = '0'.repeat(64);
-  await assert.rejects(request('/healthz'), /pin mismatch/); fingerprint = correct;
-  assert.equal(await docker(['exec', name, '/pawtalk', 'serve', 'info'], { quiet: true }), invite);
-  console.log('PASS read-only non-root container, pinned TLS, password rotation, auth, proxy, persistent invitation');
-  if (process.argv.includes('--audio')) {
-    vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1'], { windowsHide: true, stdio: 'ignore' });
-    vite.on('error', error => console.error(error.message));
-    await until(async () => { try { return (await fetch('http://127.0.0.1:5173/tests/voice.html')).ok; } catch { return false; } }, 'Vite');
-    await run(require('electron'), ['scripts/integration.cjs'], { childEnv: { ...env, PAWTALK_TEST_SERVER: 'https://127.0.0.1:31443', PAWTALK_TEST_INVITATION: invite, PAWTALK_TEST_PASSWORD: password } });
+  if(process.argv.includes('--legacy-rejection')){
+    await run(process.execPath,['tests/membership-host-client.cjs','reject-legacy',directory,invite]);
+    console.log('PASS frozen published Server rejected by current Client transport policy');
+  }else{
+  const initial=await docker(['exec',name,'/pawtalk','serve','initial-admin'],{quiet:true});
+  await client('join',initial);
+  assert.equal((await request('/api/v2/state')).status,401);
+  assert.equal((await request('/api/connect',{nickname:'Legacy'})).status,426);
+  assert.equal((await request('/api/config')).status,200);
+  assert.equal((await request('/rtc')).status,200);
+  const correct=fingerprint;fingerprint='0'.repeat(64);
+  await assert.rejects(request('/healthz'),/pin mismatch/);fingerprint=correct;
+  await assert.rejects(docker(['exec',name,'/pawtalk','serve','initial-admin'],{quiet:true}));
+  assert.equal(await docker(['exec',name,'/pawtalk','serve','info'],{quiet:true}),invite);
+  console.log('PASS read-only non-root API 2 container, mandatory E2EE, one-time bootstrap, encrypted chat, pinned TLS and proxy');
+  if(process.argv.includes('--audio')){
+    assert.equal(process.platform,'win32','Native container audio harness currently requires Windows Electron');
+    await client('audio');
+    vite=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1'],{windowsHide:true,stdio:'ignore'});
+    vite.on('error',error=>console.error(error.message));
+    await until(async()=>{try{return(await fetch('http://127.0.0.1:5173/tests/voice.html')).ok;}catch{return false;}},'Vite');
+    await run(require('electron'),['scripts/integration.cjs'],{childEnv:{...env,PAWTALK_API2_FIXTURE:output,PAWTALK_TEST_INVITATION:invite}});
   }
   await docker(['exec', name, 'killall', '-STOP', 'livekit-server'], { quiet: true });
   assert.equal((await request('/healthz')).status, 503);
@@ -85,12 +99,15 @@ try {
   await docker(['start', name], { quiet: true });
   await until(async () => { try { return (await request('/healthz')).status === 200; } catch { return false; } }, 'restart');
   assert.equal(await docker(['exec', name, '/pawtalk', 'serve', 'info'], { quiet: true }), invite);
-  assert.equal((await request('/api/connect', { nickname: 'After restart', password })).status, 200);
+  await client('verify');
   await docker(['stop', '-t', '15', name], { quiet: true });
   assert.equal(await docker(['inspect', '--format', '{{.State.ExitCode}}', name], { quiet: true }), '0');
   console.log('PASS media failure readiness, supervisor exit, restart persistence, graceful SIGTERM');
+  }
 } finally {
   vite?.kill();
   await docker(['rm', '-f', name], { quiet: true }).catch(() => {});
   await docker(['volume', 'rm', volume], { quiet: true }).catch(() => {});
+  assert.equal(path.dirname(directory),os.tmpdir());
+  await rm(directory,{recursive:true,force:true});
 }

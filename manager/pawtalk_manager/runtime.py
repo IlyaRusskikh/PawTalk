@@ -20,6 +20,18 @@ class Runtime:
     def __init__(self, template):
         self.template = Path(template)
 
+    def command(self, state, config, *args):
+        container = self.container(state, config)['Id']
+        return run(['docker', 'exec', container, '/pawtalk', 'serve', *args])
+
+    def initialized(self, state, config):
+        from .admission import status
+        return status(lambda *args: self.command(state, config, *args))
+
+    def invitation(self, state, config):
+        from .admission import initial_invitation
+        return initial_invitation(lambda *args: self.command(state, config, *args))
+
     def names(self,state):
         if not isinstance(state.get('project'),str) or not isinstance(state.get('volume'),str) or not re.fullmatch(r'pawtalk-[a-f0-9]{12}',state['project']) or not re.fullmatch(r'pawtalk-[a-f0-9]{12}(?:-restore-[a-f0-9]{12})?',state['volume']):
             raise ValueError('Unsafe managed project/volume')
@@ -103,7 +115,11 @@ class Runtime:
         raw = run(['docker','exec',info['Id'],'/pawtalk','serve','info']).decode().strip()
         if not re.fullmatch(r'pawtalk://[^/\s]+/[a-f0-9]{64}',raw):
             raise ValueError('Invalid room identity')
-        return hashlib.sha256(raw.encode()).hexdigest()
+        from .admission import inspect_status
+        status = inspect_status(lambda *args: self.command(state,config,*args))
+        if status is None:
+            raise ValueError('Server does not support API 2 host status')
+        return hashlib.sha256(('pawtalk-host-v2\n'+raw+'\n'+status['serverId']).encode()).hexdigest()
 
     def healthy(self,state,config,expected=None,timeout=90):
         deadline = time.monotonic()+timeout

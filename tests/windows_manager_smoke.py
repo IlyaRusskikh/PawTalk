@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 fixtures,stage = map(Path,sys.argv[1:3])
 sys.path.insert(0,str(Path(__file__).resolve().parent))
-from windows_smoke_support import remove_owned_tree
+from windows_smoke_support import assert_manager_only_layout, remove_owned_tree
 sys.path.insert(0,str(stage/'bootstrap/manager'))
 from pawtalk_manager import bundles, native, release, preflight, cli
 from pawtalk_manager.config import atomic, lock
@@ -103,11 +103,43 @@ for port in range(23000,60000,4):
     finally:
         for s in sockets:s.close()
 else: raise RuntimeError('No free port range')
-media_key='42'*32 # Synthetic loopback test key, never a production room key.
-key_id=hashlib.sha256(bytes.fromhex(media_key)).hexdigest()
-config=dict(PAWTALK_PUBLIC_IP='127.0.0.1',PAWTALK_PORT=str(port),PAWTALK_E2EE='true',PAWTALK_E2EE_KEY_ID=key_id)
+config=dict(PAWTALK_PUBLIC_IP='127.0.0.1',PAWTALK_PORT=str(port))
+client_directory=fixtures/'native-client'
+client_result=fixtures/'membership-result.json'
+def run_client(mode,address=None):
+    input_file=fixtures/'membership-input.json'
+    input_file.write_text(json.dumps(dict(mode=mode,address=address or runtime.command(c.state(),c.config(),'info').decode().strip())),encoding='utf-8')
+    env={**os.environ,'PAWTALK_APP_TEST_DIR':str(client_directory),'PAWTALK_APP_TEST_INPUT':str(input_file),'PAWTALK_APP_TEST_OUTPUT':str(client_result)}
+    env.pop('ELECTRON_RUN_AS_NODE',None)
+    result=subprocess.run([os.environ['PAWTALK_ELECTRON'],str(Path(__file__).with_name('manager-membership-client.cjs'))],env=env,capture_output=True,timeout=45,creationflags=subprocess.CREATE_NO_WINDOW)
+    if result.returncode:
+        report=(result.stdout+result.stderr).decode(errors='replace')
+        if address:report=report.replace(address,'[invitation redacted]')
+        raise RuntimeError('Native API 2 client failed: '+report)
+    return json.loads(client_result.read_text())
 try:
     with patch.object(native,'host',side_effect=control),patch.object(bundles,'host',side_effect=control),patch.object(native,'fetch',side_effect=fetch):
+        fresh_root=root.with_name(root.name+'-first-ui');roots.append(fresh_root)
+        if scm: protect(fresh_root)
+        fresh=Controller(fresh_root)
+        initial_calls=len(calls)
+        with patch.object(native,'fetch',side_effect=AssertionError('Manager install fetched Server')):
+            native.install_manager_only(fresh,stage/'bootstrap/manager','en')
+        assert len(calls)==initial_calls and not fresh.state_file.exists()
+        assert_manager_only_layout(fresh_root)
+        # Copy a raw local archive without its fixture signature: tests the same
+        # explicit unsigned-package confirmation path as manual API2 review.
+        local=fixtures/'local';local.mkdir();local_zip=local/'PawTalk.Server.0.9.0.windows-x64.zip'
+        shutil.copyfile(fixtures/local_zip.name,local_zip)
+        package=native.inspect_server_package(fresh,str(local_zip))
+        defaults=native.manager_values(fresh)
+        values={k:defaults[k] for k in cli.SETTINGS_FIELDS};values.update(config)
+        with patch.object(native,'fetch',side_effect=AssertionError('Local setup fetched Server')),patch.object(preflight,'check',side_effect=lambda values:preflight.check_ports(int(values['PAWTALK_PORT']))):
+            native.setup_server(fresh,dict(source='local',id=package['id'],expected=defaults,values=values),stage/'bootstrap/manager')
+        assert fresh.runtime.container(fresh.state(),fresh.config())['State']['Running']
+        assert fresh.state()['localPackage']==package['id'] and not (fresh.directory/'setup.json').exists()
+        fresh.runtime.stop(fresh.state(),fresh.config());control('stop-manager',fresh_root)
+        print('PASS Manager-only install: no network/service; explicit first UI local setup runs actual API2 core')
         manager=manifest('manager','0.1.0')
         directory=bundles.stage(root,manager,keys,fixtures/manager['bundle'])
         bundles.switch(root,directory)
@@ -153,102 +185,50 @@ try:
             runtime.healthy(before,c.config(),before['identity'])
             print('PASS actual LocalService SCM stop without debug privilege; explicit restart restores service')
         invitation=runtime.command(before,c.config(),'info')
+        assert runtime.initialized(before,c.config()) is False
         shared=runtime.invitation(before,c.config())
-        password=shared['password'].encode()
-        assert shared['url'].startswith(invitation.decode().strip()+'#password=')
-        assert runtime.invitation(before,c.config())==shared
-        assert password not in (c.directory/'invitation.dpapi').read_bytes()
-        assert password.strip() and b'pawtalk://' in invitation
-        assert password.strip() not in (root/'var/log/pawtalk/server.log').read_bytes()
-        try:runtime.command(before,c.config(),'initial-password');raise AssertionError('password reused')
+        assert shared['url'].startswith(invitation.decode().strip()+'#')
+        member=run_client('join',shared['url'])
+        assert runtime.initialized(before,c.config()) is True
+        assert runtime.invitation(before,c.config()) is None
+        assert shared['url'].encode() not in (root/'var/log/pawtalk/server.log').read_bytes()
+        assert not (c.directory/'invitation.dpapi').exists()
+        try:runtime.command(before,c.config(),'initial-admin');raise AssertionError('administrative link issued after setup')
         except RuntimeError:pass
-        def login(extra=None,expected=200):
-            saved=json.loads((runtime.data(c.state())/'state.json').read_text())
-            context=ssl.create_default_context(cadata=saved['Certificate'])
-            connection=http.client.HTTPSConnection('127.0.0.1',int(c.config()['PAWTALK_PORT']),context=context,timeout=10)
-            body=dict(nickname='Native CI',password=password.decode().strip(),e2ee=True,e2eeKeyId=key_id)
-            body.update(extra or {})
-            connection.request('POST','/api/connect',json.dumps(body),{'Content-Type':'application/json'})
-            response=connection.getresponse();raw=response.read();status=response.status;connection.close()
-            assert status==expected
-            return json.loads(raw) if status==200 else None
-        login()
-        login({'e2ee':False,'e2eeKeyId':''},426)
-        login({'e2eeKeyId':'b'*64},403)
-        # Separate real authentication phases so the public listener's five
-        # attempts/minute limit remains enabled and cannot mask regressions.
-        runtime.compose(c.state(),c.config(),'restart','server')
-        runtime.healthy(c.state(),c.config(),c.state()['identity'])
-        env={**os.environ,'PAWTALK_TEST_SERVER':f'https://127.0.0.1:{port}',
-             'PAWTALK_TEST_INVITATION':invitation.decode().strip(),'PAWTALK_TEST_PASSWORD':password.decode().strip(),
-             'PAWTALK_TEST_MEDIA_KEY':media_key}
-        env.pop('ELECTRON_RUN_AS_NODE',None)
-        backend=subprocess.run([os.environ['PAWTALK_ELECTRON'],str(Path(__file__).resolve().parent/'windows-connect-main.cjs')],env=env,capture_output=True,timeout=90,creationflags=subprocess.CREATE_NO_WINDOW)
-        if backend.returncode:
-            import re
-            report=(backend.stdout+backend.stderr).decode(errors='replace')
-            for value in [password.decode().strip(),media_key,invitation.decode().strip()]:report=report.replace(value,'[redacted]')
-            report=re.sub(r'eyJ[A-Za-z0-9._-]+','[token redacted]',report)
-            file=Path(__file__).resolve().parents[1]/'release/qa/native-windows-main-failure.txt'
-            file.parent.mkdir(parents=True,exist_ok=True);file.write_text(report,encoding='utf-8')
-            print(report,file=sys.stderr)
-            raise RuntimeError('Native Electron login check failed; see release/qa/native-windows-main-failure.txt')
-        print('PASS real restricted Electron login: E2EE prompt, password link, manual IP/key and LAN proxy hostname regression')
-        runtime.compose(c.state(),c.config(),'restart','server')
-        runtime.healthy(c.state(),c.config(),c.state()['identity'])
-        audio=subprocess.run([os.environ['PAWTALK_ELECTRON'],str(Path(__file__).resolve().parents[1]/'scripts/integration.cjs')],
-                             env=env,capture_output=True,timeout=180,creationflags=subprocess.CREATE_NO_WINDOW)
-        if audio.returncode:
-            import re
-            report=(audio.stdout+audio.stderr).decode(errors='replace')
-            for value in [password.decode().strip(),media_key,invitation.decode().strip()]:report=report.replace(value,'[redacted]')
-            report=re.sub(r'eyJ[A-Za-z0-9._-]+','[token redacted]',report)
-            file=Path(__file__).resolve().parents[1]/'release/qa/native-windows-audio-failure.txt'
-            file.parent.mkdir(parents=True,exist_ok=True);file.write_text(report,encoding='utf-8')
-            raise RuntimeError('Native encrypted RTP check failed; see release/qa/native-windows-audio-failure.txt')
-        print('PASS native Windows encrypted bidirectional Opus/RTP, PTT, mute and rejoin with two actual Electron clients (synthetic audio)')
         def activity(path,token=None):
             saved=json.loads((runtime.data(c.state())/'state.json').read_text())
             context=ssl.create_default_context(cadata=saved['Certificate'])
-            connection=http.client.HTTPSConnection('127.0.0.1',port,context=context,timeout=10)
+            connection=http.client.HTTPSConnection('127.0.0.1',int(c.config()['PAWTALK_PORT']),context=context,timeout=10)
             connection.request('GET',path,headers={'Authorization':'Bearer '+token} if token else {})
             response=connection.getresponse();raw=response.read();status=response.status;connection.close()
             return status,raw
-        policy=json.loads(activity('/api/config')[1])
-        hardened='private-presence-v1' in policy.get('capabilities',[])
-        previous=login()
-        previous_secret=json.loads((runtime.data(c.state())/'state.json').read_text())['APISecret']
-        if hardened:
-            assert activity('/api/presence')[0]==401
-            assert activity('/api/presence',previous['chatToken'])[0]==200
-            assert activity('/rtc/rtc/validate?access_token='+previous['token'])[0]==200
-        old_password=password
-        renewed=runtime.invitation(c.state(),c.config(),reset=True)
-        password=renewed['password'].encode()
-        assert password!=old_password
-        assert runtime.command(c.state(),c.config(),'info')==invitation
-        login({'password':old_password.decode()},401)
-        current=login()
-        if hardened:
-            assert json.loads((runtime.data(c.state())/'state.json').read_text())['APISecret']!=previous_secret
-            for path in ['/api/presence','/api/preview?readAfter=0']:
-                status,body=activity(path,previous['chatToken'])
-                assert status==401 and b'participants' not in body
-                assert activity(path,current['chatToken'])[0]==200
-            assert activity('/rtc/rtc/validate?access_token='+previous['token'])[0]==401
-            assert activity('/rtc/rtc/validate?access_token='+current['token'])[0]==200
-            print('PASS actual Server/LiveKit password rotation revokes old presence, preview and voice tokens; anonymous occupancy denied')
-        else:
-            print('Published Server fixture lacks private-presence-v1; server-side hardening checks require the new Server artifact')
-        assert runtime.invitation(c.state(),c.config())==renewed
-        print('PASS actual DPAPI invitation retrieval and password reset/restart; old password rejected, certificate preserved')
+        def server_policy():
+            status,body=activity('/api/config');assert status==200;return json.loads(body)
+        policy=server_policy()
+        assert policy['apiProtocolVersion']==2 and policy['e2eeRequired'] is True and policy['initialized'] is True
+        assert activity('/api/v2/state')[0]==401
+        assert activity('/api/v2/state','synthetic-invalid-session')[0]==401
+        assert activity('/api/presence')[0]==426
+        print('PASS actual initial-admin CLI, native DPAPI client bootstrap, mandatory E2EE and anonymous/legacy rejection; no admin bootstrap after setup')
+        audio_fixture=run_client('audio')
+        audio_file=fixtures/'membership-audio.json';audio_file.write_text(json.dumps(audio_fixture),encoding='utf-8')
+        env={**os.environ,'PAWTALK_TEST_SERVER':f'https://127.0.0.1:{port}','PAWTALK_TEST_INVITATION':invitation.decode().strip(),'PAWTALK_API2_FIXTURE':str(audio_file)}
+        env.pop('ELECTRON_RUN_AS_NODE',None)
+        audio=subprocess.run([os.environ['PAWTALK_ELECTRON'],str(Path(__file__).resolve().parents[1]/'scripts/integration.cjs')],env=env,capture_output=True,timeout=180,creationflags=subprocess.CREATE_NO_WINDOW)
+        if audio.returncode:raise RuntimeError('Native API 2 RTP integration failed: '+(audio.stdout+audio.stderr).decode(errors='replace'))
+        print(audio.stdout.decode(errors='replace').strip())
+        app_input=fixtures/'membership-app.json';app_input.write_text(json.dumps(dict(address=shared['url'],serverId=member['serverId'])),encoding='utf-8')
+        env={**os.environ,'PAWTALK_APP_TEST_DIR':str(client_directory),'PAWTALK_APP_TEST_INPUT':str(app_input)};env.pop('ELECTRON_RUN_AS_NODE',None)
+        app_check=subprocess.run([os.environ['PAWTALK_ELECTRON'],str(Path(__file__).with_name('membership-app-native.cjs')),'--smoke'],env=env,capture_output=True,timeout=100,creationflags=subprocess.CREATE_NO_WINDOW)
+        if app_check.returncode:raise RuntimeError('Native Manager -> Client UI failed: '+(app_check.stdout+app_check.stderr).decode(errors='replace').replace(shared['url'],'[invitation redacted]'))
+        print('PASS real Manager Server -> Client main/preload/renderer, retained OS credentials, encrypted chat/images, channels and LiveKit E2EE')
         c.install(config,{},directory/'manager/compose.server.yaml','')
         assert c.state()==before
-        print('PASS native install, E2EE health, identity, one-time password, reinstall and cross-process lock')
+        print('PASS native API 2 install, health, stable server identity, bootstrap, reinstall and cross-process lock')
         def probe():
-            with closing(sqlite3.connect(runtime.data(c.state())/'chat.sqlite')) as db:
+            with closing(sqlite3.connect(runtime.data(c.state())/'membership-v2.sqlite')) as db:
                 return db.execute('SELECT value FROM manager_smoke_probe').fetchone()[0]
-        with closing(sqlite3.connect(runtime.data(c.state())/'chat.sqlite')) as db, db:
+        with closing(sqlite3.connect(runtime.data(c.state())/'membership-v2.sqlite')) as db, db:
             db.execute('CREATE TABLE manager_smoke_probe(value TEXT)')
             db.execute('INSERT INTO manager_smoke_probe VALUES (?)',('original',))
         backup=c.create_backup()
@@ -264,7 +244,7 @@ try:
         start=runtime.start
         def fail(candidate,values):
             if candidate['version']=='0.9.1':
-                (runtime.data(candidate)/'chat.sqlite').write_bytes(b'injected failed rollout mutation')
+                (runtime.data(candidate)/'membership-v2.sqlite').write_bytes(b'injected failed rollout mutation')
                 raise RuntimeError('injected native start failure')
             return start(candidate,values)
         with patch.object(runtime,'start',side_effect=fail):
@@ -287,7 +267,7 @@ try:
         print('PASS native backup, failed-update data rollback, Server update, Manager-only update without server restart, restore')
         # The GUI protocol applies the same validated settings to the real
         # native room. Older published Server fixtures do not support rebind.
-        if 'network-settings-v1' in policy.get('capabilities',[]):
+        if policy.get('apiProtocolVersion')==2:
             # These additional transactions deliberately create more than the
             # normal retention count; keep the original backup for the later
             # fresh-root restore test instead of letting normal pruning remove it.
@@ -307,11 +287,12 @@ try:
             values.update(PAWTALK_PUBLIC_IP='127.0.0.2',PAWTALK_PORT=str(new_port),PAWTALK_CHAT_MAX_MB='64')
             assert cli.apply_settings(c,dict(expected=old_config,values=values))
             port=new_port
-            assert login()['e2eeRequired'] is True
+            assert server_policy()['e2eeRequired'] is True
             assert probe()=='original'
             changed_invite=runtime.command(c.state(),c.config(),'info')
             assert changed_invite!=invitation and b'127.0.0.2:'+str(port).encode() in changed_invite
-            assert runtime.invitation(c.state(),c.config())['password'].encode()==password
+            assert runtime.invitation(c.state(),c.config()) is None
+            run_client('verify')
             try:cli.apply_settings(c,dict(expected=old_config,values=values));raise AssertionError('stale settings window accepted')
             except ValueError:pass
             stable=c.config()
@@ -323,17 +304,13 @@ try:
                 try:c.configure({'PAWTALK_PUBLIC_IP':'127.0.0.3'});raise AssertionError('failed settings committed')
                 except RuntimeError:pass
             assert c.config()==stable and runtime.command(c.state(),c.config(),'info')==changed_invite
-            assert probe()=='original' and login()['e2eeRequired'] is True
-            assert c.configure({'PAWTALK_E2EE':'false'})
-            assert login({'e2ee':False,'e2eeKeyId':''})['e2eeRequired'] is False
-            replacement_key_id=hashlib.sha256(bytes.fromhex('24'*32)).hexdigest()
-            assert c.configure({'PAWTALK_E2EE':'true','PAWTALK_E2EE_KEY_ID':replacement_key_id})
-            login(expected=403)
-            assert login({'e2eeKeyId':replacement_key_id})['e2eeRequired'] is True
-            assert c.configure({'PAWTALK_E2EE_KEY_ID':key_id})
-            assert probe()=='original' and login()['e2eeRequired'] is True
-            print('PASS native settings protocol: IP/port/history apply, password/SQLite retained, stale window rejected, actual rebind failure rolled back')
-            print('PASS native settings E2EE off/on and key-ID replacement enforce the new login policy')
+            assert probe()=='original' and server_policy()['e2eeRequired'] is True
+            for invalid in [{'PAWTALK_E2EE':'false'},{'PAWTALK_E2EE_KEY_ID':'b'*64}]:
+                try:c.configure(invalid);raise AssertionError('manual encryption policy accepted')
+                except ValueError:pass
+            assert probe()=='original' and server_policy()['e2eeRequired'] is True
+            run_client('verify')
+            print('PASS native settings: IP/port/history apply, encrypted membership/history retained, stale window rejected, actual rebind failure rollback, E2EE cannot be disabled')
             # Reproduce the reported tray stop -> edit -> save path with the
             # real server/config/runtime, both with console hosting and SCM.
             runtime.stop(c.state(),c.config())
@@ -347,7 +324,7 @@ try:
             assert prepared['config']['PAWTALK_CHAT_MAX_MB']=='48'
             runtime.start(c.state(),c.config())
             runtime.healthy(c.state(),c.config(),c.state()['identity'])
-            assert login()['e2eeRequired'] is True
+            assert server_policy()['e2eeRequired'] is True
             print('PASS stop -> edit -> save retains stopped state and prepares new settings for the next real start')
         if not scm:
             process.kill()
@@ -400,8 +377,8 @@ try:
         assert runtime.command(c.state(),c.config(),'info')==invitation
         assert probe()=='original'
         assert c.state()['managerVersion']=='0.1.0'
-        login()
-        print('PASS native fresh-root restore authenticates archived Server/Manager and preserves SQLite/TLS/password identity')
+        run_client('verify')
+        print('PASS native fresh-root restore authenticates archived Server/Manager and preserves encrypted SQLite/TLS/profile identity')
         with lock(c.directory/'operation.lock'):
             before_local=c.create_backup()
             package=native.inspect_server_package(c,fixtures/'PawTalk.Server.0.9.2.windows-x64.zip')
@@ -435,20 +412,28 @@ try:
                 assert control('stop-manager',target_root).returncode==0
             install_root=roots[0].with_name(roots[0].name+'-installer')
             roots.append(install_root)
-            config_file=fixtures/'installer.env'
-            # This input is public configuration. Signed private fixture roots are explicit.
-            config_file.write_text(''.join(k+'='+v+'\n' for k,v in {**config,'PAWTALK_LANGUAGE':'en'}.items()),encoding='utf-8')
             version=(stage/'bootstrap/manager/VERSION').read_text().strip()
             setup=build_stage.parent/f'PawTalk.Server.Manager.Setup.{version}.exe'
-            arguments=[str(setup),'/S',f'/ROOT={install_root}',f'/CONFIG={config_file}',f'/TRUST={fixtures/"trust.json"}',
-                       f'/SERVERMANIFEST={fixtures/"server-0.9.0.json"}',f'/MANAGERMANIFEST={fixtures/"manager-0.1.0.json"}',
-                       f'/BUNDLE={fixtures/"PawTalk.Manager.0.1.0.tar.gz"}',f'/SERVERBUNDLE={fixtures/"PawTalk.Server.0.9.0.windows-x64.zip"}']
+            arguments=[str(setup),'/S',f'/ROOT={install_root}']
             try:
                 result=subprocess.run(arguments,capture_output=True,timeout=240)
                 if result.returncode:raise RuntimeError('Actual EXE installation failed')
                 installed=program/'pawtalkctl.exe'
                 assert installed.is_file() and (program/'Uninstall.exe').is_file()
                 assert hashlib.sha256(installed.read_bytes()).digest()==hashlib.sha256((stage/'pawtalkctl.exe').read_bytes()).digest()
+                # protectRoot pre-creates the empty Server directory with its
+                # final ACLs even though Manager has not downloaded Server.
+                assert_manager_only_layout(install_root)
+                def desktop(action,payload):
+                    result=subprocess.run([str(installed),'--root',str(install_root),'desktop',action],input=json.dumps(payload).encode(),capture_output=True,timeout=180)
+                    assert result.returncode==0,f'Desktop {action} failed'
+                    return json.loads(result.stdout)['value']
+                snapshot=desktop('snapshot',{})
+                assert snapshot['setupRequired'] is True
+                staged=desktop('inspect-server-package',dict(path=str(local_zip)))
+                values={k:snapshot['values'][k] for k in cli.SETTINGS_FIELDS};values.update(config)
+                snapshot=desktop('setup-server',dict(source='local',id=staged['id'],expected=snapshot['values'],values=values))
+                assert snapshot['setupRequired'] is False
                 for attempt in range(20):
                     status=subprocess.run([str(installed),'--root',str(install_root),'status'],capture_output=True,timeout=30)
                     if status.returncode==0:
@@ -457,10 +442,10 @@ try:
                     time.sleep(0.5)
                 else:raise RuntimeError('Installed server did not become healthy')
                 assert not list((install_root/'var/lib/pawtalk-data').glob('*/initial-password'))
-                invitation_result=subprocess.run([str(installed),'--root',str(install_root),'--lang','en','invitation'],capture_output=True,timeout=30)
+                invitation_result=subprocess.run([str(installed),'--root',str(install_root),'--lang','en','initial-admin'],capture_output=True,timeout=30)
                 assert invitation_result.returncode==0
                 saved_invitation=json.loads(invitation_result.stdout)
-                assert '#password=' in saved_invitation['url']
+                assert 'setup=1' in saved_invitation['url'] and 'v=2' in saved_invitation['url']
                 saved_config=(install_root/'etc/pawtalk/config.env').read_bytes()
                 # Execute the actual generated Windows uninstaller, not an emulation.
                 removed=subprocess.run([str(program/'Uninstall.exe'),'/S'],capture_output=True,timeout=120)
@@ -490,12 +475,12 @@ try:
                 assert again.returncode==0,f'Reinstallation with existing config failed (exit={again.returncode}, stage={install_stage})'
                 assert not legacy.exists(),'Legacy Program Files directory was not retired'
                 assert (install_root/'etc/pawtalk/config.env').read_bytes()==saved_config
-                again_invitation=subprocess.run([str(installed),'--root',str(install_root),'invitation'],capture_output=True,timeout=30)
+                again_invitation=subprocess.run([str(installed),'--root',str(install_root),'initial-admin'],capture_output=True,timeout=30)
                 busy=b'Another PawTalk operation is running' in again_invitation.stderr
                 assert again_invitation.returncode==0,f'Invitation after migration failed (exit={again_invitation.returncode}, busy={busy})'
                 restored_invitation=json.loads(again_invitation.stdout)
-                assert restored_invitation.get('password')==saved_invitation['password'],'Migration changed the recoverable password'
-                assert restored_invitation.get('url')==saved_invitation['url'],'Migration changed the invitation URL'
+                assert restored_invitation['url'].split('#')[0]==saved_invitation['url'].split('#')[0],'Reinstall changed TLS identity'
+                assert restored_invitation['url']!=saved_invitation['url'],'Initial admission links must be unique'
                 purged=subprocess.run([str(program/'Uninstall.exe'),'/S','/DELETE-DATA'],capture_output=True,timeout=120)
                 assert purged.returncode==0,'Full uninstall failed'
                 for attempt in range(100):
@@ -503,7 +488,7 @@ try:
                     time.sleep(0.2)
                 else:raise RuntimeError('Full uninstall left program files or room data')
                 assert not exists_key(registration) and not exists_key(uninstall_key)
-                print('PASS actual EXE ProgramData install, password-bearing invitation, preserved-config reinstall, legacy-path service migration, keep-data and full uninstalls')
+                print('PASS actual EXE ProgramData install, initial-admin admission, preserved-config reinstall, legacy-path service migration, keep-data and full uninstalls')
             finally:
                 installer_error=sys.exception()
                 try:

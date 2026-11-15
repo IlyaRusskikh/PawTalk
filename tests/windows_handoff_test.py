@@ -9,7 +9,41 @@ import sys
 import tempfile
 import time
 import unittest
-from windows_smoke_support import remove_owned_tree
+from windows_smoke_support import assert_manager_only_layout, remove_owned_tree
+
+
+class ManagerOnlyLayoutTests(unittest.TestCase):
+    def test_missing_server_directory_is_valid(self):
+        with tempfile.TemporaryDirectory() as root:
+            assert_manager_only_layout(root)
+
+    def test_empty_acl_provisioned_server_directory_is_valid(self):
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root)/'opt/pawtalk-server').mkdir(parents=True)
+            assert_manager_only_layout(root)
+
+    def test_server_payload_file_or_version_directory_is_rejected(self):
+        for payload in ['pawtalk-server.exe','0.11.0']:
+            with self.subTest(payload=payload),tempfile.TemporaryDirectory() as root:
+                server=Path(root)/'opt/pawtalk-server';server.mkdir(parents=True)
+                if payload.endswith('.exe'):(server/payload).write_bytes(b'synthetic')
+                else:(server/payload).mkdir()
+                with self.assertRaisesRegex(AssertionError,'populated Server payload'):
+                    assert_manager_only_layout(root)
+
+    def test_server_payload_root_cannot_be_a_file(self):
+        with tempfile.TemporaryDirectory() as root:
+            server=Path(root)/'opt/pawtalk-server';server.parent.mkdir()
+            server.write_bytes(b'synthetic')
+            with self.assertRaisesRegex(AssertionError,'populated Server payload'):
+                assert_manager_only_layout(root)
+
+    def test_server_state_or_configuration_is_rejected(self):
+        for relative in ['var/lib/pawtalk-manager/installed.json','etc/pawtalk/config.env']:
+            with self.subTest(relative=relative),tempfile.TemporaryDirectory() as root:
+                file=Path(root)/relative;file.parent.mkdir(parents=True);file.write_text('synthetic')
+                with self.assertRaisesRegex(AssertionError,'Installer (initialized|configured) Server'):
+                    assert_manager_only_layout(root)
 
 
 class OperationLockTests(unittest.TestCase):

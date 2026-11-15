@@ -27,7 +27,8 @@ var brokerTokenPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 // Deliberately typed: private configuration and credentials cannot be published.
 type desktopPublicStatus struct {
-	Update struct {
+	SetupRequired bool `json:"setupRequired,omitempty"`
+	Update        struct {
 		Status    string  `json:"status"`
 		Version   *string `json:"version,omitempty"`
 		CheckedAt int64   `json:"checkedAt,omitempty"`
@@ -148,7 +149,7 @@ func desktopBroker(pipe, token, root string) error {
 					result["value"] = true
 				}
 			} else {
-				allowed := map[string]bool{"snapshot": true, "apply": true, "invitation": true, "reset-password": true, "backup-create": true, "backup-restore": true, "backup-delete": true, "diagnostics": true, "logs": true, "check-updates": true, "check-server-updates": true, "install-manager-update": true, "install-server-update": true, "inspect-server-package": true, "install-server-package": true}
+				allowed := map[string]bool{"snapshot": true, "apply": true, "initial-admin": true, "backup-create": true, "backup-restore": true, "backup-delete": true, "diagnostics": true, "logs": true, "check-updates": true, "check-server-updates": true, "install-manager-update": true, "install-server-update": true, "inspect-server-package": true, "install-server-package": true, "setup-server": true}
 				if !allowed[request.Action] {
 					result["error"] = "invalid"
 				} else {

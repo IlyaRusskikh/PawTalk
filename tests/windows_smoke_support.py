@@ -7,6 +7,22 @@ import sys
 import time
 
 
+def assert_manager_only_layout(root):
+    """ACL provisioning may create empty directories, but no Server payload."""
+    root=Path(root)
+    for relative,message in [
+        ('var/lib/pawtalk-manager/installed.json','Installer initialized Server'),
+        ('etc/pawtalk/config.env','Installer configured Server'),
+    ]:
+        if os.path.lexists(root/relative):
+            raise AssertionError(message)
+    server=root/'opt/pawtalk-server'
+    if server.is_symlink() or (hasattr(server,'is_junction') and server.is_junction()):
+        raise AssertionError('Server payload directory is linked')
+    if server.exists() and (not server.is_dir() or next(server.iterdir(),None) is not None):
+        raise AssertionError('Installer populated Server payload before explicit setup')
+
+
 def remove_owned_tree(path,expected_parent,prefix):
     path=Path(os.path.abspath(path))
     if path.is_symlink() or (hasattr(path,'is_junction') and path.is_junction()):

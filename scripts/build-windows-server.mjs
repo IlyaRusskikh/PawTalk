@@ -6,9 +6,14 @@ import os from 'node:os';
 import { serverDefinition, buildWindowsServer } from './server-core.mjs';
 const root=path.resolve(import.meta.dirname,'..');
 if(process.platform!=='win32')throw Error('Build Windows artifacts on Windows');
+const args=process.argv.slice(2);
+if(args.length&&!(args.length===2&&args[0]==='--output-dir'))throw Error('Supported option: --output-dir <release subdirectory>');
 const definition=await serverDefinition();
 const version=definition.version;
-const output=path.join(root,'release/server');await mkdir(output,{recursive:true});
+const output=path.resolve(args[1]||path.join(root,'release/server'));
+const releaseRelative=path.relative(path.join(root,'release'),output);
+if(releaseRelative.startsWith('..')||path.isAbsolute(releaseRelative))throw Error('Server build output must stay inside release/');
+await mkdir(output,{recursive:true});
 const stage=await mkdtemp(path.join(os.tmpdir(),'pawtalk-server-package-'));
 const run=(cmd,args,cwd=root)=>execFileSync(cmd,args,{cwd,stdio:'inherit',windowsHide:true});
 try{
@@ -22,4 +27,4 @@ try{
  run('tar.exe',['-a','-cf',file,'-C',stage,'pawtalk-server.exe','livekit-server.exe','LICENSE','THIRD_PARTY_NOTICES.md','GO-LICENSE','LIVEKIT-LICENSE','GO-DEPENDENCIES-LICENSE']);
  console.log('Permanent Windows Server built:',file);
  run(process.execPath,['scripts/package-local-server.mjs','--archive',file]);
-}finally{await rm(stage,{recursive:true,force:true});}
+}finally{if(path.dirname(stage)!==path.resolve(os.tmpdir())||!path.basename(stage).startsWith('pawtalk-server-package-'))throw Error('Unsafe Server package cleanup path');await rm(stage,{recursive:true,force:true});}

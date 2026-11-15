@@ -36,6 +36,17 @@ test('host check isolates arguments, waits for cleanup/exit and blocks concurren
   assert.equal((await result).state, 'internet');
   assert.equal(check.running, false);
 });
+
+test('IP observations stay diagnostic and cannot promote failed port checks to success', () => {
+  const network = { lanIP: '192.168.1.20', wanIP: '100.64.1.20', externalIP: '203.0.113.20', probeIP: '203.0.113.20', comparison: 'additional-nat' };
+  const result = parseResult(prefix + JSON.stringify({ state: 'unconfirmed', tcp: [false, false], udp: false, network }));
+  assert.deepEqual(result.network, network);
+  assert.equal(result.state, 'unconfirmed');
+  for (const invalid of [{ ...network, externalIP: 'service error' }, { ...network, probeIP: '::1' }, { ...network, comparison: 'impossible' }, { ...network, wanIP: null }]) {
+    assert.throws(() => parseResult(prefix + JSON.stringify({ state: 'unconfirmed', tcp: [false, false], udp: false, network: invalid })));
+  }
+  assert.deepEqual(parseResult(prefix + JSON.stringify({ state: 'internet', tcp: [true, true], udp: true, network: { ...network, extra: 'not forwarded' } })).network, network);
+});
 test('host check cancellation signals stdin and waits for worker cleanup', async () => {
   const process = child(); const check = new HostCheck('check.ps1', () => process);
   let input = ''; process.stdin.on('data', data => { input += data; });

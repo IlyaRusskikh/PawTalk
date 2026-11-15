@@ -28,11 +28,13 @@ test('light preset has dark text and separate persisted panel/sidebar/chat color
   for(const key of Object.keys(defaultTheme))assert.equal(restored[key],light[key]);
 });
 
-test('light semantic colors remain readable and CSS cannot bypass the configurable palette', async () => {
+test('light text colors stay readable, the chosen success color is shared, and CSS uses the palette', async () => {
   const light = themePresets[5];
   const contrast = (a, b) => (Math.max(luminance(a), luminance(b)) + .05) / (Math.min(luminance(a), luminance(b)) + .05);
-  for (const key of ['text', 'accent', 'success', 'warning', 'danger']) assert.ok(contrast(light[key], light.surface) >= 4.5, key + ' contrast');
-  for (const file of ['style.css', 'interface.css', 'home.css']) {
+  for (const key of ['text', 'accent', 'warning', 'danger']) assert.ok(contrast(light[key], light.surface) >= 4.5, key + ' contrast');
+  // The owner explicitly selected this common success/E2EE indicator for every preset.
+  for (const preset of themePresets) assert.equal(preset.success, '#23a55a');
+  for (const file of ['style.css', 'interface.css', 'membership.css']) {
     const css = await readFile(new URL('../src/' + file, import.meta.url), 'utf8');
     assert.doesNotMatch(css, /#[\da-f]{3,8}\b|\brgba?\(/i, file + ' only uses palette colors');
     for (const rule of css.matchAll(/border-radius\s*:\s*([^;}]+)/g)) assert.ok(!/\dpx/.test(rule[1]) || rule[1].includes('--ui-radius'), 'corners follow the Appearance setting');

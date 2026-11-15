@@ -39,7 +39,7 @@ run('tar.exe',['-xf',archive,'-C',path.join(stage,'runtime')]);
 await mkdir(path.join(stage,'bootstrap/manager/pawtalk_manager'),{recursive:true});
 const files=['VERSION','trust.json','compose.server.yaml','pawtalkctl','launcher','pawtalk-update.service','pawtalk-update.timer','pawtalk-health.service','pawtalk-health.timer'];
 for(const file of files)await cp(path.join(root,'manager',file),path.join(stage,'bootstrap/manager',file));
-for(const name of ['__init__','release','config','runtime','controller','preflight','bundles','cli','platforms','native'])await cp(path.join(root,`manager/pawtalk_manager/${name}.py`),path.join(stage,`bootstrap/manager/pawtalk_manager/${name}.py`));
+for(const name of ['__init__','release','config','runtime','controller','preflight','bundles','cli','platforms','native','admission'])await cp(path.join(root,`manager/pawtalk_manager/${name}.py`),path.join(stage,`bootstrap/manager/pawtalk_manager/${name}.py`));
 for(const file of ['LICENSE','THIRD_PARTY_NOTICES.md'])await cp(path.join(root,file),path.join(stage,file));
 if(nativeGo){
  const goRoot=execFileSync(go,['env','GOROOT'],{encoding:'utf8',windowsHide:true}).trim();

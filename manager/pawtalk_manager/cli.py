@@ -19,17 +19,13 @@ MESSAGES = {
  'confirm':('Продолжить? [y/N]: ','Continue? [y/N]: '),
  'ip':('Подтвердите публичный IPv4','Confirm public IPv4'),
  'port':('Основной порт','Base port'),
- 'e2ee':('Включить сквозное шифрование? (да/нет)','Enable end-to-end encryption? (yes/no)'),
- 'key':('SHA-256 key ID из клиента (НЕ секретный ключ)','SHA-256 key ID from Client (NOT the secret key)'),
  'chat':('Лимит истории, МиБ (0 = без ограничения)','History limit, MiB (0 = unlimited)'),
  'auto':('Включить автоматическое обновление сервера? (да/нет)','Enable automatic server updates? (yes/no)'),
- 'updates':('Обновление сервера прерывает звонок. Автообновление включает сервер и средство его обслуживания.','Server updates interrupt calls. Automatic updates include the server and its maintenance tool.'),
+ 'invitation_unavailable':('Сервер уже настроен. Приглашения создают администраторы и модераторы в клиенте.','This server is already initialized. Administrators and moderators create invitations in the client.'),
+ 'updates':('Сквозное шифрование обязательно; ключ создаст клиент первого администратора. Обновление сервера прерывает звонок. Автообновление включает сервер и средство его обслуживания.','End-to-end encryption is mandatory; the first administrator client creates the key. Server updates interrupt calls. Automatic updates include the server and its maintenance tool.'),
  'docker':('Установить Docker из официального apt-репозитория?','Install Docker from its official apt repository?'),
- 'installed':('Комната установлена. Сохраните приглашение и первый пароль.','Room installed. Save the invitation and initial password.'),
+ 'installed':('Сервер установлен. Вступите по одноразовой ссылке первого администратора; она действует 24 часа.','Server installed. Join using the single-use first administrator link; it expires in 24 hours.'),
  'invitation':('Приглашение (вставьте только следующую строку в клиент):','Invitation (paste only the next line into the client):'),
- 'initial_password':('Первый пароль (введите в отдельном окне пароля клиента):','Initial password (enter in the client’s separate password dialog):'),
- 'password_unavailable':('Старый пароль не сохранён. В меню сервера выберите «Сменить пароль и скопировать приглашение». Смена пароля прервёт текущие звонки.', 'The old password was not saved. Choose “Reset password and copy invitation” in the server menu. Resetting the password interrupts current calls.'),
- 'reset_password':('Сменить пароль комнаты и перезапустить сервер? Старые приглашения с паролем перестанут работать.', 'Reset the room password and restart the server? Old password-bearing invitations will stop working.'),
  'existing':('Существующая комната сохранена; данные не сброшены.','Existing room preserved; data retained.'),
  'external':('Локальная проверка не подтверждает внешний TCP/UDP и голос из другой сети.','Local checks do not verify external TCP/UDP or voice from another network.'),
  'error':('Ошибка выполнения.','Operation failed.'),
@@ -43,7 +39,6 @@ MESSAGES = {
  'invalid_bool':('Введите да или нет (также принимаются yes/no и true/false).','Enter yes or no (true/false also accepted).'),
  'invalid_ip':('Введите корректный IPv4-адрес.','Enter a valid IPv4 address.'),
  'invalid_port':('Введите порт от 1024 до 65532.','Enter a port from 1024 to 65532.'),
- 'invalid_key':('Введите SHA-256 key ID: 64 шестнадцатеричных символа.','Enter the SHA-256 key ID: 64 hexadecimal characters.'),
  'invalid_chat':('Введите целое число от 0 до 1048576 МиБ.','Enter an integer from 0 to 1048576 MiB.'),
 }
 
@@ -52,7 +47,7 @@ def text(key,lang):
     return MESSAGES[key][lang == 'en']
 
 
-SETTINGS_FIELDS = {'PAWTALK_PUBLIC_IP','PAWTALK_PORT','PAWTALK_E2EE','PAWTALK_E2EE_KEY_ID',
+SETTINGS_FIELDS = {'PAWTALK_PUBLIC_IP','PAWTALK_PORT',
                    'PAWTALK_CHAT_MAX_MB','PAWTALK_SERVER_AUTO_UPDATE','PAWTALK_MANAGER_AUTO_UPDATE','PAWTALK_LANGUAGE'}
 
 
@@ -86,15 +81,12 @@ def wizard(lang,initial=None):
     values = dict(DEFAULTS,**(initial or {}))
     values['PAWTALK_LANGUAGE'] = lang
     candidates = [] if initial else preflight.public_candidates()
-    fields = [('ip','PAWTALK_PUBLIC_IP'),('port','PAWTALK_PORT'),('e2ee','PAWTALK_E2EE'),
-              ('key','PAWTALK_E2EE_KEY_ID'),('chat','PAWTALK_CHAT_MAX_MB'),('auto','PAWTALK_SERVER_AUTO_UPDATE')]
+    fields = [('ip','PAWTALK_PUBLIC_IP'),('port','PAWTALK_PORT'),('chat','PAWTALK_CHAT_MAX_MB'),('auto','PAWTALK_SERVER_AUTO_UPDATE')]
     values['PAWTALK_PUBLIC_IP'] = values.get('PAWTALK_PUBLIC_IP',candidates[0] if candidates else '')
     print(text('updates',lang))
     for key,field in fields:
-        if key == 'key' and values['PAWTALK_E2EE'] != 'true':
-            continue
-        default = 'true' if not initial and key in ('e2ee','auto') else values[field]
-        boolean = key in ('e2ee','auto')
+        default = 'true' if not initial and key == 'auto' else values[field]
+        boolean = key == 'auto'
         shown_default = (('да' if default == 'true' else 'нет') if lang == 'ru' else ('yes' if default == 'true' else 'no')) if boolean else default
         while True:
             response = input(text(key,lang)+(f' [{shown_default}]' if shown_default else '')+': ')
@@ -106,8 +98,6 @@ def wizard(lang,initial=None):
                     print(text('invalid_bool',lang))
                     continue
             else:
-                if key == 'key':
-                    response = response.lower()
                 try:
                     validate({**values,field:response})
                 except ValueError:
@@ -126,10 +116,11 @@ def manifest(file,component,keys):
 
 
 def doctor(controller,lang):
-    result = dict(installed=controller.state_file.exists(),transactionPending=controller.journal.exists(),
+    result = dict(installed=controller.state_file.exists() and not (controller.directory/'setup.json').exists(),transactionPending=controller.journal.exists(),
                   freeMiB=shutil.disk_usage(controller.root).free//1048576,externalNetworkVerified=False)
     if not result['installed']:
-        result['action'] = 'pawtalkctl install / pawtalkctl backup restore'
+        result.update(running=False,managerRunning=False)
+        result['action'] = 'Manager UI: choose Server package and complete setup' if WINDOWS else 'pawtalkctl install / pawtalkctl backup restore'
         return result
     state,config = controller.state(),controller.config()
     result.update(serverVersion=state['version'],managerVersion=state['managerVersion'],image=state['image'])
@@ -165,16 +156,15 @@ def arguments(argv):
     for key in ['config','trust','server-manifest','manager-manifest','bundle','server-bundle']:
         install.add_argument('--'+key)
     install.add_argument('--bootstrap-docker',action='store_true')
-    invitation = sub.add_parser('invitation')
+    invitation = sub.add_parser('initial-admin')
     invitation.add_argument('--url',action='store_true')
-    invitation.add_argument('--reset-password',action='store_true')
-    invitation.add_argument('--yes',action='store_true')
     for name in ['status','doctor','logs','periodic','health','run-server','setup']:
         sub.add_parser(name)
     settings = sub.add_parser('settings')
     settings.add_argument('--apply',action='store_true')
     desktop = sub.add_parser('desktop')
-    desktop.add_argument('action',choices=['snapshot','apply','invitation','reset-password','backup-create','backup-restore','backup-delete','diagnostics','logs','check-updates','check-server-updates','install-manager-update','install-server-update','inspect-server-package','install-server-package'])
+    desktop.add_argument('action',choices=['snapshot','apply','initial-admin','backup-create','backup-restore','backup-delete','diagnostics','logs','check-updates','check-server-updates','install-manager-update','install-server-update','inspect-server-package','install-server-package','setup-server'])
+    sub.add_parser('manager-install')
     config = sub.add_parser('configure')
     config.add_argument('values',nargs='+',help='PAWTALK_FIELD=value')
     config.add_argument('--yes',action='store_true')
@@ -274,8 +264,10 @@ def publish_desktop_status(controller):
     if not WINDOWS: return
     file=controller.directory/'manager-update.json'
     status=json.loads(file.read_text()) if file.exists() else dict(status='idle')
-    config=controller.config()
-    value=dict(update=status,language=config['PAWTALK_LANGUAGE'],autoManager=config['PAWTALK_MANAGER_AUTO_UPDATE']=='true',serverVersion=controller.state()['version'],managerVersion=controller.state()['managerVersion'])
+    from .native import manager_values,installed_desktop_version
+    config=manager_values(controller)
+    installed=controller.state_file.exists() and not (controller.directory/'setup.json').exists()
+    value=dict(update=status,language=config['PAWTALK_LANGUAGE'],autoManager=config['PAWTALK_MANAGER_AUTO_UPDATE']=='true',serverVersion=controller.state()['version'] if installed else '0.0.0',managerVersion=installed_desktop_version(),setupRequired=not installed)
     # The install directory has a different ACL policy from private room data.
     # Only the host publishes this allowlisted, nonsecret document for the UI.
     if host('publish-desktop-status',controller.root,input=json.dumps(value).encode()).returncode:
@@ -285,16 +277,31 @@ def publish_desktop_status(controller):
 def desktop_execute(controller,action,request):
     if action == 'snapshot':
         publish_desktop_status(controller)
+        if WINDOWS and (not controller.state_file.exists() or (controller.directory/'setup.json').exists()):
+            from .native import manager_values,installed_desktop_version
+            return dict(setupRequired=True,values=manager_values(controller),serverVersion='0.0.0',managerVersion=installed_desktop_version(),initialized=None,serverLocal=False,backups=[],update=dict(status='idle'),serverUpdate=dict(status='idle'))
         updates=controller.directory/'manager-update.json'
         server_updates=controller.directory/'server-update.json'
-        return dict(values=controller.config(),serverVersion=controller.state()['version'],
+        return dict(setupRequired=False,values=controller.config(),serverVersion=controller.state()['version'],
+                    initialized=controller.runtime.initialized(controller.state(),controller.config()),
                     serverLocal=bool(controller.state().get('localPackage')),
                     managerVersion=controller.state()['managerVersion'],
                     update=json.loads(updates.read_text()) if updates.exists() else dict(status='idle'),
                     serverUpdate=json.loads(server_updates.read_text()) if server_updates.exists() else dict(status='idle'),
                     backups=[dict(name=p.name,created=int(p.stat().st_mtime)) for p in sorted(controller.backups.glob('backup-*'),reverse=True) if p.is_dir() and re.fullmatch(r'backup-[a-f0-9]{12}',p.name)])
+    if action == 'setup-server':
+        from .native import setup_server
+        setup_server(controller,request,Path(__file__).resolve().parent.parent)
+        return desktop_execute(controller,'snapshot',{})
     if action == 'apply':
-        apply_settings(controller,request)
+        if WINDOWS and (not controller.state_file.exists() or (controller.directory/'setup.json').exists()):
+            from .native import manager_values
+            old=manager_values(controller)
+            if not isinstance(request,dict) or set(request)!={'expected','values'} or request['expected']!=old: raise ValueError('Settings changed elsewhere')
+            values=request['values']
+            if not isinstance(values,dict) or set(values)!=SETTINGS_FIELDS: raise ValueError('Invalid settings fields')
+            write_config(controller.etc/'config.env',validate({**old,**values}))
+        else: apply_settings(controller,request)
         return desktop_execute(controller,'snapshot',{})
     if action=='inspect-server-package':
         from .native import inspect_server_package
@@ -304,8 +311,8 @@ def desktop_execute(controller,action,request):
         install_server_package(controller,request.get('id'))
         save(controller.directory/'server-update.json',dict(status='idle'))
         return desktop_execute(controller,'snapshot',{})
-    if action in ('invitation','reset-password'):
-        value=controller.runtime.invitation(controller.state(),controller.config(),reset=action=='reset-password')
+    if action == 'initial-admin':
+        value=controller.runtime.invitation(controller.state(),controller.config())
         if value is None: return dict(unavailable=True)
         return value
     if action == 'backup-create':
@@ -319,7 +326,9 @@ def desktop_execute(controller,action,request):
         if not re.fullmatch(r'backup-[a-f0-9]{12}',name): raise ValueError('Invalid backup name')
         controller.restore(name)
         return desktop_execute(controller,'snapshot',{})
-    if action == 'diagnostics': return doctor(controller,controller.config()['PAWTALK_LANGUAGE'])
+    if action == 'diagnostics':
+        from .native import manager_values
+        return doctor(controller,manager_values(controller)['PAWTALK_LANGUAGE'] if WINDOWS else controller.config()['PAWTALK_LANGUAGE'])
     if action == 'logs':
         file=controller.root/'var/log/pawtalk/server.log'
         if not file.exists(): return dict(text='')
@@ -348,7 +357,7 @@ def desktop_main(root,action):
         if not isinstance(request,dict): raise ValueError('Invalid request')
         protect(root)
         controller=Controller(root)
-        if not controller.state_file.exists(): raise ValueError('No installed room')
+        if (not controller.state_file.exists() or (controller.directory/'setup.json').exists()) and action not in ('snapshot','apply','setup-server','inspect-server-package','logs','diagnostics'): raise ValueError('No installed room')
         if action in ('snapshot','logs','diagnostics'):
             # Atomic documents and read-only diagnostics do not need to wait for
             # a backup, service health probe or an installer holding the lock.
@@ -363,13 +372,13 @@ def desktop_main(root,action):
             if component=='server': value=desktop_execute(controller,'snapshot',{})
             print(json.dumps(dict(value=value),ensure_ascii=False)); return 0
         with lock(controller.directory/'operation.lock',timeout=10):
-            if not controller.state_file.exists(): raise ValueError('No installed room')
+            if (not controller.state_file.exists() or (controller.directory/'setup.json').exists()) and action not in ('apply','setup-server','inspect-server-package'): raise ValueError('No installed room')
             controller.recover()
             value=desktop_execute(controller,action,request)
         print(json.dumps(dict(value=value),ensure_ascii=False)); return 0
     except (OSError,ValueError,RuntimeError,KeyError) as error:
         message=str(error)
-        code='conflict' if 'changed elsewhere' in message else 'busy' if 'lock' in message.lower() or 'operation is' in message.lower() else 'failed'
+        code='noCompatibleServer' if 'No compatible published Server' in message else 'alreadyConfigured' if 'already configured' in message else 'portsOccupied' if 'ports are occupied' in message else 'conflict' if 'changed elsewhere' in message else 'busy' if 'lock' in message.lower() or 'operation is' in message.lower() else 'failed'
         print(json.dumps(dict(error=code))); return 1
 
 
@@ -397,6 +406,13 @@ def main(argv=None):
         if WINDOWS:
             protect(args.root)
         controller = Controller(args.root)
+        if args.command=='manager-install':
+            if not WINDOWS: raise ValueError('Windows Manager operation')
+            from .native import install_manager_only
+            with lock(controller.directory/'operation.lock',timeout=10):
+                install_manager_only(controller,source,lang)
+                publish_desktop_status(controller)
+            return 0
         if WINDOWS and args.command=='periodic':
             return windows_periodic(controller)
         if args.command == 'install' and args.server_bundle:
@@ -406,7 +422,7 @@ def main(argv=None):
         # The freshly started maintenance service may briefly own this lock.
         # Let the interactive invitation request wait; watchdog/mutations remain
         # nonblocking so stopping maintenance from a foreground operation cannot deadlock.
-        with lock(controller.directory/'operation.lock',timeout=10 if args.command in ('invitation','settings') else 0) as release_lock:
+        with lock(controller.directory/'operation.lock',timeout=10 if args.command in ('initial-admin','settings') else 0) as release_lock:
             if args.lang is None and controller.state_file.exists():
                 lang = controller.config()['PAWTALK_LANGUAGE']
             if args.command == 'settings':
@@ -425,14 +441,12 @@ def main(argv=None):
             if args.command in ('status','doctor'):
                 print(json.dumps(doctor(controller,lang),ensure_ascii=False,indent=2))
                 return 0
-            if args.command == 'invitation':
-                if not WINDOWS or not controller.state_file.exists():
-                    raise ValueError('No installed Windows room')
-                if args.reset_password:
-                    confirm(text('reset_password',lang),args.yes,lang)
-                result = controller.runtime.invitation(controller.state(),controller.config(),reset=args.reset_password)
+            if args.command == 'initial-admin':
+                if not controller.state_file.exists():
+                    raise ValueError('No installed server')
+                result = controller.runtime.invitation(controller.state(),controller.config())
                 if result is None:
-                    print(text('password_unavailable',lang),file=sys.stderr)
+                    print(text('invitation_unavailable',lang),file=sys.stderr)
                     return 2
                 if args.url:
                     sys.stdout.write(result['url'])
@@ -493,19 +507,14 @@ def main(argv=None):
                     bundles.switch(controller.root,directory)
                 bundles.install_units(controller.root,directory,config,args.no_systemd)
                 state = controller.state()
-                container = controller.runtime.container(state,config)['Id']
                 print(text('existing' if existing else 'installed',lang))
-                if WINDOWS:
+                if not existing:
                     invitation = controller.runtime.invitation(state,config)
                     if invitation:
                         print(text('invitation',lang))
                         print(invitation['url'])
                     else:
-                        print(text('password_unavailable',lang))
-                elif not existing:
-                    for action in ['info','initial-password']:
-                        print(text('invitation' if action == 'info' else 'initial_password',lang))
-                        print((controller.runtime.command(state,config,action) if WINDOWS else run(['docker','exec',container,'/pawtalk','serve',action])).decode().strip())
+                        print(text('invitation_unavailable',lang))
                 print(text('external',lang))
                 return 0
             if args.command == 'backup' and args.action == 'list':
@@ -518,7 +527,7 @@ def main(argv=None):
                 keys = json.loads(Path(key_file).read_text())
                 release.verify_snapshot(meta,keys)
                 directory = None
-                if not controller.state_file.exists():
+                if not controller.state_file.exists() and (not WINDOWS or 'managerSha256' in meta):
                     snapshot = controller.backups/args.name
                     manager = release.verify_historical((snapshot/'manager-manifest.json').read_bytes(),'manager',keys)
                     if manager['version'] != meta['state']['managerVersion']:
@@ -530,6 +539,11 @@ def main(argv=None):
                 if WINDOWS and directory is not None:
                     bundles.switch(controller.root,directory)
                 controller.restore(args.name or '')
+                if WINDOWS and directory is None:
+                    from .native import installed_desktop_version
+                    save(controller.state_file,{**controller.state(),'managerVersion':installed_desktop_version()})
+                    for action in ['install-manager','start-manager']:
+                        if host(action,controller.root).returncode: raise RuntimeError('Windows service setup failed')
                 if directory is not None:
                     atomic(controller.etc/'trust.json',(directory/'manager/trust.json').read_bytes())
                     atomic(controller.root/'opt/pawtalk-manager/launcher',(directory/'manager/launcher').read_bytes(),0o700)

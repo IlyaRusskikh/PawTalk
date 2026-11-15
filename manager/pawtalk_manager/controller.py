@@ -141,6 +141,8 @@ class Controller:
                 names.add(member.name)
             if not any(n.lstrip('./') == 'state.json' for n in names):
                 raise ValueError('Backup has no room identity')
+            if meta['state'].get('dataSchema') != 2 or not any(n.lstrip('./') == 'membership-v2.sqlite' for n in names):
+                raise ValueError('Backup does not contain API 2 membership data; legacy migration is unsupported')
         return meta,archive
 
     def restore_data(self,name,resume=True):
@@ -225,7 +227,7 @@ class Controller:
             save(self.state_file,state)
             return False
         state = dict(project='pawtalk-'+uuid.uuid4().hex[:12],version=manifest['version'],
-                     image=IMAGE+'@'+manifest['digest'],dataSchema=1,managerVersion=manager_version,serverManifest=manifest['_signed'])
+                     image=IMAGE+'@'+manifest['digest'],dataSchema=manifest['dataSchema'],managerVersion=manager_version,serverManifest=manifest['_signed'])
         if 'windows' in manifest:
             state['windows'] = manifest['windows']
         state['volume'] = state['project']
@@ -285,7 +287,7 @@ class Controller:
             raise ValueError('Published Windows Server version was replaced')
         if not replacing_local and semver(manifest['version']) <= semver(state['version']):
             return False
-        if manifest['dataSchema'] != state['dataSchema'] or manifest['apiProtocol'] != 1:
+        if manifest['dataSchema'] != state['dataSchema'] or manifest['apiProtocol'] != 2:
             raise ValueError('Unsupported server data/protocol transition')
         candidate = {**state,'version':manifest['version'],'image':IMAGE+'@'+manifest['digest'],'serverManifest':manifest['_signed']}
         candidate.pop('localPackage',None)
@@ -328,7 +330,7 @@ class Controller:
         network_changed = any(new[key] != old[key] for key in ('PAWTALK_PUBLIC_IP','PAWTALK_PORT'))
         if network_changed and not hasattr(self.runtime,'reconfigure_network'):
             raise ValueError('Address/port changes are supported by the native Windows runtime only')
-        runtime_keys = ['PAWTALK_PUBLIC_IP','PAWTALK_PORT','PAWTALK_E2EE','PAWTALK_E2EE_KEY_ID','PAWTALK_CHAT_MAX_MB','PAWTALK_UPDATE_PROXY']
+        runtime_keys = ['PAWTALK_PUBLIC_IP','PAWTALK_PORT','PAWTALK_CHAT_MAX_MB','PAWTALK_UPDATE_PROXY']
         if all(new[key] == old[key] for key in runtime_keys):
             write_config(self.etc/'config.env',new)
             return False

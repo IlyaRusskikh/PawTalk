@@ -44,8 +44,8 @@ Client 0.11.0 уже доставляет общее ядро; историче�
 
 ### Важные ограничения
 
-- E2EE **экспериментально и выключено по умолчанию**. Общий ключ не обновляется автоматически при уходе участника; защиты прошлых разговоров после последующей компрометации общего ключа (forward secrecy) нет. [Модель E2EE](docs/E2EE.md).
-- Без E2EE медиасервер может получить доступ к аудио, а сервер — читать сохранённый чат.
+- В текущем дереве API 2 E2EE **обязательно** для голоса, текста и вложений. Секрет создаётся клиентом и хранится на устройствах; сервер получает зашифрованные пакеты. Опубликованные API 1 бинарники этим изменением не обновляются. [Модель E2EE](docs/E2EE.md).
+- Уход, кик и бан отзывают серверный доступ, но не стирают уже полученные данные/ключи. Автоматической ротации и forward secrecy нет. Сервер видит метаданные, роли и присутствие; уже выданные LiveKit-токены имеют оговорённое окно повторного использования.
 - Windows-установщик пока не имеет Authenticode-подписи. SHA-256 и подпись Ed25519 манифеста обновлений проверяют другие свойства и не являются подписью издателя Windows. [Обновления](docs/UPDATES.md).
 - Реальные микрофоны, игры/PTT, внешние сети и нагрузка до 30 участников ещё требуют аппаратной приёмки. [План проверки](docs/ACCEPTANCE.md).
 
@@ -91,7 +91,7 @@ Response times and fix timelines are not guaranteed. Security fixes are shipped 
 
 ### Known limitations
 
-- E2EE is **experimental and disabled by default**. There is no automatic key rotation when a participant leaves and no forward secrecy for old sessions if a shared key is later compromised. [E2EE model](docs/E2EE.md).
-- Without E2EE, the media server can access audio and the server can read stored chat.
+- API 2 in the development tree requires E2EE for voice, text and attachments. Clients create and retain the root; the server stores encrypted packages. This does not update published API 1 binaries. [E2EE model](docs/E2EE.md).
+- Leaving, kicks and bans revoke server access but cannot erase delivered data or keys. Automatic rotation and forward secrecy are absent. The server sees metadata, roles and presence; issued LiveKit tokens retain a documented reuse window.
 - Windows installers are not yet Authenticode-signed. Published SHA-256 checksums and Ed25519-signed update manifests serve different purposes and do not replace a Windows publisher signature. [Updates](docs/UPDATES.md).
 - Hardware acceptance remains open for physical microphones, game/PTT behavior, external networks, and 30-participant loads. [Acceptance checklist](docs/ACCEPTANCE.md).

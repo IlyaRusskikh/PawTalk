@@ -1,9 +1,45 @@
-# Client ↔ Server compatibility
+# Client ↔ Server ↔ Manager compatibility
 
-Release versions are independent. `GET /api/config` adds `apiProtocolVersion: 1`
-and `capabilities` (`voice-v1`, `chat-v2`, `profiles-v1`). Missing protocol
-means legacy protocol 1; unsupported explicit protocols are rejected with a localized
-message before login. Existing chat feature negotiation remains authoritative.
+Current source uses [API 2](API-V2.md), mandatory E2EE and data schema 2.
+Client, selfhost, permanent Windows/Linux Server and Manager use that contract.
+This is an unreleased breaking update: no published binary is modified and source
+package versions do not announce new public releases.
+
+| Client | Server | Manager | Result |
+| --- | --- | --- | --- |
+| API 2 source | API 2 source | API/data 2 source | Supported; current shared core, timed invitations, membership and channels |
+| API 2 source | API 1 / missing protocol | Any | Rejected before identity/admission proofs; no fallback |
+| API 1 published | API 2 source | Any | Legacy API endpoints reject with HTTP 426 |
+| Any | Unknown explicit API | Any | Rejected |
+| API 2 | API/data 2 | Legacy Manager | Unsupported management/admission contract |
+| API 2 | API/data 1 | API/data 2 Manager | Install/update/restore rejected; no migration |
+
+GET /api/config declares apiProtocolVersion:2, capabilities, mandatory E2EE and a
+signed server identity bound to the actual TLS fingerprint/origin. Missing protocol
+is no longer accepted. Component release numbers are independent of these fields.
+
+The data schema is fresh: membership-v2.sqlite, separate host state and OS-protected
+client identities/roots. No bookmark/password/history migration or dual production
+core exists. Old data is not deleted automatically; use a clean configuration/data
+root. Manager backup/update validation requires API/data 2. Archive signing schema,
+Manager config schema and launcher/SCM protocol remain independently versioned at 1.
+
+Client selfhost and permanent Windows Server build the same server/ and LiveKit
+with the same flags/toolchain; check-server-core.mjs verifies byte equality.
+Selfhost stores history in memory; serve persists schema 2. Updating Server does
+not replace an installed Client, and updating Manager does not replace Server.
+Supply Server first, then matching Manager/Client. [Operator guide](SERVER-API2.md).
+
+Verification includes native Windows main/preload/OS vault/TLS, real API 2 RTP,
+Linux Compose install/update/rollback/restore, signed package fixtures, and explicit
+rejection of immutable published Server 0.8.0 through server-smoke.mjs
+--legacy-rejection. Hardware, external networks, native SCM/systemd availability
+are reported separately in [the implementation journal](MULTICHANNEL-PLAN.md).
+
+## Historical published API 1 matrix
+
+The following rows describe historical published binaries only. They do not define
+compatibility of API 2 source builds and are not changed by this update.
 
 | Client | Server | Contract |
 |---|---|---|
@@ -18,44 +54,35 @@ message before login. Existing chat feature negotiation remains authoritative.
 | 0.11.0 | 0.10.1 | Protocol 1; no permanent Server/Manager upgrade required for this Client |
 | 0.11.0 self-host | shared server/ 0.10.1 | Current shared core; ephemeral chat, authorized activity and optional E2EE |
 
-Client 0.11.0 and development builds: temporary Client rooms and permanent Windows
-Server builds use the same `server/` core with identical Go/LiveKit binaries, verified by
-`scripts/check-server-core.mjs`. Modes remain `selfhost` (in-memory room) and
-`serve` (persistent room). The historical rows above describe published binaries;
-updating this tree does not change them. See [shared-core details](BUNDLED-SERVER.md).
-
-Manager 0.2.1 retains signed Server/Manager verification. Existing Server 0.9.0
-supports native port changes; IP rebinding requires Server 0.10.1's `serve rebind`.
-Upgrade Server first, then Manager and Client; a new Manager EXE alone does not
-replace an installed Server or silently accept an unsigned ZIP.
-
-Client 0.10.1 fixes saved-credential reconnects; Manager 0.2.1 fixes Windows service
-control without debug privilege and immediate settings language. Neither changes
-the protocol or requires a Server release beyond the published 0.10.1.
-
-`shared/protocol.cjs` covers legacy/new/unsupported protocol negotiation.
-The frozen published selector fixture tests 0.8.0 → 0.8.1 → Client 0.9.0 discovery.
-The updater, manifest verifier and public keys in tags 0.7.1 and 0.8.0 are identical.
-Version 0.7.0 has an older case-sensitive GitHub repository-path check: discovery
-can fail if GitHub returns another repository casing. That installed binary cannot
-be fixed remotely by a new tag; seamless migration is not promised for that build.
-`scripts/server-smoke.mjs` can target the immutable published Server 0.8.0 digest;
-`--audio` adds two actual Electron/LiveKit clients with synthetic microphones.
-Windows self-host and packaged tests exercise the native Electron APIs and bundled binaries.
-These are local synthetic checks, not two physical devices or external-network acceptance.
-
-Breaking changes require an explicit matrix update and server-first compatibility
-release, then Client, then eventual legacy removal. A higher Client release number
-does not require a higher Server release number. Unsupported data schemas are
-blocked by the host updater until a tested backup/restore transition is supplied.
+Historical Client 0.10.1 retains its pinned/backported core; published Client 0.11.0
+introduced the shared core while retaining API 1. Historical missing protocol meant
+legacy 1. Frozen updater tests retain the 0.8.0 → 0.8.1 → Client 0.9.0 discovery
+bridge; executable update trust and API compatibility are separate contracts.
+Old 0.7.0 repository-case discovery limitations are not fixed in installed binaries.
 
 ## Русский
 
-Поддерживается новый клиент с сервером 0.8.0 по API protocol 1. Отсутствие поля
-протокола трактуется как legacy 1; неизвестный явный протокол блокируется до входа
-с локализованной ошибкой. Голос/чат проверяются отдельно от relay: старый VPS не
-раздаёт новые `client-v*` ассеты. Прямое обновление через GitHub работает независимо.
-Исторический Client 0.10.1 сохраняет закреплённый commit; Client 0.11.0 и текущие
-сборки используют общее ядро server/ для selfhost и serve. Для Client 0.11.0
-обновление постоянного Server 0.10.1 или Manager 0.2.1 не требуется. Проверки с
-синтетическими микрофонами не заменяют реальную сеть и устройства.
+Текущие исходники Client/Server/Manager используют API 2 и схему данных 2.
+API 1, отсутствие версии и неизвестный протокол отклоняются до передачи личности.
+Это ещё не опубликованный breaking update: миграции старых настроек/истории/закладок
+нет, требуется чистое состояние, старые файлы сами не удаляются. Старые опубликованные
+бинарники остаются прежними; историческая таблица выше относится только к ним.
+
+Ключи создаёт и хранит клиент; E2EE обязательно. Временный и постоянный хосты
+собирают одно ядро, различаются сроком жизни/хранением. Server поставляется первым,
+затем совместимые Manager и Client. Версии выпусков независимы от API, схемы БД,
+формата подписей и протокола launcher. Проверки физических устройств, внешней сети
+и нативных SCM/systemd не подменяются локальными синтетическими тестами.
+
+Server-name management requires the current core endpoint PATCH /api/v2/server.
+Existing API 2 databases already contain server_state.name; no schema change is
+needed. Update the permanent core before using the new admin rename action; an
+older API 2 core returns NOT_FOUND for that action. Renaming preserves server ID,
+TLS/E2EE identity and existing memberships. Windows notification previews remain
+local: plaintext is produced after client decryption, never added to Server storage.
+
+API 2 follow-up: authenticated membership denials may include optional error.details
+(expiresAt for bans, membershipState for departures); older peers retain code-only
+behavior. Link status optionally includes sourceNickname/targetNickname for the two
+proven participants; names are display metadata, outside the signed identity transcript.
+No schema or API version change. Rebuild the shared Server core for these details.

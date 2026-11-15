@@ -64,7 +64,8 @@ class ManagerDesktopTests(unittest.TestCase):
                 self.assertEqual(len(task.find('t:Triggers',ns)),0)
                 self.assertEqual(task.find('t:Principals/t:Principal/t:UserId',ns).text,'S-1-5-18')
                 self.assertEqual(task.find('t:Actions/t:Exec/t:Command',ns).text,str(installer))
-                self.assertIn('/CONFIG=',task.find('t:Actions/t:Exec/t:Arguments',ns).text)
+                self.assertIn('/ROOT=',task.find('t:Actions/t:Exec/t:Arguments',ns).text)
+                self.assertNotIn('/CONFIG=',task.find('t:Actions/t:Exec/t:Arguments',ns).text)
             return SimpleNamespace(returncode=0)
         with patch.object(native.subprocess,'run',side_effect=scheduler):
             native.schedule_manager_installer(self.c,installer)
@@ -90,7 +91,7 @@ class ManagerDesktopTests(unittest.TestCase):
     def test_password_and_invitation_are_not_in_overview_snapshot(self):
         with patch.object(cli,'publish_desktop_status'):
             snapshot=cli.desktop_execute(self.c,'snapshot',{})
-        self.assertEqual(set(snapshot),{'values','serverVersion','serverLocal','managerVersion','update','serverUpdate','backups'})
+        self.assertEqual(set(snapshot),{'setupRequired','values','serverVersion','serverLocal','managerVersion','update','serverUpdate','backups','initialized'})
         self.assertNotIn('password',json.dumps(snapshot).lower())
 
     def test_network_discovery_does_not_hold_room_lock_and_check_never_installs(self):
@@ -218,7 +219,7 @@ class ManagerDesktopTests(unittest.TestCase):
     def test_portable_package_binds_metadata_to_inner_archive(self):
         raw=self.local_archive().read_bytes()
         package=self.c.root/'portable.zip'
-        meta=dict(format='pawtalk-server-package-v1',version='0.9.0',apiProtocol=1,dataSchema=1,sha256=hashlib.sha256(raw).hexdigest())
+        meta=dict(format='pawtalk-server-package-v1',version='0.9.0',apiProtocol=2,dataSchema=2,sha256=hashlib.sha256(raw).hexdigest())
         with zipfile.ZipFile(package,'w') as archive:
             archive.writestr('package.json',json.dumps(meta))
             archive.writestr('server.zip',raw)
@@ -231,17 +232,19 @@ class ManagerDesktopTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'checksum'):native.inspect_server_package(self.c,package)
 
     def test_public_status_uses_host_instead_of_private_file_acl(self):
-        with patch.object(cli,'WINDOWS',True),patch.object(cli,'host',return_value=SimpleNamespace(returncode=0)) as host:
+        with patch.object(native,'installed_desktop_version',return_value='0.4.0'),patch.object(cli,'WINDOWS',True),patch.object(cli,'host',return_value=SimpleNamespace(returncode=0)) as host:
             snapshot=cli.desktop_execute(self.c,'snapshot',{})
         args=host.call_args
         self.assertEqual(args.args,('publish-desktop-status',self.c.root))
         status=json.loads(args.kwargs['input'])
-        self.assertEqual(set(status),{'update','language','autoManager','serverVersion','managerVersion'})
+        self.assertEqual(set(status),{'setupRequired','update','language','autoManager','serverVersion','managerVersion'})
+        self.assertFalse(status['setupRequired'])
+        self.assertEqual(status['managerVersion'],'0.4.0')
         self.assertEqual(status['serverVersion'],snapshot['serverVersion'])
         self.assertNotIn('values',status)
 
     def test_public_status_host_failure_is_reported(self):
-        with patch.object(cli,'WINDOWS',True),patch.object(cli,'host',return_value=SimpleNamespace(returncode=1)):
+        with patch.object(native,'installed_desktop_version',return_value='0.4.0'),patch.object(cli,'WINDOWS',True),patch.object(cli,'host',return_value=SimpleNamespace(returncode=1)):
             with self.assertRaisesRegex(ValueError,'Unable to publish'):
                 cli.publish_desktop_status(self.c)
 

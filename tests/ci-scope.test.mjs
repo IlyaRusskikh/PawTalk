@@ -15,11 +15,9 @@ test('LiveKit API download entry points receive the scoped CI token', () => {
     assert.ok(step, command);
     assert.equal(step.env.GH_TOKEN, '${{ github.token }}', command);
   }
-  for (const job of ['server', 'windows']) {
-    const step = check.jobs[job].steps.find(step => step.name?.includes('published') && step.run?.includes('prepare-server-fixture.py'));
-    assert.ok(step, job + ' signed dependency');
-    assert.equal(step.env.GH_TOKEN, '${{ github.token }}');
-  }
+  const fixture=check.jobs.windows.steps.find(step=>step.id==='api2fixture');
+  assert.ok(fixture.run.includes('scripts/build-windows-server.mjs'));
+  assert.equal(fixture.env.GH_TOKEN,'${{ github.token }}');
 });
 
 // Evaluate the restricted boolean syntax used by these workflow conditions.
@@ -54,11 +52,11 @@ for (const component of ['all', 'client', 'server', 'manager']) {
       const commands = steps.map(step => step.run || '').join('\n');
       const scope = ciScope(component);
       assert.equal(commands.includes('npm run package'), scope.client);
-      assert.equal(commands.includes('node scripts/build-windows-server.mjs'), scope.server);
+      assert.equal(steps.some(step=>step.run==='node scripts/build-windows-server.mjs'), scope.server);
       const managerBuilds = steps.filter(step => step.run?.startsWith('node scripts/build-manager-windows.mjs'));
       assert.equal(managerBuilds.some(step => !step.run.includes('--runtime-only')), scope.manager);
       assert.equal(managerBuilds.some(step => step.run.includes('--runtime-only')), component === 'server');
-      assert.equal(commands.includes('--windows-zip release/qa/windows-server-fixture.zip'), component === 'manager');
+      assert.equal(commands.includes('--output-dir release/qa/api2-server'), component === 'manager');
       assert.equal(commands.includes('scripts/windows-manager-smoke.mjs'), scope.host);
       assert.equal(commands.includes('npm run native:build'), scope.client);
       const uploads = steps.filter(step => step.uses?.startsWith('actions/upload-artifact@')).map(step => step.with.name).sort();
@@ -76,7 +74,8 @@ for (const component of ['all', 'client', 'server', 'manager']) {
     const scope = ciScope(component);
     assert.equal(commands.includes('go test -race'), scope.server);
     assert.equal(commands.includes('scripts/docker-smoke.mjs --containers-only'), scope.server);
-    assert.equal(commands.includes('scripts/prepare-server-fixture.py --github-output'), scope.publishedServer);
+    assert.equal(commands.includes('docker build -f server/standalone.Dockerfile -t pawtalk-server:local'), true);
+    assert.equal(commands.includes('scripts/prepare-server-fixture.py --github-output'), false);
     assert.equal(commands.includes('tests/compose_integration.py'), scope.host);
     assert.equal(commands.includes('scripts/server-smoke.mjs'), true);
   });

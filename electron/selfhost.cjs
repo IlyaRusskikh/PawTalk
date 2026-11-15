@@ -1,7 +1,7 @@
 const { HostError } = require('./host-errors.cjs');
 const { t } = require('../shared/i18n.cjs');
 const { spawn, fork } = require('node:child_process');
-const { randomBytes, createHash } = require('node:crypto');
+const { randomBytes } = require('node:crypto');
 const { mkdtemp, writeFile, rm } = require('node:fs/promises');
 const { tmpdir, networkInterfaces } = require('node:os');
 const { isIP } = require('node:net');
@@ -51,9 +51,8 @@ class SelfHost {
   status() { return this.state; }
   async start(input) {
     if (this.starting || this.stopping || this.state.running) throw new HostError(t("Комната уже запущена или меняет состояние"));
-    if (!input || typeof input.password !== 'string' || Buffer.byteLength(input.password) < 8 || Buffer.byteLength(input.password) > 1024) throw new HostError(t("Пароль комнаты должен содержать от 8 до 1024 байт"));
+    if (!input || typeof input !== 'object') throw new HostError(t("Неверные настройки сервера"));
     if (input.name !== undefined && (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 80)) throw new HostError(t("Укажите название комнаты до 80 символов"));
-    if (input.e2ee !== undefined && typeof input.e2ee !== 'boolean') throw new HostError(t("Неверный режим шифрования"));
     const port = Number(input.port);
     if (!Number.isInteger(port) || port < 1024 || port > 65532) throw new HostError(t("Укажите порт от 1024 до 65532"));
     this.starting = true;
@@ -81,9 +80,6 @@ class SelfHost {
       const nodeIP = publicIPv4(externalIP) && mapped ? externalIP : lan[0];
       if (!nodeIP) throw new HostError(t("Не найден сетевой адрес компьютера"));
       const key = 'vc_' + randomBytes(12).toString('hex'), secret = randomBytes(32).toString('hex');
-      // This key stays in the client process and invitations, never in Go/LiveKit.
-      const mediaKey = input.e2ee ? randomBytes(32).toString('hex') : null;
-      const mediaKeyID = mediaKey ? createHash('sha256').update(Buffer.from(mediaKey, 'hex')).digest('hex') : '';
       const config = path.join(this.directory, 'livekit.yaml');
       await writeFile(config, `port: ${port+3}\nbind_addresses: [127.0.0.1]\nrtc:\n  tcp_port: ${port+1}\n  udp_port: ${port+2}\n  use_external_ip: false\n  advertise_internal_ip: true\n  node_ip: ${nodeIP}\n  enable_loopback_candidate: true\n  stun_servers: []\nkeys:\n  ${key}: ${secret}\nroom:\n  auto_create: true\n  max_participants: 30\nlogging:\n  level: error\n`, { mode: 0o600 });
       const api = spawn(path.join(this.resources, 'pawtalk-api.exe'), ['selfhost'], { windowsHide: true, stdio: ['pipe','pipe','pipe'] });
@@ -92,18 +88,21 @@ class SelfHost {
       api.stdin.on('error', () => {});
       this.children.push(api);
       const ready = childReady(api, line => { try { const v = JSON.parse(line); return /^[a-f0-9]{64}$/.test(v.fingerprint) ? v : null; } catch { return null; } });
-      api.stdin.write(JSON.stringify({ Port: port, MediaPort: port+3, Key: key, Secret: secret, Password: input.password, RequireE2EE: !!mediaKey, E2EEKeyID: mediaKeyID, Addresses: [...lan, ...(mapped && publicIPv4(externalIP) ? [externalIP] : [])], MediaExecutable: path.join(this.resources, 'livekit-server.exe'), MediaConfig: config })+'\n');
-      const { fingerprint } = await ready;
+      api.stdin.write(JSON.stringify({ Port: port, MediaPort: port+3, Key: key, Secret: secret, Name: input.name, Addresses: [...lan, ...(mapped && publicIPv4(externalIP) ? [externalIP] : [])], MediaExecutable: path.join(this.resources, 'livekit-server.exe'), MediaConfig: config })+'\n');
+      const { fingerprint, bootstrap } = await ready;
+      if (!bootstrap || !/^[a-f0-9]{32}$/.test(bootstrap.serverId) || !/^[a-f0-9]{32}$/.test(bootstrap.inviteId) || !/^[\w-]{43}$/.test(bootstrap.token)) throw new HostError(t("Встроенный сервер несовместим с клиентом"));
       if (this.cancelled) throw new HostError(t("Создание комнаты отменено: компьютер перешёл в сон"));
       api.once('exit', () => { if (this.state.running) void this.stop(t("Сервер комнаты остановился")); });
-      const invite = ip => `pawtalk://${ip}:${port}/${fingerprint}#password=${encodeURIComponent(input.password)}&name=${encodeURIComponent(input.name || t("Комната"))}${mediaKey ? '&e2ee=' + mediaKey : ''}`;
+      const invite = ip => `pawtalk://${ip}:${port}/${fingerprint}`;
+      this.bootstrapAddress = invite('127.0.0.1') + '#' + new URLSearchParams({v:'2',server:bootstrap.serverId,invite:bootstrap.inviteId,token:bootstrap.token,setup:'1'});
       const internet = mapped && publicIPv4(externalIP);
-      this.state = { running: true, e2ee: !!mediaKey, name: input.name || t("Комната"), port, mapped, internet, localAddress: invite('127.0.0.1'), invitations: [...(internet ? [invite(externalIP)] : []), ...lan.map(invite)], message: internet ? t("Порты открыты на роутере. Доступность из интернета не проверена.") : t("Комната работает в локальной сети. Автопроброс недоступен или у провайдера дополнительный NAT."), fingerprint };
+      this.state = { running: true, serverId: bootstrap.serverId, e2ee: true, name: input.name || t("Комната"), port, mapped, internet, localAddress: invite('127.0.0.1'), invitations: [...(internet ? [invite(externalIP)] : []), ...lan.map(invite)], message: internet ? t("Порты открыты на роутере. Доступность из интернета не проверена.") : t("Комната работает в локальной сети. Автопроброс недоступен или у провайдера дополнительный NAT."), fingerprint };
       this.onChange(this.state); return this.state;
     } catch (error) { await this.cleanup(); throw error; }
     finally { this.starting = false; }
   }
   async cleanup() {
+    this.bootstrapAddress = undefined;
     for (const child of this.children.splice(0)) {
       const exited = new Promise(resolve => { child.once('exit', resolve); if (child.exitCode !== null) resolve(); });
       child.stdin?.end();

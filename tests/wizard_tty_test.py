@@ -49,51 +49,43 @@ class WizardTTYTests(unittest.TestCase):
                 child.wait()
             os.close(master)
 
-    def test_pasted_true_requests_key_before_history_in_both_languages(self):
+    def test_pasted_port_is_normalized_without_manual_key_prompts(self):
         for lang in ['ru','en']:
             with self.subTest(lang=lang):
-                values,output = self.wizard(lang,['203.0.113.10','','\x1b[200~true\x1b[201~','A'*64,'1024','TRUE'])
-                self.assertEqual(values['PAWTALK_E2EE'],'true')
-                self.assertEqual(values['PAWTALK_E2EE_KEY_ID'],'a'*64)
+                values,output = self.wizard(lang,['203.0.113.10','\x1b[200~18443\x1b[201~','1024','TRUE'])
+                self.assertEqual(values['PAWTALK_PORT'],'18443')
+                self.assertEqual(values['PAWTALK_CHAT_MAX_MB'],'1024')
+                self.assertNotIn('PAWTALK_E2EE',values)
+                self.assertNotIn('PAWTALK_E2EE_KEY_ID',values)
+                self.assertNotIn('SHA-256 key ID',output)
+
+    def test_invalid_history_and_boolean_are_reprompted(self):
+        for lang in ['ru','en']:
+            with self.subTest(lang=lang):
+                values,output = self.wizard(lang,['203.0.113.10','','invalid-limit','1024','tru\u0435','true'])
                 self.assertEqual(values['PAWTALK_CHAT_MAX_MB'],'1024')
                 self.assertEqual(values['PAWTALK_SERVER_AUTO_UPDATE'],'true')
-                self.assertEqual(values['PAWTALK_MANAGER_AUTO_UPDATE'],'true')
-                self.assertLess(output.index('SHA-256 key ID'),output.index('Лимит истории' if lang == 'ru' else 'History limit'))
-
-    def test_invalid_boolean_and_key_are_reprompted_before_continuing(self):
-        for lang in ['ru','en']:
-            with self.subTest(lang=lang):
-                values,output = self.wizard(lang,['203.0.113.10','','tru\u0435','true','invalid-id','b'*64,'1024','false'])
-                self.assertEqual(values['PAWTALK_E2EE'],'true')
-                self.assertEqual(values['PAWTALK_E2EE_KEY_ID'],'b'*64)
                 self.assertIn('Введите да или нет' if lang == 'ru' else 'Enter yes or no',output)
-                self.assertIn('64 шестнадцатеричных символа' if lang == 'ru' else '64 hexadecimal characters',output)
                 self.assertNotIn('Traceback',output)
 
-    def test_defaults_enable_encryption_and_both_update_components(self):
+    def test_defaults_enable_both_update_components_with_mandatory_encryption(self):
         for lang in ['ru','en']:
             with self.subTest(lang=lang):
-                values,output = self.wizard(lang,['203.0.113.10','','','c'*64,'',''])
-                for field in ['PAWTALK_E2EE','PAWTALK_SERVER_AUTO_UPDATE','PAWTALK_MANAGER_AUTO_UPDATE']:
+                values,output = self.wizard(lang,['203.0.113.10','','',''])
+                for field in ['PAWTALK_SERVER_AUTO_UPDATE','PAWTALK_MANAGER_AUTO_UPDATE']:
                     self.assertEqual(values[field],'true')
-                self.assertIn('(да/нет) [да]' if lang == 'ru' else '(yes/no) [yes]',output)
-                self.assertEqual(output.count('Включить автоматическое обновление сервера?' if lang == 'ru' else 'Enable automatic server updates?'),1)
+                self.assertIn('Сквозное шифрование обязательно' if lang == 'ru' else 'End-to-end encryption is mandatory',output)
+                self.assertNotIn('PAWTALK_E2EE',values)
                 self.assertNotIn('stable/preview',output)
-                self.assertNotIn('PAWTALK_SERVER_CHANNEL',values)
-                self.assertNotIn('PAWTALK_MANAGER_CHANNEL',values)
 
-    def test_localized_answers_disable_encryption_and_both_updates(self):
-        for lang,yes,no in [('ru','ДА','НЕТ'),('en','YES','NO')]:
-            for encrypted in [True,False]:
-                with self.subTest(lang=lang,encrypted=encrypted):
-                    answers = ['203.0.113.10','',yes if encrypted else no]
-                    if encrypted:
-                        answers.append('d'*64)
-                    values,output = self.wizard(lang,answers+['',no])
-                    self.assertEqual(values['PAWTALK_E2EE'],'true' if encrypted else 'false')
-                    self.assertEqual(values['PAWTALK_SERVER_AUTO_UPDATE'],'false')
-                    self.assertEqual(values['PAWTALK_MANAGER_AUTO_UPDATE'],'false')
-                    self.assertEqual('SHA-256 key ID' in output,encrypted)
+    def test_localized_no_disables_updates_without_disabling_encryption(self):
+        for lang,no in [('ru','НЕТ'),('en','NO')]:
+            with self.subTest(lang=lang):
+                values,output = self.wizard(lang,['203.0.113.10','','',no])
+                self.assertEqual(values['PAWTALK_SERVER_AUTO_UPDATE'],'false')
+                self.assertEqual(values['PAWTALK_MANAGER_AUTO_UPDATE'],'false')
+                self.assertNotIn('SHA-256 key ID',output)
+                self.assertNotIn('PAWTALK_E2EE',values)
 
 
 if __name__ == '__main__': unittest.main()

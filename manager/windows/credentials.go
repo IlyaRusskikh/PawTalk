@@ -28,54 +28,44 @@ func bootstrapCommand(args []string) bool {
 		case "--no-systemd":
 			args = args[1:]
 		default:
-			return args[0] == "install" || args[0] == "invitation" || args[0] == "settings" || args[0] == "desktop" || args[0] == "periodic" || args[0] == "health" || args[0] == "run-server"
+			return args[0] == "--help" || args[0] == "-h" || args[0] == "logs" || args[0] == "uninstall" || args[0] == "manager-install" || args[0] == "status" || args[0] == "doctor" || args[0] == "backup" || args[0] == "configure" || args[0] == "setup" || args[0] == "update" || args[0] == "manager" || args[0] == "--self-test" || args[0] == "install" || args[0] == "initial-admin" || args[0] == "settings" || args[0] == "desktop" || args[0] == "periodic" || args[0] == "health" || args[0] == "run-server"
 		}
 	}
 	return false
 }
 
-func copyInvitation(root, lang string, reset bool) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+func copyInitialAdmin(root, lang string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	args := []string{"--root", root, "--lang", lang, "invitation", "--url"}
-	if reset {
-		args = append(args, "--reset-password", "--yes")
-	}
+	args := []string{"--root", root, "--lang", lang, "initial-admin", "--url"}
 	command := python(ctx, filepath.Join(base(), "bootstrap", "manager", "pawtalkctl"), args...)
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	output, err := command.Output()
 	if err != nil {
-		message := "Could not get the invitation. Open Status / Doctor to check the Manager and server."
+		message := "Could not create the first administrator link. Start a compatible server and check Manager diagnostics."
 		if lang == "ru" {
-			message = "Не удалось получить приглашение. Откройте Status / Doctor для проверки Manager и сервера."
+			message = "Не удалось создать ссылку первого администратора. Запустите совместимый сервер и проверьте диагностику Manager."
 		}
-		if reset {
-			message = "Could not reset the password or restart the server. Open Status / Doctor to check the server."
+		var failure *exec.ExitError
+		if errors.As(err, &failure) && failure.ExitCode() == 2 {
+			message = "This server is already initialized. Administrators and moderators create invitations in the client."
 			if lang == "ru" {
-				message = "Не удалось сменить пароль или перезапустить сервер. Откройте Status / Doctor для проверки сервера."
-			}
-		} else {
-			var failure *exec.ExitError
-			if errors.As(err, &failure) && failure.ExitCode() == 2 {
-				message = "The old password was not saved. Use Reset password and copy invitation. Resetting interrupts calls."
-				if lang == "ru" {
-					message = "Старый пароль не сохранён или недоступен. Используйте «Сменить пароль и скопировать приглашение». Смена пароля прерывает звонки."
-				}
+				message = "Сервер уже настроен. Приглашения создают администраторы и модераторы в клиенте."
 			}
 		}
 		trayCall("MessageBoxW", 0, wide(message), wide("PawTalk Server"), 0x10)
 		return err
 	}
 	value := strings.TrimSpace(string(output))
-	if !strings.HasPrefix(value, "pawtalk://") || !strings.Contains(value, "#password=") || len(value) > 14000 {
-		return errors.New("invalid invitation output")
+	if !validInitialInvitation(value) {
+		return errors.New("invalid administrator invitation output")
 	}
 	if err := putClipboard(value); err != nil {
 		return err
 	}
-	message := "Invitation with password copied. Share it privately. Share the E2EE secret separately if enabled."
+	message := "The single-use administrator link was copied. It expires in 24 hours. A new link revokes the previous one."
 	if lang == "ru" {
-		message = "Приглашение с паролем скопировано. Отправляйте его лично. При включённом E2EE секретный ключ передаётся отдельно."
+		message = "Одноразовая административная ссылка скопирована. Срок — 24 часа. Новая ссылка отменяет предыдущую."
 	}
 	trayCall("MessageBoxW", 0, wide(message), wide("PawTalk Server"), 0x40)
 	return nil

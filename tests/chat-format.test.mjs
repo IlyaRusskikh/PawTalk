@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { inlineMarkdown, messageMarkdown } from '../shared/chat-format.mjs';
+import { inlineMarkdown, messageMarkdown, messagePreview } from '../shared/chat-format.mjs';
+
+test('notification previews remove formatting, preserve literals and hide spoilers',()=>{
+  assert.equal(messagePreview('**bold** __under__ *italic* ~~gone~~ [label](https://example.test)'),'bold under italic gone label');
+  assert.equal(messagePreview('\\*literal\\* `**code**`'),'*literal* **code**');
+  assert.equal(messagePreview('before ||secret|| after','[spoiler]'),'before [spoiler] after');
+  assert.equal(messagePreview('# Heading\n> Quote\n- Item\n```js\nconst x = 1;\n```'),'Heading Quote Item const x = 1;');
+});
 
 test('Discord-style formatting preserves nested emphasis, escapes and literal code', () => {
   assert.deepEqual(inlineMarkdown('**bold *italic***'), [{type:'bold',children:['bold ',{type:'italic',children:['italic']}]}]);

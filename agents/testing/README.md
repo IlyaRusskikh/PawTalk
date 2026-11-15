@@ -11,7 +11,7 @@ manual and tag checks retain component scopes via scripts/ci-scope.mjs.
 | client | `npm run build`, `npm test`; affected native/Electron/UI/audio smokes from .github/workflows/check.yml; native:build + native-smoke; package and packaged-smoke for installer changes/releases |
 | server | in server/: `go test ./...`, `go vet ./...`; Linux CI also race; relevant server-smoke, dev-server --smoke, docker-smoke --containers-only; shared-core equality when both Windows bundles built |
 | manager | in manager/windows/: `go test ./...`, `go vet ./...`; Python unittest discover tests/*_test.py; actual SCM, desktop/package smokes on Windows; systemd, Compose install/backup/update/restore/crash and Debian-container checks on Linux |
-| compatibility | frozen published Server 0.8.0 smoke, signed published test fixtures; API/protocol and release routing tests; relevant cross-component integration above |
+| compatibility | frozen published Server 0.8.0 explicit rejection (`server-smoke.mjs --legacy-rejection`); API 2 source fixtures for current Client/Manager, signed update fixtures; API/protocol/release routing tests and relevant integrations above |
 
 Docs/site/agent-only work uses infrastructure checks; implementation changes use
 affected component baselines and relevant integration. Shared server core routes

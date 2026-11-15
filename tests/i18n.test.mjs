@@ -16,9 +16,10 @@ test('English catalog preserves placeholders and covers localized source strings
     for (const file of await readdir(new URL(`../${directory}/`, import.meta.url))) {
       if (!/\.(tsx?|cjs)$/.test(file)) continue;
       const source = await readFile(new URL(`../${directory}/${file}`, import.meta.url), 'utf8');
-      for (const match of source.matchAll(/\bt\(("(?:[^"\\]|\\.)*")/g)) {
-        const key = JSON.parse(match[1]);
-        assert.ok(Object.hasOwn(english, key), `${file}: ${key}`);
+      for(const match of source.matchAll(/\bt\(("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g)) {
+        const literal=match[1];
+        const key=literal[0]==='"'?JSON.parse(literal):literal.slice(1,-1).replace(/\\(?:u([a-f\d]{4})|x([a-f\d]{2})|(.))/gi,(_match,u,x,character)=>u||x?String.fromCharCode(parseInt(u||x,16)):({n:'\n',r:'\r',t:'\t',b:'\b',f:'\f',v:'\v','0':'\0'}[character]??character));
+        assert.ok(Object.hasOwn(english,key),`${file}: ${key}`);
       }
     }
   }

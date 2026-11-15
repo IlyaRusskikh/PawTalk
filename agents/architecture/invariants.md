@@ -4,11 +4,15 @@
   through scripts/server-core.mjs with the same toolchain/flags; receipt hashes
   and scripts/check-server-core.mjs verify byte equality. selfhost and serve
   differ in lifetime/storage. Server release alone does not patch installed Client.
-- API protocol 1 and capabilities, not release numbers, determine compatibility.
-  Missing explicit protocol means legacy 1; unsupported explicit protocol fails
-  before login. Follow docs/COMPATIBILITY.md and server-first transitions.
-- TLS invitation fingerprint is checked before password transmission. Experimental
-  E2EE is opt-in, has no automatic rotation or forward secrecy. Do not overclaim.
+- API protocol 2 and capabilities, not release numbers, determine compatibility.
+  Missing/legacy/unknown protocol is rejected before identity or admission proofs.
+  API 1 has no production fallback or data migration. Follow docs/COMPATIBILITY.md.
+- TLS invitation fingerprint is checked before HTTP credentials. E2EE is mandatory:
+  clients create/retain the server root and derive channel/purpose keys; the host
+  stores opaque packages only. No automatic rotation or forward secrecy is promised.
+- Membership, voice presence and server-local device bindings are independent.
+  Every authenticated action checks current membership/role/ban. Original message
+  authors remain immutable. Unlink ends inherited edit/admin rights immediately.
 - Updaters keep independent Client/Server/Manager Ed25519 trust roots, signed
   repository/component/channel/version/digest contracts. The public website catalog
   does not authorize executable updates or replace signature verification.

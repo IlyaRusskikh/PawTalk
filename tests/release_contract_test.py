@@ -28,7 +28,7 @@ class ReleaseTests(unittest.TestCase):
     def signed(self, component='server', **changes):
         now = int(time.time())
         value = dict(schema=1,component=component,repository=release.REPO,version='0.9.0',channel='preview',
-                     publishedAt=now,expiresAt=now+3600,apiProtocol=1,dataSchema=1,image=release.IMAGE,digest='sha256:'+'a'*64)
+                     publishedAt=now,expiresAt=now+3600,apiProtocol=2,dataSchema=2,image=release.IMAGE,digest='sha256:'+'a'*64)
         if component == 'manager':
             value.update(bundle='PawTalk.Manager.0.9.0.tar.gz',size=42,sha256='a'*64,launcherProtocol=1,configSchema=1)
         value.update(changes)
@@ -43,7 +43,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(release.verify(raw,component,self.keys)['component'],component)
             with self.assertRaises(ValueError):
                 release.verify(raw, 'server' if component == 'manager' else 'manager', self.keys)
-        for changes in [dict(expiresAt=0),dict(dataSchema=2),dict(apiProtocol=2),dict(schema=True),dict(apiProtocol=True),dict(image='evil/image'),dict(digest=None),dict(repository='other/repo'),dict(channel='stable',version='1.0.0-beta.1')]:
+        for changes in [dict(expiresAt=0),dict(dataSchema=1),dict(apiProtocol=1),dict(dataSchema=3),dict(apiProtocol=3),dict(schema=True),dict(apiProtocol=True),dict(image='evil/image'),dict(digest=None),dict(repository='other/repo'),dict(channel='stable',version='1.0.0-beta.1')]:
             with self.assertRaises(ValueError):
                 release.verify(self.signed(**changes),'server',self.keys)
         for artifact in [dict(name='../escape',size=1,sha256='a'*64),
@@ -71,7 +71,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_historical_restore_requires_signed_server_reference(self):
         raw = self.signed()
-        meta = {'state':dict(version='0.9.0',image=release.IMAGE+'@sha256:'+'a'*64,dataSchema=1,serverManifest=raw.decode())}
+        meta = {'state':dict(version='0.9.0',image=release.IMAGE+'@sha256:'+'a'*64,dataSchema=2,serverManifest=raw.decode())}
         self.assertEqual(release.verify_snapshot(meta,self.keys)['version'],'0.9.0')
         meta['state']['image'] = release.IMAGE+'@sha256:'+'b'*64
         with self.assertRaises(ValueError): release.verify_snapshot(meta,self.keys)

@@ -150,14 +150,14 @@ func TestPurgeBoundaryAndOwnership(t *testing.T) {
 }
 
 func TestWindowsBootstrapRoutes(t *testing.T) {
-	for _, args := range [][]string{{"install"}, {"--lang", "ru", "install"}, {"invitation", "--url"}, {"--lang", "en", "invitation", "--reset-password", "--yes"}, {"settings"}, {"settings", "--apply"}, {"desktop", "snapshot"}, {"periodic"}, {"--lang", "en", "health"}, {"run-server"}} {
+	for _, args := range [][]string{{"--help"}, {"-h"}, {"logs"}, {"uninstall", "--keep-data"}, {"manager-install"}, {"status"}, {"doctor"}, {"backup", "list"}, {"configure"}, {"setup"}, {"update", "check"}, {"manager", "now"}, {"--self-test"}, {"install"}, {"--lang", "ru", "install"}, {"initial-admin", "--url"}, {"--lang", "en", "initial-admin", "--url"}, {"settings"}, {"settings", "--apply"}, {"desktop", "snapshot"}, {"periodic"}, {"--lang", "en", "health"}, {"run-server"}} {
 		if !bootstrapCommand(args) {
 			t.Fatal("Windows UX used a downloaded older Manager", args)
 		}
 	}
-	for _, args := range [][]string{{"manager", "now"}, {"--lang"}} {
+	for _, args := range [][]string{{"--lang"}, {"invitation", "--url"}, {"reset-password"}} {
 		if bootstrapCommand(args) {
-			t.Fatal("maintenance bypassed selected signed Manager", args)
+			t.Fatal("unknown command bypassed Windows routing", args)
 		}
 	}
 }

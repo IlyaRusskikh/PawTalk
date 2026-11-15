@@ -68,7 +68,7 @@ input, select, textarea { background: var(--surface); color: var(--text); border
 .settings-nav button:hover { background: var(--panel); color: var(--text); }.settings-nav button[aria-selected=true] { background: var(--accent-soft); color: var(--accent); }
 .settings-panel { min-width: 0; padding: 28px 32px; overflow: auto; outline: none; scrollbar-width: thin; scrollbar-color: var(--raised) transparent; }
 .settings-modal .settings-card { border: 0; border-radius:0; background: transparent; padding: 0 !important; margin: 0 0 24px; }
-.settings-card h1, .settings-card h2 { font-size: 21px; font-weight: 600; letter-spacing: -.45px; margin-bottom: 24px; }.settings-card .settings-description { margin: -13px 0 26px; font-size: 12px; line-height: 1.7; }
+.settings-card h1, .settings-card h2 { font-size: 21px; font-weight: 600; letter-spacing: -.45px; margin-bottom: 24px; }.settings-card .settings-description { margin: -12px 0 var(--settings-heading-gap,24px); font-size: 12px; line-height: 1.7; }
 .profile-avatar { background: var(--surface); border: 1px solid var(--line); border-radius:calc(var(--ui-radius) * 1); padding: 20px; margin-bottom: 25px; }
 .theme-presets { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 28px; }.theme-preset { color: var(--muted); background: transparent; font-size: 10px; display: grid; gap: 9px; text-align: left; padding: 0; }.theme-preset[aria-pressed=true] { color: var(--accent); }
 .theme-sample { display: grid; gap: 7px; border: 1px solid; border-radius:calc(var(--ui-radius) * 0.8333); height: 74px; padding: 12px 10px; }.theme-sample i { height: 5px; background: color-mix(in srgb, var(--text) 12.5%, transparent); border-radius:calc(var(--ui-radius) * 0.25); }.theme-sample i:first-child { width: 42%; }.theme-sample i:last-child { width: 65%; }
@@ -107,7 +107,7 @@ main:has(.room-content) { background: radial-gradient(ellipse at 90% 15%, color-
 .chat-compose textarea:focus { border-color:var(--accent); }
 .chat-compose textarea::placeholder { color:var(--muted); }
 .chat-typing:empty { display:none; }
-.appearance-settings .appearance-section-title { font-size:12px; letter-spacing:0; margin:28px 0 14px; }
+.appearance-settings .appearance-section-title { font-size:12px; letter-spacing:0; margin:var(--settings-section-gap,32px) 0 var(--settings-field-gap,20px); }
 .theme-color-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
 .theme-color-field { display:flex; flex-direction:column; gap:9px; font-size:11px; }
 .theme-color-control { display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:calc(var(--ui-radius) * 0.75); padding:7px 10px; background:var(--surface); }
@@ -240,19 +240,19 @@ button:hover:not(:disabled) { filter:none; }
 /* Settings follow the same section hierarchy as the desktop voice reference. */
 .settings-modal { width: min(1200px, calc(100vw - 48px)); height: min(880px, calc(100vh - 64px)); }
 .settings-panel { padding: 40px clamp(24px, 5vw, 72px); scroll-behavior: smooth; scrollbar-gutter: stable; }
-.settings-content { width: 100%; max-width: 700px; margin: 0 auto; }
+.settings-content { --settings-section-gap:32px; --settings-heading-gap:24px; --settings-field-gap:20px; width: 100%; max-width: 700px; margin: 0 auto; }
 .settings-content > *, .settings-content .settings-page { width: 100%; max-width: none; margin-inline: 0; }
 .settings-content .settings-card { margin: 0; }
-.settings-content .settings-card h1, .settings-content .settings-card h2:not(.appearance-section-title) { margin: 0 0 24px; }
+.settings-content .settings-card h1, .settings-content .settings-card h2:not(.appearance-section-title) { margin: 0 0 var(--settings-heading-gap); }
 .settings-section + .settings-section, .settings-content > .settings-stack + .settings-section,
-.settings-content > .settings-section + .settings-stack { border-top: 1px solid var(--line); margin-top: 32px; padding-top: 32px; }
+.settings-content > .settings-section + .settings-stack { border-top: 1px solid var(--line); margin-top: var(--settings-section-gap); padding-top: var(--settings-section-gap); }
 .settings-page-footer { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line); }
 .settings-page-footer .settings-reset { margin: 0; }
 .settings-nav-group { color: var(--muted); font-size: 11px; font-weight: 600; padding: 18px 13px 7px; border-top: 1px solid var(--line); margin-top: 10px; }
 .settings-nav-group:first-of-type { margin-top: 0; }
 .settings-nav .settings-nav-child { margin-left: 16px; border-left: 2px solid var(--line); border-radius: 0; padding-block: 9px; }
 .settings-nav .settings-nav-child[aria-selected=true] { border-left-color: var(--text); color: var(--text); background: var(--raised); }
-.settings-page > .settings-card + .settings-card { border-top: 1px solid var(--line); padding-top: 32px !important; margin-top: 32px; }
+.settings-page > .settings-card + .settings-card { border-top: 1px solid var(--line); padding-top: var(--settings-section-gap) !important; margin-top: var(--settings-section-gap); }
 .settings-panel .toggle-row { border-bottom: 0; padding-block: 16px; gap: 24px; }
 .settings-panel label, .settings-panel .slider-label > span { color: var(--text); }
 .settings-panel .mic-test-button { background: var(--accent); color: var(--on-accent); }
@@ -349,3 +349,8 @@ button:hover:not(:disabled) { filter:none; }
 .settings-content > .settings-section:has(+ .settings-page-footer),
 .settings-content > .settings-stack:has(+ .settings-page-footer) > .settings-section:last-child { min-height: calc(var(--settings-last-height, 0px) + 33px); }
 .update-settings-actions { justify-content: flex-start; flex-wrap: wrap; }
+
+.ui-button,.modal-actions>button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:11px 18px;border-radius:calc(var(--ui-radius)*.6667);font-size:13px;background:var(--raised);color:var(--text)}
+.ui-button-primary,.modal-actions>button.primary{background:var(--accent);color:var(--on-accent)}
+.ui-button-quiet{background:transparent;color:var(--muted)}
+.ui-button-danger,.modal-actions>button.danger-button{background:var(--raised);color:var(--danger)}

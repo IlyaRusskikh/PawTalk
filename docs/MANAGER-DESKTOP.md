@@ -1,5 +1,7 @@
 # Server Manager 0.4.0 desktop
 
+> Историческое руководство опубликованных API 1 выпусков. Для текущих исходников API 2 используйте [новое руководство](SERVER-API2.md), [контракт API](API-V2.md) и [совместимость](COMPATIBILITY.md). Пароли и ручной генератор E2EE ниже к API 2 не относятся.
+
 Опубликован preview / Published preview: [Manager 0.4.0](releases/manager-v0.4.0.md). Предыдущий выпуск / Previous release: [Manager 0.3.0](releases/manager-v0.3.0.md).
 Downloads and installation: [Windows Server](WINDOWS-SERVER.md).
 
@@ -206,3 +208,22 @@ Branch CI 0.3.0 проверил настоящие SCM-службы и NSIS ins
 чистой Windows VM с правами администратора; console smoke и подменённый планировщик
 их не заменяют. Не запускайте installer smoke поверх существующего сервера
 пользователя. Физические аудиоустройства, внешняя сеть и нагрузка проверяются отдельно.
+
+## First-run Server setup / Первая настройка Server
+
+Current API 2 Windows sources install Manager alone: the installer selects only
+Manager language and performs no Server download or first-time service registration.
+The UI starts in an unconfigured state. Choose a local ZIP/portable package or an
+explicit published-release download, edit network/history/update settings, then
+confirm installation and start. Signature/hash/size and package-quarantine checks
+are reused. Failed setup preserves its data/project journal for an explicit retry.
+Reinstalling Manager preserves existing Server settings, identity and stopped state.
+No public release is implied by this source change.
+
+В текущих исходниках API 2 установщик выбирает только язык Manager, не скачивает
+Server и не создаёт службы нового сервера. При первом запуске выберите локальный
+ZIP/переносимый пакет или явную загрузку опубликованного выпуска; задайте сеть,
+историю и обновления, затем подтвердите установку и запуск. Действуют прежние
+проверки подписи/хэша/размера и карантин пакета. При ошибке сохраняются данные
+и журнал проекта для явной повторной попытки. Переустановка Manager сохраняет
+настройки, идентичность и остановленное состояние существующего Server.

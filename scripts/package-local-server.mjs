@@ -4,6 +4,8 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
+import {createRequire} from 'node:module';
+const {apiProtocolVersion,dataSchemaVersion}=createRequire(import.meta.url)('../shared/membership.cjs');
 const args=process.argv.slice(2),options={};
 for(let i=0;i<args.length;i+=2){if(!['--archive','--manifest'].includes(args[i])||!args[i+1])throw Error('Use --archive <Windows Server ZIP> [--manifest <server-manifest.json>]');options[args[i]]=path.resolve(args[i+1]);}
 if(!options['--archive'])throw Error('--archive is required');
@@ -14,7 +16,7 @@ const bytes=await readFile(archive);
 const directory=await mkdtemp(path.join(os.tmpdir(),'pawtalk-local-package-'));
 try{
  await copyFile(archive,path.join(directory,'server.zip'));
- await writeFile(path.join(directory,'package.json'),JSON.stringify({format:'pawtalk-server-package-v1',version:match[1],apiProtocol:1,dataSchema:1,sha256:createHash('sha256').update(bytes).digest('hex')})+'\n');
+ await writeFile(path.join(directory,'package.json'),JSON.stringify({format:'pawtalk-server-package-v1',version:match[1],apiProtocol:apiProtocolVersion,dataSchema:dataSchemaVersion,sha256:createHash('sha256').update(bytes).digest('hex')})+'\n');
  const files=['package.json','server.zip'];
  if(options['--manifest']){await copyFile(options['--manifest'],path.join(directory,'server-manifest.json'));files.push('server-manifest.json');}
  const output=path.join(path.dirname(archive),`PawTalk.Server.${match[1]}.pawtalk-server.zip`);

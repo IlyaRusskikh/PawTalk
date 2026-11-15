@@ -6,7 +6,10 @@ function invitation(address) {
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   const params = new URLSearchParams(url.hash.slice(1));
   if (!isIP(hostname) || !url.port || url.username || url.password || url.search || !/^\/[a-f0-9]{64}$/.test(url.pathname) || (url.hash && !params.size)) throw new Error(t("Неверное приглашение в комнату"));
-  for (const key of params.keys()) if (!['password', 'name', 'e2ee'].includes(key) || params.getAll(key).length !== 1) throw new Error(t("Неверное приглашение в комнату"));
+  const v2 = params.get('v') === '2';
+  const allowed = v2 ? ['v','server','invite','token','open','package','setup','link','target','targetDevice','targetKey','targetRevision','signer'] : ['password','name','e2ee'];
+  for (const key of params.keys()) if (!allowed.includes(key) || params.getAll(key).length !== 1) throw new Error(t("Неверное приглашение в комнату"));
+  if (v2 && (!/^[a-f0-9]{32}$/.test(params.get('server') || '') || !/^[\w-]{43}$/.test(params.get('token') || '') || !/^[a-f0-9]{32}$/.test(params.get('invite') || params.get('link') || ''))) throw new Error(t("Неверное приглашение в комнату"));
   const e2eeKey = params.get('e2ee');
   if (e2eeKey !== null && !/^[a-f0-9]{64}$/.test(e2eeKey)) throw new Error(t("Неверный ключ E2EE"));
   const password = params.get('password');

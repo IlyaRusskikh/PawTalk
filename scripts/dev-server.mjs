@@ -78,8 +78,8 @@ try {
   if (build) await docker(['build', '-f', 'server/standalone.Dockerfile', '-t', image, '.']);
   if (!smoke) {
     console.log('Local development only: this server is exposed on 127.0.0.1.');
-    console.log('On first start, save the generated password from the logs.');
-    console.log('In another terminal: npm run dev. Invitation: docker exec pawtalk-dev-server /pawtalk serve info');
+    console.log('First administrator: docker exec pawtalk-dev-server /pawtalk serve initial-admin');
+    console.log('In another terminal: npm run dev. Open the one-time administrator invitation.');
     console.log('Keep volume pawtalk-dev-server-data to retain the room identity and chat.');
   }
   const args = [

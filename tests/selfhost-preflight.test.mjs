@@ -10,6 +10,61 @@ import path from 'node:path';
 const execute = promisify(execFile);
 const shells = ['powershell.exe'];
 if (process.platform === 'win32' && spawnSync('pwsh.exe', ['-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'], { windowsHide: true }).status === 0) shells.push('pwsh.exe');
+
+for (const shell of shells) test(`IP comparison and probe selection distinguish NAT, VPN and missing observations (${shell})`, { skip: process.platform !== 'win32' }, async () => {
+  const source = path.resolve('scripts/check-selfhost.ps1').replaceAll("'", "''");
+  const command = `. '${source}';
+    $cases = @(
+      @('203.0.113.20','203.0.113.20','same','203.0.113.20'),
+      @('203.0.113.20','198.51.100.20','different','203.0.113.20'),
+      @('100.64.1.20','203.0.113.20','additional-nat','203.0.113.20'),
+      @('192.168.1.1','203.0.113.20','additional-nat','203.0.113.20'),
+      @('','','unavailable',''),
+      @('','203.0.113.20','unavailable','203.0.113.20'),
+      @('203.0.113.20','','unavailable','203.0.113.20'),
+      @('100.64.1.20','','additional-nat','')
+    );
+    foreach ($c in $cases) {
+      if ((Get-IPComparison $c[0] $c[1]) -ne $c[2]) { throw ('Wrong comparison: '+($c -join ',')) };
+      if ((Get-PortCheckAddress $c[0] $c[1] '') -ne $c[3]) { throw 'Wrong probe target' }
+    };
+    if ((Get-PortCheckAddress '203.0.113.20' '198.51.100.20' '203.0.113.30') -ne '203.0.113.30') { throw 'Override lost' };
+    if ((Get-PortCheckAddress '203.0.113.20' '198.51.100.20' '10.0.0.1') -ne '') { throw 'Invalid override silently ignored' };
+    'IP_COMPARISON_OK'`;
+  const result = await execute(shell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, timeout: 10000 });
+  assert.match(result.stdout, /IP_COMPARISON_OK/);
+});
+
+for (const shell of shells) test(`external IPv4 lookup bounds responses, rejects redirects/private IPs and falls back (${shell})`, { skip: process.platform !== 'win32', timeout: 20000 }, async () => {
+  const requests = [];
+  const server = createServer((req, res) => {
+    requests.push(req.url);
+    if (req.url === '/redirect') { res.writeHead(302, { Location: '/must-not-follow' }); res.end(); }
+    else if (req.url === '/error') { res.writeHead(503); res.end('unavailable'); }
+    else if (req.url === '/private') res.end('100.64.1.20');
+    else if (req.url === '/large') res.end('x'.repeat(1024));
+    else if (req.url === '/invalid') res.end('127.1');
+    else if (req.url === '/slow') { /* HttpClient timeout must release the request. */ }
+    else res.end('203.0.113.20\n');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const source = path.resolve('scripts/check-selfhost.ps1').replaceAll("'", "''");
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const command = `. '${source}';
+      foreach ($bad in @('redirect','error','private','large','invalid','slow')) {
+        $ip = Get-ObservedPublicIPv4 @("${base}/$bad", '${base}/good');
+        if ($ip -ne '203.0.113.20') { throw ('Fallback failed after '+$bad) }
+      };
+      if ((Get-ObservedPublicIPv4 @('${base}/private','${base}/error')) -ne '') { throw 'Lookup failure returned an IP' };
+      'IP_LOOKUP_OK'`;
+    const result = await execute(shell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, timeout: 16000 });
+    assert.match(result.stdout, /IP_LOOKUP_OK/);
+    assert.ok(!requests.includes('/must-not-follow'));
+    assert.equal(requests.filter(p => p === '/good').length, 6);
+  } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+});
+
 for (const shell of shells) test(`preflight SOAP faults, finite leases and ownership cleanup (${shell})`, { skip: process.platform !== 'win32' }, async () => {
   const mappings = new Map();
   const calls = [];
@@ -149,7 +204,7 @@ for (const scenario of ['timeout', 'udp-first', 'tcp-first', 'cancel', 'extra-po
   const mockProbe = scenario === 'timeout' || cancellation ? '' : `function Test-PublicIPv4 { return $true }; function New-UdpProbe { return @{ Client=(New-Object IO.MemoryStream); Received=$false; Confirmed=$false; Ready=[DateTime]::UtcNow.AddSeconds(${scenario === 'tcp-first' ? 1 : 0}) } }; function Receive-UdpProbe {}; function Update-UdpProbe($probe) { if ([DateTime]::UtcNow -ge $probe.Ready) { $probe.Received=$true; $probe.Confirmed=$true } };`;
   const probeOptions = scenario === 'timeout' || cancellation ? '-SkipUdpCheck' : "-PublicIP '203.0.113.20'";
   const application = scenario === 'timeout' ? '' : '-Application';
-  const command = `. '${source}' -Port ${port} -Seconds ${seconds} ${probeOptions} -SkipTcpCheck ${application}; function Get-NetIPConfiguration { [pscustomobject]@{ IPv4DefaultGateway=1; IPv4Address=@([pscustomobject]@{IPAddress='127.0.0.1'}) } }; function Find-UPnPService { throw 'Synthetic: no router' }; ${mockProbe} Start-SelfHostCheck; Write-Output 'CALLER_STILL_RUNNING'`;
+  const command = `. '${source}' -Port ${port} -Seconds ${seconds} ${probeOptions} -SkipTcpCheck ${application}; function Get-ObservedPublicIPv4 { return '' }; function Get-NetIPConfiguration { [pscustomobject]@{ IPv4DefaultGateway=1; IPv4Address=@([pscustomobject]@{IPAddress='127.0.0.1'}) } }; function Find-UPnPService { throw 'Synthetic: no router' }; ${mockProbe} Start-SelfHostCheck; Write-Output 'CALLER_STILL_RUNNING'`;
   const extra = scenario === 'extra-port-in-use' ? createTCPServer() : null;
   if (extra) await new Promise(resolve => extra.listen(port + 3, '0.0.0.0', resolve));
   const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
