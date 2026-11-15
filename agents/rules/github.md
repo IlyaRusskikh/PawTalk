@@ -30,7 +30,7 @@
    still blocking updates/deletions; owner must verify this before first promotion.
 6. Pages source is GitHub Actions. github-pages permits main and component tag
    families for manual release events. Pages uses actions:read to check that a
-   completed Release Candidate Preflight actually published; prepare-only completion
+   completed Release Candidate Preflight or Promote Existing Preflight actually published; prepare-only completion
    is ignored. pages/id-token permissions and GHCR package creation must be allowed.
    API/catalog failure preserves the previous deployment; recover with Pages dispatch.
 7. Actions artifacts must remain available through both approvals (7-day retention;
@@ -39,9 +39,19 @@
    First run: merge this PR only after review/CI; configure settings above; dispatch
    main with components=client (or the intended set), promote=false; inspect component
    readiness, SHA, versions and artifact digests. It creates no production tags/assets.
-   For the actual release use a fresh promote=true dispatch, review Preflight before
-   approving release-tag, then independently review/approve release-publish. After
+   For the actual release prefer Promote Existing Preflight with the successful
+   prepare-only source_run_id at the unchanged main SHA. It promotes the complete
+   original set without rebuilding. A fresh promote=true dispatch remains supported.
+   Review source evidence before release-tag, then independently approve release-publish. After
    dispatch the agent provides the run link and hands off; no passive CI polling.
+8. Promotion needs GITHUB_TOKEN actions:read to inspect run/attempt jobs and download
+   immutable source artifacts; no PAT or signing secret is used. Both protected
+   environments still allow main and require independent reviewers. No new environment
+   or Settings change is introduced. Preserve the candidate index and all prepared
+   packages until publication; missing/expired/foreign/mixed-attempt evidence fails.
+   Do not rerun source jobs, delete artifacts, change channels/main or dispatch a
+   competing release while a candidate awaits approval. Old candidates without the
+   saved index require a fresh Preflight after this infrastructure reaches main.
 
 Review settings in GitHub UI. Repository files cannot prove Required reviewers,
 rulesets, artifact limits or GHCR permission are configured. No settings are changed

@@ -28,13 +28,19 @@ notes below do not authorize repeating old publication steps.
    run attempt, component, version, channel and every file's size/SHA-256. Upload
    immutable Actions artifacts (7-day retention). Preflight downloads the same-run
    outputs and rechecks receipts against preparation job-output digests, signatures,
-   payload hashes and OCI index/platforms. Its summary reports component readiness. When Client+Server are selected,
+   payload hashes and OCI index/platforms. Its summary reports component readiness.
+   Save these original contracts and receipt digests in pawtalk-candidate-index.
+   When Client+Server are selected,
    compare the separately built Go and LiveKit bytes against the Client core receipt.
 6. promote defaults to false: prepare-only stops here, with no tags, Releases, GHCR
-   or Pages deployment. For an actual release dispatch with promote=true from the
-   outset; after successful Preflight the owner separately approves **release-tag**.
-   The job revalidates all artifacts, exact source/manifests/notes and current main,
-   prechecks the entire tag set, then creates only selected immutable tags.
+   or Pages deployment. Preferred when a successful candidate exists: dispatch
+   **Promote Existing Preflight** (promote-candidate.yml) on the unchanged main SHA,
+   supplying only source_run_id. It derives the complete original component set,
+   versions and channels; checks GitHub API evidence and original artifacts without
+   repeating check.yml, builds, signing or integration tests. The alternative remains
+   a fresh release.yml dispatch with promote=true for a complete new preparation.
+   Both paths separately request **release-tag**, revalidate the candidate/current
+   main, precheck every tag, then create only the original selected immutable tags.
 7. The owner separately approves **release-publish** for selected component jobs.
    They download and revalidate the exact prepared bytes; there is no rebuild or
    re-sign. They require matching tags and unchanged main, reject existing Releases
@@ -59,10 +65,70 @@ are also not atomic; an orphan image, draft or a published component can remain 
 later failure. Never overwrite/delete tags/assets/images or blindly rerun promotion.
 Investigate, report exact completed/failed stages and prepare a new version/PR after a
 failed tag/publication. A main change requires a new candidate. Artifact expiry,
-workflow/signing/build-input changes or changed run attempt invalidate reuse; never
-import another run's artifact. No external cache/server or published retry policy is
+workflow/signing/build-input changes or a changed source attempt invalidate reuse.
+Cross-run reuse is allowed only through Promote Existing Preflight with its explicit
+verified source context; never overwrite GITHUB_* or regenerate source receipts.
+No external cache/server or published retry policy is
 introduced. GitHub's settings and hardware/external-network acceptance are separate
 from repository tests. No automated result guarantees absence of future API failures.
+
+## Продвижение готового кандидата / Promote an existing candidate
+
+Рекомендуемый порядок: Preflight с promote=false → успешное завершение →
+Promote Existing Preflight с source_run_id → release-tag approval → независимое
+release-publish approval. Повторных сборок, полной проверки CI и подписания нет.
+Продвигается весь исходный набор: отдельного выбора компонентов, версий и каналов
+в promotion нет. Подтверждения и запрет замены тегов/релизов остаются обязательными.
+Альтернатива: Preflight с promote=true → те же два независимых подтверждения.
+
+Preferred sequence: prepare-only Preflight → successful completion → Promote Existing
+Preflight with source_run_id → tag approval → independent publication approval.
+Use promote=true when a new complete preparation is wanted. Both paths share the
+same protected tag/publication code in release-candidate.mjs. The promotion workflow
+has actions:read and no signing secrets, PAT, build jobs or production writes before
+the corresponding environment approval. Pages handles both workflow names and still
+requires an actual successful publisher; prepare-only completion cannot deploy.
+
+The source must be a completed successful main workflow_dispatch from exactly this
+repository and release.yml workflow ID/path, at the same SHA as current main AND
+the executing promotion checkout. API evidence includes the preflight, infrastructure,
+plan/report, every selected component's complete native verification matrix and
+preparation jobs; only intentionally unused jobs may be skipped. Source tag and
+publisher jobs must be skipped: a failed or rejected publication is not a reusable
+prepare-only candidate. Both existing tags and GitHub Releases block a new promotion.
+
+The preflight job uploads an immutable candidate index holding the original source
+run ID/attempt, component contracts and receipt hashes. The API must confirm the
+index and packages belong to that run/SHA/repository, are unexpired and were created
+during their successful source jobs in the SAME attempt. Jobs inherited from a prior
+attempt, ambiguous names, missing artifacts and incomplete pagination are rejected.
+The plan pins artifact IDs/digests and the source attempt. Each protected job fetches
+the original index again and rechecks API evidence; changes invalidate promotion.
+The executing promotion run has its own ID/attempt. Original receipts keep the
+source IDs; they are neither regenerated nor rewritten to match the new run.
+
+Downloads use GitHub Actions artifact REST APIs. Verify the API's SHA-256 over the
+whole ZIP before parsing it; extract only an exact flat file allowlist, rejecting
+duplicates, extra/missing entries, links, special/encrypted entries and traversal.
+Limits: 1 MiB for the index, 8 GiB per component archive AND expanded file set; larger
+candidates fail rather than fall back to a build. Storage URLs receive no GitHub
+token. Then check every original receipt, file size/hash, release notes/version/channel,
+signature and Server OCI index/platforms. No new production dependency is needed:
+Node, standard-library Python on Ubuntu and skopeo perform integrity checks only.
+
+Do not edit main (including workflow/config/dependencies/trust/notes), change the
+selected channel variables, rerun/delete source artifacts, or submit competing release
+dispatches between preparation and promotion. Both workflows share one concurrency
+group. A changed main requires a fresh Preflight; timestamp/attempt ambiguity fails
+closed. GitHub metadata checks and remote writes cannot be one atomic transaction:
+owner coordination remains required during approvals and publication.
+
+Older candidates without the new index are deliberately unsupported. In particular,
+example run 43695001207 is not automatically reusable after this feature changes
+main, and its versions may already be published. After this infrastructure is merged,
+prepare a new candidate for a future release on its final main SHA. An expired index
+or package, changed source attempt, rejection after tag creation, or partial writes
+must not be repaired by rebuilding missing files or blindly retrying promotion.
 
 | Компонент | Источник версии | Тег | Артефакты |
 |---|---|---|---|

@@ -59,7 +59,7 @@ test('publication gates follow verification and prepared artifacts', async () =>
 test('Pages chains successful publication from main; generation must precede deployment', async () => {
   const pages = await workflow('pages');
   assert.deepEqual(pages.on.release.types, ['published']);
-  assert.deepEqual(pages.on.workflow_run.workflows, ['Release Candidate Preflight']);
+  assert.deepEqual(pages.on.workflow_run.workflows, ['Release Candidate Preflight', 'Promote Existing Preflight']);
   assert.match(pages.jobs.deploy.if, /conclusion == 'success'/);
   const steps = pages.jobs.deploy.steps;
   assert.equal(steps.find(step => step.uses?.startsWith('actions/checkout')).with.ref, 'main');

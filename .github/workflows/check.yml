@@ -36,7 +36,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node scripts/check-agents.mjs
       - run: node scripts/check-website.mjs
-      - run: node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/release-candidate.test.mjs
+      - run: node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/release-candidate.test.mjs tests/candidate-origin.test.mjs
       - name: Verify prepared OCI digest through isolated local registry
         run: node scripts/release-image-smoke.mjs
       - name: Lint all GitHub Actions workflows
@@ -127,7 +127,6 @@ jobs:
           PAWTALK_CI_COMPONENT: ${{ inputs.component || 'all' }}
         run: node scripts/ci-scope.mjs
       - uses: actions/setup-python@v6
-        if: steps.scope.outputs.host == 'true'
         with:
           python-version: '3.13'
       - uses: actions/setup-go@v6

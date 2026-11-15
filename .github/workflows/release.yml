@@ -61,7 +61,7 @@ jobs:
       - run: node scripts/check-website.mjs
       - run: >-
           node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs
-          tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/release-candidate.test.mjs
+          tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/release-candidate.test.mjs tests/candidate-origin.test.mjs
       - name: Verify prepared OCI digest through isolated local registry
         run: node scripts/release-image-smoke.mjs
       - name: Lint all GitHub Actions workflows
@@ -278,7 +278,14 @@ jobs:
           name: pawtalk-manager-prepared
           path: candidate/manager
         if: contains(fromJSON(needs.plan.outputs.components), 'manager')
-      - run: node scripts/release-candidate.mjs validate
+      - name: Validate and save original candidate contracts for later promotion
+        run: node scripts/release-candidate.mjs snapshot
+      - uses: actions/upload-artifact@v6
+        with:
+          name: pawtalk-candidate-index
+          path: release/candidate-index/candidate.json
+          if-no-files-found: error
+          retention-days: 7
       - id: receipts
         run: echo "value=$RECEIPTS" >> "$GITHUB_OUTPUT"
       - name: Report component readiness

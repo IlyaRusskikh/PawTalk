@@ -7,12 +7,79 @@ import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { selection, trusted, tagGuard } from '../scripts/release-candidate.mjs';
 const exec = promisify(execFile);
 const require = createRequire(import.meta.url);
 const yaml = createRequire(require.resolve('app-builder-lib/package.json'))('js-yaml');
 const workflow = async name => yaml.load(await readFile(new URL(`../.github/workflows/${name}.yml`,import.meta.url),'utf8'));
 const sha = 'a'.repeat(40);
+
+async function promoteFixture(directory, env, index) {
+  for (const name of ['candidate-origin.mjs','extract-candidate.py']) await cp(new URL('../scripts/'+name,import.meta.url),path.join(directory,'scripts',name));
+  const python=env.PAWTALK_PYTHON || (process.platform==='win32' && env.pythonLocation ? path.join(env.pythonLocation,'python.exe') : 'python3');
+  const source={id:123,workflow_id:42,path:'.github/workflows/release.yml',name:'Release Candidate Preflight',repository:{id:7,full_name:'IlyaRusskikh/PawTalk'},head_repository:{id:7,full_name:'IlyaRusskikh/PawTalk'},head_sha:sha,head_branch:'main',event:'workflow_dispatch',run_attempt:1,status:'completed',conclusion:'success'};
+  const jobs=[];
+  const add=(name,conclusion='success')=>jobs.push({id:jobs.length+1,name,status:'completed',conclusion,head_sha:sha,run_id:123,run_attempt:1,started_at:'2026-01-01T00:00:00Z',completed_at:'2026-01-01T01:00:00Z'});
+  for(const name of ['plan','infrastructure','preflight','report','prepare-client'])add(name);
+  for(const name of ['tag','prepare-server','prepare-manager','publish-client','publish-server','publish-manager'])add(name,'skipped');
+  for(const name of ['infrastructure','server (ubuntu-24.04)','server (ubuntu-24.04-arm)','windows (windows-2022)','windows (windows-2025)'])add('verify (client) / '+name,name==='infrastructure'?'skipped':'success');
+  const {assetNames}=await import('../scripts/release-candidate.mjs');
+  const archives=[['pawtalk-candidate-index','release/candidate-index',['candidate.json']],['pawtalk-client-prepared','release/client',[...assetNames('client','1.2.3'),'receipt.json']]];
+  const artifacts=[];
+  for(const [name,folder,names] of archives) {
+    const file=path.join(directory,name+'.zip');
+    await exec(python,['-B','-I','-c',`import sys,zipfile,pathlib
+with zipfile.ZipFile(sys.argv[1],'w') as z:
+ for name in sys.argv[3:]:z.write(pathlib.Path(sys.argv[2])/name,name)`,file,path.join(directory,folder),...names],{windowsHide:true});
+    artifacts.push({id:100+artifacts.length,name,digest:'sha256:'+createHash('sha256').update(await readFile(file)).digest('hex'),expired:false,created_at:'2026-01-01T00:30:00Z',expires_at:'2099-01-01T00:00:00Z',workflow_run:{id:123,head_sha:sha,head_branch:'main',repository_id:7,head_repository_id:7}});
+  }
+  await writeFile(path.join(directory,'api-fixture.json'),JSON.stringify({source,jobs,artifacts}));
+  await writeFile(path.join(directory,'api-state.json'),JSON.stringify({tags:{},commands:[]}));
+  const mock=path.join(directory,'mock-api.mjs');
+  await writeFile(mock,`import fs from 'node:fs';import path from 'node:path';import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';import {createHash} from 'node:crypto';
+const root=process.cwd(),f=JSON.parse(fs.readFileSync('api-fixture.json')),state=JSON.parse(fs.readFileSync('api-state.json'));
+const save=()=>fs.writeFileSync('api-state.json',JSON.stringify(state));
+const assets=()=>['PawTalk.Setup.1.2.3.exe','PawTalk.Licenses.1.2.3.zip','SHA256SUMS.txt','update-manifest.json'].map(name=>{const b=fs.readFileSync(path.join(root,'candidate/client',name));return {name,size:b.length,digest:'sha256:'+createHash('sha256').update(b).digest('hex')};});
+const real=cp.execFileSync;cp.execFileSync=(command,args,options)=>{if(command==='git'){if(JSON.stringify(args)!==JSON.stringify(['rev-parse','HEAD']))throw Error('Unexpected Git mutation');return f.source.head_sha;}
+if(command==='gh'){state.commands.push(args);if(args[1]==='create')state.release={draft:true,prerelease:true,assets:assets()};else if(args[1]==='edit')state.release.draft=false;else throw Error('Unexpected gh command');save();return '';}
+return real(command,args,options);};syncBuiltinESMExports();
+globalThis.fetch=async(url,options={})=>{const u=new URL(url);if(u.hostname==='storage.example.test'){if(options.headers)throw Error('Credentials reached storage');const a=f.artifacts.find(a=>String(a.id)===u.pathname.slice(1));return new Response(fs.readFileSync(a.name+'.zip'));}
+if(u.hostname!=='api.github.com')throw Error('External network forbidden in test');const e=u.pathname.replace('/repos/IlyaRusskikh/PawTalk/','');let value;
+if(e==='git/ref/heads/main')value={object:{sha:f.source.head_sha}};
+else if(e==='actions/runs/123')value=f.source;
+else if(e==='actions/workflows/release.yml')value={id:42,path:f.source.path};
+else if(e==='actions/runs/123/attempts/1/jobs')value={total_count:f.jobs.length,jobs:f.jobs};
+else if(e==='actions/runs/123/artifacts')value={total_count:f.artifacts.length,artifacts:f.artifacts};
+else if(e.startsWith('actions/artifacts/')&&e.endsWith('/zip'))return new Response(null,{status:302,headers:{location:'https://storage.example.test/'+e.split('/')[2]}});
+else if(e.startsWith('git/ref/tags/'))value=state.tags[e.slice('git/ref/tags/'.length)];
+else if(e.startsWith('releases/tags/'))value=state.release;
+else if(e==='git/refs'&&options.method==='POST'){const body=JSON.parse(options.body);state.tags[body.ref.slice('refs/tags/'.length)]={object:{sha:body.sha,type:'commit'}};save();value={};}
+else throw Error('Unexpected API endpoint '+e);
+return new Response(value?JSON.stringify(value):'{}',{status:value?200:404});};
+`);
+  const promoted={...env,GITHUB_RUN_ID:'456',GITHUB_RUN_ATTEMPT:'2',SOURCE_RUN_ID:'123',GH_TOKEN:'synthetic-token'};
+  delete promoted.PAWTALK_UPDATE_PRIVATE_KEY;
+  const run=command=>exec(process.execPath,['--import',pathToFileURL(mock).href,path.join(directory,'scripts/release-candidate.mjs'),command],{cwd:directory,env:promoted,windowsHide:true});
+  promoted.PAWTALK_CLIENT_CHANNEL='stable';
+  await assert.rejects(run('promote-plan'),/Indexed version\/channel\/source contract mismatch/);
+  promoted.PAWTALK_CLIENT_CHANNEL='preview';
+  for(const command of ['promote-plan','promote-tag','promote-publish']) {
+    await rm(path.join(directory,'candidate/client'),{recursive:true,force:true});
+    await run(command);
+    if(command==='promote-plan') {
+      const output=await readFile(env.GITHUB_OUTPUT,'utf8');
+      promoted.ORIGIN=output.split(/\r?\n/).find(line=>line.startsWith('origin=')).slice('origin='.length);
+    }
+    const receipt=JSON.parse(await readFile(path.join(directory,'candidate/client/receipt.json'),'utf8'));
+    assert.equal(receipt.run,'123');assert.equal(receipt.attempt,'1');
+    assert.equal(receipt.sha,index.sha);
+  }
+  const state=JSON.parse(await readFile(path.join(directory,'api-state.json'),'utf8'));
+  assert.deepEqual(Object.keys(state.tags),['client-v1.2.3']);
+  assert.equal(state.release.draft,false);
+  assert.deepEqual(state.commands.map(args=>args[1]),['create','edit']);
+}
 
 test('component sets are exact, canonical and fail closed', () => {
   for (const input of ['client','server','manager','client,server','server,manager','client,manager','all']) {
@@ -58,6 +125,13 @@ test('real seal/validation rejects missing, corrupted, foreign and re-signed rec
     env.RECEIPTS=JSON.stringify({client:hash(receipt)});
     await cp(path.join(directory,'release/client'),path.join(directory,'candidate/client'),{recursive:true});
     await run('release-candidate',['validate']);
+    await run('release-candidate',['snapshot']);
+    const index=JSON.parse(await readFile(path.join(directory,'release/candidate-index/candidate.json'),'utf8'));
+    assert.deepEqual(index.components,['client']);
+    assert.equal(index.run,'123');assert.equal(index.attempt,'1');
+    assert.equal(index.receipts.client,hash(receipt));
+    assert.deepEqual(await readFile(path.join(directory,'candidate/client/receipt.json')),receipt);
+    await promoteFixture(directory,env,index);
     const target=path.join(directory,'candidate/client',installer);
     await writeFile(target,'corrupt');
     await assert.rejects(run('release-candidate',['validate']),/Corrupt artifact/);
@@ -143,6 +217,6 @@ test('actual workflow enforces preflight before tags and separate publication ap
   assert.match(script,/'--verify-tag','--draft'/);
   assert.match(script,/'--draft=false'/);
   assert.doesNotMatch(script,/--clobber/);
-  assert.deepEqual(pages.on.workflow_run.workflows,[w.name]);
+  assert.deepEqual(pages.on.workflow_run.workflows,[w.name,'Promote Existing Preflight']);
   assert.match(pages.jobs.deploy.steps[0].run,/startswith\("publish-"\)/);
 });

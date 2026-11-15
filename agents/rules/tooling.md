@@ -15,3 +15,10 @@ mechanisms; avoid rereading vendor docs for ordinary product tasks.
   [environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments),
   [rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets): PR-only development verification, environment jobs after build,
   explicit main ancestry and immutable tags; settings require owner setup.
+
+Promotion API contracts rechecked 2026-11-15 against official GitHub docs:
+[workflow runs](https://docs.github.com/en/rest/actions/workflow-runs),
+[attempt-specific jobs](https://docs.github.com/en/rest/actions/workflow-jobs),
+[artifact metadata/download](https://docs.github.com/en/rest/actions/artifacts).
+REST metadata has archive digests and run/SHA identity; artifact attempts are checked
+against matching successful job intervals plus the original candidate index.

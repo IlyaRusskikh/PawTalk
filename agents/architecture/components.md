@@ -7,7 +7,7 @@
 | Server | `server/`, `server/VERSION`, `server/standalone.Dockerfile`, `scripts/build-windows-server.mjs` | Go API/auth/chat/storage + LiveKit; serve mode persists identity/data; Windows services or Linux host networking |
 | Manager | `manager/pawtalkctl`, `manager/launcher`, `manager/pawtalk_manager/`, `manager/windows/`, `manager/desktop/` | Host-only Python controller; Compose/systemd on Linux, Go/SCM and Electron UI on Windows; independent signed updates |
 | Shared contracts | `shared/membership.cjs`, `shared/server-crypto.mjs`, `shared/framing.mjs`, `shared/release.cjs`, `shared/encryption.mjs`, `shared/i18n.cjs`, `shared/en.json` | API/data 2, framed signatures, client-only channel crypto, independent component releases and localization |
-| Infrastructure | `.github/workflows/`, `scripts/`, `tests/`, `website/` | PR verification, component candidate builds before tags, gated publication, generated public catalog and Pages |
+| Infrastructure | `.github/workflows/`, `scripts/`, `tests/`, `website/` | PR verification, component candidate builds before tags, verified cross-run promotion, gated publication, generated public catalog and Pages |
 
 Version sources: Client package.json + both package-lock version fields; Server
 server/VERSION; Manager manager/VERSION + manager/desktop/package.json. These are

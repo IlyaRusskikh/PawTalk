@@ -7,7 +7,7 @@ manual and Preflight checks retain component scopes via scripts/ci-scope.mjs.
 
 | Suite | Required commands / coverage |
 | --- | --- |
-| infrastructure | `node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/release-candidate.test.mjs`; `node scripts/check-agents.mjs`; `node scripts/check-website.mjs`; `node scripts/website-smoke.mjs` (real Electron); `node scripts/release-image-smoke.mjs` (Docker/local registry); `npm run check:public` |
+| infrastructure | `node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/release-candidate.test.mjs tests/candidate-origin.test.mjs`; `node scripts/check-agents.mjs`; `node scripts/check-website.mjs`; `node scripts/website-smoke.mjs` (real Electron); `node scripts/release-image-smoke.mjs` (Docker/local registry); `npm run check:public` |
 | client | `npm run build`, `npm test`; affected native/Electron/UI/audio smokes from .github/workflows/check.yml; native:build + native-smoke; package and packaged-smoke for installer changes/releases |
 | server | in server/: `go test ./...`, `go vet ./...`; Linux CI also race; relevant server-smoke, dev-server --smoke, docker-smoke --containers-only; shared-core equality when both Windows bundles built |
 | manager | in manager/windows/: `go test ./...`, `go vet ./...`; Python unittest discover tests/*_test.py; actual SCM, desktop/package smokes on Windows; systemd, Compose install/backup/update/restore/crash and Debian-container checks on Linux |
@@ -31,3 +31,15 @@ artifacts and enforce the YAML approval/dependency graph. Local OCI smoke uses a
 isolated registry, never GHCR. Hosted reviewer enforcement and production signing
 are not simulated as successful release acceptance. Preflight uses component-specific
 check.yml modes before tags; publication must only revalidate/download prepared bytes.
+
+Include `tests/candidate-origin.test.mjs` in infrastructure checks. It uses mock
+GitHub APIs and synthetic ZIPs for source run/job/attempt provenance, pagination,
+expiry, archive digests, strict extraction, immutable tags and partial publication.
+The Client fixture exercises real seal → saved index → cross-run promotion plan →
+tag → publication with synthetic keys, a network-denying API mock and mocked external
+writes; original receipts remain unchanged despite a different executing run/attempt.
+Python 3.13 is set up for Windows verification, including Client scopes; local Node
+tests may set PAWTALK_PYTHON to an existing interpreter's absolute path. No Store
+installation is required. These checks do not prove hosted approvals or perform
+production writes. Promote Existing Preflight itself runs integrity/provenance checks
+only: it must never call check.yml, rebuild packages/OCI or re-sign manifests.

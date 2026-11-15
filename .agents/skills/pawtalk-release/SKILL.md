@@ -18,7 +18,14 @@ metadata:
    permission precede squash merge; delete branch. After merge initiate Preflight
    on exact main SHA with selected component versions; all PR CI is not release proof.
 5. Use dispatch-only release.yml: promote=false safely prepares without tags or
-   publication. Actual promote=true runs all selected release scopes, real builds,
+   publication. When a successful prepare-only candidate already exists, prefer
+   Promote Existing Preflight with its source_run_id on the exact unchanged main SHA.
+   Promote the entire original set; derive versions/channels from the saved index,
+   verify API run/workflow/attempt jobs and immutable archive digests, original
+   receipts/signatures and OCI digest, and retain the original run ID/attempt.
+   Never replace GITHUB_* or rebuild/re-sign missing/invalid artifacts. Missing index,
+   stale main, expiry, mixed attempts or existing tags/releases require rejection.
+   The alternative promote=true runs all selected release scopes, real builds,
    signatures and receipt validation BEFORE requesting release-tag approval. Agent
    initiates the required approval when ready, gives its direct run URL and hands
    control to owner; never passively monitor CI without instruction. No tag on failed
@@ -27,6 +34,10 @@ metadata:
    Then request separate release-publish approval. Publishers revalidate source/run,
    signatures and exact prepared bytes; no rebuild/re-sign. Both environments need
    main deployment permission and Required reviewers configured by owner.
+   Do not edit main/channels or rerun/delete source artifacts during review. Promotion
+   rechecks and pins source evidence at both gates, shares the release concurrency
+   group and has no signing secrets. Existing candidates pre-dating the saved index
+   cannot be retroactively upgraded; prepare a future candidate on the final main SHA.
 7. Never replace tags/assets/images or publish partial/failed releases. Multi-tag
    API writes and GitHub/GHCR publication are not atomic. Report partial failures,
    preserve diagnostics and prepare a new version/PR; no blind promotion retry.
