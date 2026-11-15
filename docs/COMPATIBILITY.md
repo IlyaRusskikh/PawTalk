@@ -1,12 +1,23 @@
 # Client ↔ Server ↔ Manager compatibility
 
-Current source uses [API 2](API-V2.md), mandatory E2EE and data schema 2.
+Published components and current source use [API 2](API-V2.md), mandatory E2EE and data schema 2.
 Client, selfhost, permanent Windows/Linux Server and Manager use that contract.
-This is an unreleased breaking update: no published binary is modified and source
-package versions do not announce new public releases.
+API 2 is a published breaking update with no API 1 migration. Historical binaries
+remain unchanged; source package versions do not announce new public releases.
+Select future versions from [GitHub Releases](https://ilyarusskikh.github.io/PawTalk/downloads/)
+and their component-specific requirements. Install a fresh Debian VPS with the
+**[Linux guide](SERVER-DEBIAN.md)**.
+
+Published compatible preview snapshot, 15 November 2026:
+[Client 0.12.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.12.1),
+[Server 0.11.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/server-v0.11.1),
+[Manager 0.5.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/manager-v0.5.1).
+This dated combination is not a permanent version pin or a claim that all future
+releases are compatible.
 
 | Client | Server | Manager | Result |
 | --- | --- | --- | --- |
+| Published API 2 | Published API/data 2 | Published API/data 2 Manager | Supported for the published combination above; read each later release's requirements |
 | API 2 source | API 2 source | API/data 2 source | Supported; current shared core, timed invitations, membership and channels |
 | API 2 source | API 1 / missing protocol | Any | Rejected before identity/admission proofs; no fallback |
 | API 1 published | API 2 source | Any | Legacy API endpoints reject with HTTP 426 |
@@ -28,7 +39,10 @@ Client selfhost and permanent Windows Server build the same server/ and LiveKit
 with the same flags/toolchain; check-server-core.mjs verifies byte equality.
 Selfhost stores history in memory; serve persists schema 2. Updating Server does
 not replace an installed Client, and updating Manager does not replace Server.
-Supply Server first, then matching Manager/Client. [Operator guide](SERVER-API2.md).
+For a fresh deployment use compatible Manager/Server and Client; subsequent update
+order follows each release's requirements. A protocol transition needs server-side
+support before clients use it; this does not provide API 1 migration.
+[Operator guide](SERVER-API2.md).
 
 Verification includes native Windows main/preload/OS vault/TLS, real API 2 RTP,
 Linux Compose install/update/rollback/restore, signed package fixtures, and explicit
@@ -39,7 +53,7 @@ are reported separately in [the implementation journal](MULTICHANNEL-PLAN.md).
 ## Historical published API 1 matrix
 
 The following rows describe historical published binaries only. They do not define
-compatibility of API 2 source builds and are not changed by this update.
+compatibility of published API 2 or current source builds; those binaries stay unchanged.
 
 | Client | Server | Contract |
 |---|---|---|
@@ -62,15 +76,22 @@ Old 0.7.0 repository-case discovery limitations are not fixed in installed binar
 
 ## Русский
 
-Текущие исходники Client/Server/Manager используют API 2 и схему данных 2.
+Опубликованные Client/Server/Manager и текущие исходники используют API 2 и схему данных 2.
 API 1, отсутствие версии и неизвестный протокол отклоняются до передачи личности.
-Это ещё не опубликованный breaking update: миграции старых настроек/истории/закладок
+Это опубликованный несовместимый переход: миграции старых настроек/истории/закладок
 нет, требуется чистое состояние, старые файлы сами не удаляются. Старые опубликованные
 бинарники остаются прежними; историческая таблица выше относится только к ним.
 
+На 15 ноября 2026 года опубликована совместимая preview-комбинация Client 0.12.1,
+Server 0.11.1, Manager 0.5.1 (ссылки выше). Это датированный снимок; актуальные версии
+выбираются из GitHub Releases с учётом условий каждого выпуска. Основная инструкция
+нового Linux VPS — [установка на Debian](SERVER-DEBIAN.md).
+
 Ключи создаёт и хранит клиент; E2EE обязательно. Временный и постоянный хосты
-собирают одно ядро, различаются сроком жизни/хранением. Server поставляется первым,
-затем совместимые Manager и Client. Версии выпусков независимы от API, схемы БД,
+собирают одно ядро, различаются сроком жизни/хранением. Для чистой установки нужны
+совместимые Manager/Server и Client; порядок последующих обновлений задаётся
+условиями выпуска. Новый протокол требует поддержки сервера до использования
+клиентом, но это не означает миграцию API 1. Версии выпусков независимы от API, схемы БД,
 формата подписей и протокола launcher. Проверки физических устройств, внешней сети
 и нативных SCM/systemd не подменяются локальными синтетическими тестами.
 

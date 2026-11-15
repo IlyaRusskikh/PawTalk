@@ -1,9 +1,10 @@
 # API 2 — executable implementation contract
 
-Status: implemented in current source Client, selfhost, permanent Server and
-Manager; final acceptance is recorded in MULTICHANNEL-PLAN.md. This is an unreleased
-breaking contract, not a description of installed API 1 releases. No migration or
-second production core is shipped.
+Status: published in compatible API 2 Client, selfhost, permanent Server and Manager;
+current source implements this contract. See [published compatibility](COMPATIBILITY.md)
+and the [Debian VPS guide](SERVER-DEBIAN.md). This breaking contract does not describe
+historical installed API 1 releases. No migration or second production core is shipped.
+Verification history is recorded in MULTICHANNEL-PLAN.md, with environment limitations.
 
 ## Identity and authentication
 

@@ -1,7 +1,11 @@
 # Серверы API 2: запуск и управление
 
-Это руководство для текущих исходников нового ядра. Релиз API 2 ещё не опубликован.
-Не подменяйте старые опубликованные артефакты и не применяйте к ним эти команды.
+API 2 опубликован. Для чистого постоянного Linux VPS начните с
+**[пошаговой установки на Debian](SERVER-DEBIAN.md)**: зависимости, доверенный
+bootstrap, Docker/Compose, первое вступление, reboot, обновления и backup/restore.
+Это руководство описывает общую модель API 2 и Windows/selfhost. Версии выбирайте
+из [GitHub Releases](https://ilyarusskikh.github.io/PawTalk/downloads/),
+не по версиям исходных пакетов. Старые опубликованные артефакты не заменяются.
 Миграции API 1 нет: нужна чистая конфигурация и новая БД. Старые данные не удаляются
 автоматически. Поддерживаемые сочетания перечислены в [COMPATIBILITY.md](COMPATIBILITY.md).
 
@@ -18,6 +22,8 @@
 изображения; удаление занятого голосового отключает голос, сохраняя членство.
 
 ## Чистый постоянный сервер Windows/Linux
+
+Полная последовательность для Debian VPS находится в [основной Linux-инструкции](SERVER-DEBIAN.md).
 
 Manager использует те же Go API и LiveKit, что встроенный хост. В конфигурации
 задаются IP, базовый порт, лимит истории и параметры обновлений. По умолчанию:
@@ -143,7 +149,9 @@ root и не стирают ранее скачанные данные. Суще
 
 ## English
 
-This guide describes unreleased API 2 source builds. Start with fresh configuration
+API 2 is published. For a fresh permanent Linux VPS, start with the
+**[Debian installation and operation guide](SERVER-DEBIAN.md)**. This page covers
+shared API 2 behavior and Windows/selfhost. Start with fresh configuration
 and schema 2; API 1 is rejected, with no migration. E2EE is mandatory and configured
 automatically by clients. Selfhost assigns its creator; a clean permanent server
 issues a 24-hour single-use first-admin link via Manager/CLI. No host admin link
@@ -189,7 +197,15 @@ connection does not verify external TCP/UDP reachability. Share full invitations
 only with intended participants: the fragment after `#` contains admission and
 E2EE key delivery material.
 
-## Локальная проверка Windows до выпуска API 2
+## Историческая локальная проверка Windows до выпуска API 2
+
+Следующий раздел — исторический порядок проверки до публикации API 2, а не
+инструкция установки опубликованных компонентов. Для новой установки используйте
+[Debian VPS](SERVER-DEBIAN.md) или [Windows Manager UI](#windows-first-server-setup).
+Указанные ниже номера и ограничения review-набора относятся к тому снимку.
+
+Historical pre-publication Windows review procedure; use the current installation
+guides above for published releases. Review-build version references below are historical.
 
 Используйте текущие Client, Manager и Server из исходников. Старый опубликованный
 Manager API 1 не является совместимым вариантом новой конфигурации. В локальном

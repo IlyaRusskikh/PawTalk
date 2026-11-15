@@ -20,7 +20,8 @@
 
 | Раздел | Описание |
 | --- | --- |
-| [Установка VPS](SERVER.md) | Docker Compose, мастер, отдельные подписанные обновления, backup/restore |
+| **[Debian VPS: установка API 2 с нуля](SERVER-DEBIAN.md)** | Основная Linux-инструкция: зависимости, доверие, Docker/Compose, первое вступление, reboot, updates, backup/restore / Primary Linux guide |
+| [Способы установки Server](SERVER.md) | Актуальные инструкции Linux/Windows и архив API 1 / Hosting guides and API 1 history |
 | [Manager desktop](MANAGER-DESKTOP.md) | Новый Windows UI, трей, обновления и границы проверки / New Windows UI and verification |
 | [Совместимость](COMPATIBILITY.md) | API protocol, Client ↔ Server, переход 0.8.1 и Windows self-host |
 | [Обновления клиента и язык](UPDATES.md) | Подписанные обновления клиента и резервная передача через комнаты |
@@ -36,8 +37,8 @@ New VPS installations use Docker Compose through the verified host controller. P
 | [Разработка и локальный запуск](DEVELOPMENT.md) | `docker run`, сборка клиента, тесты; без Compose / Local development |
 | [Архитектура](ARCHITECTURE.md) | Компоненты клиента, сервера, голосового тракта и обновлений |
 | [API 1, история](API.md) | Исторический опубликованный протокол / Historical published protocol |
-| [Новый контракт API 2](API-V2.md) | Контракт текущих исходников: членство, каналы, обязательное E2EE / Current source contract |
-| [Сервер API 2](SERVER-API2.md) | Настройка текущих исходников Windows/Linux/selfhost / Current source operator guide |
+| [Контракт API 2](API-V2.md) | Членство, каналы, обязательное E2EE / Membership, channels and mandatory E2EE |
+| [Сервер API 2](SERVER-API2.md) | Опубликованный API 2: Windows/selfhost, членство и управление; установка Debian — по основной инструкции выше / API 2 operation |
 | [БД API 2](DATABASE-V2.md) | Физические таблицы, ключи и диаграмма связей / Physical schema and relationships |
 | [Будущие идеи / Future ideas](FUTURE-IDEAS.md) | Идеи для обсуждения, не утверждённый план / Proposals, not an approved roadmap |
 | [План многоканальных серверов](MULTICHANNEL-PLAN.md) | Согласованные требования, физическая схема, выполненные этапы и текущие проверки / Durable implementation journal |
