@@ -3,11 +3,12 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 app.disableHardwareAcceleration();
 app.whenReady().then(async()=>{
- const win=new BrowserWindow({show:false,width:1100,height:760,webPreferences:{sandbox:true,contextIsolation:true,backgroundThrottling:false}});
+ const win=new BrowserWindow({show:false,width:1100,height:760,webPreferences:{offscreen:true,sandbox:true,contextIsolation:true,backgroundThrottling:false}});
  const errors=[];win.webContents.on('console-message',event=>{if(event.level==='error'){errors.push(event.message);console.error('renderer:',event.message);}});
  const timeout=setTimeout(()=>{console.error('chat UI watchdog timeout');app.exit(1);},90000);
  const run=code=>win.webContents.executeJavaScript(code,true),wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const until=async(code,label)=>{for(let i=0;i<180;i++){if(await run(code))return;await wait(50);}throw Error(label+': '+await run('document.body.innerText.slice(-1800)'));};
+ const layout=()=>run('document.fonts.ready.then(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))');
  const set=(selector,value)=>run(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('missing '+${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
  const enter=extra=>run(`document.querySelector('.member-composer textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...${JSON.stringify(extra||{})}}))`);
  try{
@@ -29,9 +30,22 @@ app.whenReady().then(async()=>{
   await run("document.querySelector('.member-reply').click()");
   await until("!!document.querySelector('[data-message-row=\"20\"].chat-message-target')",'around lookup highlights source');
   const target=await run("(()=>{const list=document.querySelector('.member-history'),row=document.querySelector('[data-message-row=\"20\"]'),a=list.getBoundingClientRect(),b=row.getBoundingClientRect();return b.top>=a.top&&b.bottom<=a.bottom})()");assert.equal(target,true,'source is visible');
-  const bottomAnchor=await run("(()=>{const list=document.querySelector('.member-history'),box=list.getBoundingClientRect(),row=[...list.querySelectorAll('[data-message-row]')].reverse().find(e=>{const r=e.getBoundingClientRect();return r.top<box.bottom&&r.bottom>box.top});return{id:row.dataset.messageRow,offset:row.getBoundingClientRect().bottom-box.bottom}})()");
-  win.setSize(940,650);await wait(150);
-  const restored=await run(`(()=>{const list=document.querySelector('.member-history'),row=list.querySelector('[data-message-row="${bottomAnchor.id}"]');return row.getBoundingClientRect().bottom-list.getBoundingClientRect().bottom})()`);assert.ok(Math.abs(restored-bottomAnchor.offset)<3,'resize retains reading anchor');
+  // Include a slow-renderer case so the resize assertion cannot depend on a
+  // fast desktop or the old 150 ms delay.
+  if(language==='en'&&reduced==='no-preference')await win.webContents.debugger.sendCommand('Emulation.setCPUThrottlingRate',{rate:4});
+  for(const [width,height] of [[940,650],[1080,700],[940,650]]){
+   // Wait for committed layout/ResizeObserver delivery, not an assumed amount
+   // of runner CPU time. Hidden non-offscreen windows can suppress frames.
+   await layout();
+   const bottomAnchor=await run("(()=>{const list=document.querySelector('.member-history'),box=list.getBoundingClientRect(),row=[...list.querySelectorAll('[data-message-row]')].reverse().find(e=>{const r=e.getBoundingClientRect();return r.top<box.bottom&&r.bottom>box.top});return{id:row.dataset.messageRow,offset:row.getBoundingClientRect().bottom-box.bottom}})()");
+   win.setSize(width,height);
+   const [contentWidth,contentHeight]=win.getContentSize();
+   await until(`innerWidth===${contentWidth}&&innerHeight===${contentHeight}`,'renderer receives native window size');
+   await layout();
+   const restored=await run(`(()=>{const list=document.querySelector('.member-history'),row=list.querySelector('[data-message-row="${bottomAnchor.id}"]');return row.getBoundingClientRect().bottom-list.getBoundingClientRect().bottom})()`);
+   assert.ok(Math.abs(restored-bottomAnchor.offset)<3,`resize retains reading anchor ${language}/${reduced} at ${width}x${height}: row ${bottomAnchor.id}, expected ${bottomAnchor.offset}, actual ${restored}`);
+  }
+  await win.webContents.debugger.sendCommand('Emulation.setCPUThrottlingRate',{rate:1});
   await run("document.querySelector('.member-history').scrollTop=0;document.querySelector('.member-history').dispatchEvent(new Event('scroll'))");
   await until("Number(document.querySelector('[data-message-row]').dataset.messageRow)<8",'scroll loads previous page');
   assert.ok(await run("document.querySelectorAll('[data-message-row]').length<=25"),'history window is bounded');

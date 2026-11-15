@@ -997,3 +997,18 @@ Docker/Compose и native Windows проверками. Linux race/arm64, реа�
   18 tests with 3 expected Windows-only skips. Public guard and staged review
   precede commit/push to the same PR. Actual elevated NSIS/SCM confirmation
   belongs to the next Windows CI run; it was not exercised locally.
+
+### PR #13 Windows resize-check follow-up
+
+- [x] Run 43679761979: Windows 2025 passed the full workflow, and both Windows
+  jobs passed the corrected installer/SCM stage. Windows 2022 subsequently failed
+  the EN/normal chat resize assertion, which sampled a hidden non-offscreen
+  renderer after a fixed 150 ms delay.
+- [x] Render the hidden chat test offscreen; wait for native content dimensions,
+  loaded fonts and two actual animation frames before comparing reading anchors.
+  Exercise shrink/grow/shrink with the existing <3 px tolerance, adding 4x CPU
+  throttling to EN/normal resize and exact expected/actual diagnostics.
+- [x] The affected real Electron chat suite passed RU/EN × reduced/normal,
+  including the slow-renderer resize case. Application chat code is unchanged.
+  Public guard/staged review precede commit/push; Windows 2022 confirmation
+  belongs to the new CI run.
