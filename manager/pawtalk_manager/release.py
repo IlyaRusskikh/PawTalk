@@ -164,7 +164,7 @@ def verify(raw, component, keys, now=None):
         raise ValueError("Invalid signed channel")
     if any(type(m.get(k)) is not int for k in ("publishedAt", "expiresAt")) or not m["publishedAt"] <= now + 300 or not now < m["expiresAt"] <= m["publishedAt"] + 366 * 86400:
         raise ValueError("Expired/invalid manifest")
-    if any(type(m.get(k)) is not int or m[k] != 1 for k in ['apiProtocol','dataSchema']):
+    if any(type(m.get(k)) is not int or m[k] != 2 for k in ['apiProtocol','dataSchema']):
         raise ValueError("Unsupported protocol/data schema")
     if component == "server":
         if m.get("image") != IMAGE or not isinstance(m.get('digest'),str) or not DIGEST.fullmatch(m['digest']):

@@ -27,11 +27,12 @@ class BundleTests(unittest.TestCase):
     def test_bilingual_wizard_keeps_secret_keys_off_the_server(self):
         import contextlib
         for lang in ['ru','en']:
-            answers = ['203.0.113.10','18443','true','a'*64,'128','true']
+            answers = ['203.0.113.10','18443','128','true']
             with patch.object(preflight,'public_candidates',return_value=['203.0.113.10']),patch('builtins.input',side_effect=answers),contextlib.redirect_stdout(io.StringIO()):
                 values = cli.wizard(lang)
             self.assertEqual(values['PAWTALK_LANGUAGE'],lang)
-            self.assertEqual(values['PAWTALK_E2EE_KEY_ID'],'a'*64)
+            self.assertNotIn('PAWTALK_E2EE_KEY_ID',values)
+            self.assertNotIn('PAWTALK_E2EE',values)
             self.assertNotIn('PAWTALK_E2EE_KEY',values)
             self.assertNotIn('PAWTALK_SERVER_CHANNEL',values)
             self.assertNotIn('PAWTALK_MANAGER_CHANNEL',values)

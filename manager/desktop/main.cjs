@@ -22,7 +22,7 @@ let language=option('--lang')==='ru'?'ru':'en',win,tray,quitting=false,busy=null
 let state={state:'unavailable'};
 const t=key=>strings[language][key]||strings[language].failed;
 const command=(file,args,timeout=5000)=>new Promise((resolve,reject)=>execFile(file,args,{windowsHide:true,timeout,maxBuffer:2*1024*1024},(error,stdout)=>error?reject(error):resolve(stdout)));
-const status=()=>({...state,language,busy,operations:[...(busy?[busy]:[]),...checks],version,update:publicState.update||{status:'idle'},autoManager:publicState.autoManager??false});
+const status=()=>({...state,state:(snapshot?.setupRequired??publicState.setupRequired)?'not-configured':state.state,language,busy,operations:[...(busy?[busy]:[]),...checks],version,initialized:snapshot?.initialized,update:publicState.update||{status:'idle'},autoManager:publicState.autoManager??false});
 function publish(){if(win&&!win.isDestroyed())win.webContents.send('manager:status',status());refreshTray();}
 async function refresh(){
   if(refreshing)return;
@@ -55,7 +55,7 @@ function refreshTray(){
 }
 async function show(){ensureTray();if(showWindow)await showWindow();}
 async function showError(error){await show();win?.webContents.send('manager:status',{...status(),error:error.code||error.message||'failed'});}
-const allowed=new Set(['snapshot','apply','start','stop','copy-password','copy-invitation','reset-password','backup-create','backup-restore','backup-delete','diagnostics','logs','check-updates','check-server-updates','install-manager-update','install-server-update','select-server-package','install-server-package']);
+const allowed=new Set(['snapshot','apply','setup-server','start','stop','copy-initial-admin','backup-create','backup-restore','backup-delete','diagnostics','logs','check-updates','check-server-updates','install-manager-update','install-server-update','select-server-package','install-server-package']);
 async function perform(action,payload={}){
   if(!allowed.has(action)||!payload||typeof payload!=='object'||JSON.stringify(payload).length>65536)throw Object.assign(Error('invalid'),{code:'invalid'});
   const checking=['check-updates','check-server-updates'].includes(action);
@@ -67,15 +67,15 @@ async function perform(action,payload={}){
       if(choice.canceled)return null;
       return await broker.request('inspect-server-package',{path:choice.filePaths[0]});
     }
-    const copy=action==='copy-password'||action==='copy-invitation'||action==='reset-password';
-    const value=await broker.request(copy?(action==='reset-password'?'reset-password':'invitation'):action,payload);
-    if(copy){if(value.unavailable)throw Object.assign(Error('passwordUnavailable'),{code:'passwordUnavailable'});await clipboard.writeText(action==='copy-password'?value.password:value.url);return {copied:true};}
+    const copy=action==='copy-initial-admin';
+    const value=await broker.request(copy?'initial-admin':action,payload);
+    if(copy){if(value.unavailable){if(snapshot)snapshot.initialized=true;publish();throw Object.assign(Error('alreadyInitialized'),{code:'alreadyInitialized'});}if(typeof value.url!=='string'||value.url.length>14000)throw Error('invalid');await clipboard.writeText(value.url);return {copied:true};}
     if(value?.values)snapshot=value;
     if(['check-updates','install-manager-update'].includes(action))publicState.update=value;
     return value;
   }finally{if(checking)checks.delete(action);else busy=null;publish();await refresh();}
 }
-async function exitManager(){await stopAndExit(()=>perform('stop'),finish);}
+async function exitManager(){if(snapshot?.setupRequired??publicState.setupRequired){await finish();return;}await stopAndExit(()=>perform('stop'),finish);}
 async function finish(){quitting=true;clearInterval(poll);tray?.destroy();tray=undefined;broker.close();control?.close();app.quit();}
 function authorized(event){if(!win||event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame)throw Error('Unauthorized Manager window');}
 app.on('window-all-closed',()=>{});

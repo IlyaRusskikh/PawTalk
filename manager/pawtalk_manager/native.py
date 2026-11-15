@@ -8,8 +8,6 @@ import subprocess
 import tarfile
 import time
 import zipfile
-import secrets
-import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from .config import atomic, save
@@ -35,7 +33,7 @@ def inspect_server_package(controller,file):
             if len(names)!=len(set(names)) or set(names) not in ({'package.json','server.zip'},{'package.json','server.zip','server-manifest.json'}): raise ValueError('Invalid Server package contents')
             if archive.getinfo('package.json').file_size>16384 or archive.getinfo('server.zip').file_size>256*1024*1024: raise ValueError('Server package too large')
             meta=json.loads(archive.read('package.json'))
-            if meta.get('format')!='pawtalk-server-package-v1' or meta.get('apiProtocol')!=1 or meta.get('dataSchema')!=1: raise ValueError('Unsupported Server package')
+            if meta.get('format')!='pawtalk-server-package-v1' or meta.get('apiProtocol')!=2 or meta.get('dataSchema')!=2: raise ValueError('Unsupported Server package')
             version=meta['version']; raw=archive.read('server.zip')
             if hashlib.sha256(raw).hexdigest()!=meta['sha256']: raise ValueError('Server package checksum mismatch')
             if 'server-manifest.json' in names:
@@ -65,7 +63,7 @@ def inspect_server_package(controller,file):
         manifest=release.verify(signed,'server',keys)
         if manifest['version']!=version or manifest.get('windows')!=artifact: raise ValueError('Server package does not match signed manifest')
     else:
-        manifest=dict(version=version,dataSchema=1,apiProtocol=1,digest='sha256:'+digest,windows=artifact,_signed='',_local=True)
+        manifest=dict(version=version,dataSchema=2,apiProtocol=2,digest='sha256:'+digest,windows=artifact,_signed='',_local=True)
     directory=controller.directory/'packages'
     directory.mkdir(parents=True,exist_ok=True);secure(directory)
     atomic(directory/(digest+'.zip'),raw)
@@ -137,7 +135,7 @@ def queue_manager_installer(controller,manifest):
 def schedule_manager_installer(controller,installer):
     task='PawTalk-Manager-Update-'+hashlib.sha256(str(controller.root).lower().encode()).hexdigest()[:16]
     quote=lambda value: subprocess.list2cmdline([str(value)])
-    arguments='/S /ROOT='+quote(controller.root)+' /CONFIG='+quote(controller.etc/'config.env')
+    arguments='/S /ROOT='+quote(controller.root)
     scheduler=str(Path(os.environ.get('SystemRoot',r'C:\Windows'))/'System32/schtasks.exe')
     # No clock trigger: /Run starts it exactly once. A near-future ONCE trigger
     # would run the installer a second time after the immediate /Run.
@@ -201,53 +199,13 @@ class NativeRuntime:
             raise RuntimeError('Server command failed; run pawtalkctl doctor')
         return result.stdout
 
-    def invitation(self,state,config,reset=False):
-        """Keep a recoverable Windows-only receipt, encrypted by user DPAPI.
+    def initialized(self,state,config):
+        from .admission import status
+        return status(lambda *args: self.command(state,config,*args))
 
-        Bind it to the actual password hash so an old backup or an external
-        reset never silently returns a stale password. Do not store E2EE keys.
-        """
-        bare = self.command(state,config,'info').decode().strip()
-        if not re.fullmatch(r'pawtalk://[^/\s]+/[a-f0-9]{64}',bare):
-            raise ValueError('Invalid room identity')
-        receipt = self.control/'invitation.dpapi'
-        initial = self.data(state)/'initial-password'
-        def binding():
-            saved = json.loads((self.data(state)/'state.json').read_text())
-            return hashlib.sha256(saved['PasswordHash'].encode()).hexdigest()
-        def remember(password):
-            encrypted = host('seal-credential',input=json.dumps(dict(password=password,binding=binding())).encode())
-            if encrypted.returncode:
-                raise RuntimeError('Unable to protect invitation with Windows DPAPI')
-            atomic(receipt,encrypted.stdout)
-            return dict(url=bare+'#password='+urllib.parse.quote(password,safe=''),password=password)
-        if reset:
-            password = secrets.token_urlsafe(18)
-            was_running = host('status-server',self.root).returncode == 0
-            self.stop(state,config)
-            try:
-                changed = subprocess.run([str(self.binary(state)),'serve','reset-password'],env=self.env(state,config),input=password.encode(),capture_output=True,timeout=15)
-                if changed.returncode:
-                    raise RuntimeError('Unable to reset server password')
-                result = remember(password)
-            finally:
-                if was_running:
-                    self.start(state,config)
-            if was_running:
-                self.healthy(state,config)
-            return result
-        if initial.is_file():
-            result = remember(initial.read_text().strip())
-            self.command(state,config,'initial-password')
-            return result
-        if receipt.is_file():
-            decrypted = host('unseal-credential',input=receipt.read_bytes())
-            if decrypted.returncode:
-                return None
-            saved = json.loads(decrypted.stdout)
-            if saved.get('binding') == binding() and isinstance(saved.get('password'),str):
-                return dict(url=bare+'#password='+urllib.parse.quote(saved['password'],safe=''),password=saved['password'])
-        return None
+    def invitation(self,state,config):
+        from .admission import initial_invitation
+        return initial_invitation(lambda *args: self.command(state,config,*args))
 
     def pull(self,state):
         artifact = state.get('windows')
@@ -359,7 +317,11 @@ class NativeRuntime:
         raw = self.command(state,config,'info').decode().strip()
         if not re.fullmatch(r'pawtalk://[^/\s]+/[a-f0-9]{64}',raw):
             raise ValueError('Invalid room identity')
-        return hashlib.sha256(raw.encode()).hexdigest()
+        from .admission import inspect_status
+        status = inspect_status(lambda *args: self.command(state,config,*args))
+        if status is None:
+            raise ValueError('Server does not support API 2 host status')
+        return hashlib.sha256(('pawtalk-host-v2\n'+raw+'\n'+status['serverId']).encode()).hexdigest()
 
     def healthy(self,state,config,expected=None,timeout=90):
         deadline = time.monotonic()+timeout
@@ -431,3 +393,111 @@ def serve(root):
                 break
             time.sleep(0.2)
         return child.wait()
+
+def manager_values(controller,language='ru'):
+    """Draft defaults are data only; reading this never installs or starts Server."""
+    from .config import DEFAULTS,read_config,validate
+    if (controller.etc/'config.env').exists():
+        return read_config(controller.etc/'config.env')
+    metadata=controller.directory/'manager.json'
+    if metadata.exists(): language=json.loads(metadata.read_text()).get('language',language)
+    return validate({**DEFAULTS,'PAWTALK_PUBLIC_IP':'127.0.0.1','PAWTALK_LANGUAGE':language})
+
+
+def install_manager_only(controller,source,language):
+    """Install the protected control plane without fetching any executable package."""
+    if language not in ('ru','en'): raise ValueError('Invalid language')
+    source=Path(source)
+    version=installed_desktop_version()
+    save(controller.directory/'manager.json',dict(version=version,language=language))
+    trust=controller.etc/'trust.json'
+    if not trust.exists(): atomic(trust,(source/'trust.json').read_bytes())
+    # Upgrading Manager preserves existing Server data and its stopped/running state.
+    # A fresh Manager registers no Server or maintenance service.
+    if controller.state_file.exists() and not (controller.directory/'setup.json').exists():
+        state,config=controller.state(),controller.config()
+        controller.runtime.prepare(state,config)
+        for action in ['install-server','install-manager','start-manager']:
+            if host(action,controller.root).returncode: raise RuntimeError('Windows service setup failed')
+        if os.environ.get('PAWTALK_INSTALL_KEEP_STOPPED')!='1':
+            controller.runtime.start(state,config)
+            controller.runtime.healthy(state,config,state.get('identity'))
+    return version
+
+
+def setup_server(controller,request,source):
+    """Explicit first-run operation, serialized by the same lock as later updates."""
+    import uuid
+    from . import release,preflight
+    from .config import validate,write_config,remove
+    journal=controller.directory/'setup.json'
+    pending=json.loads(journal.read_text()) if journal.exists() else {}
+    if controller.state_file.exists() and controller.state().get('project')!=pending.get('project'): raise ValueError('Server already configured')
+    fields={'PAWTALK_PUBLIC_IP','PAWTALK_PORT','PAWTALK_CHAT_MAX_MB','PAWTALK_SERVER_AUTO_UPDATE','PAWTALK_MANAGER_AUTO_UPDATE','PAWTALK_LANGUAGE'}
+    if set(request)!= {'source','id','expected','values'} or request['source'] not in ('local','published'):
+        raise ValueError('Invalid setup request')
+    old=manager_values(controller)
+    if request['expected']!=old: raise ValueError('Settings changed elsewhere')
+    values=request['values']
+    if not isinstance(values,dict) or set(values)!=fields or any(not isinstance(v,str) for v in values.values()): raise ValueError('Invalid settings fields')
+    config=validate({**old,**values})
+    keys=json.loads((controller.etc/'trust.json').read_text())
+    archive=None
+    if request['source']=='local':
+        identifier=request['id']
+        if not isinstance(identifier,str) or not re.fullmatch(r'[a-f0-9]{64}',identifier): raise ValueError('Invalid Server package identifier')
+        directory=controller.directory/'packages'
+        manifest=json.loads((directory/(identifier+'.json')).read_text())
+        archive=directory/(identifier+'.zip')
+        if manifest['windows']['sha256']!=identifier or hashlib.sha256(archive.read_bytes()).hexdigest()!=identifier: raise ValueError('Staged Server package changed')
+        if manifest.get('_local') is not True:
+            manifest=release.verify(manifest['_signed'],'server',keys)
+            if manifest['windows']['sha256']!=identifier: raise ValueError('Signed package changed')
+    else:
+        if request['id'] is not None: raise ValueError('Invalid published Server selection')
+        manifest=release.discover('server',keys)
+        if manifest is None: raise ValueError('No compatible published Server')
+    if manifest.get('apiProtocol')!=2 or manifest.get('dataSchema')!=2 or not manifest.get('windows'):
+        raise ValueError('Unsupported Server package')
+    if manifest.get('_local') is True: config['PAWTALK_SERVER_AUTO_UPDATE']='false'
+    if controller.state_file.exists():
+        controller.runtime.stop(controller.state(),manager_values(controller))
+        remove(controller.state_file)
+    preflight.check(config)
+    project=pending.get('project','pawtalk-'+uuid.uuid4().hex[:12])
+    if not re.fullmatch(r'pawtalk-[a-f0-9]{12}',project): raise ValueError('Invalid setup journal')
+    state=dict(project=project,volume=project,version=manifest['version'],image=release.IMAGE+'@'+manifest['digest'],dataSchema=2,
+               managerVersion=installed_desktop_version(),serverManifest=manifest['_signed'],windows=manifest['windows'])
+    if manifest.get('_local') is True: state['localPackage']=manifest['windows']['sha256']
+    previous=getattr(controller.runtime,'server_bundle',None)
+    controller.runtime.server_bundle=archive
+    try:
+        controller.runtime.pull(state)
+        save(journal,dict(project=project,config=config))
+        controller.runtime.create_volume(state)
+        if pending.get('config',{}).get('PAWTALK_PUBLIC_IP',config['PAWTALK_PUBLIC_IP'])!=config['PAWTALK_PUBLIC_IP'] and (controller.runtime.data(state)/'state.json').exists():
+            controller.runtime.command(state,config,'rebind')
+        write_config(controller.etc/'config.env',config)
+        atomic(controller.template,(Path(source)/'compose.server.yaml').read_bytes())
+        save(controller.state_file,state)
+        controller.runtime.start(state,config)
+        state['identity']=controller.runtime.healthy(state,config)
+        save(controller.state_file,state)
+        for action in ['install-manager','start-manager']:
+            if host(action,controller.root).returncode: raise RuntimeError('Windows service setup failed')
+        remove(journal)
+    except Exception:
+        try: host('stop-manager',controller.root)
+        except (OSError,ValueError,RuntimeError): pass
+        try: controller.runtime.stop(state,config)
+        except (OSError,ValueError,RuntimeError): pass
+        try:
+            if controller.state_file.exists() and controller.state().get('project')==project:
+                remove(controller.state_file)
+                runtime=controller.directory/'runtime.json'
+                if runtime.exists(): remove(runtime)
+        except OSError: pass
+        try: write_config(controller.etc/'config.env',old)
+        except OSError: pass
+        raise
+    finally: controller.runtime.server_bundle=previous

@@ -83,13 +83,13 @@ type trayNotify struct {
 	BalloonIcon         uintptr
 }
 
-type trayLabels struct{ Running, Stopped, Pending, Unavailable, Start, Stop, Quit, Exit, Failure, Invite, Reset, Settings string }
+type trayLabels struct{ Running, Stopped, Pending, Unavailable, Start, Stop, Quit, Exit, Failure, Invite, Settings string }
 
 func trayText(lang string) trayLabels {
 	if lang == "ru" {
-		return trayLabels{"Сервер работает", "Сервер остановлен", "Сервер запускается или останавливается", "Служба сервера недоступна", "Включить сервер", "Отключить сервер", "Остановить сервер и выйти", "Закрыть значок (сервер продолжит работу)", "Не удалось изменить состояние сервера. Проверьте службу и права администратора.", "Скопировать приглашение с паролем", "Сменить пароль и скопировать приглашение", "Настройки сервера…"}
+		return trayLabels{"Сервер работает", "Сервер остановлен", "Сервер запускается или останавливается", "Служба сервера недоступна", "Включить сервер", "Отключить сервер", "Остановить сервер и выйти", "Закрыть значок (сервер продолжит работу)", "Не удалось изменить состояние сервера. Проверьте службу и права администратора.", "Создать ссылку первого администратора", "Настройки сервера…"}
 	}
-	return trayLabels{"Server running", "Server stopped", "Server starting or stopping", "Server service unavailable", "Start server", "Stop server", "Stop server and exit", "Close tray (server keeps running)", "Could not change server state. Check the service and administrator permissions.", "Copy invitation with password", "Reset password and copy invitation", "Server settings…"}
+	return trayLabels{"Server running", "Server stopped", "Server starting or stopping", "Server service unavailable", "Start server", "Stop server", "Stop server and exit", "Close tray (server keeps running)", "Could not change server state. Check the service and administrator permissions.", "Create first administrator link", "Server settings…"}
 }
 
 func trayState(root string) (svc.State, error) {
@@ -122,7 +122,7 @@ func trayStatus(state svc.State, err error, labels trayLabels) string {
 }
 
 func trayElevate(action, root, lang string) error {
-	if action != "start" && action != "stop" && action != "stop-exit" && action != "invite" && action != "reset-invite" && action != "settings" {
+	if action != "start" && action != "stop" && action != "stop-exit" && action != "invite" && action != "settings" {
 		return errors.New("invalid tray action")
 	}
 	args := []string{"--tray-control", action, root, lang}
@@ -151,6 +151,14 @@ func serverTrayClass(root string) string {
 func closeTray(root string) error {
 	return closeTrayMode(root, false)
 }
+
+// Only close an already running window from an older installed Manager during
+// upgrades. Current sources contain no implementation that can create this UI.
+func legacySettingsClass(root string) string {
+	absolute, _ := filepath.Abs(root)
+	hash := sha256.Sum256([]byte(strings.ToLower(filepath.Clean(absolute))))
+	return fmt.Sprintf("PawTalk.Server.Settings.%x", hash[:8])
+}
 func closeTrayMode(root string, restart bool) error {
 	if err := closeDesktop(root, restart); err != nil {
 		return err
@@ -159,7 +167,7 @@ func closeTrayMode(root string, restart bool) error {
 	if err != nil {
 		return err
 	}
-	if err := closeServerWindow(settingsClass(root)); err != nil {
+	if err := closeServerWindow(legacySettingsClass(root)); err != nil {
 		return err
 	}
 	return closeServerWindow(serverTrayClass(absolute))
@@ -233,7 +241,7 @@ func runTray(root, lang string) error {
 	}
 	command := func(id uintptr) {
 		switch id {
-		case 1, 2, 4, 5, 6, 7:
+		case 1, 2, 4, 5, 7:
 			action := "start"
 			if id == 7 {
 				action = "settings"
@@ -246,16 +254,6 @@ func runTray(root, lang string) error {
 			}
 			if id == 5 {
 				action = "invite"
-			}
-			if id == 6 {
-				message := "Reset the room password and restart the server? Current calls will be interrupted and old password-bearing invitations will stop working."
-				if lang == "ru" {
-					message = "Сменить пароль комнаты и перезапустить сервер? Текущие звонки прервутся, старые приглашения с паролем перестанут работать."
-				}
-				if trayCall("MessageBoxW", notify.Window, wide(message), wide("PawTalk Server"), 0x34) != 6 {
-					return
-				}
-				action = "reset-invite"
 			}
 			if err := trayElevate(action, root, lang); err != nil {
 				trayError(lang)
@@ -288,7 +286,6 @@ func runTray(root, lang string) error {
 		}
 		trayCall("AppendMenuW", popup, 0x800, 0, 0)
 		trayCall("AppendMenuW", popup, inviteFlags, 5, wide(labels.Invite))
-		trayCall("AppendMenuW", popup, inviteFlags, 6, wide(labels.Reset))
 		trayCall("AppendMenuW", popup, inviteFlags, 7, wide(labels.Settings))
 		trayCall("AppendMenuW", popup, 0x800, 0, 0)
 		quitFlags := uintptr(2)
@@ -426,7 +423,7 @@ normalTray:
 		lang, args = args[1], args[2:]
 	}
 	if len(args) == 4 && args[0] == "--tray-control" {
-		if (args[1] != "start" && args[1] != "stop" && args[1] != "stop-exit" && args[1] != "invite" && args[1] != "reset-invite" && args[1] != "settings") || (args[3] != "ru" && args[3] != "en") {
+		if (args[1] != "start" && args[1] != "stop" && args[1] != "stop-exit" && args[1] != "invite" && args[1] != "settings") || (args[3] != "ru" && args[3] != "en") {
 			return 1
 		}
 		if args[1] == "settings" {
@@ -435,8 +432,8 @@ normalTray:
 			}
 			return 0
 		}
-		if args[1] == "invite" || args[1] == "reset-invite" {
-			if copyInvitation(args[2], args[3], args[1] == "reset-invite") != nil {
+		if args[1] == "invite" {
+			if copyInitialAdmin(args[2], args[3]) != nil {
 				return 1
 			}
 			return 0

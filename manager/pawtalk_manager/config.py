@@ -14,7 +14,7 @@ if WINDOWS:
 else:
     import fcntl
 
-DEFAULTS = dict(PAWTALK_PORT='18443',PAWTALK_E2EE='false',PAWTALK_E2EE_KEY_ID='',
+DEFAULTS = dict(PAWTALK_PORT='18443',
                 PAWTALK_CHAT_MAX_MB='128',PAWTALK_UPDATE_PROXY='true',
                 PAWTALK_BACKUP_KEEP='5',
                 PAWTALK_SERVER_AUTO_UPDATE='false',PAWTALK_MANAGER_AUTO_UPDATE='false',
@@ -32,12 +32,9 @@ def validate(values):
         raise ValueError('Expected unicast IPv4 address')
     if not re.fullmatch(r'[0-9]{1,5}', values['PAWTALK_PORT']) or not 1024 <= int(values['PAWTALK_PORT']) <= 65532:
         raise ValueError('Port must be 1024..65532')
-    for key in ['PAWTALK_E2EE','PAWTALK_UPDATE_PROXY','PAWTALK_SERVER_AUTO_UPDATE','PAWTALK_MANAGER_AUTO_UPDATE']:
+    for key in ['PAWTALK_UPDATE_PROXY','PAWTALK_SERVER_AUTO_UPDATE','PAWTALK_MANAGER_AUTO_UPDATE']:
         if values[key] not in ('true','false'):
             raise ValueError('Invalid boolean: '+key)
-    key_id = values['PAWTALK_E2EE_KEY_ID']
-    if (key_id or values['PAWTALK_E2EE'] == 'true') and not re.fullmatch(r'[a-f0-9]{64}',key_id):
-        raise ValueError('E2EE requires the SHA-256 key ID, never the secret key')
     if not re.fullmatch(r'[0-9]{1,7}',values['PAWTALK_CHAT_MAX_MB']) or int(values['PAWTALK_CHAT_MAX_MB']) > 1048576:
         raise ValueError('Invalid chat limit')
     if values['PAWTALK_LANGUAGE'] not in ('ru','en'):

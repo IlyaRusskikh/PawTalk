@@ -30,6 +30,7 @@ class MemoryRoom:
         self.status = 'healthy'
         self.restarts = 0
 
+    def initialized(self,state,config): return True
     def pull(self,state): pass
     def verify_image(self,state): pass
     def create_volume(self,state): pass
@@ -52,13 +53,13 @@ class MemoryRoom:
         if self.backup_error:
             raise OSError('injected full disk')
         with tarfile.open(file,'w') as archive:
-            for name,data in [('state.json',b'identity'),('chat.sqlite',self.data)]:
+            for name,data in [('state.json',b'identity'),('membership-v2.sqlite',self.data)]:
                 info = tarfile.TarInfo(name)
                 info.size = len(data)
                 archive.addfile(info,io.BytesIO(data))
     def import_backup(self,state,file):
         with tarfile.open(file) as archive:
-            self.data = archive.extractfile('chat.sqlite').read()
+            self.data = archive.extractfile('membership-v2.sqlite').read()
     def container(self,state,config):
         return {'State':{'Running':self.running,'Health':{'Status':self.status}}}
     def compose(self,state,config,*args): self.restarts += 1
@@ -71,7 +72,7 @@ class ControllerTests(unittest.TestCase):
         self.c = Controller(self.temp.name,self.room)
         template = Path(self.temp.name)/'source.yaml'
         template.write_text('services: {}')
-        self.manifest = dict(version='0.9.0',digest='sha256:'+'a'*64,dataSchema=1,apiProtocol=1,windows={'name':'synthetic.zip','sha256':'a'*64,'size':1},_signed='synthetic receipt; verification tested separately')
+        self.manifest = dict(version='0.9.0',digest='sha256:'+'a'*64,dataSchema=2,apiProtocol=2,windows={'name':'synthetic.zip','sha256':'a'*64,'size':1},_signed='synthetic receipt; verification tested separately')
         self.c.install({'PAWTALK_PUBLIC_IP':'203.0.113.10'},self.manifest,template,'0.1.0')
 
     def tearDown(self): self.temp.cleanup()
@@ -215,7 +216,7 @@ class ControllerTests(unittest.TestCase):
     def test_schema_and_downgrade_blocked_before_stopping(self):
         self.assertFalse(self.c.update_server({**self.manifest,'version':'0.8.0'}))
         with self.assertRaises(ValueError):
-            self.c.update_server({**self.manifest,'version':'0.9.1','dataSchema':2})
+            self.c.update_server({**self.manifest,'version':'0.9.1','dataSchema':3})
         self.assertTrue(self.room.running)
         self.assertFalse(self.c.journal.exists())
 
