@@ -11,9 +11,11 @@ documentation and landing pages as applicable. Push working branches within the
 authorized task after affected final-state checks and public diff review.
 
 Merge requires current successful PR CI and separate explicit owner permission.
-Default to squash; delete the working branch after merge. Tags require separate
-permission and must point to commits contained in main. Publication requires its
-own approval after verification/build; a tag approval is not publication approval.
+Default to squash; delete the working branch after merge. Tags require successful
+Release Candidate Preflight on the exact unchanged main SHA
+with all selected artifacts ready, then separate release-tag permission. Publication
+requires its own release-publish approval and reuses those bytes without rebuild.
+A tag approval is not publication approval.
 Never replace/delete published tags, binaries or images, or rewrite main history.
 Fix post-merge errors in a new branch/PR; a failed pushed release tag gets a new
 version. Documentation-only changes need no component release/version bump.

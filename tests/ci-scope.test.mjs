@@ -37,7 +37,7 @@ test('component scope fails closed and PR default retains all components', () =>
   for (const input of ['', 'other', 'Client', 'all\n']) assert.throws(() => ciScope(input));
   assert.equal(check.on.workflow_call.inputs.component.default, 'all');
   assert.equal(check.on.workflow_dispatch.inputs.component.default, 'all');
-  assert.equal(release.jobs.verify.with.component, '${{ needs.plan.outputs.component }}');
+  assert.equal(release.jobs.verify.with.component, '${{ matrix.component }}');
   for (const job of [check.jobs.server, check.jobs.windows]) {
     const scope = job.steps.find(step => step.id === 'scope');
     assert.equal(scope.run, 'node scripts/ci-scope.mjs');
@@ -100,9 +100,9 @@ test('prepared publisher artifact names and extraction paths match independent u
     assert.ok(upload.with.path.startsWith(`release/${component}/`));
     assert.ok(!upload.with.path.includes('\n'));
     const prepared = preparation.steps.find(step => step.uses?.startsWith('actions/upload-artifact@'));
-    const publisher = release.jobs[component].steps.find(step => step.with?.name === prepared.with.name);
+    const publisher = release.jobs[`publish-${component}`].steps.find(step => step.with?.name === prepared.with.name);
     assert.ok(publisher, `${component} consumes complete prepared output`);
-    assert.equal(publisher.with.path, component === 'server' ? 'release' : 'release/manager');
+    assert.equal(publisher.with.path, `candidate/${component}`);
   }
 });
 

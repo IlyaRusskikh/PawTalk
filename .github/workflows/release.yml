@@ -1,69 +1,142 @@
-name: Publish component release
-on:
-  push:
-    tags: ['client-v*', 'server-v*', 'manager-v*']
+name: Release Candidate Preflight
+'on':
+  workflow_dispatch:
+    inputs:
+      components:
+        description: One component, comma-separated set, or all
+        type: string
+        default: all
+        required: true
+      promote:
+        description: After preflight request separate tag and publication approvals
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-candidate-main
   cancel-in-progress: false
+env:
+  COMPONENTS: ${{ inputs.components }}
+  PAWTALK_CLIENT_CHANNEL: ${{ vars.PAWTALK_CLIENT_CHANNEL || 'preview' }}
+  PAWTALK_SERVER_CHANNEL: ${{ vars.PAWTALK_SERVER_CHANNEL || 'preview' }}
+  PAWTALK_MANAGER_CHANNEL: ${{ vars.PAWTALK_MANAGER_CHANNEL || 'preview' }}
 jobs:
   plan:
+    if: github.ref == 'refs/heads/main' && github.repository == 'IlyaRusskikh/PawTalk'
     runs-on: ubuntu-latest
     outputs:
-      component: ${{ steps.route.outputs.component }}
-      version: ${{ steps.route.outputs.version }}
-      channel: ${{ steps.route.outputs.channel }}
+      components: ${{ steps.plan.outputs.components }}
+      client_tag: ${{ steps.plan.outputs.client_tag }}
+      client_version: ${{ steps.plan.outputs.client_version }}
+      client_channel: ${{ steps.plan.outputs.client_channel }}
+      server_tag: ${{ steps.plan.outputs.server_tag }}
+      server_version: ${{ steps.plan.outputs.server_version }}
+      server_channel: ${{ steps.plan.outputs.server_channel }}
+      manager_tag: ${{ steps.plan.outputs.manager_tag }}
+      manager_version: ${{ steps.plan.outputs.manager_version }}
+      manager_channel: ${{ steps.plan.outputs.manager_channel }}
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-      - name: Require tag commit contained in main
-        run: |
-          git fetch origin main
-          git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/main
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: '24.22.1'
-      - id: route
-        env:
-          PAWTALK_CLIENT_CHANNEL: ${{ vars.PAWTALK_CLIENT_CHANNEL || 'preview' }}
-          PAWTALK_SERVER_CHANNEL: ${{ vars.PAWTALK_SERVER_CHANNEL || 'preview' }}
-          PAWTALK_MANAGER_CHANNEL: ${{ vars.PAWTALK_MANAGER_CHANNEL || 'preview' }}
-        run: |
-          node scripts/release-contract.mjs "$GITHUB_REF_NAME" > /tmp/route.json
-          node --input-type=module -e "import fs from 'node:fs'; const p=JSON.parse(fs.readFileSync('/tmp/route.json')); fs.appendFileSync(process.env.GITHUB_OUTPUT, 'component='+p.component+'\nversion='+p.version+'\nchannel='+p.channel+'\n');"
-      - name: Require reviewed component release notes
-        run: |
-          notes="docs/releases/$GITHUB_REF_NAME.md"
-          if [ ! -s "$notes" ]; then
-            echo "Missing release description: $notes (see docs/RELEASING.md)" >&2
-            exit 1
-          fi
-      - name: Refuse replacing a published release
+          node-version: 24.22.1
+      - id: plan
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          # A non-404 API error must fail rather than imply the release is absent.
-          code=$(curl -sS -o /tmp/existing.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME")
-          test "$code" = 404
-  verify:
+        run: node scripts/release-candidate.mjs plan
+  infrastructure:
     needs: plan
-    uses: ./.github/workflows/check.yml
-    with:
-      component: ${{ needs.plan.outputs.component }}
-      client-prerelease: ${{ needs.plan.outputs.channel == 'preview' }}
-    secrets:
-      PAWTALK_UPDATE_PRIVATE_KEY: ${{ secrets.PAWTALK_UPDATE_PRIVATE_KEY }}
-  prepare-server:
-    if: needs.plan.outputs.component == 'server'
-    needs: [plan, verify]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: '24.22.1'
+          node-version: 24.22.1
+      - run: npm ci --ignore-scripts
+      - run: node scripts/check-agents.mjs
+      - run: node scripts/check-website.mjs
+      - run: >-
+          node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs
+          tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/release-candidate.test.mjs
+      - name: Verify prepared OCI digest through isolated local registry
+        run: node scripts/release-image-smoke.mjs
+      - name: Lint all GitHub Actions workflows
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
+  verify:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.plan.outputs.components) }}
+    uses: ./.github/workflows/check.yml
+    with:
+      component: ${{ matrix.component }}
+      skip-infrastructure: true
+      candidate: true
+  prepare-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.22.1
+      - uses: actions/download-artifact@v7
+        with:
+          name: pawtalk-windows
+          path: release/client
+      - name: Sign exact verified Client installer
+        env:
+          PAWTALK_UPDATE_PRIVATE_KEY: ${{ secrets.PAWTALK_UPDATE_PRIVATE_KEY }}
+          PAWTALK_PRERELEASE: ${{ needs.plan.outputs.client_channel == 'preview' && 'true' || 'false' }}
+        run: node scripts/sign-update.mjs release/client
+      - name: Check complete prepared archives
+        env:
+          VERSION: ${{ needs.plan.outputs.client_version }}
+        run: |-
+          unzip -t "release/client/PawTalk.Licenses.$VERSION.zip"
+          unzip -Z1 "release/client/PawTalk.Licenses.$VERSION.zip" | grep -x LICENSE
+          unzip -Z1 "release/client/PawTalk.Licenses.$VERSION.zip" | grep -x THIRD_PARTY_NOTICES.md
+          unzip -Z1 "release/client/PawTalk.Licenses.$VERSION.zip" | grep '^licenses/'
+      - id: seal
+        name: Verify signatures, completeness and seal source-bound receipt
+        run: node scripts/release-candidate.mjs seal
+      - uses: actions/upload-artifact@v6
+        with:
+          name: pawtalk-client-prepared
+          if-no-files-found: error
+          retention-days: 7
+          path: release/client/*
+    if: contains(fromJSON(needs.plan.outputs.components), 'client')
+    needs:
+      - plan
+      - verify
+      - infrastructure
+    env:
+      COMPONENTS: client
+    outputs:
+      digest: ${{ steps.seal.outputs.digest }}
+  prepare-server:
+    if: contains(fromJSON(needs.plan.outputs.components), 'server')
+    needs:
+      - plan
+      - verify
+      - infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.22.1
       - uses: actions/download-artifact@v7
         with:
           name: pawtalk-server-windows
@@ -78,38 +151,64 @@ jobs:
           file: server/standalone.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: false
-          outputs: type=oci,dest=release/server-image.tar
+          outputs: type=oci,dest=release/server/server-image.tar
           labels: |
             org.opencontainers.image.source=https://github.com/IlyaRusskikh/PawTalk
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ needs.plan.outputs.version }}
+            org.opencontainers.image.version=${{ needs.plan.outputs.server_version }}
             org.opencontainers.image.licenses=AGPL-3.0-only
+      - uses: actions/download-artifact@v7
+        if: contains(fromJSON(needs.plan.outputs.components), 'client')
+        with:
+          name: pawtalk-client-core
+          path: release/client-core
+      - name: Compare separately built Client and permanent Server cores
+        if: contains(fromJSON(needs.plan.outputs.components), 'client')
+        run: node scripts/release-candidate.mjs compare-core
       - name: Sign prepared Server digest and Windows package
         env:
           PAWTALK_SERVER_PRIVATE_KEY: ${{ secrets.PAWTALK_SERVER_PRIVATE_KEY }}
-          PAWTALK_PRERELEASE: ${{ needs.plan.outputs.channel == 'preview' && 'true' || 'false' }}
+          PAWTALK_PRERELEASE: ${{ needs.plan.outputs.server_channel == 'preview' && 'true' || 'false' }}
         run: |
-          skopeo inspect --raw oci-archive:release/server-image.tar > /tmp/server-index.json
+          skopeo inspect --raw oci-archive:release/server/server-image.tar > /tmp/server-index.json
           digest=$(sha256sum /tmp/server-index.json | cut -d ' ' -f 1)
           export PAWTALK_IMAGE_DIGEST="sha256:$digest"
           node scripts/release-metadata.mjs
+      - name: Check complete prepared archives
+        env:
+          VERSION: ${{ needs.plan.outputs.server_version }}
+        run: |-
+          unzip -t "release/server/PawTalk.Server.$VERSION.windows-x64.zip"
+          skopeo copy --all --preserve-digests oci-archive:release/server/server-image.tar "oci:$RUNNER_TEMP/verified-server:checked"
+      - id: seal
+        name: Verify signatures, completeness and seal source-bound receipt
+        run: node scripts/release-candidate.mjs seal
       - uses: actions/upload-artifact@v6
         with:
           name: pawtalk-server-prepared
           if-no-files-found: error
-          path: |
-            release/server-image.tar
-            release/server/server-manifest.json
-            release/server/PawTalk.Server.*.windows-x64.zip
+          retention-days: 7
+          path: release/server/*
+    env:
+      COMPONENTS: server
+      PAWTALK_RELEASE_TAG: ${{ needs.plan.outputs.server_tag }}
+    outputs:
+      digest: ${{ steps.seal.outputs.digest }}
   prepare-manager:
-    if: needs.plan.outputs.component == 'manager'
-    needs: [plan, verify]
+    if: contains(fromJSON(needs.plan.outputs.components), 'manager')
+    needs:
+      - plan
+      - verify
+      - infrastructure
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: '24.22.1'
+          node-version: 24.22.1
       - uses: actions/download-artifact@v7
         with:
           name: pawtalk-manager-windows
@@ -117,105 +216,236 @@ jobs:
       - name: Sign complete Manager bundle
         env:
           PAWTALK_MANAGER_PRIVATE_KEY: ${{ secrets.PAWTALK_MANAGER_PRIVATE_KEY }}
-          PAWTALK_PRERELEASE: ${{ needs.plan.outputs.channel == 'preview' && 'true' || 'false' }}
+          PAWTALK_PRERELEASE: ${{ needs.plan.outputs.manager_channel == 'preview' && 'true' || 'false' }}
         run: node scripts/release-metadata.mjs
+      - name: Check complete prepared archives
+        env:
+          VERSION: ${{ needs.plan.outputs.manager_version }}
+        run: tar -tzf "release/manager/PawTalk.Manager.$VERSION.tar.gz"
+      - id: seal
+        name: Verify signatures, completeness and seal source-bound receipt
+        run: node scripts/release-candidate.mjs seal
       - uses: actions/upload-artifact@v6
         with:
           name: pawtalk-manager-prepared
           if-no-files-found: error
+          retention-days: 7
           path: release/manager/*
-  client:
-    environment: release-publish
-    if: needs.plan.outputs.component == 'client'
-    needs: [plan, verify]
+    env:
+      COMPONENTS: manager
+      PAWTALK_RELEASE_TAG: ${{ needs.plan.outputs.manager_tag }}
+    outputs:
+      digest: ${{ steps.seal.outputs.digest }}
+  preflight:
+    if: >-
+      always() && needs.plan.result == 'success' && needs.verify.result == 'success' && needs.infrastructure.result == 'success' &&
+      !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    needs:
+      - plan
+      - verify
+      - infrastructure
+      - prepare-client
+      - prepare-server
+      - prepare-manager
+    runs-on: ubuntu-latest
+    outputs:
+      receipts: ${{ steps.receipts.outputs.value }}
+    env:
+      RECEIPTS: >-
+        { "client": "${{ needs.prepare-client.outputs.digest }}", "server": "${{ needs.prepare-server.outputs.digest }}", "manager": "${{
+        needs.prepare-manager.outputs.digest }}" }
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.22.1
+      - run: sudo apt-get update && sudo apt-get install -y skopeo
+      - uses: actions/download-artifact@v7
+        with:
+          name: pawtalk-client-prepared
+          path: candidate/client
+        if: contains(fromJSON(needs.plan.outputs.components), 'client')
+      - uses: actions/download-artifact@v7
+        with:
+          name: pawtalk-server-prepared
+          path: candidate/server
+        if: contains(fromJSON(needs.plan.outputs.components), 'server')
+      - uses: actions/download-artifact@v7
+        with:
+          name: pawtalk-manager-prepared
+          path: candidate/manager
+        if: contains(fromJSON(needs.plan.outputs.components), 'manager')
+      - run: node scripts/release-candidate.mjs validate
+      - id: receipts
+        run: echo "value=$RECEIPTS" >> "$GITHUB_OUTPUT"
+      - name: Report component readiness
+        run: >
+          node --input-type=module <<'NODE'
+
+          import fs from "node:fs"; for(const [c,d] of Object.entries(JSON.parse(process.env.RECEIPTS))) if(d)
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `- ${c}: READY; source ${process.env.GITHUB_SHA}; receipt ${d}\n`);
+
+          NODE
+  tag:
+    if: always() && needs.plan.result == 'success' && needs.preflight.result == 'success' && inputs.promote && github.ref == 'refs/heads/main'
+    needs:
+      - plan
+      - preflight
+    environment: release-tag
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      RECEIPTS: ${{ needs.preflight.outputs.receipts }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.22.1
+      - run: sudo apt-get update && sudo apt-get install -y skopeo
       - uses: actions/download-artifact@v7
         with:
-          name: pawtalk-windows
-          path: release
-      - name: Publish Client assets only
+          name: pawtalk-client-prepared
+          path: candidate/client
+        if: contains(fromJSON(needs.plan.outputs.components), 'client')
+      - uses: actions/download-artifact@v7
+        with:
+          name: pawtalk-server-prepared
+          path: candidate/server
+        if: contains(fromJSON(needs.plan.outputs.components), 'server')
+      - uses: actions/download-artifact@v7
+        with:
+          name: pawtalk-manager-prepared
+          path: candidate/manager
+        if: contains(fromJSON(needs.plan.outputs.components), 'manager')
+      - name: Create only checked immutable tags
         env:
           GH_TOKEN: ${{ github.token }}
-          CHANNEL: ${{ needs.plan.outputs.channel }}
-        run: |
-          flags=(--latest=false)
-          if [ "$CHANNEL" = preview ]; then flags=(--prerelease --latest=false); fi
-          title=$(head -n 1 "docs/releases/$GITHUB_REF_NAME.md")
-          title="${title#\# }"
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/PawTalk.Setup.*.exe release/PawTalk.Licenses.*.zip release/SHA256SUMS.txt release/update-manifest.json
-          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false "${flags[@]}"
-  server:
+        run: node scripts/release-candidate.mjs tag
+  report:
+    if: always()
+    needs:
+      - plan
+      - verify
+      - infrastructure
+      - prepare-client
+      - prepare-server
+      - prepare-manager
+      - preflight
+      - tag
+      - publish-client
+      - publish-server
+      - publish-manager
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report exact stage outcomes, including failures and rejections
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: >
+          node --input-type=module <<'NODE'
+
+          import fs from "node:fs"; for(const [name,job] of Object.entries(JSON.parse(process.env.RESULTS)))
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `- ${name}: ${job.result}\n`);
+
+          NODE
+  publish-client:
+    if: >-
+      always() && needs.preflight.result == 'success' && needs.tag.result == 'success' && contains(fromJSON(needs.plan.outputs.components),
+      'client') && github.ref == 'refs/heads/main'
+    needs:
+      - plan
+      - preflight
+      - tag
     environment: release-publish
-    if: needs.plan.outputs.component == 'server'
-    needs: [plan, verify, prepare-server]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RECEIPTS: ${{ needs.preflight.outputs.receipts }}
+      COMPONENTS: client
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.22.1
+      - uses: actions/download-artifact@v7
+        with:
+          name: pawtalk-client-prepared
+          path: candidate/client
+      - name: Publish only prepared artifacts; never rebuild
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-candidate.mjs publish
+  publish-server:
+    if: >-
+      always() && needs.preflight.result == 'success' && needs.tag.result == 'success' && contains(fromJSON(needs.plan.outputs.components),
+      'server') && github.ref == 'refs/heads/main'
+    needs:
+      - plan
+      - preflight
+      - tag
+    environment: release-publish
     runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
+    env:
+      RECEIPTS: ${{ needs.preflight.outputs.receipts }}
+      COMPONENTS: server
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: '24.22.1'
+          node-version: 24.22.1
+      - run: sudo apt-get update && sudo apt-get install -y skopeo
       - uses: actions/download-artifact@v7
         with:
           name: pawtalk-server-prepared
-          path: release
-      - run: sudo apt-get update && sudo apt-get install -y skopeo
-      - name: Refuse replacing image version
+          path: candidate/server
+      - name: Publish only prepared artifacts; never rebuild
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.plan.outputs.version }}
-        run: |
-          # Query the authenticated registry; distinguish missing from authorization/network errors.
-          token=$(curl --fail -sS -u "$GITHUB_ACTOR:$GH_TOKEN" 'https://ghcr.io/token?service=ghcr.io&scope=repository:ilyarusskikh/pawtalk-server:pull' | node -pe 'JSON.parse(fs.readFileSync(0)).token')
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $token" -H 'Accept: application/vnd.oci.image.index.v1+json' "https://ghcr.io/v2/ilyarusskikh/pawtalk-server/manifests/$VERSION")
-          test "$code" = 404
-      - name: Publish prepared image without changing its digest
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.plan.outputs.version }}
-        run: |
-          skopeo copy --all --preserve-digests --dest-creds "$GITHUB_ACTOR:$GH_TOKEN" oci-archive:release/server-image.tar "docker://ghcr.io/ilyarusskikh/pawtalk-server:$VERSION"
-      - name: Publish Server metadata and Windows package
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHANNEL: ${{ needs.plan.outputs.channel }}
-        run: |
-          flags=(--latest=false)
-          if [ "$CHANNEL" = preview ]; then flags+=(--prerelease); fi
-          title=$(head -n 1 "docs/releases/$GITHUB_REF_NAME.md")
-          title="${title#\# }"
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/server/server-manifest.json release/server/PawTalk.Server.*.windows-x64.zip
-          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false "${flags[@]}"
-  manager:
+        run: node scripts/release-candidate.mjs publish
+  publish-manager:
+    if: >-
+      always() && needs.preflight.result == 'success' && needs.tag.result == 'success' && contains(fromJSON(needs.plan.outputs.components),
+      'manager') && github.ref == 'refs/heads/main'
+    needs:
+      - plan
+      - preflight
+      - tag
     environment: release-publish
-    if: needs.plan.outputs.component == 'manager'
-    needs: [plan, verify, prepare-manager]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      RECEIPTS: ${{ needs.preflight.outputs.receipts }}
+      COMPONENTS: manager
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: '24.22.1'
+          node-version: 24.22.1
       - uses: actions/download-artifact@v7
         with:
           name: pawtalk-manager-prepared
-          path: release/manager
-      - name: Publish Manager assets only
+          path: candidate/manager
+      - name: Publish only prepared artifacts; never rebuild
         env:
           GH_TOKEN: ${{ github.token }}
-          CHANNEL: ${{ needs.plan.outputs.channel }}
-        run: |
-          flags=(--latest=false)
-          if [ "$CHANNEL" = preview ]; then flags+=(--prerelease); fi
-          title=$(head -n 1 "docs/releases/$GITHUB_REF_NAME.md")
-          title="${title#\# }"
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --repo "$GITHUB_REPOSITORY" "${flags[@]}" --title "$title" --notes-file "docs/releases/$GITHUB_REF_NAME.md" release/manager/PawTalk.Manager.*.tar.gz release/manager/manager-manifest.json release/manager/PawTalk.Server.Manager.Setup.*.exe
-          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false "${flags[@]}"
+        run: node scripts/release-candidate.mjs publish

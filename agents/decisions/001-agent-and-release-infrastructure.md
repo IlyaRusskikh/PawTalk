@@ -1,6 +1,7 @@
 # 001 — Shared agent knowledge and public release discovery
 
-Status: accepted for this implementation; GitHub settings require owner action.
+Status: accepted; the original tag-build sequence is superseded by
+[Decision 002](002-release-candidate-preflight.md). GitHub settings require owner action.
 
 Context: independent component versions already exist, but descriptive documents
 and website downloads drifted. Push+PR CI duplicated the same heavy checks and

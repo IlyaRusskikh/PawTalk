@@ -15,10 +15,21 @@ metadata:
 3. Run applicable final-state CI locally plus packaged smoke after Client installer;
    report unavailable environments. Review diff/public guard; push branch and PR.
 4. Hand off PR CI link without polling. Successful CI plus explicit owner merge
-   permission precede squash merge; delete branch. Ask separately before tag creation.
-5. Only tag a commit contained in main with matching component version. Send the
-   direct tag workflow URL. Build/sign/verify must succeed before separately
-   approved release-publish publication. Environment settings need owner setup.
-6. Never replace tags/assets/images or publish partial/failed releases. A failed
-   pushed release tag requires a new version/PR. No release for docs-only changes,
-   no post-release catalog/version commit. Pages derives public links from Releases.
+   permission precede squash merge; delete branch. After merge initiate Preflight
+   on exact main SHA with selected component versions; all PR CI is not release proof.
+5. Use dispatch-only release.yml: promote=false safely prepares without tags or
+   publication. Actual promote=true runs all selected release scopes, real builds,
+   signatures and receipt validation BEFORE requesting release-tag approval. Agent
+   initiates the required approval when ready, gives its direct run URL and hands
+   control to owner; never passively monitor CI without instruction. No tag on failed
+   Preflight, stale SHA or absent/corrupt/foreign artifacts.
+6. After separate release-tag approval, only checked immutable tags are created.
+   Then request separate release-publish approval. Publishers revalidate source/run,
+   signatures and exact prepared bytes; no rebuild/re-sign. Both environments need
+   main deployment permission and Required reviewers configured by owner.
+7. Never replace tags/assets/images or publish partial/failed releases. Multi-tag
+   API writes and GitHub/GHCR publication are not atomic. Report partial failures,
+   preserve diagnostics and prepare a new version/PR; no blind promotion retry.
+   No release/version bump for infrastructure/docs-only work. Pages derives public
+   links from successful publication. No settings, merge, tag or publication without
+   the corresponding explicit owner permission.
