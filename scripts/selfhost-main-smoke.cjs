@@ -48,6 +48,8 @@ async function test(window){
   assert.ok(await run("parseFloat(getComputedStyle(document.querySelector('dialog .modal-actions button')).borderTopLeftRadius)>0"));
   await run("document.querySelector('dialog .danger-button').click()");
   await until(`window.desktop.membership('servers').then(r=>!r.value.some(s=>s.serverId===${JSON.stringify(host.serverId)}))`,'stopped selfhost removed from creator registry');
+  const stale=await run(`window.desktop.membership('connect',{serverId:${JSON.stringify(host.serverId)}})`);
+  assert.equal(stale.error.code,'NOT_A_MEMBER','stale requests after own shutdown stay local');
   await until("!document.querySelector('dialog')",'host cleanup completes');
   assert.equal((await run('window.desktop.hostStatus()')).running,false);
   const invalid=await run('window.desktop.checkHost(1).then(()=>null,e=>e.message)');assert.equal(invalid,t('Укажите порт от 1024 до 65532.'));

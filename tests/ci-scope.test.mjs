@@ -59,6 +59,15 @@ for (const component of ['all', 'client', 'server', 'manager']) {
       assert.equal(commands.includes('--output-dir release/qa/api2-server'), component === 'manager');
       assert.equal(commands.includes('scripts/windows-manager-smoke.mjs'), scope.host);
       assert.equal(commands.includes('npm run native:build'), scope.client);
+      const renderer=steps.findIndex(step=>step.run==='npm run build');
+      assert.ok(renderer>=0,`${component}: Client renderer is a host-test dependency`);
+      const lifecycle=steps.findIndex(step=>step.run?.includes('scripts/windows-manager-smoke.mjs'));
+      if(scope.host){
+        assert.ok(renderer<lifecycle,`${component}: renderer exists before native host UI checks`);
+        const media=steps.findIndex(step=>step.run==='npm run server:prepare'||step.run==='node scripts/prepare-server.mjs --livekit-only');
+        const serverBuild=steps.findIndex(step=>step.run?.includes('scripts/build-windows-server.mjs'));
+        assert.ok(media>=0&&media<serverBuild,`${component}: LiveKit exists before the actual or fixture Server is built`);
+      }
       const uploads = steps.filter(step => step.uses?.startsWith('actions/upload-artifact@')).map(step => step.with.name).sort();
       const expected = runner === 'windows-2025' ? [
         ...(scope.client ? ['pawtalk-windows'] : []),

@@ -65,6 +65,49 @@ test('only the matching local selfhost stops on leave; an external server uses m
   try{assert.equal((await external.call('servers')).value[0].ownedSelfhost,false);await external.call('leave',{serverId});assert.equal(stopped,1);assert.equal(left,1);}finally{external.service.stop();}
 });
 
+test('a missing local membership is not a server kick',async()=>{
+ const f=fixture();try{
+  await f.call('servers');f.client.registry=async()=>[];
+  assert.equal((await f.call('connect',{serverId})).error.code,'NOT_A_MEMBER');
+  assert.equal(f.events.some(event=>event[1]?.departure),false);
+ }finally{f.service.stop();}
+});
+
+test('voluntary selfhost departure suppresses an already pending membership denial',async()=>{
+ const f=fixture({getHost:()=>({running:true,serverId}),stopHost:async()=>{}});
+ let entered,reject;const started=new Promise(resolve=>{entered=resolve;});
+ f.client.state=()=>{entered();return new Promise((_resolve,fail)=>{reject=fail;});};
+ try{
+  const pending=f.call('connect',{serverId});await started;
+  assert.equal((await f.call('leave',{serverId})).value,true);
+  reject(failure('NOT_A_MEMBER'));await pending;
+  assert.equal(f.events.some(event=>event[1]?.departure),false);
+ }finally{f.service.stop();}
+});
+
+test('host shutdown suppresses stale denials but an explicit rejoin restores ban notices',async()=>{
+ const f=fixture();let entered,reject;const started=new Promise(resolve=>{entered=resolve;});
+ f.client.state=()=>{entered();return new Promise((_resolve,fail)=>{reject=fail;});};
+ try{
+  const pending=f.call('connect',{serverId});await started;await f.service.serverEnded(serverId);
+  reject(failure('BANNED'));await pending;
+  assert.equal(f.events.some(event=>event[1]?.departure),false);
+  f.client.join=async()=>{f.client.connections.set(serverId,{});return{serverId};};
+  await f.call('join',{address:'synthetic',nickname:'Synthetic'});
+  f.client.state=async()=>{throw failure('BANNED');};await f.call('connect',{serverId});
+  assert.equal(f.events.filter(event=>event[1]?.departure).length,1);
+ }finally{f.service.stop();}
+});
+
+test('a rejected leave does not suppress a subsequent real ban',async()=>{
+ const f=fixture();try{
+  f.client.leave=async()=>{throw failure('LAST_ADMIN');};
+  assert.equal((await f.call('leave',{serverId})).error.code,'LAST_ADMIN');
+  f.client.state=async()=>{throw failure('BANNED');};await f.call('connect',{serverId});
+  assert.equal(f.events.filter(event=>event[1]?.departure).length,1);
+ }finally{f.service.stop();}
+});
+
  test('membership departures carry one modal event and ban expiry before forgetting',async()=>{
  const f=fixture();try{
   await f.call('servers');const expiresAt=Date.now()+60000;
