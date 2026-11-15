@@ -1,7 +1,7 @@
 # PawTalk Manager 0.5.1 — UI-first setup and API 2 admission
 
-Preview for Windows x64 and Linux; changes since Manager 0.4.0. Prepared notes; publication/tag verification are pending.
-Предварительная версия Windows x64 и Linux; изменения относительно Manager 0.4.0. Описание подготовлено; публикация и tag CI ещё не выполнены.
+Preview for Windows x64 and Linux; changes since Manager 0.4.0.
+Предварительная версия Windows x64 и Linux; изменения относительно Manager 0.4.0.
 
 [Windows installer / Установщик](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.5.1/PawTalk.Server.Manager.Setup.0.5.1.exe) · [Linux/shared bundle](https://github.com/IlyaRusskikh/PawTalk/releases/download/manager-v0.5.1/PawTalk.Manager.0.5.1.tar.gz).
 
@@ -60,4 +60,4 @@ Preview. Moving unsigned local builds to a fresh Linux/CLI installation is limit
 
 - `PawTalk.Server.Manager.Setup.0.5.1.exe`, `PawTalk.Manager.0.5.1.tar.gz`, `manager-manifest.json`.
 - Verify the Manager Ed25519 trust root and manifest artifact sizes/SHA-256 / Проверяйте отдельный ключ Ed25519 Manager и размеры/SHA-256 из манифеста.
-- [Source / Исходники](https://github.com/IlyaRusskikh/PawTalk/tree/manager-v0.5.1) · [CHANGELOG](https://github.com/IlyaRusskikh/PawTalk/blob/manager-v0.5.1/CHANGELOG.md) · [Manager guide](https://github.com/IlyaRusskikh/PawTalk/blob/manager-v0.5.1/docs/MANAGER-DESKTOP.md) · [AGPL-3.0-only](https://github.com/IlyaRusskikh/PawTalk/blob/manager-v0.5.1/LICENSE). Third-party notices remain included. Successful tag CI will be recorded only after it completes.
+- [Source / Исходники](https://github.com/IlyaRusskikh/PawTalk/tree/manager-v0.5.1) · [CHANGELOG](https://github.com/IlyaRusskikh/PawTalk/blob/manager-v0.5.1/CHANGELOG.md) · [Manager guide](https://github.com/IlyaRusskikh/PawTalk/blob/manager-v0.5.1/docs/MANAGER-DESKTOP.md) · [AGPL-3.0-only](https://github.com/IlyaRusskikh/PawTalk/blob/manager-v0.5.1/LICENSE). Third-party notices remain included.

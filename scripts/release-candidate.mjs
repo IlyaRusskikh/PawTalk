@@ -7,6 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { versions } from './release-contract.mjs';
+import { assertNotes, notesDigest, verifyReleaseNotes } from './check-release-notes.mjs';
 const { releasePlan, channelFor } = createRequire(import.meta.url)('../shared/release.cjs');
 const families = ['client', 'server', 'manager'];
 const root = path.resolve(import.meta.dirname, '..');
@@ -23,7 +24,7 @@ export function trusted(env) {
 }
 export function binding(receipt, expected, digest) {
   if (!digest || hash(Buffer.from(JSON.stringify(receipt)+'\n')) !== digest) throw Error('Receipt digest mismatch');
-  for (const key of ['repository','sha','run','attempt','component','version','channel','tag']) if (receipt[key] !== expected[key]) throw Error(`Candidate ${key} mismatch`);
+  for (const key of ['repository','sha','run','attempt','component','version','channel','tag','notesSha256']) if (receipt[key] !== expected[key]) throw Error(`Candidate ${key} mismatch`);
 }
 export function tagGuard({ready, sha, main, artifacts}) {
   if (!ready || sha !== main || !artifacts) throw Error('Successful preflight, unchanged main and complete artifacts required');
@@ -48,9 +49,10 @@ async function plan(component, env = process.env, origin) {
   const tag = `${component}-v${source[component]}`;
   const p = releasePlan(tag, source);
   const channel = channelFor(p.version, env[`PAWTALK_${component.toUpperCase()}_CHANNEL`] || 'preview');
-  if (!(await readFile(path.join(root,`docs/releases/${tag}.md`),'utf8')).trim()) throw Error('Missing release notes');
+  const notes = await readFile(path.join(root,`docs/releases/${tag}.md`),'utf8');
+  assertNotes(notes, {tag, channel});
   return {repository:env.GITHUB_REPOSITORY, sha:origin?.sha ?? env.GITHUB_SHA, run:origin?.run ?? env.GITHUB_RUN_ID,
-    attempt:origin?.attempt ?? env.GITHUB_RUN_ATTEMPT, component, version:p.version, channel, tag};
+    attempt:origin?.attempt ?? env.GITHUB_RUN_ATTEMPT, component, version:p.version, channel, tag, notesSha256:notesDigest(notes)};
 }
 async function signatures(p, directory) {
   const name = p.component === 'client' ? 'update-manifest.json' : `${p.component}-manifest.json`;
@@ -103,18 +105,30 @@ export async function createTags(plans, request = api) {
   }
 }
 export async function publishAssets(p, directory, {request=api,execute=run,notes=path.join(root,`docs/releases/${p.tag}.md`)} = {}) {
-  const title = (await readFile(notes,'utf8')).split(/\r?\n/)[0].replace(/^# /,'');
+  const text = await readFile(notes,'utf8');
+  const title = assertNotes(text,p);
+  if (!p.notesSha256 || notesDigest(text) !== p.notesSha256) throw Error('Approved release notes digest mismatch');
   const flags = ['--latest=false',...(p.channel === 'preview' ? ['--prerelease'] : [])];
   const names = assetNames(p.component,p.version).filter(n=>n !== 'server-image.tar');
   const assets = names.map(n=>path.join(directory,n));
   execute('gh',['release','create',p.tag,'--verify-tag','--draft','--repo',p.repository,...flags,'--title',title,'--notes-file',notes,...assets]);
+  // Read the authenticated draft by ID: the tag endpoint is for published releases.
+  const id = JSON.parse(execute('gh',['release','view',p.tag,'--repo',p.repository,'--json','databaseId'])).databaseId;
+  if (!Number.isSafeInteger(id) || id <= 0) throw Error('Invalid draft release ID');
+  const draft = await request(`releases/${id}`);
+  verifyReleaseNotes(draft,text,p,true);
+  await verifyAssets(draft);
   execute('gh',['release','edit',p.tag,'--repo',p.repository,'--draft=false',...flags]);
   const published = await request(`releases/tags/${p.tag}`);
   if (!published || published.draft || published.prerelease !== (p.channel === 'preview')) throw Error('Incomplete published release');
-  for (const name of names) {
-    const asset = published.assets.find(a=>a.name === name);
-    const local = await fileDigest(path.join(directory,name));
-    if (!asset || asset.size !== local.size || asset.digest !== 'sha256:'+local.sha256) throw Error('Published asset verification failed: '+name);
+  verifyReleaseNotes(published,text,p);
+  await verifyAssets(published);
+  async function verifyAssets(release) {
+    for (const name of names) {
+      const asset = release.assets?.find(a=>a.name === name);
+      const local = await fileDigest(path.join(directory,name));
+      if (!asset || asset.size !== local.size || asset.digest !== 'sha256:'+local.sha256) throw Error('Published asset verification failed: '+name);
+    }
   }
 }
 async function currentMain() {

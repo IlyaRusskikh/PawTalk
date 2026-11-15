@@ -1,7 +1,7 @@
 # PawTalk Server 0.11.1 — API 2 membership and multiple channels
 
-Public preview; changes since Server 0.10.1. Prepared notes; not yet published or verified by tag CI.
-Предварительный выпуск; изменения относительно Server 0.10.1. Описание подготовлено; публикация и tag CI ещё не выполнены.
+Public preview; changes since Server 0.10.1.
+Предварительный выпуск; изменения относительно Server 0.10.1.
 
 [Windows x64 ZIP](https://github.com/IlyaRusskikh/PawTalk/releases/download/server-v0.11.1/PawTalk.Server.0.11.1.windows-x64.zip) · Linux amd64/arm64: `ghcr.io/ilyarusskikh/pawtalk-server:0.11.1`.
 
@@ -68,4 +68,4 @@ No channel role restrictions, automatic key rotation or forward secrecy. Previou
 
 - `PawTalk.Server.0.11.1.windows-x64.zip`, signed / подписанный `server-manifest.json`; Linux amd64/arm64 image above / образ указан выше.
 - Manager verifies component Ed25519 signature, ZIP size/SHA-256 and immutable image digest / Manager проверяет подпись компонента, размер/SHA-256 ZIP и digest образа.
-- [Source / Исходники](https://github.com/IlyaRusskikh/PawTalk/tree/server-v0.11.1) · [CHANGELOG](https://github.com/IlyaRusskikh/PawTalk/blob/server-v0.11.1/CHANGELOG.md) · [Server guide](https://github.com/IlyaRusskikh/PawTalk/blob/server-v0.11.1/docs/SERVER-API2.md) · [AGPL-3.0-only](https://github.com/IlyaRusskikh/PawTalk/blob/server-v0.11.1/LICENSE). Third-party notices remain included. No successful tag CI is claimed yet.
+- [Source / Исходники](https://github.com/IlyaRusskikh/PawTalk/tree/server-v0.11.1) · [CHANGELOG](https://github.com/IlyaRusskikh/PawTalk/blob/server-v0.11.1/CHANGELOG.md) · [Server guide](https://github.com/IlyaRusskikh/PawTalk/blob/server-v0.11.1/docs/SERVER-API2.md) · [AGPL-3.0-only](https://github.com/IlyaRusskikh/PawTalk/blob/server-v0.11.1/LICENSE). Third-party notices remain included.
