@@ -2,15 +2,16 @@ const { randomBytes } = require('node:crypto');
 const { t } = require('../shared/i18n.cjs');
 const { messagePreview } = require('../shared/chat-format.mjs');
 const randomID = () => randomBytes(16).toString('hex');
-function fail(code) { throw Object.assign(Error(code), { code }); }
+// Local registry/validation failures are not authenticated server revocations.
+function fail(code) { throw Object.assign(Error(code), { code, local: true }); }
 function string(value, max = 14000) { if (typeof value !== 'string' || value.length > max) fail('INVALID_INPUT'); return value; }
 function id(value, size = 32) { if (typeof value !== 'string' || !new RegExp(`^[0-9a-f]{${size}}$`).test(value)) fail('INVALID_INPUT'); return value; }
 
 function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, getHost, stopHost, setVoiceEndpoint = () => {} }) {
-  const statuses = new Map(), connecting = new Map(), knownRecords = new Map(), departed = new Set(); let activeVoice, preparedVoice, voiceEpoch=0,voiceBusy=false, stopped = false, timer, lastNotification = 0, departureTask;
+  const statuses = new Map(), connecting = new Map(), knownRecords = new Map(), departed = new Set(), intentionalDepartures = new Set(); let activeVoice, preparedVoice, voiceEpoch=0,voiceBusy=false, stopped = false, timer, lastNotification = 0, departureTask;
   const locked=error=>['SERVER_KEY_CHANGED','SERVER_ID_CHANGED','INVALID_SERVER_IDENTITY','SERVER_BINDING_MISMATCH'].includes(error.code);
   async function reportDeparture(serverId,error,record=knownRecords.get(serverId)){
-    if(!record||!['NOT_A_MEMBER','BANNED'].includes(error.code)||departed.has(serverId))return;
+    if(error.local||intentionalDepartures.has(serverId)||!record||!['NOT_A_MEMBER','BANNED'].includes(error.code)||departed.has(serverId))return;
     departed.add(serverId);
     const departure={serverId,name:record.name,kind:error.code==='BANNED'?'ban':'kick'};
     if(error.code==='BANNED'&&(error.details?.expiresAt===null||Number.isSafeInteger(error.details?.expiresAt)))departure.expiresAt=error.details.expiresAt;
@@ -36,7 +37,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     if (stopped) return;
     try {
       const records = await client.registry(); let index = 0;
-      if(!departureTask&&client.pendingDepartures)departureTask=client.pendingDepartures().then(results=>{if(stopped)return;for(const result of results)if(result.outcome==='blocked')send('membership-changed',{serverId:result.serverId,leaveError:'LAST_ADMIN'});if(results.length)send('membership-changed',{});}).catch(()=>{}).finally(()=>{departureTask=undefined;});
+      if(!departureTask&&client.pendingDepartures)departureTask=client.pendingDepartures().then(results=>{if(stopped)return;for(const result of results)if(result.outcome==='blocked'){intentionalDepartures.delete(result.serverId);send('membership-changed',{serverId:result.serverId,leaveError:'LAST_ADMIN'});}if(results.length)send('membership-changed',{});}).catch(()=>{}).finally(()=>{departureTask=undefined;});
       const connections=Promise.all(Array.from({ length: Math.min(4, records.length) }, async () => {
         while (index < records.length && !stopped) {
           const record = records[index++];
@@ -66,6 +67,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     async identity() { const identity = await client.identity(); return { profileId: identity.profileId, deviceId: identity.deviceId }; },
     async join(input) {
       const result = await client.join(string(input.address), string(input.nickname, 64), string(input.deviceLabel || t('Компьютер'), 64));
+      intentionalDepartures.delete(result.serverId);departed.delete(result.serverId);
       statuses.set(result.serverId, 'online'); send('membership-changed', { serverId: result.serverId }); return result;
     },
     async connect(input) {
@@ -104,10 +106,14 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     },
     async leave(input) {
       const serverId=id(input.serverId),host=getHost?.();
-      if(activeVoice?.serverId===serverId||preparedVoice?.serverId===serverId)await voiceLeave();
-      if(host?.running&&host.serverId===serverId){if(!stopHost)fail('HOST_UNAVAILABLE');await stopHost();await client.forget(serverId);}
-      else await client.leave(serverId,{defer:statuses.get(serverId)!=='online'});
-      statuses.delete(serverId);send('membership-changed',{serverId});return true;
+      // stopHost emits serverEnded synchronously; pending requests may finish later.
+      intentionalDepartures.add(serverId);
+      try {
+        if(activeVoice?.serverId===serverId||preparedVoice?.serverId===serverId)await voiceLeave();
+        if(host?.running&&host.serverId===serverId){if(!stopHost)fail('HOST_UNAVAILABLE');await stopHost();await client.forget(serverId);}
+        else await client.leave(serverId,{defer:statuses.get(serverId)!=='online'});
+        statuses.delete(serverId);send('membership-changed',{serverId});return true;
+      } catch(error) { intentionalDepartures.delete(serverId);throw error; }
     },
     async voice(input) {
       const serverId=id(input.serverId),channelId=id(input.channelId);if(voiceBusy)fail('BUSY');voiceBusy=true;
@@ -139,7 +145,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     async 'link.propose'(input) { return links.propose(string(input.text), string(input.nickname, 64), string(input.deviceLabel || t('Компьютер'), 64), input.chosen || 'target'); },
     async 'link.status'(input) { return links.status(id(input.linkId)); },
     async 'link.approve'(input) { return links.approve(id(input.linkId)); },
-    async 'link.finish'(input) { const result = await links.finish(id(input.linkId)); send('membership-changed', {}); return result; },
+    async 'link.finish'(input) { const result = await links.finish(id(input.linkId)); intentionalDepartures.delete(result.serverId);departed.delete(result.serverId);send('membership-changed', {}); return result; },
     async 'device.unlink'(input) { return links.unlink(id(input.serverId), id(input.deviceId, 64), false); },
     async 'device.revoke'(input) { return links.unlink(id(input.serverId), id(input.deviceId, 64), true); },
     async 'control.create'(input) { return links.transferCreate(id(input.serverId), id(input.deviceId, 64)); },
@@ -172,6 +178,6 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     }
   });
   return { start() { void background(); }, stop() { stopped = true; clearTimeout(timer); void voiceLeave(); }, suspend() { void voiceLeave(); },
-    async serverEnded(serverId) { if(activeVoice?.serverId===serverId||preparedVoice?.serverId===serverId){await voiceLeave();send('membership-voice-lost',{serverId});} await client.forget(serverId);statuses.delete(serverId);send('membership-changed',{serverId}); },statuses };
+    async serverEnded(serverId) { intentionalDepartures.add(serverId);knownRecords.delete(serverId);if(activeVoice?.serverId===serverId||preparedVoice?.serverId===serverId){await voiceLeave();send('membership-voice-lost',{serverId});} await client.forget(serverId);statuses.delete(serverId);send('membership-changed',{serverId}); },statuses };
 }
 module.exports = { registerMembershipIPC };
