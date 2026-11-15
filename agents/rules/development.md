@@ -40,6 +40,13 @@ approval request when that concrete stage is ready; do not infer later approvals
 
 ## Documentation, legal and UI
 
+Release notes are final public user documentation before PR merge. Apply
+REL-NOTES-01…06 in [RELEASING.md](../../docs/RELEASING.md): no temporary publication/CI
+statuses or advance success claims; review RU/EN for equal accuracy. Actual results
+belong in Actions, with optional confirmed run links. Run check-release-notes and
+its tests. Existing public body edits require separate owner permission and must
+preserve tags/assets; follow [recovery](../../docs/RELEASE-NOTES-RECOVERY.md).
+
 Keep README.md/README.ru.md aligned; they and the landing pages present PawTalk.
 Detailed constraints belong in docs/ and SECURITY.md. Describe real behavior and
 limits. A short feature-documentation gap between merge and release is allowed;

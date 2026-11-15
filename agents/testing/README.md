@@ -13,6 +13,11 @@ manual and Preflight checks retain component scopes via scripts/ci-scope.mjs.
 | manager | in manager/windows/: `go test ./...`, `go vet ./...`; Python unittest discover tests/*_test.py; actual SCM, desktop/package smokes on Windows; systemd, Compose install/backup/update/restore/crash and Debian-container checks on Linux |
 | compatibility | frozen published Server 0.8.0 explicit rejection (`server-smoke.mjs --legacy-rejection`); API 2 source fixtures for current Client/Manager, signed update fixtures; API/protocol/release routing tests and relevant integrations above |
 
+Infrastructure also requires `node scripts/check-release-notes.mjs` and
+`node --test tests/release-notes.test.mjs`. Selected release candidates repeat notes
+validation in shared plan/tag/publish code for both workflows, with no historical
+exemptions. Published-note verification is read-only, not a build/CI substitute.
+
 Docs/site/agent-only work uses infrastructure checks; implementation changes use
 affected component baselines and relevant integration. Shared server core routes
 Client+Server+Manager+compatibility because the host lifecycle also consumes it.

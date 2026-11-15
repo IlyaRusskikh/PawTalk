@@ -6,9 +6,9 @@ PawTalk is an AGPL-3.0-only Windows app for friends and gaming communities.
 Host a temporary server from the client or run a permanent Windows/Linux server.
 No central account is required.
 
-**Development tree:** the multichannel update uses API 2 and a fresh data schema.
-It is not yet a published release and does not migrate API 1 installations.
-Published binaries retain their published behavior. See [compatibility](docs/COMPATIBILITY.md).
+**Published API 2:** multichannel servers use mandatory E2EE and a fresh data schema.
+There is no automatic migration of API 1 installations. Choose compatible components
+from GitHub Releases; see [compatibility](docs/COMPATIBILITY.md).
 
 ## Downloads
 
@@ -20,7 +20,7 @@ Components have independent releases and updates. Updating Client or Manager doe
 not replace an installed Server. Public versions and downloads come from GitHub
 Releases; source package versions do not announce a release.
 
-## Current development features
+## API 2 features
 
 - Multiple voice channels and text chats. Administrators create, rename and delete
   channels; the default text and voice channels are protected from deletion.
@@ -50,7 +50,7 @@ Releases; source package versions do not announce a release.
 3. Use **Invite participants** to create a timed link. Recipients paste it into
    **Join server**. Joining does not automatically enter a voice channel.
 
-In current Windows sources, the installer sets only the Manager language. Choose
+On Windows, the installer sets only the Manager language. Choose
 a local Server package or explicitly download a compatible release in Manager UI;
 Server is installed and started only after confirmation.
 
@@ -58,6 +58,9 @@ For a clean permanent server, create a one-time **first administrator** invitati
 in Manager or the host CLI. The first client creates and saves encryption keys;
 there is no separate key generator. Further administrators join normally and are
 promoted by an existing administrator. [Operator guide](docs/SERVER-API2.md).
+
+For a clean Linux VPS, follow the **[Linux VPS Server API 2 installation guide](docs/SERVER-LINUX.md)**:
+trusted bootstrap, Docker/Compose, first-admin link, reboot checks, updates and backup/restore.
 
 Self-hosting over the internet needs reachable ports: TCP 18443, TCP 18444 and UDP
 18445 by default. NAT/CGNAT, firewall and VPN behavior can affect connectivity.

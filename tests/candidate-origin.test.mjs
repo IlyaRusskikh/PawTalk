@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { sourceRunId, sourceCandidate, verifyRun, downloadArtifact, confirmSource } from '../scripts/candidate-origin.mjs';
+import { notesDigest } from '../scripts/check-release-notes.mjs';
 import { absent, binding, createTags, publishAssets, assetNames } from '../scripts/release-candidate.mjs';
 const sha='a'.repeat(40), workflow={id:42,path:'.github/workflows/release.yml'};
 const hash = b=>createHash('sha256').update(b).digest('hex');
@@ -126,21 +127,30 @@ test('shared publisher stays draft-first, verifies exact assets and stops on fai
   const directory=await mkdtemp(path.join(os.tmpdir(),'pawtalk-publish-fixture-'));
   try {
     const p=fixture(['client']).index.plans.client, notes=path.join(directory,'notes.md');
-    await writeFile(notes,'# Synthetic release\nРусский / English\n');
+    const text=(await readFile(new URL('../docs/releases/client-v0.12.1.md',import.meta.url),'utf8')).replaceAll('0.12.1','1.2.3');
+    await writeFile(notes,text);p.notesSha256=notesDigest(text);
+    const metadata={tag_name:p.tag,name:text.split(/\r?\n/)[0].slice(2),body:text,prerelease:true};
     const assets=[];
     for (const name of assetNames('client','1.2.3')) {const bytes=Buffer.from('synthetic '+name);await writeFile(path.join(directory,name),bytes);assets.push({name,size:bytes.length,digest:'sha256:'+hash(bytes)});}
-    const commands=[],request=async()=>({draft:false,prerelease:true,assets});
-    await publishAssets(p,directory,{notes,request,execute:(command,args)=>commands.push([command,args])});
-    assert.ok(commands[0][1].includes('--draft'));assert.ok(commands[1][1].includes('--draft=false'));
+    const commands=[],request=async endpoint=>({...metadata,draft:endpoint==='releases/7',assets});
+    const execute=(command,args)=>{commands.push([command,args]);return args[1]==='view'?JSON.stringify({databaseId:7}):'';};
+    await publishAssets(p,directory,{notes,request,execute});
+    assert.ok(commands[0][1].includes('--draft'));assert.ok(commands[2][1].includes('--draft=false'));
     assert.ok(commands[0][1].includes('--prerelease'));assert.ok(commands[0][1].includes('--verify-tag'));
+    for (const patch of [{name:'Wrong component'}, {body:text.slice(0,-20)}, {tag_name:'client-v9.9.9'}]) {
+      const writes=[];
+      await assert.rejects(publishAssets(p,directory,{notes,execute:(command,args)=>{writes.push(args);return JSON.stringify({databaseId:7});},request:async()=>({...metadata,...patch,draft:true,assets})}),/approved notes/);
+      assert.ok(!writes.some(args=>args.includes('--draft=false')), 'invalid draft never becomes public');
+    }
+    await assert.rejects(publishAssets({...p,notesSha256:'0'.repeat(64)},directory,{notes,execute:()=>{throw Error('unexpected write');}}),/digest mismatch/);
     for (const failAt of [1,2]) {
       let count=0;
-      await assert.rejects(publishAssets(p,directory,{notes,request,execute:()=>{if(++count===failAt)throw Error('partial upload/publication');}}),/partial/);
+      await assert.rejects(publishAssets(p,directory,{notes,request,execute:()=>{if(++count===failAt)throw Error('partial upload/publication');return JSON.stringify({databaseId:7});}}),/partial/);
       assert.equal(count,failAt);
     }
-    await assert.rejects(publishAssets(p,directory,{notes,execute:()=>{},request:async()=>({draft:true,assets})}),/Incomplete/);
+    await assert.rejects(publishAssets(p,directory,{notes,execute,request:async()=>({...metadata,draft:true,assets})}),/Incomplete/);
     assets[0].digest='sha256:'+'f'.repeat(64);
-    await assert.rejects(publishAssets(p,directory,{notes,execute:()=>{},request}),/asset verification failed/);
+    await assert.rejects(publishAssets(p,directory,{notes,execute,request}),/asset verification failed/);
   } finally {await rm(directory,{recursive:true,force:true});}
 });
 

@@ -1,6 +1,6 @@
 # Permanent Windows server / Постоянный Windows-сервер
 
-> Историческое руководство опубликованных API 1 выпусков. Для текущих исходников API 2 используйте [новое руководство](SERVER-API2.md), [контракт API](API-V2.md) и [совместимость](COMPATIBILITY.md). Пароли и ручной генератор E2EE ниже к API 2 не относятся.
+> Историческое руководство API 1 с отдельной заметкой о переходе. API 2 опубликован: для новой установки используйте [актуальное руководство](SERVER-API2.md#windows-first-server-setup), [контракт API](API-V2.md) и [совместимость](COMPATIBILITY.md). Пароли и ручной генератор E2EE ниже к API 2 не относятся. Для Linux VPS — [установка Linux VPS](SERVER-LINUX.md).
 
 **Server 0.10.1 / Manager 0.4.0 — released previews / предварительные выпуски.**
 [Актуальный установщик Manager](https://ilyarusskikh.github.io/PawTalk/downloads/#manager) · [Изменения](releases/manager-v0.4.0.md).
@@ -63,7 +63,9 @@ runtime/host; это прерывает звонок. В Windows автообн�
 Python встроен в установщик. Docker, WSL, Node.js и отдельная установка Python
 не требуются. Для загрузки опубликованных выпусков действуют подписи и заранее
 настроенные публичные ключи `manager/trust.json`; локальный пакет требует явного
-подтверждения в UI. API 2 в этой ветке ещё не опубликован.
+подтверждения в UI. Совместимые опубликованные API 2 компоненты выбирайте по
+[каталогу релизов](https://ilyarusskikh.github.io/PawTalk/downloads/) и
+[матрице совместимости](COMPATIBILITY.md).
 
 По умолчанию программа находится в `%ProgramData%\PawTalk Server Manager`,
 данные/конфигурация/backup — в `%ProgramData%\PawTalk`.

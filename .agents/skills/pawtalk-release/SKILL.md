@@ -11,9 +11,16 @@ metadata:
    previous published release using GitHub Releases, not source versions.
 2. In work/{service}-v{version} from current main prepare independent version
    sources, CHANGELOG and reviewed RU/EN docs/releases/<tag>.md with exact assets,
-   upgrade requirements and limitations. Preserve published historical notes.
+   upgrade requirements and limitations. Follow REL-NOTES-01…06 in RELEASING.md:
+   write final public text before PR merge, accurate before and after publication;
+   review RU/EN equally. No pending CI/publication statuses or advance success claims.
+   Actual results belong in Actions; confirmed run links are optional. Preserve
+   accurate history of failed earlier tags. Existing public body corrections need
+   separate owner approval; use docs/RELEASE-NOTES-RECOVERY.md without replacing assets.
 3. Run applicable final-state CI locally plus packaged smoke after Client installer;
-   report unavailable environments. Review diff/public guard; push branch and PR.
+   report unavailable environments. Run node scripts/check-release-notes.mjs and
+   its tests; selected-candidate checks never exempt historical failed drafts.
+   Review diff/public guard; push branch and PR when authorized by the user.
 4. Hand off PR CI link without polling. Successful CI plus explicit owner merge
    permission precede squash merge; delete branch. After merge initiate Preflight
    on exact main SHA with selected component versions; all PR CI is not release proof.
@@ -32,7 +39,9 @@ metadata:
    Preflight, stale SHA or absent/corrupt/foreign artifacts.
 6. After separate release-tag approval, only checked immutable tags are created.
    Then request separate release-publish approval. Publishers revalidate source/run,
-   signatures and exact prepared bytes; no rebuild/re-sign. Both environments need
+   signatures, exact prepared bytes and notesSha256; no rebuild/re-sign. Check draft
+   title/tag/channel/full body/links/assets before visibility and again afterward.
+   Stop on mismatch without automatic overwrite/retry. Both environments need
    main deployment permission and Required reviewers configured by owner.
    Do not edit main/channels or rerun/delete source artifacts during review. Promotion
    rechecks and pins source evidence at both gates, shares the release concurrency

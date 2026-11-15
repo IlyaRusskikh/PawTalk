@@ -1,7 +1,7 @@
 # PawTalk Client 0.12.1 — Servers, channels and linked devices
 
-Preview for Windows x64; changes since Client 0.11.0. Prepared release notes; publication and tag verification are pending.
-Предварительная версия Windows x64; изменения относительно Client 0.11.0. Описание подготовлено; публикация и проверка тега ещё не выполнены.
+Preview for Windows x64; changes since Client 0.11.0.
+Предварительная версия Windows x64; изменения относительно Client 0.11.0.
 
 [Windows installer / Установщик](https://github.com/IlyaRusskikh/PawTalk/releases/download/client-v0.12.1/PawTalk.Setup.0.12.1.exe)
 
@@ -70,4 +70,4 @@ Preview: channels share the same access; custom roles/private channels and post-
 
 - `PawTalk.Setup.0.12.1.exe`, `SHA256SUMS.txt`, `update-manifest.json`, `PawTalk.Licenses.0.12.1.zip`.
 - Verify / Проверка: `Get-FileHash .\PawTalk.Setup.0.12.1.exe -Algorithm SHA256`; compare SHA256SUMS and the component's Ed25519 update manifest. Ed25519 does not replace Authenticode.
-- [Source / Исходники](https://github.com/IlyaRusskikh/PawTalk/tree/client-v0.12.1) · [CHANGELOG](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.12.1/CHANGELOG.md) · [Guide / Руководство](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.12.1/docs/GUIDE.ru.md) · [AGPL-3.0-only](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.12.1/LICENSE). License archive retains third-party notices. Tag CI success is not claimed before it runs.
+- [Source / Исходники](https://github.com/IlyaRusskikh/PawTalk/tree/client-v0.12.1) · [CHANGELOG](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.12.1/CHANGELOG.md) · [Guide / Руководство](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.12.1/docs/GUIDE.ru.md) · [AGPL-3.0-only](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.12.1/LICENSE). License archive retains third-party notices.

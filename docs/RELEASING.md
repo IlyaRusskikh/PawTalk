@@ -143,6 +143,67 @@ minor — существенные функции, major — очень круп
 
 ## Описание каждого релиза / Release notes for every tag
 
+### Обязательные правила / Mandatory rules
+
+- **REL-NOTES-01:** Описание готово для конечного пользователя до merge PR. /
+  Notes must be final public user documentation before PR merge.
+- **REL-NOTES-02:** Запрещены временные статусы: «Ожидает публикации», «CI ещё не
+  пройден», «Проверки будут выполнены», «Описание подготовлено, релиз ещё не
+  опубликован», `Tag CI pending`, `Not yet published`, `Publication pending`,
+  `Verification pending` и эквиваленты. / No temporary publication or CI statuses
+  or equivalent wording in either language.
+- **REL-NOTES-03:** Нельзя заранее заявлять об успешном CI или публикации без
+  подтверждения. / Never claim successful verification or publication in advance.
+- **REL-NOTES-04:** Результаты проверок находятся в GitHub Actions. Ссылка на
+  успешный запуск допустима после его завершения, но необязательна в статическом
+  описании. / Actions holds actual results; a confirmed successful run link is
+  optional and may only be added after completion.
+- **REL-NOTES-05:** Текст достоверен до/после публикации и при историческом
+  просмотре. / Notes remain accurate before, after and long after publication.
+- **REL-NOTES-06:** Codex проверяет одинаковую фактическую точность RU/EN. /
+  Codex must review both languages for the same factual accuracy.
+
+Пишите возможности, исправления, установку, совместимость, ограничения и точные
+ссылки на файлы/исходники/лицензии, а не отчёт о ходе разработки.
+Describe shipped behavior, installation, compatibility, limitations and exact
+download/source/license links, rather than development progress.
+
+PR CI и инфраструктура Preflight выполняют `node scripts/check-release-notes.mjs`
+и `tests/release-notes.test.mjs`: временные статусы RU/EN, устаревшие ссылки на tag
+workflows, компонент, версия, канал, платформы, разделы изменений/установки/
+ограничений и ссылки. Это проверка распространённых ошибок, а не доказательство
+истинности любого утверждения; ручная проверка RU/EN по REL-NOTES-03/06 обязательна.
+Три снимка неудачных выпусков `client-v0.12.0`, `server-v0.11.0`, `manager-v0.5.0`
+сохранены без изменений и исключены только из общего сканирования по точному SHA-256
+текста. Проверка выбранного кандидата никогда не применяет это исключение.
+Достоверная история предыдущих неуспешных тегов и завершённых Actions runs разрешена.
+
+Оба пути выпуска используют общий `release-candidate.mjs`: plan проверяет описание
+выбранного компонента до сборки; tag и publish повторяют проверку до записи.
+`notesSha256` (UTF-8, CRLF → LF) связывает полный текст с receipt и candidate index
+на точном SHA. Promote Existing Preflight сравнивает хэш с исходным планом, сохраняя
+исходные run/attempt, подписи и receipts. Кандидаты без хэша заметок не продвигаются;
+нужен новый Preflight на новом main.
+
+До открытия draft проверяются его ID, заголовок, tag, канал, полный текст (включая
+ссылки) и asset digests. После публикации проверки повторяются. Несовпадение
+останавливает workflow без автоматической перезаписи или повторной публикации.
+`node scripts/check-release-notes.mjs --published <tag>` выполняет лёгкое сравнение
+опубликованного описания с файлом в проверенном checkout через авторизованный `gh`:
+только чтение, без сборки или полного CI. Для отдельно согласованного исправления
+трёх существующих описаний см. [безопасную синхронизацию](RELEASE-NOTES-RECOVERY.md).
+
+PR/Preflight infrastructure runs the notes validator and tests. Both release paths
+validate selected notes in shared plan/tag/publish code and bind normalized full text
+through `notesSha256` in the original receipt and candidate index. Promotion preserves
+source run/attempt and receipts without rebuilding/signing. Candidates without this
+binding require a fresh Preflight. Draft metadata/body/links/assets are checked before
+public visibility and again afterward; mismatches stop without overwriting or retrying.
+`--published <tag>` compares public notes through `gh`, read-only. Exact frozen failed
+drafts are exempt only from the general scan. Pattern checks do not prove all prose
+true; bilingual review remains mandatory. See [recovery](RELEASE-NOTES-RECOVERY.md)
+for separately approved body-only corrections, preserving historical assets.
+
 До push тега подготовьте и проверьте `docs/releases/<tag>.md`, например
 `docs/releases/client-v0.10.1.md`. Это полный текст GitHub Release, а не ссылка
 на PR или автоматически сгенерированный список коммитов. Сравнивайте с предыдущим
@@ -162,14 +223,15 @@ minor — существенные функции, major — очень круп
    из следующего тега в старый релиз; не выдавайте синтетические проверки за аппаратную
    или внешнесетевую приёмку. Отличайте подпись update manifest от Authenticode EXE.
 5. Точные файлы, способ проверки, исходники/CHANGELOG/руководство **этого тега**,
-   лицензия и ссылка на фактически успешный Preflight, когда он завершён.
+   лицензия; ссылка на фактически успешный Preflight после его завершения допустима,
+   но необязательна.
 
 Не заполняйте пустые категории фразами «нет изменений» и не подменяйте заметки
 ссылкой на общий changelog. Основа стиля — подробные релизы `v0.7.0`/`v0.8.0`;
 готовые примеры для независимых компонентов находятся в [releases/](releases/).
 Заголовок GitHub Release должен называть компонент, версию и главную тему.
 
-Workflow требует непустой файл заметок до сборки и публикует его через
+Workflow проверяет полный файл заметок до сборки и публикует его через
 `--notes-file`, без `--generate-notes`. После публикации проверьте отображённый текст,
 ссылки и соответствие файлу; подтверждённые результаты CI можно добавить в файл и
 описание после завершения выпуска. Редактирование описания не меняет теги, бинарники,

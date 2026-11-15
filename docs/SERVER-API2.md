@@ -1,7 +1,11 @@
 # Серверы API 2: запуск и управление
 
-Это руководство для текущих исходников нового ядра. Релиз API 2 ещё не опубликован.
-Не подменяйте старые опубликованные артефакты и не применяйте к ним эти команды.
+API 2 опубликован. Для чистого постоянного Linux VPS начните с
+**[пошаговой установки на Linux VPS](SERVER-LINUX.md)**: зависимости, доверенный
+bootstrap, Docker/Compose, первое вступление, reboot, обновления и backup/restore.
+Это руководство описывает общую модель API 2 и Windows/selfhost. Версии выбирайте
+из [GitHub Releases](https://ilyarusskikh.github.io/PawTalk/downloads/),
+не по версиям исходных пакетов. Старые опубликованные артефакты не заменяются.
 Миграции API 1 нет: нужна чистая конфигурация и новая БД. Старые данные не удаляются
 автоматически. Поддерживаемые сочетания перечислены в [COMPATIBILITY.md](COMPATIBILITY.md).
 
@@ -18,6 +22,8 @@
 изображения; удаление занятого голосового отключает голос, сохраняя членство.
 
 ## Чистый постоянный сервер Windows/Linux
+
+Полная последовательность для Linux VPS находится в [основной Linux-инструкции](SERVER-LINUX.md).
 
 Manager использует те же Go API и LiveKit, что встроенный хост. В конфигурации
 задаются IP, базовый порт, лимит истории и параметры обновлений. По умолчанию:
@@ -46,6 +52,40 @@ Linux использует Compose и постоянный том, Windows — �
 Без устройств с root серверная копия сама по себе не восстанавливает расшифровку.
 
 ## Приглашения, роли и выход
+
+### Локальный и внешний адрес постоянного сервера
+
+Для сервера, развёрнутого через Manager, клиент создаёт приглашения с адресом
+своего текущего подключения. Внешний IP из настроек Manager не подставляется
+автоматически, если в клиенте сохранён локальный IP.
+
+Чтобы новые приглашения содержали внешний IP, выйдите из голосового канала,
+откройте меню сервера (три точки или ПКМ) → «Изменить адрес сервера» и замените
+только IP в текущем адресе `pawtalk://IP:порт/отпечаток`. Сохраните порт и
+TLS-отпечаток сертификата без изменений. При сохранении клиент подключается по
+новому адресу и проверяет прежнюю идентичность сервера и членство; это не новое
+вступление и не изменение настроек Manager.
+
+Если из локальной сети внешний адрес недоступен, смена может завершиться
+`PAWTALK_TLS_TIMEOUT`. Одна из возможных причин — отсутствие NAT loopback
+(обращения из LAN к собственному внешнему IP) на роутере. Сам тайм-аут не доказывает
+эту причину и не определяет, доступен ли сервер из интернета. При неудачной смене
+клиент сохраняет прежний адрес.
+
+В таком случае оставьте локальный адрес в клиенте и создавайте приглашения обычным
+способом. Перед отправкой внешнему участнику в скопированной ссылке замените
+**только IP** на внешний IP того же сервера. Порт, отпечаток и весь фрагмент после
+`#` должны остаться без изменений; это применимо, когда внешний и внутренний порты
+совпадают. При перенаправлении на другой внешний порт укажите и соответствующий
+внешний порт. Для участников в той же LAN оставьте локальный IP. Повторяйте замену
+для каждой новой внешней ссылки: клиент продолжит генерировать локальные.
+Уже отправленные ссылки автоматически не изменяются; замена адреса не продлевает
+срок приглашения и не создаёт отдельное приглашение.
+
+Проверьте подключение по внешней ссылке из другой сети, а также работу голоса.
+Успешное локальное подключение не подтверждает доступность внешних TCP/UDP-портов.
+Передавайте полные приглашения только предполагаемым участникам: фрагмент после
+`#` содержит данные для вступления и получения ключа E2EE.
 
 Администратор и модератор создают одноразовые ссылки на 24 часа или многоразовые
 на час. По 100 активных ссылок каждого типа на сервер. Модератор отзывает свои,
@@ -109,7 +149,9 @@ root и не стирают ранее скачанные данные. Суще
 
 ## English
 
-This guide describes unreleased API 2 source builds. Start with fresh configuration
+API 2 is published. For a fresh permanent Linux VPS, start with the
+**[Linux VPS installation and operation guide](SERVER-LINUX.md)**. This page covers
+shared API 2 behavior and Windows/selfhost. Start with fresh configuration
 and schema 2; API 1 is rejected, with no migration. E2EE is mandatory and configured
 automatically by clients. Selfhost assigns its creator; a clean permanent server
 issues a 24-hour single-use first-admin link via Manager/CLI. No host admin link
@@ -121,7 +163,49 @@ share current rights and message ownership, and permit one voice device per grou
 Server backups preserve host/membership identity and encrypted history, but contain
 no client root. See [API-V2.md](API-V2.md) and [E2EE.md](E2EE.md).
 
-## Локальная проверка Windows до выпуска API 2
+### LAN and public addresses for a permanent server
+
+For a server deployed through Manager, the client generates invitations using its
+current connection address. It does not automatically substitute Manager's public
+IP when the client has saved a LAN IP.
+
+To generate public invitations, leave the voice channel, open the server menu
+(three dots or right-click) → **Change server address**, and replace only the IP in
+the current `pawtalk://IP:port/fingerprint` address. Keep the port and certificate's
+TLS fingerprint unchanged. Saving connects to the new address and verifies the
+existing server identity and membership; it neither rejoins nor changes Manager's
+settings.
+
+If the public address is unreachable from your LAN, saving may fail with
+`PAWTALK_TLS_TIMEOUT`. One possible cause is a router without NAT loopback
+(accessing its own public IP from the LAN). The timeout alone neither establishes
+that cause nor determines internet reachability. A failed change preserves the
+client's previous address.
+
+In that case, keep the LAN address in the client and generate invitations normally.
+Before sending a copied invitation to an external participant, replace **only the
+IP** with the same server's public IP. Preserve the port, fingerprint and entire
+fragment after `#`; this assumes the internal and external ports match. If port
+forwarding uses a different external port, set that external port as well. Keep
+the LAN IP for participants on the same LAN. Repeat the replacement for each new
+external invitation: the client will keep generating LAN links. Previously sent
+links do not update automatically; changing the address does not extend an
+invitation's lifetime or create a separate invitation.
+
+Test the public invitation from another network, including voice. A successful LAN
+connection does not verify external TCP/UDP reachability. Share full invitations
+only with intended participants: the fragment after `#` contains admission and
+E2EE key delivery material.
+
+## Историческая локальная проверка Windows до выпуска API 2
+
+Следующий раздел — исторический порядок проверки до публикации API 2, а не
+инструкция установки опубликованных компонентов. Для новой установки используйте
+[Linux VPS](SERVER-LINUX.md) или [Windows Manager UI](#windows-first-server-setup).
+Указанные ниже номера и ограничения review-набора относятся к тому снимку.
+
+Historical pre-publication Windows review procedure; use the current installation
+guides above for published releases. Review-build version references below are historical.
 
 Используйте текущие Client, Manager и Server из исходников. Старый опубликованный
 Manager API 1 не является совместимым вариантом новой конфигурации. В локальном
