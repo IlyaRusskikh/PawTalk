@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 import controller_test as fixtures
+from windows_smoke_support import assert_manager_only_layout
 from pawtalk_manager import cli, native, release, preflight
 from pawtalk_manager.controller import Controller
 
@@ -51,11 +52,11 @@ class ManagerSetupTests(unittest.TestCase):
         return dict(source='local' if package else 'published',id=package['id'] if package else None,expected=old,
                     values={k:old[k] for k in fields})
     def test_manager_only_has_no_network_server_config_or_service(self):
+        # Windows protectRoot creates this empty directory before Manager setup.
+        (self.c.root/'opt/pawtalk-server').mkdir(parents=True)
         with patch.object(release,'discover') as discover,patch.object(native,'fetch') as fetch,patch.object(self.room,'start') as start:
             self.install()
-            self.assertFalse(self.c.state_file.exists())
-            self.assertFalse((self.c.etc/'config.env').exists())
-            self.assertFalse((self.c.root/'opt/pawtalk-server').exists())
+            assert_manager_only_layout(self.c.root)
             self.calls.assert_not_called();discover.assert_not_called();fetch.assert_not_called();start.assert_not_called()
         with patch.object(cli,'WINDOWS',True),patch.object(cli,'publish_desktop_status'):
             snapshot=cli.desktop_execute(self.c,'snapshot',{})

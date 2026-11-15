@@ -982,3 +982,18 @@ Docker/Compose и native Windows проверками. Linux race/arm64, реа�
   passed. Final installers: Client 0.12.0 and Manager 0.5.0; Server 0.11.0 local ZIP.
   Public guard/staged review precede commit partition/push; build output and logs
   remain ignored. No real user Server installation or data was changed.
+
+### PR #13 Windows CI follow-up
+
+- [x] Both Windows 2022/2025 failures in run 43678305267 reached real installer
+  verification. The assertion mistook protectRoot's empty ACL-provisioned
+  opt/pawtalk-server directory for a downloaded Server. No Server payload,
+  configuration or installed-state was present. Production ACLs stay unchanged.
+- [x] Share a Manager-only layout assertion between installer/native/isolated
+  setup checks: permit a missing/empty protected Server directory, reject files,
+  version subdirectories, linked roots, configuration and installed state.
+  Add portable positive/negative regressions to the Windows handoff suite.
+- [x] Targeted checks passed: Windows handoff/layout 9/9; Linux setup/handoff
+  18 tests with 3 expected Windows-only skips. Public guard and staged review
+  precede commit/push to the same PR. Actual elevated NSIS/SCM confirmation
+  belongs to the next Windows CI run; it was not exercised locally.

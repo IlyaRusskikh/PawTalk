@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 fixtures,stage = map(Path,sys.argv[1:3])
 sys.path.insert(0,str(Path(__file__).resolve().parent))
-from windows_smoke_support import remove_owned_tree
+from windows_smoke_support import assert_manager_only_layout, remove_owned_tree
 sys.path.insert(0,str(stage/'bootstrap/manager'))
 from pawtalk_manager import bundles, native, release, preflight, cli
 from pawtalk_manager.config import atomic, lock
@@ -126,7 +126,7 @@ try:
         with patch.object(native,'fetch',side_effect=AssertionError('Manager install fetched Server')):
             native.install_manager_only(fresh,stage/'bootstrap/manager','en')
         assert len(calls)==initial_calls and not fresh.state_file.exists()
-        assert not (fresh.etc/'config.env').exists()
+        assert_manager_only_layout(fresh_root)
         # Copy a raw local archive without its fixture signature: tests the same
         # explicit unsigned-package confirmation path as manual API2 review.
         local=fixtures/'local';local.mkdir();local_zip=local/'PawTalk.Server.0.9.0.windows-x64.zip'
@@ -421,9 +421,9 @@ try:
                 installed=program/'pawtalkctl.exe'
                 assert installed.is_file() and (program/'Uninstall.exe').is_file()
                 assert hashlib.sha256(installed.read_bytes()).digest()==hashlib.sha256((stage/'pawtalkctl.exe').read_bytes()).digest()
-                assert not (install_root/'var/lib/pawtalk-manager/installed.json').exists(),'Installer initialized Server'
-                assert not (install_root/'opt/pawtalk-server').exists(),'Installer downloaded Server'
-                assert not (install_root/'etc/pawtalk/config.env').exists(),'Installer configured Server'
+                # protectRoot pre-creates the empty Server directory with its
+                # final ACLs even though Manager has not downloaded Server.
+                assert_manager_only_layout(install_root)
                 def desktop(action,payload):
                     result=subprocess.run([str(installed),'--root',str(install_root),'desktop',action],input=json.dumps(payload).encode(),capture_output=True,timeout=180)
                     assert result.returncode==0,f'Desktop {action} failed'
