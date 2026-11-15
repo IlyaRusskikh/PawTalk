@@ -1077,5 +1077,9 @@ Docker/Compose и native Windows проверками. Linux race/arm64, реа�
   both hosted Windows variants, physical devices/external networks remain CI/owner
   acceptance. Linux implementation/workflow jobs are unchanged; their previously
   green PR #13 results are retained as prior coverage, not claimed as a new run.
-- [ ] Commit, push and open the patch PR; hand off CI without watching.
+- [x] Committed CI dependencies (4209e4a), Client departure fix (d37299d) and
+  patch release preparation (ffaaa0f); pushed branch and opened
+  [PR #14](https://github.com/IlyaRusskikh/PawTalk/pull/14).
+  [CI handoff](https://github.com/IlyaRusskikh/PawTalk/pull/14/checks): no result
+  claimed and no polling. This status record is committed on the same branch.
 - [ ] Owner approvals remain separate for this PR's merge, new tags and publication.
