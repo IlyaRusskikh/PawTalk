@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { type ChatImage as Image, type ChatAccess } from './chat';
-import { decodeImage } from './chatImages';
+import { inspectImage, type ChatImage as Image } from './chatImages';
 import { Modal } from './Modal';
 import { Icon } from './Controls';
 import { t } from './i18n';
@@ -14,7 +13,9 @@ async function withImageSlot<T>(callback: () => Promise<T>) {
   try { return await callback(); }
   finally { const next = waiting.shift(); if (next) next(); else active--; }
 }
-export function ChatImage({ image, access, getKey }: { image: Image; access: ChatAccess; getKey(): Promise<CryptoKey | undefined> }) {
+export function ChatImage({ image: inputImage, load }: { image: Image; load(): Promise<Blob> }) {
+  const [dimensions, setDimensions] = useState<{ width: number; height: number }>();
+  const image = { ...inputImage, ...dimensions };
   const element = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [url, setURL] = useState<string>();
@@ -80,7 +81,7 @@ export function ChatImage({ image, access, getKey }: { image: Image; access: Cha
     return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('resize', close); window.removeEventListener('scroll', close, true); window.removeEventListener('keydown', escape, true); };
   }, [menu]);
   useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { root: element.current?.closest('.chat-stream'), rootMargin: '120px' });
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { root: element.current?.closest('.chat-stream,.member-history'), rootMargin: '120px' });
     observer.observe(element.current!); return () => observer.disconnect();
   }, []);
   useEffect(() => {
@@ -89,14 +90,15 @@ export function ChatImage({ image, access, getKey }: { image: Image; access: Cha
     setFailed(false);
     void withImageSlot(async () => {
       if (cancelled) return;
-      const payload = await window.desktop!.chatRequest(access.handle, { attachment: { id: image.id } });
-      if (cancelled) return;
-      const decoded = await decodeImage(await getKey(), image, payload as Uint8Array);
+      const decoded = await load();
+      const metadata = inspectImage(new Uint8Array(await decoded.arrayBuffer()));
+      if (!metadata || metadata.mime !== image.mime || decoded.size > 2 * 1024 * 1024) throw Error('Invalid image');
+      if (!cancelled) setDimensions({ width: metadata.width, height: metadata.height });
       if (cancelled) return;
       blob.current = decoded; objectURL = URL.createObjectURL(decoded); setURL(objectURL);
     }).catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; blob.current = undefined; if (objectURL) URL.revokeObjectURL(objectURL); setURL(undefined); setMenu(undefined); };
-  }, [access.handle, image.id, visible || open, attempt]);
+  }, [image.id, visible || open, attempt, load]);
   return <div ref={element} className="chat-image" style={{ aspectRatio: `${image.width} / ${image.height}`, width: Math.min(420, image.width) }}>
     {url ? <button type="button" className="chat-image-open" aria-label={t("Открыть изображение {0}", image.name)} onContextMenu={showMenu} onClick={() => setOpen(true)}><img src={url} width={image.width} height={image.height} alt={image.name} decoding="async"/></button>
       : failed ? <button type="button" className="image-retry" onClick={() => setAttempt(value => value + 1)}><Icon name="image"/>{t("Не удалось загрузить. Повторить")}</button>

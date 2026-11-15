@@ -17,7 +17,7 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
     image: <><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/></>,
     plus: <path d="M12 5v14M5 12h14"/>,
     send: <path d="m3 3 19 9-19 9 4-9zm4 9h15"/>,
-    chat: <path d="M21 11a9 9 0 0 1-9 9H7l-5 2 2-5v-6a9 9 0 0 1 17 0Z"/>,
+    chat: <><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z"/><path d="M7 9h10M7 13h7"/></>,
     download: <><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></>,
     stopwatch: <><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2M9 2h6M12 2v4m6 1 2-2"/></>,
     star: <path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8l-6.2 3.2L7 14.2l-5-4.9 6.9-1z"/>,

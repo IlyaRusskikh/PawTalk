@@ -1,9 +1,10 @@
 import { t } from './i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Icon, Slider } from './Controls';
+import { Slider } from './Controls';
 import type { Person } from './session';
 import { ConnectionStatus } from './ConnectionStatus';
 import { Avatar } from './Avatar';
+import { AudioStatusIcons } from './ui/AudioStatusIcons';
 
 const cardWidth = 160;
 const cardHeight = 130;
@@ -48,7 +49,7 @@ export function Participants({ people, prefs, onChange }: { people: Person[]; pr
  }}>
   <div className="person-visual">
     <Avatar name={p.name} image={p.avatar}/>
-    <span className="person-status-icons">{p.muted && <span title={t("Микрофон выключен")} aria-label={t("Микрофон выключен")}><Icon name="mic-off" size={15}/></span>}{(p.deafened || prefs[p.id]?.muted) && <span title={p.deafened ? t("Участник отключил звук") : t("Звук выключен у вас")} aria-label={p.deafened ? t("Участник отключил звук") : t("Звук выключен у вас")}><Icon name="headphones-off" size={15}/></span>}</span>
+    <AudioStatusIcons muted={p.muted} deafened={p.deafened} locallyMuted={prefs[p.id]?.muted}/>
   </div>
   <div className="person-details"><h3 title={p.name}>{p.name}</h3><ConnectionStatus name={p.name} delay={p.rtt} loss={p.packetLoss} diagnostics={p.local ? p.diagnostics : undefined}/></div>
  </article>)}</div>

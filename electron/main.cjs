@@ -1,13 +1,12 @@
 const { t } = require('../shared/i18n.cjs');
-const { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage, powerMonitor, globalShortcut, net, safeStorage, clipboard, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage, powerMonitor, globalShortcut, net, safeStorage, clipboard, dialog, shell, Notification } = require('electron');
+const { MembershipClient } = require('./membership-client.cjs');
+const { MembershipLinks } = require('./membership-links.cjs');
+const memberFetch=require('./membership-transport.cjs').membershipTransport(session,(...args)=>net.fetch(...args));
 const path = require('node:path');
 const { localInvitation, verifyInvitation, serverCertificate, connectionError } = require('./connection.cjs');
-const { mediaEndpoint } = require('./media-endpoint.cjs');
-const { roomIdentity } = require('./room-identity.cjs');
-const { X509Certificate, createHash, randomUUID } = require('node:crypto');
-const { requestChat, validChatAccess } = require('./chat.cjs');
+const { X509Certificate } = require('node:crypto');
 const { externalLinkHandler } = require('./external-links.cjs');
-const { profileSigner } = require('./profile.cjs');
 const { serverURL, invitation } = require('./address.cjs');
 const { diagnosticCommand } = require('./diagnostic-command.cjs');
 const { SelfHost } = require('./selfhost.cjs');
@@ -17,7 +16,6 @@ const { CredentialStore } = require('./credentials.cjs');
 const { Updater } = require('./updater.cjs');
 const { UpdatePreferences } = require('./update-settings.cjs');
 const { UpdateRooms } = require('./update-rooms.cjs');
-const { RoomPreviews } = require('./room-preview.cjs');
 const { confirmUpdateStarted } = require('./update-progress.cjs');
 const { StartupSettings } = require('./startup.cjs');
 const fs = require('node:fs');
@@ -28,22 +26,8 @@ let updateRooms;
 let startup;
 let language = 'ru';
 let credentials;
-let signProfile;
-let chatAccess;
-const previews = new RoomPreviews({ fetcher: (...args) => net.fetch(...args), login: async (address, base) => {
-  try {
-    // Each bookmark must prove its own saved credentials. Never borrow an
-    // active room's token simply because another invitation uses the same IP.
-    const scope = credentialKey(address);
-    const [password,key] = await credentials.loadMany([scope,'e2ee:' + scope]); if (password === null) return;
-    const response = await net.fetch(base + '/api/connect', { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(6000),
-      body: JSON.stringify({ nickname: 'Preview', password, ...(key ? { e2ee: true, e2eeKeyId: createHash('sha256').update(Buffer.from(key, 'hex')).digest('hex') } : {}) }) });
-    if (!response.ok) { await response.body?.cancel(); return; }
-    const raw = await response.text(); if (raw.length > 16384) return;
-    const body = JSON.parse(raw); if (!validChatAccess(body)) return;
-    return { token: body.chatToken, key, ephemeral: body.chatEphemeral === true };
-  } catch { return undefined; }
-} });
+let membershipClient,membershipLinks,membershipIPC;
+const voiceSignal=new (require('./voice-signal.cjs').VoiceSignal)();
 let pendingInvitation = '';
 function acceptInvitation(args) {
   for (const address of args) {
@@ -57,13 +41,19 @@ function acceptInvitation(args) {
   }
 }
 let hosting;
+let hostedServerId;
 const hostCheck = new HostCheck(app.isPackaged ? path.join(process.resourcesPath, 'diagnostics/check-selfhost.ps1') : path.join(__dirname, '../scripts/check-selfhost.ps1'));
 const certificatePins = new Map();
+function tlsOrigin(address){const url=new URL(address);if(url.protocol==='pawtalk:')return 'https://'+url.host;if(url.protocol==='wss:')url.protocol='https:';else if(url.protocol==='ws:')url.protocol='http:';return url.origin;}
+function knownPin(address){return certificatePins.get(tlsOrigin(address));}
+function safeNetFetch(address,options={}){
+  const pin=knownPin(typeof address==='string'?address:address.url);
+  return pin?memberFetch(address,{...options,pawtalkTLSFingerprint:pin}):net.fetch(address,options);
+}
 function trustInvitation(address) {
   const room = invitation(address);
-  if (room) certificatePins.set(room.hostname, room.fingerprint);
+  if (room) certificatePins.set(room.origin, room.fingerprint);
 }
-function credentialKey(address) { const room=invitation(address); const url=room?new URL(room.origin):null; return room ? `pawtalk://${url.hostname}:${url.port||443}/${room.fingerprint}` : serverURL(address, !app.isPackaged); }
 function certificateFingerprint(certificate) {
   try { return new X509Certificate(certificate.data).fingerprint256.replace(/:/g, '').toLowerCase(); } catch { return ''; }
 }
@@ -81,39 +71,14 @@ function authorized(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Unauthorized IPC');
 }
 function registerIPC() {
+  membershipIPC=require('./membership-ipc.cjs').registerMembershipIPC({ipcMain,authorized,client:membershipClient,links:membershipLinks,clipboard,send,getWindow:()=>win,Notification,getHost:()=>hosting?.status(),stopHost:()=>hosting.stop(),setVoiceEndpoint:(address,pin)=>address?voiceSignal.open(address,pin):voiceSignal.close()});
   ipcMain.handle('chat-text-copy', (event, text) => {
     authorized(event);
     if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > 12000) throw new Error('Invalid chat text');
     return clipboard.writeText(text);
   });
   require('./image-actions.cjs').registerImageActions({ ipcMain, authorized, nativeImage, clipboard, ClipboardItem: require('electron').ClipboardItem, dialog, getWindow: () => win, t });
-  ipcMain.handle('room-preview', async (event, address, cursor) => {
-    authorized(event);
-    try {
-      const effective = invitation(address) ? localInvitation(address, hosting.status()) : address;
-      const base = serverURL(effective, !app.isPackaged);
-      await verifyInvitation(effective); trustInvitation(effective);
-      const preview=await previews.read(address, base, cursor);
-      if(preview.status==='online'&&cursor?.roomId) {
-        const certificate=await serverCertificate(effective,certificatePins.get(new URL(base).hostname.replace(/^\[|\]$/g,'')));
-        const {roomId}=roomIdentity(base,certificate,preview.feed);
-        if(roomId!==cursor.roomId)return {status:'locked'};
-      }
-      return preview;
-    } catch { return { status: 'offline' }; }
-  });
   ipcMain.handle('window-active', event => { authorized(event); return win.isVisible() && !win.isMinimized() && win.isFocused(); });
-  ipcMain.handle('room-presence', async (event, address) => {
-    authorized(event);
-    try {
-      const effective = invitation(address) ? localInvitation(address, hosting.status()) : address;
-      const base = serverURL(effective, !app.isPackaged);
-      await verifyInvitation(effective);
-      trustInvitation(effective);
-      const result = await previews.read(address,base);
-      return result.status === 'online' ? result.participants ?? null : null;
-    } catch { return null; }
-  });
   ipcMain.handle('autostart-get', event => {
     authorized(event);
     return process.platform === 'win32' && app.isPackaged && startup.enabled();
@@ -128,11 +93,6 @@ function registerIPC() {
     authorized(event);
     if (typeof value !== 'boolean' || process.platform !== 'win32' || !app.isPackaged) throw new Error(t("Автозапуск доступен в установленном приложении Windows."));
     return startup.setInTray(value);
-  });
-  ipcMain.handle('server-key-copy', (event, value) => {
-    authorized(event);
-    if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) throw new Error('Invalid encryption key field');
-    clipboard.writeText(value);
   });
   ipcMain.handle('language-get', event => { authorized(event); return language; });
   ipcMain.handle('language-set', (event, value) => {
@@ -170,11 +130,11 @@ function registerIPC() {
       await verifyInvitation(effective);
       trustInvitation(effective);
       for (const endpoint of invitation(effective) ? ['/healthz', '/rtc'] : ['/healthz']) {
-        const response = await net.fetch(`${target}${endpoint}`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
+        const response = await safeNetFetch(`${target}${endpoint}`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
         await response.body?.cancel();
         if (!response.ok) return { ok: false, message: t("{0} ответил HTTP {1}. Проверьте запуск сервера и порт в приглашении.", endpoint === '/rtc' ? t("Голосовой сервер") : t("Сервер комнаты"), response.status) };
       }
-      const policyResponse = await net.fetch(`${target}/api/config`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
+      const policyResponse = await safeNetFetch(`${target}/api/config`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
       const policy = policyResponse.ok ? await policyResponse.json() : {};
       return { ok: true, e2eeRequired: policy.e2eeRequired === true, message: effective !== address
         ? t("Ваша комната доступна напрямую на этом компьютере. При подключении будет использован локальный адрес. Доступность для друга через интернет ещё не проверена.")
@@ -207,6 +167,11 @@ function registerIPC() {
       if (hostCheck.running) throw new HostError(t("Дождитесь завершения проверки сети."));
       const result = await hosting.start(input);
       trustInvitation(result.localAddress);
+      try {
+        await membershipClient.join(hosting.bootstrapAddress, typeof input.nickname === 'string' ? input.nickname : t('Гость'), t('Компьютер'));
+        hosting.bootstrapAddress = undefined;
+        send('membership-changed', { serverId: result.serverId });
+      } catch (error) { await hosting.stop(); throw error; }
       return result;
     }, t("Не удалось запустить встроенный сервер. Возможно, порт занят."));
   });
@@ -218,99 +183,6 @@ function registerIPC() {
     }, t("Не удалось закрыть комнату. Попробуйте ещё раз."));
   });
   ipcMain.handle('capabilities', async (event) => { authorized(event); return { native: !!native, platform: process.platform, packaged: app.isPackaged, secureStorage: await safeStorage.isAsyncEncryptionAvailable() }; });
-  ipcMain.handle('credentials-load', async (event, address) => {
-    authorized(event);
-    const scope=credentialKey(address);
-    const [password,e2eeKey]=await credentials.loadMany([scope,'e2ee:'+scope]);
-    return {password,e2eeKey};
-  });
-  ipcMain.handle('credentials-save', async (event, input) => {
-    authorized(event);
-    if (!input || (input.password !== null && (typeof input.password !== 'string' || input.password.length > 1024))) throw new Error(t("Неверный пароль"));
-    if (input.e2eeKey != null && (typeof input.e2eeKey !== 'string' || !/^[a-f0-9]{64}$/.test(input.e2eeKey))) throw new Error(t("Неверный ключ E2EE"));
-    const scope=credentialKey(input.address), entries=[[scope,input.password]];
-    if ('e2eeKey' in input || input.password === null) entries.push(['e2ee:'+scope,input.password === null ? null : input.e2eeKey ?? null]);
-    await credentials.saveMany(entries);
-    previews.forget(input.address);
-  });
-  ipcMain.handle('connect', async (event, input) => {
-    authorized(event);
-    if (!input || typeof input.nickname !== 'string' || typeof input.password !== 'string' || input.nickname.length > 64 || input.password.length > 1024) throw new Error(t("Неверные параметры подключения"));
-    const address = app.isPackaged || invitation(input.address) ? localInvitation(input.address, hosting.status()) : input.address;
-    const base = serverURL(address, !app.isPackaged);
-    try {
-      const e2eeKey = input.e2eeKey ?? invitation(input.address)?.e2eeKey;
-      if (e2eeKey != null && !/^[a-f0-9]{64}$/.test(e2eeKey)) return { error: t("Неверный ключ E2EE.") };
-      const certificate = await serverCertificate(address,certificatePins.get(new URL(base).hostname.replace(/^\[|\]$/g,'')));
-      trustInvitation(address);
-      const login = { nickname: input.nickname, password: input.password || invitation(input.address)?.password || '', ...(e2eeKey ? { e2ee: true, e2eeKeyId: createHash('sha256').update(Buffer.from(e2eeKey, 'hex')).digest('hex') } : {}) };
-      const scope = invitation(address)?.fingerprint ?? base;
-      const join = async () => {
-        let profile;
-        {
-          const policy = await net.fetch(`${base}/api/config`, { redirect: 'error', signal: AbortSignal.timeout(5000) });
-          if (policy.ok) {
-            const config = await policy.text();
-            if (config.length > 1024) throw Error(t("Некорректный ответ сервера"));
-            if (config.length <= 1024) {
-              const policyConfig = JSON.parse(config);
-              require('../shared/protocol.cjs').protocol(policyConfig);
-              const challenge = policyConfig.profileChallenge;
-              if (typeof challenge === 'string') profile = await signProfile(scope, challenge, input.nickname);
-            }
-          } else await policy.body?.cancel();
-        }
-        const response = await net.fetch(`${base}/api/connect`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, redirect: 'error',
-          body: JSON.stringify({ ...login, ...(profile ? { profile } : {}) }), signal: AbortSignal.timeout(12000),
-        });
-        if (Number(response.headers.get('content-length') || 0) > 16384) throw new Error(t("Некорректный ответ сервера"));
-        const raw = await response.text(); if (raw.length > 16384) throw new Error(t("Некорректный ответ сервера"));
-        const body = JSON.parse(raw);
-        if (!response.ok) return { error: typeof body.error === 'string' ? t(body.error) : t("Ошибка сервера: {0}", response.status), credentialsRequired: [401,403,426].includes(response.status) };
-        return body;
-      };
-      const body = await join();
-      if (body.error) return {error:body.error,credentialsRequired:body.credentialsRequired===true};
-      if (body.e2eeRequired === true && !e2eeKey) return { error: t("Для комнаты нужен ключ E2EE из приглашения."), credentialsRequired: true };
-      if (e2eeKey && body.e2eeRequired !== true) return { error: t("Приглашение требует E2EE, но сервер не подтвердил защищённый режим.") };
-      const mediaURL = mediaEndpoint(body.url, base, !app.isPackaged);
-      const expected = new URL(base);
-      if (mediaURL.hostname !== expected.hostname || !['wss:', ...(!app.isPackaged ? ['ws:'] : [])].includes(mediaURL.protocol) || mediaURL.username || mediaURL.password || typeof body.token !== 'string') throw new Error(t("Неверный адрес голосового сервера"));
-      const healthURL = new URL(mediaURL); healthURL.protocol = mediaURL.protocol === 'wss:' ? 'https:' : 'http:';
-      try {
-        const health = await net.fetch(healthURL.toString(), { redirect: 'error', signal: AbortSignal.timeout(3000) });
-        if (!health.ok) throw new Error('LiveKit unavailable');
-      } catch {
-        const help = expected.hostname === '127.0.0.1' && !app.isPackaged
-          ? t("Для локального запуска выполните: npm run dev:server")
-          : t("Проверьте запуск LiveKit и HTTPS-прокси на сервере.");
-        return { error: t("Пароль принят, но голосовой сервер {0} недоступен. {1}", mediaURL.host, help) };
-      }
-      // Never accept a media key supplied by the server, even as an extra response field.
-      const local = hosting.status();
-      const ownHost = local.running && !!invitation(address) && invitation(address).fingerprint === invitation(local.localAddress)?.fingerprint;
-      const profileId = typeof body.profileId === 'string' && /^[a-f0-9]{64}$/.test(body.profileId) ? body.profileId : undefined;
-      chatAccess = validChatAccess(body) && (!body.e2eeRequired || e2eeKey)
-        ? { handle: randomUUID(), feed: body.chatFeed, token: body.chatToken, profileId, base, join, renewAfter: 0, protocol: body.chatProtocol, encrypted: body.e2eeRequired === true, key: e2eeKey, ephemeral: body.chatEphemeral === true }
-        : undefined;
-      const {roomId,bookmarkAddress}=roomIdentity(base,certificate,body.chatFeed);
-      return { url: mediaURL.toString(), token: body.token, identity: body.identity, roomId, bookmarkAddress, ownHost, e2eeRequired: body.e2eeRequired === true, ...(e2eeKey ? { e2eeKey } : {}),
-        ...(chatAccess ? { chat: { handle: chatAccess.handle, feed: chatAccess.feed, ephemeral: body.chatEphemeral === true, profileId, protocol: body.chatProtocol, encrypted: body.e2eeRequired === true, mutations: body.chatMutations === true } } : {}) };
-    } catch (error) {
-      return { error: connectionError(error) };
-    }
-  });
-  ipcMain.handle('chat-request', async (event, handle, input) => {
-    authorized(event);
-    const access = chatAccess;
-    if (!access || access.handle !== handle) throw new Error('Chat is disconnected');
-    return requestChat(net.fetch.bind(net), access, input);
-  });
-  ipcMain.handle('chat-close', (event, handle) => {
-    authorized(event);
-    if (chatAccess?.handle === handle) chatAccess = undefined;
-  });
   ipcMain.handle('configure-keys', (event, config) => {
     authorized(event);
     if (!config || !Number.isInteger(config.ptt) || config.ptt < 1 || config.ptt > 254) throw new Error(t("Неверная клавиша PTT"));
@@ -356,18 +228,23 @@ else {
       channel: updatePreferences.channel,
       directory: path.join(app.getPath('userData'), 'updates'), script: app.isPackaged ? path.join(process.resourcesPath, 'updates/install-update.ps1') : path.join(__dirname, '../scripts/install-update.ps1'),
       installDirectory: path.dirname(app.getPath('exe')), executable: app.getPath('exe'), language: () => language,
-      rooms: () => updateRooms.sources(), roomFetcher: (...args) => net.fetch(...args),
+      rooms: () => updateRooms.sources(), roomFetcher: (...args) => safeNetFetch(...args),
       onState: state => send('update-changed', { ...state, installable: app.isPackaged }) });
     acceptInvitation(process.argv);
-    hosting = new SelfHost(app.isPackaged ? path.join(process.resourcesPath, 'server') : path.join(__dirname, '../resources/server'), value => send('host-changed', value));
+    hosting = new SelfHost(app.isPackaged ? path.join(process.resourcesPath, 'server') : path.join(__dirname, '../resources/server'), value => {
+      if(value.running)hostedServerId=value.serverId;
+      else if(hostedServerId){const ended=hostedServerId;hostedServerId=undefined;void membershipIPC?.serverEnded(ended).catch(()=>{});}
+      send('host-changed', value);
+    });
     session.defaultSession.setCertificateVerifyProc((request, callback) => {
-      const pin = certificatePins.get(request.hostname);
-      const actual = certificateFingerprint(request.certificate);
-      callback(pin ? (actual === pin ? 0 : -2) : -3);
+      // The callback exposes no port. Force the renderer's URL-aware error
+      // handler to decide pinned origins; main-process requests use isolated pools.
+      const pinned=[...certificatePins.keys()].some(origin=>new URL(origin).hostname.replace(/^\[|\]$/g,'')===request.hostname.replace(/^\[|\]$/g,''));
+      callback(pinned?-2:-3);
     });
     app.on('certificate-error', (event, _contents, url, _error, certificate, callback) => {
-      const pin = certificatePins.get(new URL(url).hostname);
-      if (pin && certificateFingerprint(certificate) === pin) { event.preventDefault(); callback(true); }
+      const pin = knownPin(url);
+      if (_contents===win?.webContents && pin && certificateFingerprint(certificate) === pin) { event.preventDefault(); callback(true); }
       else callback(false);
     });
     credentials = new CredentialStore(path.join(app.getPath('userData'), 'credentials'), {
@@ -375,7 +252,8 @@ else {
       encryptString: value => safeStorage.encryptStringAsync(value),
       decryptString: async value => (await safeStorage.decryptStringAsync(value)).result,
     });
-    signProfile = profileSigner(credentials);
+    membershipClient=new MembershipClient({credentials,fetcher:memberFetch,verify:address=>serverCertificate(address),trust:address=>trustInvitation(address),allowLoopback:!app.isPackaged});
+    membershipLinks=new MembershipLinks(membershipClient);
     session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
       callback(contents === win?.webContents && permission === 'media' && details.mediaTypes?.every(type => type === 'audio'));
     });
@@ -390,6 +268,7 @@ else {
     win.webContents.on('render-process-gone', restoreAudio);
     win.on('close', event => { if (!quitting) { event.preventDefault(); win.hide(); } });
     registerIPC();
+    membershipIPC.start();
     if (native) {
       try { native.startPtt(down => send('ptt', down)); }
       catch { native = undefined; console.error('Windows input hooks are unavailable'); }
@@ -400,7 +279,7 @@ else {
     tray.setToolTip('PawTalk');
     refreshTray();
     tray.on('double-click', () => win.show());
-    powerMonitor.on('suspend', () => { restoreAudio(); send('suspend', true); void hostCheck.cancel(); if (hosting.starting) hosting.cancelled = true; else void hosting.stop(t("Комната закрыта: компьютер перешёл в сон")); });
+    powerMonitor.on('suspend', () => { restoreAudio(); membershipIPC?.suspend();send('suspend', true); void hostCheck.cancel(); if (hosting.starting) hosting.cancelled = true; else void hosting.stop(t("Комната закрыта: компьютер перешёл в сон")); });
     powerMonitor.on('lock-screen', () => { restoreAudio(); send('ptt', false); });
     if (devURL) await win.loadURL(devURL); else await win.loadFile(path.join(__dirname, '../dist/index.html'));
     await confirmUpdateStarted(path.join(app.getPath('userData'), 'updates'), app.getVersion(), app.getPath('exe'));
@@ -408,7 +287,7 @@ else {
   });
   let hostShutdown = false;
   app.on('before-quit', event => {
-    quitting = true; restoreAudio(); native?.shutdown(); globalShortcut.unregisterAll();
+    quitting = true; membershipIPC?.stop();restoreAudio(); native?.shutdown(); globalShortcut.unregisterAll();
     if (hosting && !hostShutdown) {
       event.preventDefault(); hostShutdown = true;
       void (async () => { await hostCheck.cancel(); while (hosting.starting) await new Promise(resolve => setTimeout(resolve, 100)); await hosting.stop(); })().finally(() => app.quit());

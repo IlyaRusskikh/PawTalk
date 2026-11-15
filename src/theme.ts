@@ -3,14 +3,14 @@ export type Theme = {
   success: string; warning: string; danger: string; onAccent: string; shadow: string;
   radius: number; fontSize: number; messageSpacing: number;
 };
-export const defaultTheme: Theme = { accent: '#8e83ff', background: '#191b22', surface: '#242731', sidebar: '#11141a', chat: '#20222b', text: '#eceef5', muted: '#898d9f', border: '#30333f', success: '#78d4aa', warning: '#e5bd64', danger: '#ef8ca4', onAccent: '#12141a', shadow: '#090b13', radius: 12, fontSize: 13, messageSpacing: 6 };
+export const defaultTheme: Theme = { accent: '#8e83ff', background: '#191b22', surface: '#242731', sidebar: '#11141a', chat: '#20222b', text: '#eceef5', muted: '#898d9f', border: '#30333f', success: '#23a55a', warning: '#e5bd64', danger: '#ef8ca4', onAccent: '#12141a', shadow: '#090b13', radius: 12, fontSize: 13, messageSpacing: 6 };
 export const themePresets = [
   { ...defaultTheme, name: 'Лаванда' },
   { ...defaultTheme, name: 'Океан', accent: '#6abedb', background: '#111a22', surface: '#1d2a35', sidebar: '#0d151c', chat: '#18232e', border: '#304252' },
   { ...defaultTheme, name: 'Мята', accent: '#7bcdb0', background: '#141d1b', surface: '#222e2a', sidebar: '#0f1613', chat: '#1a2621', border: '#35453c' },
   { ...defaultTheme, name: 'Роза', accent: '#e6a0b7', background: '#20171e', surface: '#30252e', sidebar: '#181016', chat: '#291e26', border: '#483542' },
   { ...defaultTheme, name: 'Янтарь', accent: '#dfbb78', background: '#201c17', surface: '#302a22', sidebar: '#181510', chat: '#28231c', border: '#463d31' },
-  { ...defaultTheme, name: 'Светлая', accent: '#635bda', background: '#f4f5fa', surface: '#ffffff', sidebar: '#e9ecf4', chat: '#ffffff', text: '#252b3d', muted: '#667085', border: '#dbe0eb', success: '#237847', warning: '#8a6114', danger: '#a83450', onAccent: '#ffffff', shadow: '#18203a' },
+  { ...defaultTheme, name: 'Светлая', accent: '#635bda', background: '#f4f5fa', surface: '#ffffff', sidebar: '#e9ecf4', chat: '#ffffff', text: '#252b3d', muted: '#667085', border: '#dbe0eb', warning: '#8a6114', danger: '#a83450', onAccent: '#ffffff', shadow: '#18203a' },
 ] satisfies (Theme & { name: string })[];
 export const validColor = (value: unknown): value is string => typeof value === 'string' && /^#[a-f0-9]{6}$/i.test(value);
 export const colorFields = ['accent', 'background', 'surface', 'sidebar', 'chat', 'text', 'muted', 'border', 'success', 'warning', 'danger', 'onAccent', 'shadow'] as const;
