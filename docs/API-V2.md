@@ -2,7 +2,7 @@
 
 Status: published in compatible API 2 Client, selfhost, permanent Server and Manager;
 current source implements this contract. See [published compatibility](COMPATIBILITY.md)
-and the [Debian VPS guide](SERVER-DEBIAN.md). This breaking contract does not describe
+and the [Linux VPS guide](SERVER-LINUX.md). This breaking contract does not describe
 historical installed API 1 releases. No migration or second production core is shipped.
 Verification history is recorded in MULTICHANNEL-PLAN.md, with environment limitations.
 

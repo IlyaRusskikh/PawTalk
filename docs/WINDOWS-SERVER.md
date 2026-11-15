@@ -1,6 +1,6 @@
 # Permanent Windows server / Постоянный Windows-сервер
 
-> Историческое руководство API 1 с отдельной заметкой о переходе. API 2 опубликован: для новой установки используйте [актуальное руководство](SERVER-API2.md#windows-first-server-setup), [контракт API](API-V2.md) и [совместимость](COMPATIBILITY.md). Пароли и ручной генератор E2EE ниже к API 2 не относятся. Для Linux VPS — [установка Debian](SERVER-DEBIAN.md).
+> Историческое руководство API 1 с отдельной заметкой о переходе. API 2 опубликован: для новой установки используйте [актуальное руководство](SERVER-API2.md#windows-first-server-setup), [контракт API](API-V2.md) и [совместимость](COMPATIBILITY.md). Пароли и ручной генератор E2EE ниже к API 2 не относятся. Для Linux VPS — [установка Linux VPS](SERVER-LINUX.md).
 
 **Server 0.10.1 / Manager 0.4.0 — released previews / предварительные выпуски.**
 [Актуальный установщик Manager](https://ilyarusskikh.github.io/PawTalk/downloads/#manager) · [Изменения](releases/manager-v0.4.0.md).

@@ -5,8 +5,8 @@ Client, selfhost, permanent Windows/Linux Server and Manager use that contract.
 API 2 is a published breaking update with no API 1 migration. Historical binaries
 remain unchanged; source package versions do not announce new public releases.
 Select future versions from [GitHub Releases](https://ilyarusskikh.github.io/PawTalk/downloads/)
-and their component-specific requirements. Install a fresh Debian VPS with the
-**[Linux guide](SERVER-DEBIAN.md)**.
+and their component-specific requirements. Install a fresh Linux VPS with the
+**[Linux guide](SERVER-LINUX.md)**.
 
 Published compatible preview snapshot, 15 November 2026:
 [Client 0.12.1](https://github.com/IlyaRusskikh/PawTalk/releases/tag/client-v0.12.1),
@@ -85,7 +85,7 @@ API 1, отсутствие версии и неизвестный проток�
 На 15 ноября 2026 года опубликована совместимая preview-комбинация Client 0.12.1,
 Server 0.11.1, Manager 0.5.1 (ссылки выше). Это датированный снимок; актуальные версии
 выбираются из GitHub Releases с учётом условий каждого выпуска. Основная инструкция
-нового Linux VPS — [установка на Debian](SERVER-DEBIAN.md).
+нового Linux VPS — [установка на Linux VPS](SERVER-LINUX.md).
 
 Ключи создаёт и хранит клиент; E2EE обязательно. Временный и постоянный хосты
 собирают одно ядро, различаются сроком жизни/хранением. Для чистой установки нужны

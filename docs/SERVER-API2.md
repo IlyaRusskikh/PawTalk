@@ -1,7 +1,7 @@
 # Серверы API 2: запуск и управление
 
 API 2 опубликован. Для чистого постоянного Linux VPS начните с
-**[пошаговой установки на Debian](SERVER-DEBIAN.md)**: зависимости, доверенный
+**[пошаговой установки на Linux VPS](SERVER-LINUX.md)**: зависимости, доверенный
 bootstrap, Docker/Compose, первое вступление, reboot, обновления и backup/restore.
 Это руководство описывает общую модель API 2 и Windows/selfhost. Версии выбирайте
 из [GitHub Releases](https://ilyarusskikh.github.io/PawTalk/downloads/),
@@ -23,7 +23,7 @@ bootstrap, Docker/Compose, первое вступление, reboot, обнов
 
 ## Чистый постоянный сервер Windows/Linux
 
-Полная последовательность для Debian VPS находится в [основной Linux-инструкции](SERVER-DEBIAN.md).
+Полная последовательность для Linux VPS находится в [основной Linux-инструкции](SERVER-LINUX.md).
 
 Manager использует те же Go API и LiveKit, что встроенный хост. В конфигурации
 задаются IP, базовый порт, лимит истории и параметры обновлений. По умолчанию:
@@ -150,7 +150,7 @@ root и не стирают ранее скачанные данные. Суще
 ## English
 
 API 2 is published. For a fresh permanent Linux VPS, start with the
-**[Debian installation and operation guide](SERVER-DEBIAN.md)**. This page covers
+**[Linux VPS installation and operation guide](SERVER-LINUX.md)**. This page covers
 shared API 2 behavior and Windows/selfhost. Start with fresh configuration
 and schema 2; API 1 is rejected, with no migration. E2EE is mandatory and configured
 automatically by clients. Selfhost assigns its creator; a clean permanent server
@@ -201,7 +201,7 @@ E2EE key delivery material.
 
 Следующий раздел — исторический порядок проверки до публикации API 2, а не
 инструкция установки опубликованных компонентов. Для новой установки используйте
-[Debian VPS](SERVER-DEBIAN.md) или [Windows Manager UI](#windows-first-server-setup).
+[Linux VPS](SERVER-LINUX.md) или [Windows Manager UI](#windows-first-server-setup).
 Указанные ниже номера и ограничения review-набора относятся к тому снимку.
 
 Historical pre-publication Windows review procedure; use the current installation

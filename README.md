@@ -59,7 +59,7 @@ in Manager or the host CLI. The first client creates and saves encryption keys;
 there is no separate key generator. Further administrators join normally and are
 promoted by an existing administrator. [Operator guide](docs/SERVER-API2.md).
 
-For a clean Linux VPS, follow the **[Debian Server API 2 installation guide](docs/SERVER-DEBIAN.md)**:
+For a clean Linux VPS, follow the **[Linux VPS Server API 2 installation guide](docs/SERVER-LINUX.md)**:
 trusted bootstrap, Docker/Compose, first-admin link, reboot checks, updates and backup/restore.
 
 Self-hosting over the internet needs reachable ports: TCP 18443, TCP 18444 and UDP

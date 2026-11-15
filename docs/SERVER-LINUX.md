@@ -1,4 +1,4 @@
-# Постоянный PawTalk Server API 2 на Debian VPS
+# Постоянный PawTalk Server API 2 на Linux VPS
 
 Пошаговая установка опубликованных Server и Linux Manager с нуля. Windows-клиент
 подключается к VPS; ставить Client, Node.js или Go на VPS не требуется.
@@ -15,10 +15,12 @@
 
 ## 1. Подготовить чистый VPS
 
-- **Debian 12 Bookworm**, systemd, архитектура **amd64 или arm64**. Код также
-  допускает Ubuntu 24.04, но команды ниже предназначены для Debian 12.
-  Debian 13, производные дистрибутивы, armhf и rootless Docker не являются
-  поддерживаемым этим руководством вариантом.
+- **Debian 12 Bookworm или Ubuntu 24.04 LTS**, systemd, архитектура **amd64 или
+  arm64**. Это поддерживаемые текущим Linux Manager дистрибутивы. Общие команды
+  ниже подходят обоим; bootstrap сам выбирает официальный apt-репозиторий Docker
+  для установленного дистрибутива. Другие версии и дистрибутивы (включая Debian 13),
+  armhf и rootless Docker не являются поддерживаемым вариантом. Общая инструкция
+  Linux VPS не означает поддержку любого Linux.
 - Root или пользователь с sudo, постоянный публичный IPv4. IPv6-only VPS не подходит.
 - Python 3.11+, OpenSSL 3, доверенные CA, Docker Engine для Linux и Compose plugin
   версии 2 или новее. Старый отдельный `docker-compose` не используется.
@@ -27,7 +29,7 @@
   Backup резервирует минимум 512 МиБ либо примерно 2,4 размера данных + 16 МиБ,
   смотря что больше. Проверенного минимального числа CPU/RAM/участников нет;
   не считайте небольшой VPS подтверждённой нагрузочной конфигурацией.
-- Исходящий HTTPS к GitHub API/downloads, GHCR и репозиториям Debian/Docker.
+- Исходящий HTTPS к GitHub API/downloads, GHCR и репозиториям ОС/Docker.
   Нужны корректные часы VPS для проверки срока подписанных манифестов.
 
 Ниже команды для **Bash** обычного пользователя с sudo. Если вошли как **root**,
@@ -41,6 +43,8 @@ apt-get install -y python3 openssl ca-certificates git curl iproute2
 ```
 
 Для пользователя с sudo:
+
+Оба поддерживаемых дистрибутива используют apt; названия пакетов ниже одинаковы.
 
 ```bash
 sudo apt-get update
@@ -125,6 +129,7 @@ sudo docker compose version --short
 Существующую apt-конфигурацию Docker он не перезаписывает, конфликтующие пакеты
 автоматически не удаляет. При конфликте сверяйтесь с
 [официальной установкой Docker для Debian](https://docs.docker.com/engine/install/debian/)
+или [Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
 и оцените существующие нагрузки; не выполняйте массовую очистку Docker.
 
 Из проверенного checkout в интерактивном SSH-терминале:
@@ -234,7 +239,7 @@ sudo pawtalkctl logs
 или выполнили uninstall, `unless-stopped` не означает автоматическое возобновление.
 Для сохранённой установки штатный повторный `sudo pawtalkctl install` запускает её
 с прежними данными. Настоящий reboot и внешнюю сеть нельзя подтвердить обычным
-Debian userspace-контейнером.
+Linux userspace-контейнером.
 
 ## 7. Обновления и настройки
 
@@ -386,8 +391,11 @@ Compose project, отключаются `pawtalk-update.timer` и `pawtalk-healt
 
 ## English overview
 
-This is the primary fresh Debian 12 VPS guide for published API 2 releases.
-Only amd64/arm64, systemd, root/sudo, a persistent public IPv4, Python 3.11+,
+This is the primary fresh Linux VPS guide for published API 2 releases.
+The current Manager supports Debian 12 and Ubuntu 24.04 LTS on amd64/arm64.
+Both use the apt commands below; Docker bootstrap selects the distribution's
+official repository. Other distributions/versions are unsupported. systemd,
+root/sudo, a persistent public IPv4, Python 3.11+,
 OpenSSL 3 and Linux Docker Engine with Compose plugin major ≥ 2 are covered.
 The 1 GiB free-space preflight threshold is not a capacity recommendation;
 CPU/RAM/concurrency acceptance remains unmeasured. Published versions come from

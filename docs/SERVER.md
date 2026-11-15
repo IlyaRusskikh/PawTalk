@@ -2,7 +2,7 @@
 
 ## Актуальные руководства / Current guides
 
-- **[Debian VPS: Server API 2 с нуля](SERVER-DEBIAN.md)** — основная Linux-инструкция:
+- **[Linux VPS: Server API 2 с нуля](SERVER-LINUX.md)** — основная Linux-инструкция:
   доверенный bootstrap, Docker/Compose, первое вступление администратора,
   проверка перезагрузки, обновления, backup/restore и удаление с сохранением данных.
 - [API 2: каналы, членство и управление](SERVER-API2.md) — общая модель Client/Server,
@@ -15,7 +15,7 @@
 API 2 опубликован. Нужны чистые конфигурация и данные API 2; автоматической
 миграции установок/backup API 1 нет. Server, Manager и Client обновляются независимо.
 
-**English:** Start with the **[Debian VPS API 2 guide](SERVER-DEBIAN.md)** for a fresh
+**English:** Start with the **[Linux VPS API 2 guide](SERVER-LINUX.md)** for a fresh
 permanent Linux server. It covers trusted installation, Docker/Compose, first-admin
 admission, reboot acceptance, updates, backup/restore and data-preserving uninstall.
 Use the API 2 guide for Windows/UI and shared membership behavior. API 2 is published;
