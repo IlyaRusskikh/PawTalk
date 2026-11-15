@@ -4,9 +4,9 @@ import { createRequire } from 'node:module';
 import net from 'node:net';
 const { SelfHost, publicIPv4, checkPorts } = createRequire(import.meta.url)('../electron/selfhost.cjs');
 
-test('selfhost rejects invalid passwords and port ranges before starting processes', async () => {
+test('selfhost rejects malformed settings and port ranges before starting processes', async () => {
  const host = new SelfHost('unused');
- for (const input of [{ password: 'short', port: 18443 }, { password: 'long-enough', port: 443 }, { password: 'long-enough', port: 65533 }, { password: 'long-enough', port: 18443.5 }]) await assert.rejects(host.start(input));
+ for (const input of [null, {name:42,port:18443}, {name:'',port:18443}, {name:'x'.repeat(81),port:18443}, { port: 443 }, { port: 65533 }, { port: 18443.5 }]) await assert.rejects(host.start(input));
  assert.equal(host.status().running, false);
 });
 

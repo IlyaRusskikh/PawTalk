@@ -64,7 +64,6 @@ def main():
         raise SystemExit(cli.main(sys.argv[3:]))
     source = Path(__file__).resolve().parents[1]
     prefix = 'pawtalk-ci-'+uuid.uuid4().hex[:12]
-    encrypted = os.environ.get('PAWTALK_COMPOSE_TEST_E2EE') == 'true'
     for _ in range(100):
         with socket.socket() as free:
             free.bind(('127.0.0.1',0))
@@ -159,9 +158,7 @@ def main():
             trust = root/'trust.json'
             trust.write_text(json.dumps(fixture.keys))
             config_file = root/'config.env'
-            key_id = hashlib.sha256(b'synthetic local E2EE key identity').hexdigest()
-            write_config(config_file,{'PAWTALK_PUBLIC_IP':'127.0.0.1','PAWTALK_PORT':str(room_port),
-                         'PAWTALK_E2EE':'true' if encrypted else 'false','PAWTALK_E2EE_KEY_ID':key_id if encrypted else ''})
+            write_config(config_file,{'PAWTALK_PUBLIC_IP':'127.0.0.1','PAWTALK_PORT':str(room_port)})
             command = ['--root',str(c.root),'--lang','en','--no-systemd','install','--config',str(config_file),
                        '--trust',str(trust),'--server-manifest',str(server_manifest),'--manager-manifest',str(initial_manifest),'--bundle',str(initial_bundle)]
             install = subprocess.run([sys.executable,__file__,'--install-worker',repository,*command],capture_output=True,text=True,timeout=180)
@@ -172,16 +169,20 @@ def main():
             assert install.returncode == 0,install.stderr
             lines = install.stdout.splitlines()
             invitation = next(line for line in lines if line.startswith('pawtalk://'))
-            password = lines[lines.index(cli.text('initial_password','en'))+1]
-            fingerprint = invitation.rsplit('/',1)[1]
+            fingerprint = invitation.split('#')[0].rsplit('/',1)[1]
             project = c.state()['project']
             container = c.runtime.container(c.state(),c.config())
             assert container['HostConfig']['NetworkMode'] == 'host'
             assert container['Config']['User'] == '65532:65532'
-            assert password not in docker('logs',container['Id'])
-            once = subprocess.run(['docker','exec',container['Id'],'/pawtalk','serve','initial-password'],capture_output=True)
+            assert invitation not in docker('logs',container['Id'])
+            def native_client(mode):
+                subprocess.run(['node',str(source/'tests/membership-host-client.cjs'),mode,str(root),invitation],check=True,timeout=45)
+            native_client('join')
+            assert c.runtime.initialized(c.state(),c.config()) is True
+            assert c.runtime.invitation(c.state(),c.config()) is None
+            once = subprocess.run(['docker','exec',container['Id'],'/pawtalk','serve','initial-admin'],capture_output=True)
             assert once.returncode != 0
-            print('PASS signed offline install, non-root Compose, one-time password and no password in logs')
+            print('PASS signed offline install, non-root Compose, one-time first-admin admission and no invitation in logs')
 
             def api(path,body=None,token=None,expected=200):
                 connection = http.client.HTTPSConnection('127.0.0.1',room_port,context=ssl._create_unverified_context(),timeout=10)
@@ -195,21 +196,13 @@ def main():
                 connection.close()
                 assert status == expected,(path,status,data)
                 return json.loads(data)
-            login = {'nickname':'CI','password':password,**({'e2ee':True,'e2eeKeyId':key_id} if encrypted else {})}
-            if encrypted:
-                api('/api/connect',{'nickname':'Missing key','password':password},expected=426)
-                api('/api/connect',{**login,'e2eeKeyId':'0'*64},expected=403)
-            joined = api('/api/connect',login)
-            token = joined['chatToken']
-            request_id = uuid.uuid4().hex
-            api('/api/chat',dict(requestId=request_id,nonce=base64.b64encode(b'x'*12).decode() if encrypted else '',ciphertext=base64.b64encode(b'local synthetic opaque history payload').decode()),token)
+            api('/api/v2/state',expected=401)
+            api('/api/connect',{'nickname':'Legacy'},expected=426)
             def preserved():
-                api('/api/connect',{**login,'nickname':'After'})
-                messages = api('/api/chat?after=0',token=token)['messages']
-                assert any(item['requestId'] == request_id for item in messages)
+                native_client('verify')
                 assert c.runtime.identity(c.state(),c.config()) == c.state()['identity']
-                assert api('/api/config')['e2eeRequired'] == encrypted
-                assert c.config()['PAWTALK_E2EE_KEY_ID'] == (key_id if encrypted else '')
+                assert api('/api/config')['e2eeRequired'] is True
+                assert api('/api/config')['apiProtocolVersion'] == 2
             original = c.state()
             reinstall = subprocess.run([sys.executable,__file__,'--install-worker',repository,*command],capture_output=True,text=True,timeout=180)
             assert reinstall.returncode == 0,reinstall.stderr
@@ -221,7 +214,7 @@ def main():
             assert c.configure({'PAWTALK_CHAT_MAX_MB':'64'})
             assert c.state()['version'] == '0.9.1'
             assert c.state()['image'].endswith(digests[1])
-            print('PASS real Server rollout preserves TLS, password, SQLite; configure retains installed digest')
+            print('PASS real Server rollout preserves TLS, membership, encrypted SQLite; configure retains installed digest')
             try:
                 c.update_server(server_release('0.9.2',digests[2]))
                 raise AssertionError('Unhealthy rollout was accepted')
@@ -248,7 +241,7 @@ def main():
             print('PASS Manager-only self-update has no Server restart or digest change')
             c.restore(checkpoint)
             preserved()
-            print('PASS explicit backup restore with password/history/TLS verification')
+            print('PASS explicit backup restore with membership/encrypted-history/TLS verification')
             c.runtime.stop(c.state(),c.config())
             c.runtime.compose(c.state(),c.config(),'down')
             fresh = controller.Controller(root/'fresh-host')
@@ -258,7 +251,7 @@ def main():
             restored = subprocess.run([sys.executable,__file__,'--install-worker',repository,'--root',str(fresh.root),'--no-systemd','backup','restore',checkpoint,'--trust',str(trust),'--yes'],capture_output=True,text=True,timeout=180)
             assert restored.returncode == 0,restored.stderr
             c = fresh
-            # Auth limiter resets on container restart, identities and chat token survive.
+            # Reauthenticate from the same synthetic device after fresh-host restore.
             preserved()
             print('PASS restore onto a fresh host directory with a new volume')
         finally:

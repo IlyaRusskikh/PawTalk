@@ -9,12 +9,12 @@ app.whenReady().then(async () => {
   win.webContents.on('console-message', event => { if (event.level === 'error') errors.push(event.message); });
   const run = code => win.webContents.executeJavaScript(code, true);
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const until = async (code, label) => { for (let i = 0; i < 100; i++) { if (await run(code)) return; await delay(50); } throw Error(label); };
+  const until = async (code, label) => { for (let i = 0; i < 100; i++) { if (await run(code)) return; await delay(50); } throw Error(label+': '+await run("JSON.stringify({count:document.querySelectorAll('.member-message').length,text:document.body.innerText.slice(-800)})")); };
   const count = () => run('window.notifications');
-  const baseline = async () => { await until('window.ready && document.querySelectorAll(".chat-message").length===100', 'history ready'); await delay(200); await run('window.setWindowActive(true)'); };
+  const baseline=async()=>{await until("window.ready&&!!document.querySelector('.member-server-list button')",'server ready');await run("document.querySelector('.member-server-list button').click()");await until("document.querySelectorAll('.member-message').length===100",'history ready');await delay(200);await run('window.setWindowActive(true)');};
   const bottom = async () => {
-    await run(`document.querySelector('.chat-jump')?.click()`); await delay(250);
-    await run(`(()=>{const list=document.querySelector('.chat-stream');list.scrollTop=list.scrollHeight;list.dispatchEvent(new Event('scroll'));})()`); await delay(100);
+    await run(`[...document.querySelectorAll('.member-load')].find(e=>e.textContent==='К новым сообщениям')?.click()`); await delay(250);
+    await run(`(()=>{const list=document.querySelector('.member-history');list.scrollTop=list.scrollHeight;list.dispatchEvent(new Event('scroll'));})()`); await delay(100);
   };
   const incoming = async (amount = 1, own = false) => { await run(`window.addMessages(${amount},${own})`); await delay(350); };
   try {
@@ -22,16 +22,17 @@ app.whenReady().then(async () => {
     await baseline();
     assert.equal(await count(), 0, 'initial history is silent');
     await bottom();
-    await incoming();
-    assert.equal(await count(), 0, 'visible latest chat is silent');
+    await run('window.messageDelay=300');await incoming();
+    assert.equal(await count(), 0, 'visible latest chat remains silent while rendering waits for a slower history request');await run('window.messageDelay=0');
     await run('window.setWindowActive(false)');
     await incoming();
     assert.equal(await count(), 1, 'inactive/minimized window notifies');
+    assert.deepEqual(await run("(()=>{const n=window.desktopNotifications.at(-1);return {text:n.text,author:n.authorName,channel:n.channelName}})()"),{text:'New message 122',author:'Friend',channel:'General'},'decrypted content reaches notification IPC');
     await incoming(1, true);
     assert.equal(await count(), 1, 'own messages are silent');
     await run('window.refresh()'); await delay(350);
     assert.equal(await count(), 1, 'same poll result never repeats');
-    await run('window.setWindowActive(true); document.querySelector(".chat-stream").scrollTop=0; document.querySelector(".chat-stream").dispatchEvent(new Event("scroll"))');
+    await run('window.setWindowActive(true); document.querySelector(".member-history").scrollTop=0; document.querySelector(".member-history").dispatchEvent(new Event("scroll"))');
     await delay(150); await incoming();
     assert.equal(await count(), 2, 'scrolled-up chat notifies');
     await bottom(); await incoming();
@@ -47,15 +48,10 @@ app.whenReady().then(async () => {
     await incoming();
     assert.equal(await count(), 5, 'subsequent live messages notify after reconnect');
 
-    await win.loadURL(process.env.PAWTALK_UI_TEST_URL + '/tests/notifications.html?live=1');
-    await until('window.ready', 'live ready'); await delay(100);
-    await run('window.setWindowActive(false); window.emitLive()'); await delay(150);
-    assert.equal(await count(), 1, 'legacy live chat notifies');
-    await run('window.emitLive(false,true)'); await delay(150);
-    assert.equal(await count(), 1, 'live packet replay is silent');
-    await run('window.emitLive(true)'); await delay(150);
-    assert.equal(await count(), 1, 'own live packets are silent');
-
+    await run('window.setWindowActive(false);window.muteServer(true)');await incoming();assert.equal(await count(),5,'muted server suppresses message audio');
+    assert.equal(await run("window.playSound('join')"),'room-join.wav','server mute preserves voice entry cue');
+    assert.equal(await run("window.playSound('leave')"),'room-leave.wav','server mute preserves voice exit cue');
+    await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/notifications.html');await baseline();
     assert.equal(await run(`window.playSound('join',{sounds:false})`), undefined);
     assert.equal(await run(`window.playSound('join',{outputVolume:0})`), undefined);
     for (const event of ['join','leave','message','mute','unmute','deafen','undeafen']) assert.equal(await run(`window.playSound('${event}',{notificationVolume:0})`), undefined, 'one notification volume mutes every cue');
@@ -96,6 +92,19 @@ app.whenReady().then(async () => {
     assert.ok(plays[1].offset>0 && plays[1].offset<plays[1].seconds,'room exit starts at its audible attack');
     assert.ok(plays.every(play => play.channels >= 1 && play.channels <= 2 && play.sink === '' && play.seconds > .3 && play.seconds < 4), 'native playback uses the expected decoded assets and default sink');
     assert.deepEqual(errors, []);
+    await run('window.addServer()');
+    await until("document.querySelectorAll('.member-server-list button').length===2",'second server');
+    await run("(()=>{const buttons=document.querySelectorAll('.member-server-list button'),dataTransfer=new DataTransfer();buttons[1].dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer}));buttons[0].dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer}));})()");
+    await until("document.querySelector('.member-server-list button').getAttribute('aria-label').startsWith('Synthetic second server')",'server drag order');
+    assert.equal(await run("JSON.parse(localStorage.getItem('pawtalk.v2.server-order'))[0]"),'3'.repeat(32),'server order persisted locally');
+    await run('window.refresh()');await delay(200);
+    assert.ok(await run("document.querySelector('.member-server-list button').getAttribute('aria-label').startsWith('Synthetic second server')"),'refresh keeps local server order');
+    await win.loadURL(process.env.PAWTALK_UI_TEST_URL + '/tests/notifications.html');await baseline();
+    await run('window.setWindowActive(false)');await delay(100);
+    await run('window.addMessages(1);window.addMessages(1,true)');
+    await until("window.desktopNotifications.length>0",'mixed incoming/own burst notification');
+    assert.equal(await run('window.desktopNotifications.at(-1).text'),'New message 121','mixed burst previews incoming content');
+    assert.equal(await run('window.desktopNotifications.at(-1).authorName'),'Friend');
     // Check packaged file:// asset resolution, independent of Vite's dev server.
     await win.loadFile(path.resolve('dist/index.html'));
     const decoded = await run(`(async()=>{const ctx=new OfflineAudioContext(1,1,48000);const results=[];for(const name of ${JSON.stringify(['mute.wav', 'unmute.wav', 'deafen.wav', 'undeafen.wav', 'room-join.wav', 'room-leave.wav', ...Array.from({length:5}, (_,i)=>`message-purr-0${i+1}.wav`)])}){const r=await fetch(new URL('./sounds/'+name,document.baseURI));if(!r.ok)throw Error(name);const b=await ctx.decodeAudioData(await r.arrayBuffer());results.push(b.duration);}return results;})()`);

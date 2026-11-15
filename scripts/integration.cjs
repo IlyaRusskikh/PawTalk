@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const api2Fixture=process.env.PAWTALK_API2_FIXTURE?JSON.parse(require('node:fs').readFileSync(process.env.PAWTALK_API2_FIXTURE,'utf8')):undefined;
+const api2Clients=[];let api2Heartbeat;
 const serverAddress = process.env.PAWTALK_TEST_SERVER || 'http://127.0.0.1:8080';
 const uiAddress = process.env.PAWTALK_UI_TEST_URL || 'http://127.0.0.1:5173';
 const mediaKey = process.env.PAWTALK_TEST_MEDIA_KEY;
@@ -18,7 +20,7 @@ function pinTestServer(partition) {
   callback(request.hostname === testInvitation.hostname ? (actual === testInvitation.fingerprint ? 0 : -2) : -3);
  });
 }
-app.setPath('userData',path.join(os.tmpdir(),'pawtalk-integration-'+process.pid));
+app.setPath('userData',api2Fixture?.profile||path.join(os.tmpdir(),'pawtalk-integration-'+process.pid));
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 if (process.env.PAWTALK_TEST_AUDIO_FILE) app.commandLine.appendSwitch('use-file-for-fake-audio-capture',path.resolve(process.env.PAWTALK_TEST_AUDIO_FILE));
@@ -35,7 +37,18 @@ app.whenReady().then(async () => {
  const credentials=[];
  const lines=[];
  const record = message => { lines.push(message); console.log(message); };
+ const grant=async index=>{
+  const client=api2Clients[index],state=await client.state(api2Fixture.serverId);
+  const access=await client.voice(state.serverId,state.channels.find(channel=>channel.kind==='voice').id);
+  return {...access,e2eeKey:access.key};
+ };
+ const closeAPI2=async()=>{clearInterval(api2Heartbeat);await Promise.all(api2Clients.map(client=>client.request(api2Fixture.serverId,'/api/v2/voice/leave','POST',{}).catch(()=>{})));};
  try {
+  if(api2Fixture){
+   const {createClient}=require('../tests/membership-electron-client.cjs');
+   for(const directory of ['credentials','guest-credentials']){const client=createClient(path.join(api2Fixture.profile,directory));const saved=(await client.registry())[0];assert.equal(saved.serverId,api2Fixture.serverId);await client.connect({...saved,address:api2Fixture.address});api2Clients.push(client);}
+   api2Heartbeat=setInterval(()=>{for(const client of api2Clients)for(const endpoint of ['/api/v2/heartbeat','/api/v2/voice/heartbeat'])void client.request(api2Fixture.serverId,endpoint,'POST',{}).catch(()=>{});},15000);
+  }
   for(let i=0;i<2;i++) {
    const partition=session.fromPartition('integration-'+i);
    pinTestServer(partition);
@@ -44,8 +57,10 @@ app.whenReady().then(async () => {
    win.webContents.on('console-message',event=>{ if(event.level === 'error') console.error('renderer:',event.message); });
    await win.loadURL(uiAddress+'/tests/voice.html?noise='+(process.env.PAWTALK_TEST_NOISE_MODE === 'rnnoise' ? 'rnnoise' : 'off'));
    await until(()=>win.webContents.executeJavaScript('window.ready === true'),'renderer ready');
-   const response=await net.fetch(`${serverAddress}/api/connect`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:'same-name',password:process.env.PAWTALK_TEST_PASSWORD,...encryption})});
-   assert.equal(response.status,200);const data=await response.json();if(mediaKey)data.e2eeKey=mediaKey;credentials.push(data);
+   let data;
+   if(api2Fixture)data=await grant(i);
+   else{const response=await net.fetch(`${serverAddress}/api/connect`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:'same-name',password:process.env.PAWTALK_TEST_PASSWORD,...encryption})});assert.equal(response.status,200);data=await response.json();if(mediaKey)data.e2eeKey=mediaKey;}
+   credentials.push(data);
    await win.webContents.executeJavaScript(`window.start(${JSON.stringify(data)})`,true);
   }
   const [a,b]=windows.map(w=>w.webContents);
@@ -103,6 +118,7 @@ app.whenReady().then(async () => {
   record('PASS released PTT stops incoming speech energy');
   await a.executeJavaScript('window.voice.disconnect()');
   await until(()=>b.executeJavaScript('window.snapshot.people?.length === 1'),'participant cleanup');
+  if(api2Fixture)credentials[0]=await grant(0);
   await a.executeJavaScript(`window.start(${JSON.stringify(credentials[0])})`,true);
   await until(async()=>await a.executeJavaScript('window.snapshot.people?.length === 2') && await b.executeJavaScript('window.snapshot.people?.length === 2'),'participants after rejoin');
   await until(async()=>(await b.executeJavaScript('window.energy()')).energy>0,'audio after rejoin');
@@ -122,12 +138,12 @@ app.whenReady().then(async () => {
   record('PASS disconnect releases tracks and updates participant list');
   const report=process.env.PAWTALK_TEST_SERVER ? 'integration-lan.txt' : process.env.PAWTALK_TEST_NOISE_MODE === 'rnnoise' ? 'integration-rnnoise.txt' : 'integration.txt';
   await fs.mkdir(path.resolve('release/qa'),{recursive:true});await fs.writeFile(path.resolve('release/qa',report),lines.join('\n')+'\n');
-  app.exit(0);
+  await closeAPI2();app.exit(0);
  } catch(error) {
   console.error(error);
   for(const win of windows) {
    try { console.error(await win.webContents.executeJavaScript(`(async()=>JSON.stringify({snapshot:window.snapshot,lastError:window.lastError,context:window.voice?.mic?.context?.state,track:window.voice?.localTrack?.isMuted,raw:window.voice?.mic?.stream?.getAudioTracks().map(t=>({enabled:t.enabled,state:t.readyState})),energy:await window.energy(),reports:await Promise.all([...(window.voice.room?.remoteParticipants.values()||[])].map(async p=>{const track=[...p.audioTrackPublications.values()][0]?.track;const report=await track?.getRTCStatsReport();return {subscribed:!!track,stats:report?[...report.values()].filter(s=>['inbound-rtp','outbound-rtp'].includes(s.type)):[]}}))}))()`)); } catch (debugError) { console.error('debug:', debugError.message); }
   }
-  app.exit(1);
+  await closeAPI2();app.exit(1);
  }
 });

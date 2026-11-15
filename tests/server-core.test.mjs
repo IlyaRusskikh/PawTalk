@@ -21,6 +21,11 @@ test('shared-core receipt detects uncommitted source changes and toolchain/versi
     await write('standalone.Dockerfile', 'FROM golang:1.27.3-alpine AS build\nFROM livekit/livekit-server:v1.13.11 AS media\n');
     await write('build.exe', 'ignored generated binary');
     assert.deepEqual(await serverDefinition(root), first);
+    await write('membership.sql', 'CREATE TABLE membership(id TEXT PRIMARY KEY);\n');
+    const schemaReceipt = await serverDefinition(root);
+    assert.notEqual(schemaReceipt.sourceSha256, first.sourceSha256, 'embedded SQLite schema is a Go build input');
+    await write('membership.sql', 'CREATE TABLE membership(id TEXT PRIMARY KEY, state TEXT);\n');
+    assert.notEqual((await serverDefinition(root)).sourceSha256, schemaReceipt.sourceSha256, 'schema edits invalidate shared-core receipt');
     await write('main.go', 'package main\nfunc main() { println("changed") }\n');
     assert.notEqual((await serverDefinition(root)).sourceSha256, first.sourceSha256);
     await write('VERSION', '0.11.0\n');

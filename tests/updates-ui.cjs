@@ -13,12 +13,28 @@ app.whenReady().then(async () => {
   win.webContents.on('console-message', event => { if (event.level === 'error') console.error('renderer:', event.message); });
   const run = expression => win.webContents.executeJavaScript(expression, true);
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const until = async expression => { for (let i = 0; i < 100; i++) { if (await run(expression)) return; await wait(50); } throw new Error('Timed out: ' + expression); };
+  const until = async expression => { for (let i = 0; i < 240; i++) { if (await run(expression)) return; await wait(50); } throw new Error('Timed out: ' + expression); };
   const click = text => run(`Array.from((document.querySelector('.update-modal[open]') || Array.from(document.querySelectorAll('dialog[open]')).at(-1) || document).querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(text)}).click()`);
   const screenshot = async name => { win.webContents.invalidate(); await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }); await wait(200); await fs.mkdir('release/qa', { recursive: true }); await fs.writeFile(`release/qa/${name}.png`, (await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG()); };
+  const checkSettingsSpacing = async language => {
+    const size=win.getSize();
+    for(const motion of ['reduce','no-preference'])for(const width of [940,1100]){
+      win.setSize(width,760);
+      await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:motion}]});
+      for(const tab of ['general','voice','appearance','profile','chat','language']){
+        await run(`document.querySelector('#settings-tab-${tab}').click()`);await wait(30);
+        const gaps=await run(`(()=>{const headingGaps=[...document.querySelectorAll('.settings-content .settings-card h1,.settings-content .settings-card h2:not(.appearance-section-title)')].map(h=>parseFloat(getComputedStyle(h).marginBottom));const gap=(a,b)=>b.querySelector('h1,h2').getBoundingClientRect().top-a.getBoundingClientRect().bottom;let sections=[];if('${tab}'==='general'){const nodes=[document.querySelector('#settings-anchor-general'),document.querySelector('.settings-content>.settings-stack'),document.querySelector('#settings-anchor-updates')];sections=nodes.slice(1).map((b,i)=>gap(nodes[i],b));}if('${tab}'==='voice'){const nodes=[...document.querySelector('#settings-anchor-voice').children];sections=nodes.slice(1).map((b,i)=>gap(nodes[i],b));sections.push(gap(document.querySelector('#settings-anchor-voice'),document.querySelector('#settings-anchor-sounds')));}return {headingGaps,sections,overflow:document.querySelector('.settings-content').scrollWidth>document.querySelector('.settings-content').clientWidth}})()`);
+        assert.ok(gaps.headingGaps.every(n=>n===24),`${language}/${motion}/${width}/${tab}: shared heading gap`);
+        assert.ok(gaps.sections.every(n=>Math.abs(n-65)<1),`${language}/${motion}/${width}/${tab}: equal section spacing ${gaps.sections}`);
+        assert.equal(gaps.overflow,false,'settings fit the panel');
+      }
+    }
+    win.setSize(...size);await run("document.querySelector('#settings-tab-general').click()");await wait(80);
+    await screenshot('settings-system-spacing-'+language);
+  };
   try {
     await win.loadURL(process.env.PAWTALK_UI_TEST_URL);
-    await until(`!!document.querySelector('.home-actions')`);
+    await until(`!!document.querySelector('.member-home-navigation')`);
     await until(`!!document.querySelector('.onboarding-modal')`);
     await screenshot('onboarding-profile-ru');
     await win.loadURL(process.env.PAWTALK_UI_TEST_URL);
@@ -26,13 +42,19 @@ app.whenReady().then(async () => {
     assert.equal(await run(`document.querySelector('.onboarding-progress').textContent.includes('Шаг 1 из 3')`), true, 'interrupted first run is offered again');
     await click('Далее'); await wait(80);
     await screenshot('onboarding-avatar-ru');
-    assert.ok(await run(`!!document.querySelector('.profile-avatar')`));
+    assert.ok(await run(`!!document.querySelector('.member-profile-preview')`));
     await click('Назад'); await wait(80);
     assert.ok(await run(`!!document.querySelector('.onboarding-modal select')`));
     await click('Далее'); await wait(80); await click('Далее'); await wait(80);
     await until(`!!document.querySelector('.mic-test-button:not(:disabled)')`);
     await click('Проверка микрофона');
     await until(`document.querySelector('.mic-test-button').getAttribute('aria-pressed') === 'true'`);
+    await until(`!!document.querySelector('.mic-bars>i.lit')`);
+    await run(`document.querySelector('.sensitivity-track').scrollIntoView({block:'center'})`);
+    win.showInactive();
+    await until(`document.querySelector('.sensitivity-level').getBoundingClientRect().width>0`);
+    assert.equal(await run(`document.querySelector('.sensitivity-level').getBoundingClientRect().left===document.querySelector('.sensitivity-track').getBoundingClientRect().left`),true,'speech fills from left');
+    await screenshot('onboarding-microphone-active-ru');
     await click('Готово'); await wait(80);
     assert.equal(await run(`!!document.querySelector('dialog[open]')`), false);
     await win.reload(); await wait(100);
@@ -46,14 +68,16 @@ app.whenReady().then(async () => {
     await click('Set up later'); await wait(80);
     await run(`localStorage.setItem('pawtalk.language','ru')`);
     await win.loadURL(process.env.PAWTALK_UI_TEST_URL);
-    await until(`document.documentElement.lang === 'ru' && !!document.querySelector('.home-actions')`);
+    await until(`document.documentElement.lang === 'ru' && !!document.querySelector('.member-home-navigation')`);
     for (const width of [940, 1100, 1240]) {
       win.setSize(width, 760); await wait(80);
-      assert.ok(await run(`document.querySelector('.rail').getBoundingClientRect().bottom - document.querySelector('.rail-settings').getBoundingClientRect().bottom < 28`), 'settings are at the bottom of the rail at ' + width);
+      assert.ok(await run(`document.querySelector('.member-rail').getBoundingClientRect().bottom - document.querySelector('.member-rail-settings').getBoundingClientRect().bottom < 28`), 'settings are at the bottom of the rail at ' + width);
     }
     await screenshot('sidebar-settings-alignment');
     await run(`document.querySelector('[title="Настройки"]').click()`);
     await until(`!!document.querySelector('dialog[open]')`);
+    await win.webContents.debugger.attach('1.3');
+    await checkSettingsSpacing('ru');
     await run(`window.updateTest.offer()`); await wait(80);
     await until(`!!document.querySelector('.update-modal[open]')`);
     assert.ok(await run(`document.querySelector('.update-modal').matches(':modal') && document.querySelector('.settings-modal').matches(':modal')`), 'update is above the still-open settings');
@@ -76,6 +100,7 @@ app.whenReady().then(async () => {
     await until(`document.querySelector('dialog h2').textContent === 'Settings'`);
     assert.equal(await run(`document.documentElement.lang`), 'en');
     assert.ok(await run(`document.querySelector('.settings-modal').textContent.includes('App language')`));
+    await checkSettingsSpacing('en');
     await run(`document.querySelector('#settings-tab-voice').click()`); await wait(80);
     assert.ok(await run(`document.querySelector('.settings-modal').textContent.includes('Noise suppression')`));
     await screenshot('settings-en');
@@ -100,8 +125,8 @@ app.whenReady().then(async () => {
     await screenshot('update-security-en');
     await click('Later');
     await win.reload();
-    await until(`!!document.querySelector('.home-actions')`);
-    assert.equal(await run(`document.querySelector('h1').textContent`), 'The conversation starts here.');
+    await until(`!!document.querySelector('.member-home-navigation')`);
+    assert.equal(await run(`document.querySelector('h1').textContent`), 'PawTalk');
     await run(`window.updateTest.unsafeCheck()`);
     await until(`!!document.querySelector('.update-modal [role=alert]')`);
     assert.equal(await run(`document.querySelector('.update-actions .primary').disabled`), true);

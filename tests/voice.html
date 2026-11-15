@@ -2,8 +2,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Participants } from '/src/Participants.tsx';
-import { GuestShare } from '/src/GuestShare.tsx';
-import { RoomChat } from '/src/RoomChat.tsx';
 import { applyTheme, defaultTheme } from '/src/theme.ts';
 applyTheme(defaultTheme);
 import '/src/style.css';
@@ -34,8 +32,6 @@ window.renderParticipants = () => {
  function Demo(){const [prefs,setPrefs]=React.useState({});return React.createElement('section',{className:'room-participants',style:{height:220}},React.createElement(Participants,{people,prefs,onChange:(id,volume,muted)=>{window.changedPref={id,volume,muted};c.setPerson(id,volume,muted);setPrefs(prev=>({...prev,[id]:{volume,muted}}));}}));}
  root().render(React.createElement(Demo));
 };
-window.renderGuestShare = target => root().render(React.createElement(GuestShare,{target,name:'Guest room',onClose:()=>root().render(null)}));
-window.renderChat = room => root().render(React.createElement(RoomChat, {room, session:c, people:window.snapshot.people, profile:{nickname:'QA B'}, visible:true, connected:true, covered:false}));
 window.snapshot = {};
 c.onUpdate = value => { window.snapshot = value; };
 c.onError = message => { window.lastError = message; };

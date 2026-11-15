@@ -19,8 +19,8 @@ app.whenReady().then(async () => {
   };
   const geometry = () => run(`(() => {
     const rect = selector => { const r = document.querySelector(selector).getBoundingClientRect(); return [r.x,r.y,r.width,r.height]; };
-    return { home: rect('.home-screen'), main: rect('main'), settings: rect('.rail-settings'),
-      overflow: ['html','body','main','.content'].map(s => { const e = document.querySelector(s); return [e.scrollWidth > e.clientWidth,e.scrollHeight > e.clientHeight]; }) };
+    return { home: rect('.member-welcome'), main: rect('main'), settings: rect('.member-rail-settings'),
+      overflow: ['html','body','main','.member-main'].map(s => { const e = document.querySelector(s); return [e.scrollWidth > e.clientWidth,e.scrollHeight > e.clientHeight]; }) };
   })()`);
   try {
     await win.loadFile(path.resolve('dist/index.html'));
@@ -38,16 +38,16 @@ app.whenReady().then(async () => {
           await win.loadFile(path.resolve('dist/index.html'));
           await run(`localStorage.setItem('pawtalk.language',${JSON.stringify(language)})`);
           await win.loadFile(path.resolve('dist/index.html'));
-          await until(`document.documentElement.lang === '${language}' && !!document.querySelector('.home-screen')`);
+          await until(`document.documentElement.lang === '${language}' && !!document.querySelector('.member-welcome')`);
           const before = await geometry();
           await run('window.offerTestUpdate()');
           await until(`!!document.querySelector('.update-modal[open]')`);
           await run(`document.querySelector('.update-modal .quiet').click()`);
-          await until(`!!document.querySelector('.rail-actions .update-indicator')`);
+          await until(`!!document.querySelector('.member-rail-actions .update-indicator')`);
           assert.deepEqual(await geometry(), before, `${language}/${motion}/${width}: update preserves content, settings and scroll geometry`);
           assert.ok(await run(`(() => {
             const u = document.querySelector('.update-indicator').getBoundingClientRect();
-            const s = document.querySelector('.rail-settings').getBoundingClientRect();
+            const s = document.querySelector('.member-rail-settings').getBoundingClientRect();
             return u.bottom <= s.top && Math.abs(u.x + u.width/2 - s.x - s.width/2) < 1;
           })()`), 'update is above and centered with Settings');
           await run(`document.querySelector('.update-indicator').click()`);

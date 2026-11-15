@@ -62,29 +62,19 @@ jobs:
       - run: go test -race ./... && go vet ./...
         if: steps.scope.outputs.server == 'true'
         working-directory: server
-      - run: docker build -f server/Dockerfile -t pawtalk-api:test .
-        if: steps.scope.outputs.server == 'true'
+      - name: Build current API 2 integration dependency
+        run: docker build -f server/standalone.Dockerfile -t pawtalk-server:local .
       - run: node scripts/check-public.mjs
       - run: node scripts/check-website.mjs
       - run: node --check scripts/dev-server.mjs && node --check scripts/docker-smoke.mjs
-      - name: Resolve published Server test dependency
-        if: steps.scope.outputs.publishedServer == 'true'
-        id: published
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 scripts/prepare-server-fixture.py --github-output
-          image=$(sed -n 's/^image=//p' "$GITHUB_OUTPUT")
-          docker pull "$image"
-          docker tag "$image" pawtalk-server:local
       - name: Verify bundled server lifecycle and authentication with real Docker
         env:
-          PAWTALK_TEST_IMAGE: ${{ steps.published.outputs.image }}
+          PAWTALK_TEST_IMAGE: pawtalk-server:local
         run: node scripts/server-smoke.mjs
       - name: Verify actual developer Docker launch and TLS pinning
         if: steps.scope.outputs.server == 'true'
         run: node scripts/dev-server.mjs --smoke
-      - name: Verify API + LiveKit containers and tokens without Compose
+      - name: Verify shared API 2 container and tokens without Compose
         if: steps.scope.outputs.server == 'true'
         run: node scripts/docker-smoke.mjs --containers-only
       - name: Host tools and signed release contracts
@@ -100,23 +90,17 @@ jobs:
         if: steps.scope.outputs.host == 'true'
         run: sudo python3 tests/compose_integration.py
         timeout-minutes: 25
-      - name: Compose E2EE policy and opaque-history persistence across the full lifecycle
-        if: steps.scope.outputs.host == 'true'
-        env:
-          PAWTALK_COMPOSE_TEST_E2EE: 'true'
-        run: sudo --preserve-env=PAWTALK_COMPOSE_TEST_E2EE python3 tests/compose_integration.py
-        timeout-minutes: 25
       - name: Debian 12 userspace install and recovery with the real Docker engine
         if: steps.scope.outputs.host == 'true'
         run: |
           docker build -f tests/vps.Dockerfile -t pawtalk-vps-test:debian12 .
           docker run --rm --network host --mount "type=bind,source=$GITHUB_WORKSPACE,target=/work" --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -e PYTHONUNBUFFERED=1 pawtalk-vps-test:debian12 python3 tests/compose_integration.py
         timeout-minutes: 25
-      - name: Verify new Client API against published Server 0.8.0
+      - name: Verify explicit rejection of frozen published Server 0.8.0
         if: steps.scope.outputs.client == 'true' || steps.scope.outputs.server == 'true'
         env:
           PAWTALK_TEST_IMAGE: ghcr.io/ilyarusskikh/pawtalk-server@sha256:601bd68f577c63a98b3dfec040b01379467576dfc6d16c15f2bf7501ac86b8f0
-        run: node scripts/server-smoke.mjs
+        run: node scripts/server-smoke.mjs --legacy-rejection
   windows:
     defaults:
       run:
@@ -231,16 +215,20 @@ jobs:
       - name: Prepare Manager test host without an installer
         if: steps.scope.outputs.host == 'true' && steps.scope.outputs.manager != 'true'
         run: node scripts/build-manager-windows.mjs --runtime-only
-      - name: Fetch signed published Windows Server test dependency
+      - name: Build current API 2 Windows Server test dependency
         if: steps.scope.outputs.manager == 'true' && steps.scope.outputs.server != 'true'
+        id: api2fixture
         env:
           GH_TOKEN: ${{ github.token }}
-          PAWTALK_MANAGER_HOST: ${{ github.workspace }}\release\manager\windows\pawtalkctl.exe
-        run: python scripts/prepare-server-fixture.py --windows-zip release/qa/windows-server-fixture.zip
+        run: |
+          node scripts/build-windows-server.mjs --output-dir release/qa/api2-server
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (Get-Content server/VERSION -Raw).Trim()
+          "zip=release/qa/api2-server/PawTalk.Server.$version.windows-x64.zip" >> $env:GITHUB_OUTPUT
       - name: Verify native Windows lifecycle with actual SCM services
         if: steps.scope.outputs.host == 'true'
         env:
-          PAWTALK_WINDOWS_SERVER_ZIP: ${{ steps.scope.outputs.server != 'true' && 'release/qa/windows-server-fixture.zip' || '' }}
+          PAWTALK_WINDOWS_SERVER_ZIP: ${{ steps.api2fixture.outputs.zip }}
         run: node scripts/windows-manager-smoke.mjs --scm ${{ steps.scope.outputs.manager == 'true' && '--installer' || '' }}
       - name: Upload Windows Server package
         if: steps.scope.outputs.server == 'true' && matrix.runner == 'windows-2025'
@@ -258,14 +246,6 @@ jobs:
           path: release/manager/PawTalk.Server.Manager.Setup.*.exe
       - run: npm run smoke
         if: steps.scope.outputs.client == 'true'
-      - run: node scripts/ui-flow-smoke.mjs --built
-        if: steps.scope.outputs.client == 'true'
-      - name: Verify legacy Manager invitations with native clipboard paste
-        if: steps.scope.outputs.client == 'true'
-        run: node scripts/manager-invitation-smoke.mjs
-      - name: Verify bookmark identity and locked room privacy
-        if: steps.scope.outputs.client == 'true'
-        run: node scripts/bookmarks-smoke.mjs
       - run: npm run test:connection-ui
         if: steps.scope.outputs.client == 'true'
       - run: node scripts/updates-ui-smoke.mjs
@@ -273,8 +253,6 @@ jobs:
       - name: Verify update button geometry in Russian and English
         if: steps.scope.outputs.client == 'true'
         run: node scripts/update-layout-smoke.mjs
-      - run: node scripts/fixes-main-smoke.mjs
-        if: steps.scope.outputs.client == 'true'
       - name: Cache LiveKit server
         if: steps.scope.outputs.client == 'true'
         uses: actions/cache@v5
@@ -301,12 +279,6 @@ jobs:
       - name: Verify packaged Client, shared core and receipt
         if: steps.scope.outputs.client == 'true'
         run: node scripts/packaged-smoke.mjs
-      - run: node scripts/realtime-smoke.mjs
-        if: steps.scope.outputs.client == 'true'
-      - run: node scripts/chat-ui-smoke.mjs
-        if: steps.scope.outputs.client == 'true'
-      - run: node scripts/chat-main-smoke.mjs
-        if: steps.scope.outputs.client == 'true'
       - name: Prepare release files
         if: steps.scope.outputs.client == 'true'
         shell: pwsh

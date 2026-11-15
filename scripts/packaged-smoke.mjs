@@ -1,5 +1,5 @@
 import { serverDefinition } from './server-core.mjs';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -70,88 +70,44 @@ try {
     assert.ok(sound.channels >= 1 && sound.channels <= 2);
     assert.ok(sound.seconds > .3 && sound.seconds < 4);
   }
-  for(let i=0;i<100;i++) {
-    if(await evaluate('!!document.querySelector("h1")')) break;
-    await new Promise(resolve=>setTimeout(resolve,100));
-  }
-  await evaluate(`document.querySelector('.onboarding-actions .quiet')?.click()`);
-  assert.equal(await evaluate('document.querySelector("h1")?.textContent'), 'Разговор начинается здесь.');
-  assert.equal(await evaluate('window.desktop.pendingInvitation()'), invite, 'protocol argument reaches preload');
-  assert.equal(await evaluate(`Array.from(document.querySelectorAll('input')).some(el=>el.value===${JSON.stringify(invite)})`), true, 'protocol invitation fills the connection form');
-  assert.equal(await evaluate(`document.querySelectorAll('.person-card').length`), 0, 'opening invitation does not auto-connect');
-  await evaluate(`document.querySelector('button[title="Настройки"]').click()`);
-  await new Promise(resolve => setTimeout(resolve, 150));
-  assert.equal(await evaluate('document.querySelector("dialog h2")?.textContent'), 'Настройки');
-  await evaluate(`document.querySelector('#settings-tab-voice').click()`);
-  for(let i=0;i<100;i++) {
-    if(await evaluate(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Проверка микрофона'&&!b.disabled)`)) break;
-    await new Promise(resolve=>setTimeout(resolve,100));
-  }
-  assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Проверка микрофона'&&!b.disabled)`),true,'packaged RNNoise model loads and microphone starts');
-  await evaluate(`document.querySelector('#settings-tab-voice').click()`);
-  await new Promise(resolve=>setTimeout(resolve,100));
-  assert.equal(await evaluate(`document.querySelector('[aria-label="Режим шумоподавления"]').value`),'rnnoise');
-  await assert.rejects(evaluate(`window.desktop.connect({address:'http://127.0.0.1:8080',nickname:'test',password:'test'})`));
-  await evaluate(`window.selfhostPassword=crypto.randomUUID(); window.desktop.startHost({port:32443,password:window.selfhostPassword})`);
-  const hostStatus = await evaluate('window.desktop.hostStatus()');
-  assert.equal(hostStatus.running, true, 'packaged server resources start');
-  await evaluate(`document.querySelector('dialog [aria-label="Закрыть"]').click()`);
-  const myRoomButton = `Array.from(document.querySelectorAll('.home-action')).find(b=>b.textContent.startsWith('Моя комната'))`;
-  for (let i = 0; i < 50; i++) {
-    if (await evaluate(`!!(${myRoomButton})`)) break;
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  assert.ok(await evaluate(`!!(${myRoomButton})`), 'lobby reflects the running host');
-  await evaluate(`(${myRoomButton}).click()`);
-  for (let i = 0; i < 50; i++) {
-    if (await evaluate(`!!document.querySelector('.host-invite button')`)) break;
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  const selectedInvitation = await evaluate(`document.querySelector('.host-invite input').value`);
-  assert.ok(hostStatus.invitations.includes(selectedInvitation), 'selected invitation belongs to the running host');
-  await evaluate(`document.querySelector('.host-invite button').click()`);
-  for (let i = 0; i < 50; i++) {
-    if (await evaluate(`document.querySelector('.host-invite button').textContent==='Скопировано'`)) break;
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  assert.equal(await evaluate(`document.querySelector('.host-invite button').textContent`), 'Скопировано', 'copy button uses installed preload and main');
-  const clipboard = spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Get-Clipboard -Raw'], { encoding: 'utf8', windowsHide: true });
-  assert.equal(clipboard.status, 0, 'system clipboard can be read');
-  assert.ok(clipboard.stdout.trim() === selectedInvitation, 'system clipboard contains the selected invitation');
-  const afterSharing = await evaluate('window.desktop.hostStatus().then(s=>({running:s.running,message:s.message}))');
-  assert.equal(afterSharing.running, true, `host is still running after sharing: ${afterSharing.message || 'no status message'}`);
-  const certificate = await new Promise((resolve, reject) => {
-    const socket = tls.connect({ host: '127.0.0.1', port: 32443, rejectUnauthorized: false }, () => {
-      const peer = socket.getPeerCertificate(); socket.destroy(); resolve(peer);
-    });
-    socket.setTimeout(5000, () => socket.destroy(new Error('Packaged TLS timed out')));
-    socket.once('error', reject);
-  });
-  for (const address of [hostStatus.localAddress, ...hostStatus.invitations]) {
-    assert.equal(tls.checkServerIdentity(new URL(address).hostname, certificate), undefined, 'packaged certificate covers every invitation IP');
-  }
-  const anonymousPresence=await new Promise((resolve,reject)=>{
-    const request=https.get({hostname:'127.0.0.1',port:32443,path:'/api/presence',rejectUnauthorized:false,timeout:5000},response=>{
-      assert.deepEqual(response.socket.getPeerCertificate().raw,certificate.raw,'same verified embedded host certificate');
-      let raw='';response.on('data',data=>raw+=data);response.on('end',()=>resolve({status:response.statusCode,raw}));
-    });request.once('timeout',()=>request.destroy(Error('Presence check timed out')));request.once('error',reject);
-  });
-  assert.equal(anonymousPresence.status,401,'packaged temporary room does not expose anonymous occupancy');
-  assert.doesNotMatch(anonymousPresence.raw,/participants/);
-  const localDiagnosis = await evaluate('window.desktop.hostStatus().then(s=>window.desktop.diagnose(s.localAddress))');
-  assert.equal(localDiagnosis.ok, true, localDiagnosis.message);
-  const ownDiagnosis = await evaluate('window.desktop.hostStatus().then(s=>window.desktop.diagnose(s.invitations[0]))');
-  assert.equal(ownDiagnosis.ok, true, ownDiagnosis.message);
-  assert.match(ownDiagnosis.message, /напрямую/);
-  if (process.env.PAWTALK_EXPECT_PORT_MAPPING === '1') assert.equal(hostStatus.mapped, true, 'packaged mapper opens all ports on test router');
-  const hosted = await evaluate(`window.desktop.hostStatus().then(s=>window.desktop.connect({address:s.localAddress,nickname:'Packaged',password:window.selfhostPassword}))`);
-  assert.equal(hosted.error, undefined, hosted.error);
-  assert.ok(hosted.token, 'packaged TLS room returns token');
+  const until=async(expression,label)=>{for(let i=0;i<300;i++){if(await evaluate(expression))return;await new Promise(resolve=>setTimeout(resolve,100));}throw Error(label);};
+  await until("!!document.querySelector('.member-welcome')",'packaged home');
+  await evaluate("document.querySelector('.onboarding-actions .quiet')?.click()");
+  await until("!document.querySelector('.onboarding-modal')",'setup dismissed');
+  assert.equal(await evaluate('window.desktop.pendingInvitation()'),invite);
+  await until("!!document.querySelector('dialog input')",'protocol invitation');
+  assert.equal(await evaluate("document.querySelector('dialog input').value"),invite);
+  assert.equal(await evaluate("!!document.querySelector('.member-audio-buttons .person-network')"),false);
+  await evaluate("document.querySelector('dialog .modal-heading button').click();document.querySelector('.member-rail-settings').click()");
+  await evaluate("document.querySelector('#settings-tab-voice').click()");
+  await until("[...document.querySelectorAll('button')].some(b=>b.textContent==='Проверка микрофона'&&!b.disabled)",'packaged RNNoise microphone');
+  assert.equal(await evaluate("document.querySelector('[aria-label=\"Режим шумоподавления\"]').value"),'rnnoise');
+  const rejected=await evaluate("window.desktop.membership('join',{address:'http://127.0.0.1:8080',nickname:'Synthetic'})");
+  assert.ok(rejected.error,'packaged Client rejects plaintext admission');
+  await evaluate("document.querySelector('dialog .modal-heading button').click()");
+  await evaluate("window.desktop.startHost({port:32443,name:'Synthetic packaged server',nickname:'Packaged'})");
+  const hostStatus=await evaluate('window.desktop.hostStatus()');assert.equal(hostStatus.running,true);assert.equal(hostStatus.e2ee,true);
+  const own=await evaluate("window.desktop.membership('connect',{serverId:"+JSON.stringify(hostStatus.serverId)+"})");
+  assert.equal(own.value.self.role,'admin');assert.equal(own.value.channels.length,2);
+  const created=await evaluate("window.desktop.membership('invite',{serverId:"+JSON.stringify(hostStatus.serverId)+",kind:'single'})");
+  const fields=new URLSearchParams(new URL(created.value).hash.slice(1));assert.equal(fields.get('v'),'2');assert.equal(fields.get('server'),hostStatus.serverId);assert.match(fields.get('open'),/^[a-f0-9]{64}$/);
+  const channel=own.value.channels.find(c=>c.kind==='text').id;
+  const sent=await evaluate("window.desktop.membership('send',{serverId:"+JSON.stringify(hostStatus.serverId)+",channelId:"+JSON.stringify(channel)+",content:{text:'Synthetic packaged encrypted chat'}})");assert.ok(!sent.error);
+  const history=await evaluate("window.desktop.membership('messages',{serverId:"+JSON.stringify(hostStatus.serverId)+",channelId:"+JSON.stringify(channel)+"})");assert.ok(history.value.messages.some(m=>m.content.text==='Synthetic packaged encrypted chat'));
+  const certificate=await new Promise((resolve,reject)=>{const connection=tls.connect({host:'127.0.0.1',port:32443,rejectUnauthorized:false},()=>{const cert=connection.getPeerCertificate();connection.destroy();resolve(cert);});connection.once('error',reject);});
+  for(const address of [hostStatus.localAddress,...hostStatus.invitations])assert.equal(tls.checkServerIdentity(new URL(address).hostname,certificate),undefined);
+  const anonymous=await new Promise((resolve,reject)=>{const request=https.get({hostname:'127.0.0.1',port:32443,path:'/api/v2/state',rejectUnauthorized:false},response=>{response.resume();resolve(response.statusCode);});request.once('error',reject);});assert.equal(anonymous,401);
+  await until("!!document.querySelector('.member-server-list button')",'host registry');
+  await evaluate("document.querySelector('.member-server-list button').click()");
+  await until("!!document.querySelector('.member-channel')",'host channels');
+  await evaluate("document.querySelector('.member-channel').click()");
+  await until("!!document.querySelector('.member-audio-buttons .person-network')",'packaged E2EE voice with RNNoise');
   await evaluate('window.desktop.stopHost()');
-  assert.equal(await evaluate('window.desktop.hostStatus().then(s=>s.running)'), false);
-  await mkdir('release/qa', { recursive: true });
-  await writeFile('release/qa/packaged.txt', 'PASS packaged Windows executable\nPASS native resource loaded outside ASAR\nPASS renderer and settings navigation\nPASS isolated preload IPC\nPASS packaged client rejects plaintext HTTP\nPASS embedded API and LiveKit start from packaged resources\nPASS packaged invitation TLS and password authentication\nPASS embedded host shutdown\n');
-  console.log('PASS packaged executable, native module, renderer, IPC, HTTPS-only policy and embedded selfhost');
+  await until("!document.querySelector('.member-audio-buttons .person-network')",'packaged host shutdown releases voice');
+  assert.equal((await evaluate('window.desktop.hostStatus()')).running,false);
+  await mkdir('release/qa',{recursive:true});
+  await writeFile('release/qa/packaged.txt','PASS packaged API 2 Client, native resources/receipt, sounds, RNNoise, TLS bootstrap, OS storage, encrypted chat, E2EE voice, unique invitation and shutdown\n');
+  console.log('PASS packaged Client/API 2, native module, verified receipt, sounds, RNNoise, TLS, creator membership, encrypted text/voice and shutdown');
 } catch (error) {
   await mkdir('release/qa', { recursive: true });
   await writeFile('release/qa/packaged-stderr.log', stderr);
