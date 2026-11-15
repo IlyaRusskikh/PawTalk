@@ -1,8 +1,8 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
@@ -31,9 +31,9 @@ import (
 var standalonePort = 18443
 var mediaAddress = "http://127.0.0.1:18446"
 
-// One atomic file keeps the certificate, API keys and password hash consistent.
+// One atomic file keeps the certificate and media credentials consistent.
 type serverState struct {
-	IP, APIKey, APISecret, PasswordHash, Certificate, PrivateKey string
+	IP, APIKey, APISecret, Certificate, PrivateKey string
 }
 
 func stateDir() string {
@@ -73,62 +73,46 @@ func readState(dir string) (serverState, error) {
 	if err != nil {
 		return state, err
 	}
-	err = json.Unmarshal(data, &state)
+	if len(data) > 65536 {
+		return state, errors.New("server state is too large")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	err = decoder.Decode(&state)
 	if err != nil {
 		return state, fmt.Errorf("invalid state.json: %w", err)
 	}
 	if net.ParseIP(state.IP) == nil || state.APIKey == "" || len(state.APISecret) < 32 {
 		return state, errors.New("invalid server state")
 	}
-	if _, _, err = parseHash(state.PasswordHash); err != nil {
-		return state, err
-	}
 	_, _, err = stateCertificate(state)
 	return state, err
 }
 
-func passwordHash(password string) (string, error) {
-	if len(password) < 8 || len(password) > 1024 {
-		return "", errors.New("password must be 8..1024 bytes")
-	}
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return "", err
-	}
-	digest, err := pbkdf2.Key(sha256.New, password, salt, 600000, 32)
-	return "pbkdf2-sha256$600000$" + b64.EncodeToString(salt) + "$" + b64.EncodeToString(digest), err
-}
-
-func createState(ip string) (serverState, string, error) {
+func createState(ip string) (serverState, error) {
 	var state serverState
 	parsed := net.ParseIP(ip)
 	if parsed == nil || parsed.IsUnspecified() || parsed.IsMulticast() {
-		return state, "", errors.New("PAWTALK_PUBLIC_IP must be the server's reachable IPv4 or IPv6 address")
+		return state, errors.New("PAWTALK_PUBLIC_IP must be the server's reachable IPv4 or IPv6 address")
 	}
 	state.IP = parsed.String()
-	random := make([]byte, 64)
+	random := make([]byte, 48)
 	if _, err := rand.Read(random); err != nil {
-		return state, "", err
+		return state, err
 	}
-	password := b64.EncodeToString(random[:18])
-	state.APIKey = "vc_" + hex.EncodeToString(random[18:30])
-	state.APISecret = hex.EncodeToString(random[30:])
-	var err error
-	state.PasswordHash, err = passwordHash(password)
-	if err != nil {
-		return state, "", err
-	}
+	state.APIKey = "pt_" + hex.EncodeToString(random[:16])
+	state.APISecret = hex.EncodeToString(random[16:])
 	cert, _, err := roomCertificateFor([]string{state.IP}, 10*365*24*time.Hour)
 	if err != nil {
-		return state, "", err
+		return state, err
 	}
 	key, err := x509.MarshalPKCS8PrivateKey(cert.PrivateKey)
 	if err != nil {
-		return state, "", err
+		return state, err
 	}
 	state.Certificate = string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Certificate[0]}))
 	state.PrivateKey = string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: key}))
-	return state, password, nil
+	return state, nil
 }
 
 func stateCertificate(state serverState) (tls.Certificate, string, error) {
@@ -169,23 +153,23 @@ func mediaReady() bool {
 	return res.StatusCode == http.StatusOK
 }
 
-func standaloneHandler(state serverState, chat *chatStore) http.Handler {
-	required, keyID, _ := encryptionPolicy() // Validated by standalone before accepting connections.
-	a := &app{cfg: config{APIKey: state.APIKey, APISecret: state.APISecret, PasswordHash: state.PasswordHash, LivekitURL: "wss://" + net.JoinHostPort(state.IP, fmt.Sprint(standalonePort)) + "/rtc", RequireE2EE: required, E2EEKeyID: keyID}, chat: chat, attempts: make(map[string]attempt), hashSlots: make(chan struct{}, 4), now: time.Now}
+func standaloneMembershipHandler(state serverState, store *membershipStore) (http.Handler, error) {
+	_, fingerprint, err := stateCertificate(state)
+	if err != nil {
+		return nil, err
+	}
+	cfg := config{APIKey: state.APIKey, APISecret: state.APISecret, RequireE2EE: true,
+		AuthBinding: "tls-sha256:" + fingerprint, PresenceURL: mediaAddress,
+		LivekitURL: "wss://" + net.JoinHostPort(state.IP, fmt.Sprint(standalonePort)) + "/rtc", UpdateCacheDir: filepath.Join(stateDir(), "update-cache")}
+	api := newMembershipHandler(store, cfg)
 	target, _ := url.Parse(mediaAddress)
 	proxy := httputil.NewSingleHostReverseProxy(target)
-	a.cfg.PresenceURL = mediaAddress
-	a.cfg.UpdateCacheDir = filepath.Join(stateDir(), "update-cache")
-	api := a.handler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// This listener is public; forwarding headers from callers are never trusted.
 		r.Header.Del("X-Real-IP")
 		r.Header.Del("X-Forwarded-For")
-		if r.URL.Path == "/healthz" {
-			if !mediaReady() {
-				fail(w, 503, "media server unavailable")
-				return
-			}
+		if r.URL.Path == "/healthz" && !mediaReady() {
+			memberFail(w, memberError(503, "MEDIA_UNAVAILABLE"))
+			return
 		}
 		if r.URL.Path == "/rtc" || strings.HasPrefix(r.URL.Path, "/rtc/") {
 			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/rtc")
@@ -196,32 +180,16 @@ func standaloneHandler(state serverState, chat *chatStore) http.Handler {
 			return
 		}
 		api.ServeHTTP(w, r)
-	})
-}
-
-func rotateRoomPassword(state *serverState, password string) error {
-	hash, err := passwordHash(password)
-	if err != nil {
-		return err
-	}
-	var secret [32]byte
-	if _, err = rand.Read(secret[:]); err != nil {
-		return err
-	}
-	// Restarting with a new LiveKit secret revokes outstanding voice JWTs as
-	// well as password-bound chat/preview tokens, while preserving room identity.
-	state.PasswordHash = hash
-	state.APISecret = hex.EncodeToString(secret[:])
-	return nil
+	}), nil
 }
 
 func rebindRoom(state *serverState, ip string) error {
 	if parsed := net.ParseIP(ip); parsed != nil && parsed.Equal(net.ParseIP(state.IP)) {
 		return nil
 	}
-	// A new address needs a certificate covering it. Preserve the password,
+	// A new address needs a certificate covering it. Preserve the membership identity,
 	// API key and history; revoke old sessions with the new signing secret.
-	replacement, _, err := createState(ip)
+	replacement, err := createState(ip)
 	if err != nil {
 		return err
 	}
@@ -230,22 +198,11 @@ func rebindRoom(state *serverState, ip string) error {
 }
 
 func standalone(args []string) error {
-	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
-		switch {
-		case args[0] == "--e2ee":
-			_ = os.Setenv("PAWTALK_E2EE", "true")
-		case strings.HasPrefix(args[0], "--e2ee-key-id="):
-			_ = os.Setenv("PAWTALK_E2EE_KEY_ID", strings.TrimPrefix(args[0], "--e2ee-key-id="))
-		default:
-			return errors.New("unknown server option; supported: --e2ee, --e2ee-key-id=<sha256>")
-		}
-		args = args[1:]
+	if len(args) > 0 && strings.HasPrefix(args[0], "--") {
+		return errors.New("API 2 encryption is mandatory; manual E2EE options are unsupported")
 	}
-	required, keyID, err := encryptionPolicy()
+	limit, err := chatStorageLimit()
 	if err != nil {
-		return err
-	}
-	if _, err := chatStorageLimit(); err != nil {
 		return err
 	}
 	if raw := os.Getenv("PAWTALK_PORT"); raw != "" {
@@ -281,6 +238,25 @@ func standalone(args []string) error {
 			return err
 		}
 		switch args[0] {
+		case "status":
+			status, err := inspectMembershipHost(filepath.Join(dir, "membership-v2.sqlite"))
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(os.Stdout).Encode(status)
+		case "initial-admin":
+			store, err := openMembershipStore(filepath.Join(dir, "membership-v2.sqlite"))
+			if err != nil {
+				return err
+			}
+			defer store.db.Close()
+			initial, err := store.createBootstrap(context.Background())
+			if err != nil {
+				return err
+			}
+			params := url.Values{"v": {"2"}, "server": {initial.ServerID}, "invite": {initial.InviteID}, "token": {initial.Token}, "setup": {"1"}}
+			fmt.Println(invitation(state) + "#" + params.Encode())
+			return nil
 		case "rebind":
 			if err := rebindRoom(&state, os.Getenv("PAWTALK_PUBLIC_IP")); err != nil {
 				return err
@@ -289,36 +265,8 @@ func standalone(args []string) error {
 		case "info":
 			fmt.Println(invitation(state))
 			return nil
-		case "initial-password":
-			file := filepath.Join(dir, "initial-password")
-			claimed := filepath.Join(dir, fmt.Sprintf(".claimed-password-%d", os.Getpid()))
-			if err := os.Rename(file, claimed); err != nil {
-				return errors.New("initial password already consumed or unavailable; use reset-password")
-			}
-			defer os.Remove(claimed)
-			password, err := os.ReadFile(claimed)
-			if err != nil {
-				return err
-			}
-			fmt.Println(string(password))
-			return nil
-		case "reset-password":
-			raw, err := io.ReadAll(io.LimitReader(os.Stdin, 1026))
-			if err != nil {
-				return err
-			}
-			err = rotateRoomPassword(&state, strings.TrimSuffix(strings.TrimSuffix(string(raw), "\n"), "\r"))
-			if err != nil {
-				return err
-			}
-			if err = saveState(dir, state); err != nil {
-				return err
-			}
-			_ = os.Remove(filepath.Join(dir, "initial-password"))
-			fmt.Println("Password updated. Restart the container to apply it.")
-			return nil
 		default:
-			return errors.New("usage: serve [info|healthcheck|initial-password|reset-password|rebind]")
+			return errors.New("usage: serve [info|status|healthcheck|initial-admin|rebind]")
 		}
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -326,18 +274,14 @@ func standalone(args []string) error {
 	}
 	state, err := readState(dir)
 	if errors.Is(err, os.ErrNotExist) {
-		var password string
-		state, password, err = createState(os.Getenv("PAWTALK_PUBLIC_IP"))
+		state, err = createState(os.Getenv("PAWTALK_PUBLIC_IP"))
 		if err != nil {
-			return err
-		}
-		if err = os.WriteFile(filepath.Join(dir, "initial-password"), []byte(password), 0600); err != nil {
 			return err
 		}
 		if err = saveState(dir, state); err != nil {
 			return err
 		}
-		log.Print("Initial password is ready for one-time retrieval with serve initial-password")
+		log.Print("Create the first administrator invitation with serve initial-admin")
 	} else if err != nil {
 		return err
 	}
@@ -409,12 +353,17 @@ func standalone(args []string) error {
 		return err
 	}
 	defer listener.Close()
-	chat, closeChat, err := startRoomChat(filepath.Join(dir, "chat.sqlite"), required, keyID)
+	store, err := openMembershipStore(filepath.Join(dir, "membership-v2.sqlite"))
 	if err != nil {
-		return fmt.Errorf("open chat history: %w", err)
+		return fmt.Errorf("open membership store: %w", err)
 	}
-	defer closeChat()
-	srv := &http.Server{Handler: standaloneHandler(state, chat), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}}
+	defer store.db.Close()
+	store.maxBytes = limit
+	handler, err := standaloneMembershipHandler(state, store)
+	if err != nil {
+		return err
+	}
+	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}}
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(tls.NewListener(listener, srv.TLSConfig)) }()
 	log.Print("PawTalk ready.")

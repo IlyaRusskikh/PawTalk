@@ -1,12 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/hmac"
-	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
@@ -82,11 +79,12 @@ func selfhost() error {
 		Addresses       []string
 		RequireE2EE     bool
 		E2EEKeyID       string
+		Name            string
 	}
 	if e := json.NewDecoder(os.Stdin).Decode(&c); e != nil {
 		return e
 	}
-	if c.Port < 1024 || c.Port > 65535 || c.MediaPort < 1024 || c.MediaPort > 65535 || len(c.Password) < 8 || len(c.Password) > 1024 || len(c.Secret) < 32 {
+	if c.Port < 1024 || c.Port > 65535 || c.MediaPort < 1024 || c.MediaPort > 65535 || len(c.Secret) < 32 || len(c.Name) > 256 {
 		return fmt.Errorf("invalid selfhost configuration")
 	}
 	media := exec.Command(c.MediaExecutable, "--config", c.MediaConfig)
@@ -122,28 +120,27 @@ func selfhost() error {
 	if e != nil {
 		return e
 	}
-	salt := make([]byte, 16)
-	if _, e = rand.Read(salt); e != nil {
-		return e
-	}
-	digest, e := pbkdf2.Key(sha256.New, c.Password, salt, 600000, 32)
-	if e != nil {
-		return e
-	}
-	cfg := config{APIKey: c.Key, APISecret: c.Secret, PasswordHash: "pbkdf2-sha256$600000$" + b64.EncodeToString(salt) + "$" + b64.EncodeToString(digest), RequireE2EE: c.RequireE2EE, E2EEKeyID: c.E2EEKeyID}
+	cfg := config{APIKey: c.Key, APISecret: c.Secret, RequireE2EE: true, AuthBinding: "tls-sha256:" + fingerprint, PresenceURL: fmt.Sprintf("http://127.0.0.1:%d", c.MediaPort)}
 	listener, e := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", c.Port))
 	if e != nil {
 		return e
 	}
 	defer listener.Close()
-	chat, closeChat, e := startRoomChat(":memory:", cfg.RequireE2EE, cfg.E2EEKeyID)
+	store, e := openMembershipStore(":memory:")
 	if e != nil {
-		return fmt.Errorf("open chat history: %w", e)
+		return fmt.Errorf("open membership store: %w", e)
 	}
-	defer closeChat()
-	a := &app{cfg: cfg, chat: chat, attempts: make(map[string]attempt), hashSlots: make(chan struct{}, 4), now: time.Now}
-	a.cfg.PresenceURL = fmt.Sprintf("http://127.0.0.1:%d", c.MediaPort)
-	apiHandler := a.handler()
+	defer store.db.Close()
+	if strings.TrimSpace(c.Name) != "" {
+		if _, e = store.db.Exec("UPDATE server_state SET name=? WHERE id=1", strings.TrimSpace(c.Name)); e != nil {
+			return e
+		}
+	}
+	bootstrap, e := store.createBootstrap(context.Background())
+	if e != nil {
+		return e
+	}
+	apiHandler := newMembershipHandler(store, cfg)
 	target, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", c.MediaPort))
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -165,23 +162,14 @@ func selfhost() error {
 	})
 	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}}
 	go func() { <-mediaDone; _ = srv.Close() }()
-	if e = json.NewEncoder(os.Stdout).Encode(map[string]string{"fingerprint": fingerprint}); e != nil {
+	// Private parent pipe only: bootstrap never appears in server logs or public status.
+	if e = json.NewEncoder(os.Stdout).Encode(map[string]any{"fingerprint": fingerprint, "bootstrap": bootstrap}); e != nil {
 		return e
 	}
 	// Parent closes stdin on exit. This also releases listeners after an unexpected parent crash.
 	go func() {
 		_, _ = io.Copy(io.Discard, os.Stdin)
-		// Tell guests the room ended, so they do not spend minutes reconnecting.
-		claims, _ := json.Marshal(map[string]any{"iss": c.Key, "sub": "host", "nbf": time.Now().Unix() - 5, "exp": time.Now().Unix() + 30, "video": map[string]bool{"roomCreate": true}})
-		unsigned := b64.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`)) + "." + b64.EncodeToString(claims)
-		mac := hmac.New(sha256.New, []byte(c.Secret))
-		_, _ = mac.Write([]byte(unsigned))
-		req, _ := http.NewRequest("POST", target.String()+"/twirp/livekit.RoomService/DeleteRoom", bytes.NewBufferString(`{"room":"common"}`))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+unsigned+"."+b64.EncodeToString(mac.Sum(nil)))
-		if response, err := client.Do(req); err == nil {
-			_ = response.Body.Close()
-		}
+		// The child media process is terminated by the deferred lifecycle cleanup.
 		_ = srv.Close()
 	}()
 	return srv.Serve(tls.NewListener(listener, srv.TLSConfig))

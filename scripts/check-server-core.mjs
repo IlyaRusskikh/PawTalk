@@ -12,7 +12,7 @@ const receipt = JSON.parse(await readFile('resources/server/bundled-server.json'
 for (const [key, value] of Object.entries(definition)) assert.equal(receipt[key], value, `shared source receipt: ${key}`);
 const stage = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-core-identity-'));
 try {
-  execFileSync('tar.exe', ['-xf', path.resolve(`release/server/PawTalk.Server.${definition.version}.windows-x64.zip`), '-C', stage], { windowsHide: true });
+  execFileSync('tar.exe', ['-xf', path.resolve(process.env.PAWTALK_WINDOWS_SERVER_ZIP || `release/server/PawTalk.Server.${definition.version}.windows-x64.zip`), '-C', stage], { windowsHide: true });
   const hash = async file => createHash('sha256').update(await readFile(file)).digest('hex');
   assert.equal(await hash('resources/server/pawtalk-api.exe'), receipt.apiSha256, 'Client core matches receipt');
   assert.equal(await hash(path.join(stage, 'pawtalk-server.exe')), receipt.apiSha256, 'Client and permanent Windows Server cores are byte-identical');
