@@ -172,6 +172,30 @@ sudo pawtalkctl doctor
 Повторный `install` сохраняет имеющиеся данные/настройки/digest и пытается запустить
 существующую установку; он не делает чистый сброс или автоматическую миграцию API 1.
 
+### Удалить bootstrap-клон после установки (необязательно)
+
+Когда установленная команда `sudo pawtalkctl doctor` показывает `installed: true`,
+`running: true`, `identityOK: true` и `transactionPending: false`, каталог
+`pawtalk-bootstrap` больше не нужен для обычной работы, обновлений или backup.
+Manager уже установлен отдельно и не запускает код из исходного checkout.
+
+Если вы всё ещё находитесь внутри клона `pawtalk-bootstrap`, созданного на шаге 3,
+проверьте текущий путь и удалите только этот клон:
+
+```bash
+pwd
+test "$(basename "$PWD")" = pawtalk-bootstrap &&
+cd .. &&
+rm -r -- pawtalk-bootstrap
+```
+
+Не удаляйте `/opt/pawtalk`, `/opt/pawtalk-manager`, `/etc/pawtalk`,
+`/var/lib/pawtalk-manager`, Docker volume сервера или backup-директории:
+это части установленного сервера и его данные. Удаление клона их не затрагивает.
+Если установка не завершилась и launcher ещё недоступен, сначала сохраните клон
+для диагностики/повторного запуска. Для восстановления на чистом VPS доверенный
+checkout при необходимости получают заново.
+
 ## 5. Первое вступление администратора
 
 После установки терминал показывает одноразовую ссылку первого администратора.
@@ -412,7 +436,11 @@ then test chat and voice from another network. Only TCP PORT/PORT+1 and UDP PORT
 are public; PORT+3 stays loopback-only.
 
 Use installed pawtalkctl for status/logs/doctor, independent updates, configure,
-backup/restore and data-preserving uninstall. Automatic updates include prereleases;
+backup/restore and data-preserving uninstall. Automatic updates include prereleases.
+After successful installation and healthy doctor results, the bootstrap repository
+clone can be deleted; installed Manager/runtime/configuration/data/backups remain
+separate. Keep the clone until incomplete installation is resolved; obtain a trusted
+checkout again when needed for fresh-host recovery.
 Linux cannot change an installed server's IP/base port. Backup interrupts calls and
 must be copied off-host; server copies do not include client E2EE roots. Restore to
 a fresh host requires the complete backup, trusted checkout/keys, Docker and the
