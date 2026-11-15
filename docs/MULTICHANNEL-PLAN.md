@@ -1044,3 +1044,38 @@ Docker/Compose и native Windows проверками. Linux race/arm64, реа�
 - [x] Affected real Electron chat suite passed RU/EN × reduced/normal, including
   shrink/grow/shrink and slow-renderer checks. Public guard/staged review precede
   commit/push; the next CI run is authoritative for both Windows runners.
+
+### Failed component tag checks — new patch candidates
+
+- [x] PR #13 merged as b28e1d3 after all five jobs passed. Owner approved
+  creation of client-v0.12.0, server-v0.11.0 and manager-v0.5.0. Their separate
+  tag verification failed before publication; retain all three tags unchanged.
+  New branch: work/client-v0.12.1__server-v0.11.1__manager-v0.5.1.
+- [x] Server run 43686137487: host lifecycle launched the actual Client without
+  dist/index.html in Server-only scope. Build the renderer for host tests too.
+- [x] Manager run 43686148683: its API 2 Server fixture lacked LiveKit. Prepare
+  LiveKit for every host scope without Client preparation, before fixture build.
+  Test the evaluated workflow dependency order for each component and both
+  Windows runners; independent package/upload boundaries remain unchanged.
+- [x] Client run 43686136842: a stale membership request during own selfhost
+  shutdown showed a false kick modal. Mark intentional departure before awaiting
+  cleanup and distinguish locally missing membership from a remote revocation.
+  Rejected leave restores notifications; successful explicit join/link does too.
+  Regression tests retain real kick/ban notices and exercise pending denials.
+- [x] Prepare Client 0.12.1, Server 0.11.1 and Manager 0.5.1 manifests, CHANGELOG
+  and complete bilingual notes against published 0.11.0/0.10.1/0.4.0, respectively.
+  Notes retain the full API 2 update; failed tags were never published.
+- [x] Node tests 186/186; infrastructure/release contracts 26/26; real Electron
+  selfhost RU/EN × normal/reduced and membership/audio integration passed.
+  Native Windows Server/Manager Go tests+vet and byte-identical core check passed.
+- [x] Client/Manager installers built; packaged Client and Manager smokes, Manager
+  desktop/tray RU/EN/motion checks and Windows handoff 9/9 passed. Real Windows
+  console lifecycle passed: initial admin, actual Client main/preload/renderer,
+  encrypted chat/images/voice, backup/update/rollback, fresh/local restore and
+  process-tree cleanup. Public guard passed; final staged review before push.
+  Logs: ignored release/qa/branch-prep/patch-*.log. Windows elevated SCM/NSIS,
+  both hosted Windows variants, physical devices/external networks remain CI/owner
+  acceptance. Linux implementation/workflow jobs are unchanged; their previously
+  green PR #13 results are retained as prior coverage, not claimed as a new run.
+- [ ] Commit, push and open the patch PR; hand off CI without watching.
+- [ ] Owner approvals remain separate for this PR's merge, new tags and publication.

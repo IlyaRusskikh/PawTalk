@@ -1,5 +1,11 @@
 # Changelog / История изменений
 
+## Client 0.12.1 / Server 0.11.1 / Manager 0.5.1 — release verification fixes
+
+- RU: Сохранено полное обновление API 2, описанное ниже. Исправлены зависимости Windows tag CI: Server готовит клиентский интерфейс, Manager — также LiveKit до сборки тестового Server. Штатное завершение клиентского селфхоста не показывает ложный кик; реальные кики/баны сохраняются.
+- EN: Retains the complete API 2 update below. Windows tag CI now builds the Client renderer for Server integration and prepares LiveKit before Manager's Server fixture. Intentional Client selfhost shutdown suppresses stale false kick notices while preserving real kick/ban reporting.
+- Failed pre-publication tags client-v0.12.0, server-v0.11.0 and manager-v0.5.0 remain immutable. New bilingual notes cover all changes since the previous published component releases; API 1 remains incompatible with no migration.
+
 ## Client 0.12.0 / Server 0.11.0 / Manager 0.5.0 — 2026-11-15 (preview preparation)
 
 - **Client 0.12.0:** multiple channels, persistent membership, server-local device linking/control transfer, administrator/moderator UI and shared server names. Restore chat scrolling/live replies, unread navigation, drag previews, compact avatars and self badge; add onboarding, offline departure and readable silent Windows notifications. Improve WAN/external IPv4 hosting diagnostics. / Многоканальные серверы, членство, привязка устройств/передача управления, интерфейс администратора/модератора и имя сервера. Восстановлены прокрутка/цитаты, переход к непрочитанным, перетаскивание; добавлены миниатюры, пин «Вы», мастер запуска, отложенный выход и читаемые уведомления Windows без системного звука. Диагностика сравнивает WAN/внешний IPv4.
