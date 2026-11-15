@@ -1029,3 +1029,18 @@ Docker/Compose и native Windows проверками. Linux race/arm64, реа�
   recovery, Manager-only update, backup restore and fresh-root restore.
   Public guard/staged review precede commit/push to the same PR; native Ubuntu
   runner confirmation belongs to the new CI run. Only test code changed.
+
+### PR #13 visible-reply geometry follow-up
+
+- [x] Run 43682275038: both Ubuntu jobs and Windows 2022 passed. Windows 2025
+  failed strict visible-reply scroll equality (839 versus 845) during normal
+  animation. Local diagnostics found an active 220 ms send-flight animation
+  at the measurement boundary; its transformed descendant affects scrollHeight.
+- [x] Before stable geometry comparisons, wait for completed history requests,
+  actual frames/fonts and finite history animations through Animation.finished.
+  Assert the source is fully visible, then keep exact scrollTop equality after
+  the click and rendered highlight. Also settle composer/history layout before
+  the initial quote lookup. No tolerance increase or application change.
+- [x] Affected real Electron chat suite passed RU/EN × reduced/normal, including
+  shrink/grow/shrink and slow-renderer checks. Public guard/staged review precede
+  commit/push; the next CI run is authoritative for both Windows runners.

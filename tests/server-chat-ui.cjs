@@ -9,6 +9,12 @@ app.whenReady().then(async()=>{
  const run=code=>win.webContents.executeJavaScript(code,true),wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const until=async(code,label)=>{for(let i=0;i<180;i++){if(await run(code))return;await wait(50);}throw Error(label+': '+await run('document.body.innerText.slice(-1800)'));};
  const layout=()=>run('document.fonts.ready.then(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))');
+ const settledHistory=async()=>{
+  await until("document.querySelector('.member-history')?.getAttribute('aria-busy')==='false'",'history requests complete');
+  await layout();
+  await run("Promise.all(document.querySelector('.member-history').getAnimations({subtree:true}).filter(animation=>Number.isFinite(animation.effect?.getComputedTiming().endTime)).map(animation=>animation.finished.catch(()=>{})))");
+  await layout();
+ };
  const set=(selector,value)=>run(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('missing '+${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
  const enter=extra=>run(`document.querySelector('.member-composer textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...${JSON.stringify(extra||{})}}))`);
  try{
@@ -26,6 +32,7 @@ app.whenReady().then(async()=>{
   assert.deepEqual(clipping,{radius:'18px',inside:true,corner:true,scroll:true},'rounded composer clips the scrollbar and remains scrollable');
   if(language==='ru'&&reduced==='no-preference'){await fs.mkdir('release/qa',{recursive:true});win.webContents.invalidate();await win.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});await wait(180);await fs.writeFile('release/qa/chat-composer-max-radius.png',(await win.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());}
   await set('.member-composer textarea','');
+  await settledHistory();
   if(language==='ru'&&reduced==='no-preference'){await fs.mkdir('release/qa',{recursive:true});await win.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});await wait(180);await fs.writeFile('release/qa/chat-restored-ru.png',(await win.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());}
   await run("document.querySelector('.member-reply').click()");
   await until("!!document.querySelector('[data-message-row=\"20\"].chat-message-target')",'around lookup highlights source');
@@ -68,9 +75,15 @@ app.whenReady().then(async()=>{
   await run('window.hold=false;window.release()');await until("!!document.querySelector('[data-message-row=\"182\"]')",'delayed send');assert.equal(await run('window.sendRequests.length'),3,'double Enter creates one send');
   await run('window.reply(182,181)');
   await until("document.querySelector('[data-message-row=\"182\"] .member-reply')?.textContent.includes('Retry once')&&!document.querySelector('.chat-jump')",'recent reply is displayed at bottom');
+  // The send flight transforms a descendant outside its normal bounds. Its
+  // completion can shrink scrollHeight independently of clicking the quote.
+  // Compare settled geometry so this assertion isolates reply navigation.
+  await settledHistory();
+  assert.equal(await run("(()=>{const list=document.querySelector('.member-history'),row=document.querySelector('[data-message-row=\"181\"]'),a=list.getBoundingClientRect(),b=row.getBoundingClientRect();return b.top>=a.top&&b.bottom<=a.top+list.clientHeight})()"),true,'reply source is already fully visible');
   const beforeVisibleJump=await run("document.querySelector('.member-history').scrollTop");
   await run("document.querySelector('[data-message-row=\"182\"] .member-reply').click()");
   await until("!!document.querySelector('[data-message-row=\"181\"].chat-message-target')",'visible source highlights');
+  await layout();
   assert.equal(await run("document.querySelector('.member-history').scrollTop"),beforeVisibleJump,'visible source does not move history');
   assert.equal(await run("!!document.querySelector('.chat-jump')"),false,'visible source does not enter older-history mode');
   const textGeometry=()=>run("(()=>{const e=document.querySelector('[data-message-row=\"181\"] .member-message-text'),line=e.querySelector('.chat-markdown-line');return{height:e.getBoundingClientRect().height,line:line.getBoundingClientRect().height}})()");
