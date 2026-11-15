@@ -1,0 +1,135 @@
+name: Promote Existing Preflight
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Successful prepare-only Release Candidate Preflight run ID at the exact current main SHA
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+# Serialize with the full release workflow; never cancel an owner's release.
+concurrency:
+  group: release-candidate-main
+  cancel-in-progress: false
+env:
+  SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+  PAWTALK_CLIENT_CHANNEL: ${{ vars.PAWTALK_CLIENT_CHANNEL || 'preview' }}
+  PAWTALK_SERVER_CHANNEL: ${{ vars.PAWTALK_SERVER_CHANNEL || 'preview' }}
+  PAWTALK_MANAGER_CHANNEL: ${{ vars.PAWTALK_MANAGER_CHANNEL || 'preview' }}
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main' && github.repository == 'IlyaRusskikh/PawTalk'
+    runs-on: ubuntu-latest
+    outputs:
+      components: ${{ steps.source.outputs.components }}
+      origin: ${{ steps.source.outputs.origin }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+      - run: sudo apt-get update && sudo apt-get install -y skopeo
+      - name: Verify source API evidence, immutable archives, receipts and signatures
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-candidate.mjs promote-plan
+  tag:
+    if: needs.plan.result == 'success' && github.ref == 'refs/heads/main'
+    needs: plan
+    environment: release-tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      ORIGIN: ${{ needs.plan.outputs.origin }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+      - run: sudo apt-get update && sudo apt-get install -y skopeo
+      - name: Revalidate the original candidate and create only its immutable tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-candidate.mjs promote-tag
+  publish-client:
+    if: needs.tag.result == 'success' && contains(fromJSON(needs.plan.outputs.components), 'client') && github.ref == 'refs/heads/main'
+    needs: [plan, tag]
+    environment: release-publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      ORIGIN: ${{ needs.plan.outputs.origin }}
+      COMPONENTS: client
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+      - name: Publish only original verified Client bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-candidate.mjs promote-publish
+  publish-server:
+    if: needs.tag.result == 'success' && contains(fromJSON(needs.plan.outputs.components), 'server') && github.ref == 'refs/heads/main'
+    needs: [plan, tag]
+    environment: release-publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+      packages: write
+    env:
+      ORIGIN: ${{ needs.plan.outputs.origin }}
+      COMPONENTS: server
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+      - run: sudo apt-get update && sudo apt-get install -y skopeo
+      - name: Publish only original verified Server bytes and OCI digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-candidate.mjs promote-publish
+  publish-manager:
+    if: needs.tag.result == 'success' && contains(fromJSON(needs.plan.outputs.components), 'manager') && github.ref == 'refs/heads/main'
+    needs: [plan, tag]
+    environment: release-publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      ORIGIN: ${{ needs.plan.outputs.origin }}
+      COMPONENTS: manager
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+      - name: Publish only original verified Manager bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-candidate.mjs promote-publish

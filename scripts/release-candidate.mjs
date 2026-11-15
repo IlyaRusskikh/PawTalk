@@ -1,7 +1,7 @@
 // Trusted main orchestration only. No build command is reachable from tag/publish.
 import { createHash, createPublicKey, verify } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { readFile, writeFile, readdir, lstat, appendFile } from 'node:fs/promises';
+import { readFile, writeFile, readdir, lstat, appendFile, mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -41,7 +41,7 @@ async function fileDigest(file) {
   for await (const chunk of createReadStream(file)) digest.update(chunk);
   return {size:info.size, sha256:digest.digest('hex')};
 }
-async function plan(component, env = process.env) {
+async function plan(component, env = process.env, origin) {
   const source = await versions();
   const desktop = await json(path.join(root,'manager/desktop/package.json'));
   if (desktop.version !== source.manager) throw Error('Manager versions differ');
@@ -49,7 +49,8 @@ async function plan(component, env = process.env) {
   const p = releasePlan(tag, source);
   const channel = channelFor(p.version, env[`PAWTALK_${component.toUpperCase()}_CHANNEL`] || 'preview');
   if (!(await readFile(path.join(root,`docs/releases/${tag}.md`),'utf8')).trim()) throw Error('Missing release notes');
-  return {repository:env.GITHUB_REPOSITORY, sha:env.GITHUB_SHA, run:env.GITHUB_RUN_ID, attempt:env.GITHUB_RUN_ATTEMPT, component, version:p.version, channel, tag};
+  return {repository:env.GITHUB_REPOSITORY, sha:origin?.sha ?? env.GITHUB_SHA, run:origin?.run ?? env.GITHUB_RUN_ID,
+    attempt:origin?.attempt ?? env.GITHUB_RUN_ATTEMPT, component, version:p.version, channel, tag};
 }
 async function signatures(p, directory) {
   const name = p.component === 'client' ? 'update-manifest.json' : `${p.component}-manifest.json`;
@@ -90,8 +91,31 @@ async function api(endpoint, method = 'GET', body) {
   if (!response.ok) throw Error(`GitHub ${method} ${endpoint}: ${response.status}`);
   return response.json();
 }
-async function absent(p) {
-  if (await api(`git/ref/tags/${p.tag}`) || await api(`releases/tags/${p.tag}`)) throw Error('Tag/release already exists: '+p.tag);
+export async function absent(p, request = api) {
+  if (await request(`git/ref/tags/${p.tag}`) || await request(`releases/tags/${p.tag}`)) throw Error('Tag/release already exists: '+p.tag);
+}
+export async function createTags(plans, request = api) {
+  // Precheck the full set before the first mutation. REST ref writes are NOT atomic.
+  for (const p of plans) await absent(p,request);
+  for (const p of plans) {
+    await request('git/refs','POST',{ref:`refs/tags/${p.tag}`,sha:p.sha});
+    console.log(`Created ${p.tag} at ${p.sha}; do not retry a partially completed promotion.`);
+  }
+}
+export async function publishAssets(p, directory, {request=api,execute=run,notes=path.join(root,`docs/releases/${p.tag}.md`)} = {}) {
+  const title = (await readFile(notes,'utf8')).split(/\r?\n/)[0].replace(/^# /,'');
+  const flags = ['--latest=false',...(p.channel === 'preview' ? ['--prerelease'] : [])];
+  const names = assetNames(p.component,p.version).filter(n=>n !== 'server-image.tar');
+  const assets = names.map(n=>path.join(directory,n));
+  execute('gh',['release','create',p.tag,'--verify-tag','--draft','--repo',p.repository,...flags,'--title',title,'--notes-file',notes,...assets]);
+  execute('gh',['release','edit',p.tag,'--repo',p.repository,'--draft=false',...flags]);
+  const published = await request(`releases/tags/${p.tag}`);
+  if (!published || published.draft || published.prerelease !== (p.channel === 'preview')) throw Error('Incomplete published release');
+  for (const name of names) {
+    const asset = published.assets.find(a=>a.name === name);
+    const local = await fileDigest(path.join(directory,name));
+    if (!asset || asset.size !== local.size || asset.digest !== 'sha256:'+local.sha256) throw Error('Published asset verification failed: '+name);
+  }
 }
 async function currentMain() {
   const main = await api('git/ref/heads/main');
@@ -110,11 +134,42 @@ async function validate(p, directory, digest) {
   }
   return signatures(p,directory);
 }
+async function existingCandidate(command) {
+  const { sourceCandidate, downloadArtifact } = await import('./candidate-origin.mjs');
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  await currentMain();
+  const temporary = await mkdtemp(path.join(os.tmpdir(),'pawtalk-source-index-'));
+  let candidate;
+  try {
+    const pinned = command === 'plan' ? undefined : JSON.parse(process.env.ORIGIN);
+    if (command !== 'plan' && (!pinned || typeof pinned !== 'object' || Array.isArray(pinned))) throw Error('Pinned source origin required');
+    candidate = await sourceCandidate(api,process.env.SOURCE_RUN_ID,process.env.GITHUB_SHA,async artifact=>{
+      await downloadArtifact(artifact,path.join(temporary,'index'),['candidate.json']);
+      return json(path.join(temporary,'index/candidate.json'));
+    },pinned);
+  } finally { await rm(temporary,{recursive:true,force:true}); }
+  const {index,origin,prepared} = candidate;
+  // All source components are promoted. A per-component publisher is an internal
+  // job from that full set, never an independently supplied selection/version.
+  const components = command === 'publish' ? selection(process.env.COMPONENTS) : index.components;
+  if (command === 'publish' && (components.length !== 1 || !index.components.includes(components[0]))) throw Error('Publisher outside source component set');
+  const plans = await Promise.all(index.components.map(c=>plan(c,process.env,origin)));
+  for (const p of plans) {
+    for (const [key,value] of Object.entries(p)) if (index.plans[p.component][key] !== value) throw Error('Indexed version/channel/source contract mismatch');
+  }
+  for (const c of components) await downloadArtifact(prepared[c],path.join(root,'candidate',c),[...assetNames(c,index.plans[c].version),'receipt.json']);
+  return {plans:plans.filter(p=>components.includes(p.component)),digests:index.receipts,origin,components:index.components};
+}
 async function main() {
-  const [command, argument] = process.argv.slice(2);
+  let [command, argument] = process.argv.slice(2);
   trusted(process.env);
-  const components = selection(process.env.COMPONENTS || argument);
-  const plans = await Promise.all(components.map(c=>plan(c)));
+  const promotion = command.startsWith('promote-');
+  if (promotion) command = command.slice('promote-'.length);
+  if (promotion && !['plan','tag','publish'].includes(command)) throw Error('Unknown promotion command');
+  const existing = promotion ? await existingCandidate(command) : null;
+  const components = existing?.components ?? selection(process.env.COMPONENTS || argument);
+  const plans = existing?.plans ?? await Promise.all(components.map(c=>plan(c)));
   if (command === 'compare-core') {
     const receipt = await json(path.join(root,'release/client-core/bundled-server.json'));
     const { serverDefinition } = await import('./server-core.mjs');
@@ -129,7 +184,7 @@ async function main() {
     console.log('PASS separately built Client/Server Go and LiveKit byte equality');
     return;
   }
-  if (command === 'plan') {
+  if (command === 'plan' && !promotion) {
     await currentMain();
     for (const p of plans) await absent(p);
     await appendFile(process.env.GITHUB_OUTPUT,`components=${JSON.stringify(components)}\n`);
@@ -147,17 +202,28 @@ async function main() {
     await appendFile(process.env.GITHUB_OUTPUT,`digest=${hash(bytes)}\n`);
     return;
   }
-  const digests = JSON.parse(process.env.RECEIPTS);
+  const digests = existing?.digests ?? JSON.parse(process.env.RECEIPTS);
   for (const p of plans) await validate(p,path.join(root,'candidate',p.component),digests[p.component]);
+  if (command === 'snapshot') {
+    const first = plans[0];
+    const index = {schema:1,workflow:'.github/workflows/release.yml',repository:first.repository,sha:first.sha,run:first.run,attempt:first.attempt,
+      components,plans:Object.fromEntries(plans.map(p=>[p.component,p])),receipts:Object.fromEntries(plans.map(p=>[p.component,digests[p.component]]))};
+    await mkdir(path.join(root,'release/candidate-index'),{recursive:true});
+    await writeFile(path.join(root,'release/candidate-index/candidate.json'),JSON.stringify(index)+'\n');
+    return;
+  }
+  if (promotion && command === 'plan') {
+    await currentMain();
+    await (await import('./candidate-origin.mjs')).confirmSource(api,existing.origin);
+    for (const p of plans) await absent(p);
+    await appendFile(process.env.GITHUB_OUTPUT,`components=${JSON.stringify(components)}\norigin=${JSON.stringify(existing.origin)}\n`);
+    return;
+  }
   if (command === 'validate') return;
   await currentMain();
+  if (promotion) await (await import('./candidate-origin.mjs')).confirmSource(api,existing.origin);
   if (command === 'tag') {
-    // Precheck the full set before the first mutation. REST ref writes are NOT atomic.
-    for (const p of plans) await absent(p);
-    for (const p of plans) {
-      await api('git/refs','POST',{ref:`refs/tags/${p.tag}`,sha:p.sha});
-      console.log(`Created ${p.tag} at ${p.sha}; do not retry a partially completed promotion.`);
-    }
+    await createTags(plans);
     return;
   }
   if (command !== 'publish') throw Error('Unknown candidate command');
@@ -186,19 +252,7 @@ async function main() {
         if ('sha256:'+hash(raw) !== payload.digest) throw Error('Published OCI digest differs');
       } finally { await (await import('node:fs/promises')).rm(authFile,{force:true}); }
     }
-    const notes = path.join(root,`docs/releases/${p.tag}.md`);
-    const title = (await readFile(notes,'utf8')).split(/\r?\n/)[0].replace(/^# /,'');
-    const flags = ['--latest=false',...(p.channel === 'preview' ? ['--prerelease'] : [])];
-    const assets = assetNames(p.component,p.version).filter(n=>n !== 'server-image.tar').map(n=>path.join(directory,n));
-    run('gh',['release','create',p.tag,'--verify-tag','--draft','--repo',p.repository,...flags,'--title',title,'--notes-file',notes,...assets]);
-    run('gh',['release','edit',p.tag,'--repo',p.repository,'--draft=false',...flags]);
-    const published = await api(`releases/tags/${p.tag}`);
-    if (!published || published.draft || published.prerelease !== (p.channel === 'preview')) throw Error('Incomplete published release');
-    for (const name of assetNames(p.component,p.version).filter(n=>n !== 'server-image.tar')) {
-      const asset = published.assets.find(a=>a.name === name);
-      const local = await fileDigest(path.join(directory,name));
-      if (!asset || asset.size !== local.size || asset.digest !== 'sha256:'+local.sha256) throw Error('Published asset verification failed: '+name);
-    }
+    await publishAssets(p,directory);
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

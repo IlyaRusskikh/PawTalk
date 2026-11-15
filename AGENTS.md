@@ -26,5 +26,7 @@ before broad search; verify descriptive docs against code.
   publish the checked bytes without rebuilding. Never replace published
   tags/binaries/images. Public versions and download links derive from GitHub
   Releases, not package versions or a global releases/latest endpoint.
+  Prefer Promote Existing Preflight for a verified prepare-only candidate on unchanged
+  main; retain its original run/attempt and receipts, with no rebuild or re-sign.
 - After PR creation give its CI link and hand control to the owner. Do not watch
   CI without explicit instruction. Silence is not approval to merge/tag/publish.
