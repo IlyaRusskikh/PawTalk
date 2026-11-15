@@ -8,7 +8,7 @@ import { versions } from './release-contract.mjs';
 const { releasePlan } = createRequire(import.meta.url)('../shared/release.cjs');
 const {apiProtocolVersion,dataSchemaVersion}=createRequire(import.meta.url)('../shared/membership.cjs');
 const root = path.resolve(import.meta.dirname, '..');
-const plan = releasePlan(process.env.GITHUB_REF_NAME, await versions());
+const plan = releasePlan(process.env.PAWTALK_RELEASE_TAG || process.env.GITHUB_REF_NAME, await versions());
 if (plan.client) throw Error('Use sign-update.mjs for Client');
 const component = plan.component;
 const trust = JSON.parse(await readFile(path.join(root, 'manager/trust.json'), 'utf8'))[component];

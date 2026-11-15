@@ -35,42 +35,31 @@ test('development CI runs only on PR/manual/reuse; full main/push CI is absent',
   assert.ok(check.jobs.server.steps.some(step => step.run?.includes('tests/compose_integration.py')));
   assert.ok(check.jobs.windows.steps.some(step => step.run?.includes('scripts/packaged-smoke.mjs')));
 });
-test('publication gate follows checks and preparation, scopes write permissions and preserves signed outputs', async () => {
+test('publication gates follow verification and prepared artifacts', async () => {
   const release = await workflow('release');
-  assert.deepEqual(release.on.push.tags, ['client-v*', 'server-v*', 'manager-v*']);
-  assert.ok(release.jobs.plan.steps.some(step => step.run?.includes('git merge-base --is-ancestor')));
+  assert.deepEqual(Object.keys(release.on), ['workflow_dispatch']);
   assert.equal(release.jobs.verify.uses, './.github/workflows/check.yml');
+  assert.equal(release.jobs.tag.environment, 'release-tag');
   for (const component of ['client', 'server', 'manager']) {
-    const job = release.jobs[component];
-    assert.equal(job.environment, 'release-publish');
-    assert.ok(job.needs.includes('verify'));
-    if (component !== 'client') assert.ok(job.needs.includes(`prepare-${component}`));
-    assert.equal(job.permissions['packages'], component === 'server' ? 'write' : undefined);
-    assert.equal(job.permissions.contents, 'write');
-    const command = job.steps.find(step => step.run?.includes('gh release create')).run;
-    assert.match(command, /--verify-tag --draft/);
-    assert.match(command, /--notes-file/);
-    assert.match(command, /gh release edit .*--draft=false/);
-    assert.doesNotMatch(command, /--generate-notes|--clobber/);
-    assert.ok(!job.steps.some(step => Object.keys(step.env ?? {}).some(key => key.includes('PRIVATE_KEY'))));
-  }
-  for (const component of ['server', 'manager']) {
-    const preparation = release.jobs[`prepare-${component}`];
-    assert.deepEqual(preparation.needs, ['plan', 'verify']);
-    assert.equal(preparation.environment, undefined);
+    const preparation = release.jobs['prepare-'+component];
+    assert.deepEqual(preparation.needs, ['plan', 'verify', 'infrastructure']);
     assert.equal(preparation.permissions?.contents ?? release.permissions.contents, 'read');
-    assert.ok(preparation.steps.some(step => step.run?.includes('scripts/release-metadata.mjs')));
+    const job = release.jobs['publish-'+component];
+    assert.equal(job.environment, 'release-publish');
+    assert.ok(job.needs.includes('preflight') && job.needs.includes('tag'));
+    assert.equal(job.permissions.packages, component === 'server' ? 'write' : undefined);
+    assert.ok(!job.steps.some(step => Object.keys(step.env ?? {}).some(key => key.includes('PRIVATE_KEY'))));
   }
   const image = release.jobs['prepare-server'].steps.find(step => step.uses?.startsWith('docker/build-push-action'));
   assert.equal(image.with.push, false);
   assert.equal(image.with.platforms, 'linux/amd64,linux/arm64');
   assert.match(image.with.outputs, /type=oci/);
-  assert.ok(release.jobs.server.steps.some(step => step.run?.includes('skopeo copy --all --preserve-digests')));
 });
+
 test('Pages chains successful publication from main; generation must precede deployment', async () => {
   const pages = await workflow('pages');
   assert.deepEqual(pages.on.release.types, ['published']);
-  assert.deepEqual(pages.on.workflow_run.workflows, ['Publish component release']);
+  assert.deepEqual(pages.on.workflow_run.workflows, ['Release Candidate Preflight']);
   assert.match(pages.jobs.deploy.if, /conclusion == 'success'/);
   const steps = pages.jobs.deploy.steps;
   assert.equal(steps.find(step => step.uses?.startsWith('actions/checkout')).with.ref, 'main');

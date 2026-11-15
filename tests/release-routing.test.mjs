@@ -21,7 +21,7 @@ test('three release routes validate their own source and cannot cross-publish', 
 });
 test('publication workflow routes are exclusive and refuse legacy publication', async () => {
   const workflow = await readFile(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
-  for (const family of ['client','server','manager']) assert.ok(workflow.includes(`needs.plan.outputs.component == '${family}'`));
+  for (const family of ['client','server','manager']) assert.ok(workflow.includes(`contains(fromJSON(needs.plan.outputs.components), '${family}')`));
   assert.ok(!workflow.includes("startsWith(github.ref, 'refs/tags/v')"));
-  assert.ok(workflow.includes('scripts/release-contract.mjs'));
+  assert.ok(workflow.includes('scripts/release-candidate.mjs'));
 });

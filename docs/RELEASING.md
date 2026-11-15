@@ -7,37 +7,62 @@ notes below do not authorize repeating old publication steps.
 
 ## Approval sequence / Этапы согласования
 
-1. Prepare work/{service}-v{version} from current main (multi-component branches:
-   work/client-vX.Y.Z__server-vX.Y.Z). Update version sources, CHANGELOG and bilingual
-   docs/releases/<tag>.md. Release versions start at 0.1.0; do not bump docs-only work.
-2. Run affected final-state checks, review staged/public diff, push the work branch
-   and open PR. Development CI runs on PR only, not branch/main pushes. Manual
-   component scopes and reusable tag checks remain. Hand off the CI URL without
-   watching unless asked. Merge needs successful current PR CI and explicit owner
-   permission; squash and delete the branch.
-3. Ask separately for tag permission. Only tag a commit contained in main; push
-   the matching immutable component tag. The plan verifies ancestry and refuses
-   an existing GitHub release. A failed pushed tag is not reused: prepare a new version.
-4. Tag CI verifies the component, builds packages and prepares/signs metadata.
-   Server builds a multi-platform OCI archive without pushing; its exact digest
-   is signed. Manager bundle is signed before publication. Client retains the
-   trusted-tag signing step and its existing key. Preparation has no write token.
-5. Owner separately approves the **release-publish** environment after all checks
-   and preparations succeed. Only then publish the prepared assets/image. GitHub
-   assets upload into a draft first; publish only after upload succeeds. Server
-   digest is preserved on registry copy. No tag, binary or image replacement.
-6. Successful release workflow triggers Pages regeneration from main. A release
-   published manually also triggers Pages. API/catalog failure leaves existing
-   Pages live; recover via Pages workflow_dispatch, without a catalog commit.
+1. Prepare a working branch from current main, component versions, CHANGELOG and
+   reviewed bilingual docs/releases/<tag>.md. Infrastructure-only PRs need no product
+   version bump. Run final checks/public review, push and open PR; hand off CI URL.
+   Do not monitor CI without an explicit request. Squash merge requires successful
+   current PR CI and separate explicit owner permission.
+2. After merge, dispatch **Release Candidate Preflight** (release.yml) on main.
+   components accepts client, server, manager, a comma-separated set without spaces,
+   or all. The dispatch fixes github.sha; every checkout/build uses that candidate.
+   The plan checks manifests, notes, channels, unchanged main and absent tags/releases.
+3. The reusable check.yml runs each selected component in its own release scope on
+   Windows 2022/2025 and Ubuntu x64/ARM64; PR all is not release evidence. Common
+   infrastructure runs once. Renderer, LiveKit, selfhost/room completion, SCM,
+   Compose/systemd, legacy rejection, Go/API and installer smokes remain required.
+4. Before any tag, prepare real Client EXE/licenses/checksum/update manifest, Server
+   ZIP/multi-platform OCI archive/server manifest, Manager EXE/Linux bundle/manifest.
+   Only trusted main preparation receives signing keys; PR/reusable checks receive
+   none. Existing Ed25519 roots and signed payload contracts remain unchanged.
+5. Seal each complete package with a receipt binding repository, exact SHA, run ID,
+   run attempt, component, version, channel and every file's size/SHA-256. Upload
+   immutable Actions artifacts (7-day retention). Preflight downloads the same-run
+   outputs and rechecks receipts against preparation job-output digests, signatures,
+   payload hashes and OCI index/platforms. Its summary reports component readiness. When Client+Server are selected,
+   compare the separately built Go and LiveKit bytes against the Client core receipt.
+6. promote defaults to false: prepare-only stops here, with no tags, Releases, GHCR
+   or Pages deployment. For an actual release dispatch with promote=true from the
+   outset; after successful Preflight the owner separately approves **release-tag**.
+   The job revalidates all artifacts, exact source/manifests/notes and current main,
+   prechecks the entire tag set, then creates only selected immutable tags.
+7. The owner separately approves **release-publish** for selected component jobs.
+   They download and revalidate the exact prepared bytes; there is no rebuild or
+   re-sign. They require matching tags and unchanged main, reject existing Releases
+   and image versions, upload assets draft-first, then publish with matching channel
+   flags and --latest=false. Server copies all OCI platforms with --preserve-digests
+   and checks the registry digest afterward; GitHub asset digests are checked too.
+8. Only actual successful publication triggers Pages regeneration from main. A
+   prepare-only workflow completion cannot deploy. Manually published Releases and
+   deliberate Pages workflow_dispatch remain recovery paths.
 
-Merge, tag and publication are separate permissions. / Merge, тег и публикация
-требуют отдельных разрешений; молчание не является согласием. До подтверждения
-публикации все проверки, сборки и подписи уже должны быть готовы. Репозиторий
-не может сам включить Required reviewers: [настройки владельца](../agents/rules/github.md).
-Подписи доступны trusted tag preparation, не PR; не переносите signing secrets
-в release-publish без изменения границ workflow. Registry/GitHub publication is
-not atomic: an orphan image/draft after failure requires investigation and a new
-version, never replacement. Do not approve an incomplete/failed release.
+Сначала успешный Preflight на точном SHA main со всеми тестами, сборками и подписями;
+только затем отдельные согласования release-tag и release-publish. Агент инициирует
+нужное согласование, когда этап готов; молчание не является разрешением. Оба
+Environment должны иметь Required reviewers и разрешать main, а не только теги.
+[Настройки владельца](../agents/rules/github.md) выполняются вручную.
+
+Fail closed / Отказы: failed Preflight, missing/corrupt/foreign artifact, stale main,
+version/channel/input mismatch or rejected tag approval produce no tags/publication.
+Publication rejection keeps already created tags unchanged. REST creation of multiple
+refs is not atomic: partial tags can remain after an API failure. GHCR and Releases
+are also not atomic; an orphan image, draft or a published component can remain after
+later failure. Never overwrite/delete tags/assets/images or blindly rerun promotion.
+Investigate, report exact completed/failed stages and prepare a new version/PR after a
+failed tag/publication. A main change requires a new candidate. Artifact expiry,
+workflow/signing/build-input changes or changed run attempt invalidate reuse; never
+import another run's artifact. No external cache/server or published retry policy is
+introduced. GitHub's settings and hardware/external-network acceptance are separate
+from repository tests. No automated result guarantees absence of future API failures.
 
 | Компонент | Источник версии | Тег | Артефакты |
 |---|---|---|---|
@@ -71,7 +96,7 @@ minor — существенные функции, major — очень круп
    из следующего тега в старый релиз; не выдавайте синтетические проверки за аппаратную
    или внешнесетевую приёмку. Отличайте подпись update manifest от Authenticode EXE.
 5. Точные файлы, способ проверки, исходники/CHANGELOG/руководство **этого тега**,
-   лицензия и ссылка на фактически успешный tag CI, когда он завершён.
+   лицензия и ссылка на фактически успешный Preflight, когда он завершён.
 
 Не заполняйте пустые категории фразами «нет изменений» и не подменяйте заметки
 ссылкой на общий changelog. Основа стиля — подробные релизы `v0.7.0`/`v0.8.0`;
@@ -88,7 +113,7 @@ Before tagging, review a complete bilingual `docs/releases/<tag>.md`. Lead with 
 component/version and user benefit; group actual additions, fixes and changes since
 the previous release of that component, omitting empty groups. Include upgrade/data/
 downtime and cross-component requirements, accurate limitations, exact downloads,
-verification, source/license links pinned to the tag and confirmed tag CI when available.
+verification, source/license links pinned to the tag and confirmed Preflight when available.
 Russian and English must convey the same changes and conditions. Publish this file
 with `--notes-file`; generated PR/commit lists are insufficient. Keep the GitHub body
 and file synchronized. Never backdate a later fix into an earlier release.
@@ -107,42 +132,30 @@ Manager 0.4.0 опубликован отдельно от Client 0.11.0; нов
 
 ## CI и публикация
 
-`.github/workflows/check.yml` проверяет PR, ручные scopes и вызывается release workflow.
-Он не публикует серверные образы. `.github/workflows/release.yml` выбирает **ровно
-один** компонент по тегу через `scripts/release-contract.mjs`, проверяет его версию,
-запускает проверки и только затем публикует свои артефакты.
+check.yml remains PR/manual/reusable verification without production signing or
+publication. release.yml is dispatch-only: no tag-triggered workflow remains, so
+neither GITHUB_TOKEN-created nor manually pushed tags start a second build/release.
+GITHUB_TOKEN ref writes do not normally trigger another push workflow anyway.
 
-Release workflow передаёт выбранный компонент в reusable `check.yml`. PR
-по умолчанию используют `all`; ручной `workflow_dispatch` позволяет проверить
-`all`, `client`, `server` или `manager` без публикации.
-Новые PR-проверки одной ветки и scope отменяют устаревший запуск;
-разные компоненты и ручные проверки имеют отдельные concurrency groups.
-
-| Scope | Выпускные сборки и загружаемые CI artifacts | Зависимости интеграционных тестов |
+| Scope | Release outputs | Integration dependencies |
 |---|---|---|
-| `client` | Только Client EXE, лицензии, checksum и подписанный манифест при tag push | Опубликованный подписанный Server; встроенный сервер из общего `server/` |
-| `server` | Только Server ZIP; release job публикует Linux image и манифест | Минимальный Manager host/runtime без NSIS-установщика; полный серверный lifecycle |
-| `manager` | Только Manager EXE; release job собирает bundle и подписывает metadata | Опубликованный подписанный Server ZIP/image, без пересборки Server; SCM/EXE и Compose lifecycle |
-| `all` | Все три пакета | Полные исходники и полный набор проверок PR |
+| client | Client EXE, license ZIP, checksum; preparation signs update manifest | Shared source selfhost and current API 2 integration image |
+| server | Windows ZIP; preparation builds/signs multi-platform OCI and manifest | Renderer, LiveKit, minimal Manager runtime, SCM and Compose |
+| manager | Manager EXE; preparation builds Linux bundle and signs manifest | Renderer, LiveKit, current API 2 Server fixture, SCM/installer and Compose |
+| all (PR only) | All Windows packages, no production signatures | Complete PR baseline, including byte equality of both shared cores |
 
-Windows artifacts разделены: `pawtalk-windows`, `pawtalk-server-windows` и
-`pawtalk-manager-windows`. Preparation скачивает только свой artifact; publisher получает полный подготовленный
-пакет своего компонента (Server также OCI archive), без повторной сборки. Зависимости тестов не загружаются как чужие release assets.
-Server dependency выбирается по подписанному опубликованному манифесту и digest,
-а не по потенциально ещё не выпущенному `server/VERSION` из дерева Manager/Client.
-Подмена ZIP, неверный hash/size или отсутствие доверенного Server прерывают проверку.
-Уже опубликованные теги и их workflow не изменяются.
+Every selected release scope runs independently; all is never substituted for a
+component-specific release mode. Some integration dependencies necessarily repeat
+across component scopes, since all has different branches/fixtures. Only equivalent
+infrastructure work is shared. Preparation uploads pawtalk-<component>-prepared;
+publishers consume the same names from the same workflow run, verify source/run
+bindings and preparation receipt digests, and cannot reach build/sign commands.
+Dependencies used only as fixtures do not become another component's release assets.
 
-- Client tag публикует только клиентские assets.
-- Server tag публикует GHCR image, Windows Server ZIP и server metadata; клиентский установщик не публикуется.
-- Manager tag публикует общий bundle, Windows EXE и metadata; пустого фиктивного релиза нет.
-- Shared/API изменения проверяют обе стороны. Подписи используют отдельные ключи.
-- Опубликованный release/image version повторно не используется. Ошибка публикации
-  после загрузки образа требует отдельного разбора; не перезаписывать image/tag.
-- Канал каждой линии задаётся независимо repository variable `PAWTALK_CLIENT_CHANNEL`,
-  `PAWTALK_SERVER_CHANNEL`, `PAWTALK_MANAGER_CHANNEL`: `stable` или `preview` (default).
-  SemVer prerelease всегда принудительно `preview`. Workflow передаёт один и тот же
-  выбор в signing и GitHub Release flags; все компоненты публикуются с --latest=false. Общий Latest не является контрактом.
+Repository variables PAWTALK_CLIENT_CHANNEL, PAWTALK_SERVER_CHANNEL and
+PAWTALK_MANAGER_CHANNEL independently select stable/preview (preview by default).
+SemVer prerelease forces preview. Changing channel/keys/build inputs while a candidate
+is awaiting review requires a new Preflight; never approve stale evidence.
 
 Updater каждого компонента просматривает список Releases с пагинацией и фильтрует
 своё семейство, SemVer, draft, подпись и ассеты. Client дополнительно учитывает

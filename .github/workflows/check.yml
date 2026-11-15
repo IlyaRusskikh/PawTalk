@@ -13,19 +13,20 @@ on:
         description: Component to package; all for PR verification
         type: string
         default: all
-      client-prerelease:
+      skip-infrastructure:
         type: boolean
-        default: true
-    secrets:
-      PAWTALK_UPDATE_PRIVATE_KEY:
-        required: false
+        default: false
+      candidate:
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
-  group: verify-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ inputs.component || 'all' }}-${{ github.event_name == 'workflow_dispatch' && 'manual' || 'automatic' }}
+  group: verify-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ inputs.component || 'all' }}-${{ github.event_name == 'workflow_dispatch' && 'manual' || 'automatic' }}-${{ inputs.candidate && github.run_id || 'development' }}
   cancel-in-progress: true
 jobs:
   infrastructure:
+    if: ${{ !inputs.skip-infrastructure }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -35,9 +36,11 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node scripts/check-agents.mjs
       - run: node scripts/check-website.mjs
-      - run: node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs tests/release-routing.test.mjs tests/release-metadata.test.mjs
+      - run: node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/release-candidate.test.mjs
       - name: Verify prepared OCI digest through isolated local registry
         run: node scripts/release-image-smoke.mjs
+      - name: Lint all GitHub Actions workflows
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
   server:
     strategy:
       fail-fast: false
@@ -294,12 +297,6 @@ jobs:
           Copy-Item licenses -Destination release -Recurse -Force
           $licenseFiles = @((Resolve-Path release/LICENSE).Path, (Resolve-Path release/THIRD_PARTY_NOTICES.md).Path, (Resolve-Path release/licenses).Path)
           Compress-Archive -LiteralPath $licenseFiles -DestinationPath "release/PawTalk.Licenses.$version.zip" -CompressionLevel Optimal
-      - name: Sign release update manifest
-        if: steps.scope.outputs.client == 'true' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/client-v')
-        env:
-          PAWTALK_UPDATE_PRIVATE_KEY: ${{ secrets.PAWTALK_UPDATE_PRIVATE_KEY }}
-          PAWTALK_PRERELEASE: ${{ inputs.client-prerelease && 'true' || 'false' }}
-        run: node scripts/sign-update.mjs
       - uses: actions/upload-artifact@v6
         if: steps.scope.outputs.client == 'true' && matrix.runner == 'windows-2025'
         with:
@@ -309,4 +306,10 @@ jobs:
             release/PawTalk.Setup.*.exe
             release/SHA256SUMS.txt
             release/PawTalk.Licenses.*.zip
-            release/update-manifest.json
+      - name: Keep verified Client core receipt for cross-scope comparison
+        if: inputs.candidate && steps.scope.outputs.client == 'true' && matrix.runner == 'windows-2025'
+        uses: actions/upload-artifact@v6
+        with:
+          name: pawtalk-client-core
+          if-no-files-found: error
+          path: resources/server/bundled-server.json

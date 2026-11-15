@@ -21,7 +21,9 @@ before broad search; verify descriptive docs against code.
 - Keep English/Russian READMEs aligned; technical detail belongs in docs/ and
   SECURITY.md. Follow shared form geometry, action-button alignment and enum
   localization rules in [development rules](agents/rules/development.md).
-- Releases follow [docs/RELEASING.md](docs/RELEASING.md). Never replace published
+- Releases follow [docs/RELEASING.md](docs/RELEASING.md): successful exact-main-SHA
+  Preflight and prepared artifacts precede separate release-tag/release-publish approvals;
+  publish the checked bytes without rebuilding. Never replace published
   tags/binaries/images. Public versions and download links derive from GitHub
   Releases, not package versions or a global releases/latest endpoint.
 - After PR creation give its CI link and hand control to the owner. Do not watch

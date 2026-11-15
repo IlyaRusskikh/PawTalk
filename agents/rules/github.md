@@ -10,26 +10,40 @@
 3. Tag rulesets for client-v*, server-v*, manager-v* and historical v*: block updates
    and deletions; restrict creation to authorized maintainers. The release plan
    also rejects tags whose commit is outside main. Do not recreate failed tags.
-4. Create **release-publish** environment BEFORE releasing. Set Required reviewers
-   to the owner/release reviewers and restrict deployment tags to the three component
-   families. Disable administrator bypass where available. A sole owner who triggers
-   tags must be able to approve separately; prevent-self-review requires a second
-   reviewer. Reviewers require repository read access; feature availability depends
-   on repository visibility/plan. An environment name in YAML alone is NOT a gate.
-5. Signing keys: existing PAWTALK_UPDATE_PRIVATE_KEY stays available only to trusted
-   tag Client verification; PAWTALK_SERVER_PRIVATE_KEY and PAWTALK_MANAGER_PRIVATE_KEY
-   sign in preparation jobs before publication approval. Keep these repository/org
-   secrets available to trusted tag jobs, never fork PRs. Moving them into
-   release-publish would block preparation; a separate protected signing environment
-   is possible but requires workflow changes. Publication uses scoped GITHUB_TOKEN
-   contents:write; only Server has packages:write. No personal token is required.
-6. Pages source: GitHub Actions, github-pages environment permitting main AND the
-   component tag families (release events keep the tag ref even when checkout uses main); Actions
-   pages/id-token permissions and GHCR package creation access. Successful release
-   workflow completion regenerates Pages from main (release events caused by
-   GITHUB_TOKEN do not reliably chain workflows). Manual releases use release:
-   published; manual dispatch recovers API/deployment failures. No settings are
-   changed by local tests. Bootstrap Pages after merging this infrastructure.
+4. Create **release-tag** AND **release-publish** BEFORE promotion. Both require
+   owner/release reviewers and deployment branch policy permitting **main** (the
+   dispatch GITHUB_REF remains refs/heads/main even after tag creation). Remove the
+   old tag-only release-publish restriction. Disable administrator bypass where
+   available. Each approval is independent; an environment name alone is NOT a gate.
+   Prevent-self-review needs a second reviewer if the owner dispatches the run.
+   Feature availability depends on repository visibility/plan; do not release if
+   Required reviewers cannot be enforced. Configure a second reviewer or use a
+   protected external/manual promotion process; never silently drop the gate.
+5. Keep PAWTALK_UPDATE_PRIVATE_KEY, PAWTALK_SERVER_PRIVATE_KEY and
+   PAWTALK_MANAGER_PRIVATE_KEY as independent repository/org secrets available only
+   to trusted main preparation steps in release.yml. check.yml has no signing secret
+   interface and PRs receive none. Do not move keys into release-publish: signing
+   must finish before tag approval. Protect main and workflow changes by review.
+   Scoped GITHUB_TOKEN writes refs only in release-tag and Releases only after
+   release-publish; only the Server publisher has packages:write. No PAT is needed.
+   Ensure tag rulesets permit the intended GITHUB_TOKEN actor to create tags while
+   still blocking updates/deletions; owner must verify this before first promotion.
+6. Pages source is GitHub Actions. github-pages permits main and component tag
+   families for manual release events. Pages uses actions:read to check that a
+   completed Release Candidate Preflight actually published; prepare-only completion
+   is ignored. pages/id-token permissions and GHCR package creation must be allowed.
+   API/catalog failure preserves the previous deployment; recover with Pages dispatch.
+7. Actions artifacts must remain available through both approvals (7-day retention;
+   repository/org limits must permit this and the complete multi-platform OCI size).
+   Inspect PR CI check contexts after the first run before adjusting required checks.
+   First run: merge this PR only after review/CI; configure settings above; dispatch
+   main with components=client (or the intended set), promote=false; inspect component
+   readiness, SHA, versions and artifact digests. It creates no production tags/assets.
+   For the actual release use a fresh promote=true dispatch, review Preflight before
+   approving release-tag, then independently review/approve release-publish. After
+   dispatch the agent provides the run link and hands off; no passive CI polling.
 
-Review repo rules/security settings in the GitHub UI. Files document desired
-settings; they cannot prove the protected environment or rulesets are configured.
+Review settings in GitHub UI. Repository files cannot prove Required reviewers,
+rulesets, artifact limits or GHCR permission are configured. No settings are changed
+by local checks. Source versions with existing historical failed tags are rejected;
+never delete/reuse those tags. See [release process](../../docs/RELEASING.md).
