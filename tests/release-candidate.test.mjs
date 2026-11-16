@@ -107,7 +107,7 @@ test('trust and tagging reject forks, PRs, tags, changed SHA and failed/incomple
 test('real seal/validation rejects missing, corrupted, foreign and re-signed receipts with synthetic signing keys', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(),'pawtalk-preflight-'));
   try {
-    for (const folder of ['scripts','shared','server','manager/desktop','electron','docs/releases','release/client']) await mkdir(path.join(directory,folder),{recursive:true});
+    for (const folder of ['scripts','shared','server','manager/desktop','electron','releases','release/client']) await mkdir(path.join(directory,folder),{recursive:true});
     for (const file of ['scripts/release-candidate.mjs','scripts/check-release-notes.mjs','scripts/release-contract.mjs','scripts/sign-update.mjs','shared/release.cjs']) await cp(new URL('../'+file,import.meta.url),path.join(directory,file));
     await writeFile(path.join(directory,'package.json'),JSON.stringify({version:'1.2.3',type:'module'}));
     await writeFile(path.join(directory,'package-lock.json'),JSON.stringify({version:'1.2.3',packages:{'':{version:'1.2.3'}}}));
