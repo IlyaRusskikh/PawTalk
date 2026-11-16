@@ -102,3 +102,5 @@
 .member-call-controls{display:flex;justify-content:center;flex:none;padding:8px 0}.member-call-controls .member-audio-buttons{display:flex;align-items:center;gap:8px}
 
 .member-load.chat-jump{left:auto;right:16px;bottom:12px;transform:none;width:40px;height:40px;padding:0;justify-content:center;border-radius:50%}.chat-jump-count{position:absolute;top:-7px;right:-7px;min-width:19px;padding:2px 5px;border-radius:12px;background:var(--accent);color:var(--on-accent);font-size:10px}
+
+.member-channel.has-unread{color:var(--text);font-weight:650}.member-channel-count{min-width:20px;padding:3px 6px;border-radius:12px;background:var(--accent);color:var(--on-accent);text-align:center;flex:none}.member-channel-count.notifications-muted,.member-unread-badge.notifications-muted{background:var(--muted);color:var(--app-bg)}

@@ -42,3 +42,7 @@ export function profileFor(state: ServerState, original: string) { return state.
 export function storedJSON<T>(key: string, fallback: T): T { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; } }
 export const cursorKey = (server: string, channel: string) => `pawtalk.v2.read.${server}.${channel}`;
 export const isServerMuted = (server: string) => Number(localStorage.getItem(`pawtalk.v2.mute.${server}`)) > Date.now();
+
+export const channelMuteKey=(server:string,channel:string)=>`pawtalk.v2.mute-channel.${server}.${channel}`;
+export const isChannelMuted=(server:string,channel:string)=>Number(localStorage.getItem(channelMuteKey(server,channel)))>Date.now();
+export const notificationsMuted=(server:string,channel:string)=>isServerMuted(server)||isChannelMuted(server,channel);
