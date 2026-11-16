@@ -1,90 +1,42 @@
-# PawTalk — self-hosted voice and text chat
+# PawTalk — your voice, your server
 
-[Русский](README.ru.md) · [Documentation](docs/README.md) · [Security](SECURITY.md)
+[Русский](README.ru.md) · [User guides](docs/README.md) · [Architecture](architecture/README.md) · [Downloads](https://ilyarusskikh.github.io/PawTalk/downloads/)
 
-PawTalk is an AGPL-3.0-only Windows app for friends and gaming communities.
-Host a temporary server from the client or run a permanent Windows/Linux server.
-No central account is required.
+**PawTalk** is an open-source voice and text chat application for friends and gaming groups. Create a temporary server right in the Windows client, or run your own always-on server on Windows or Linux with PawTalk Manager. There is no central PawTalk account.
 
-**Published API 2:** multichannel servers use mandatory E2EE and a fresh data schema.
-There is no automatic migration of API 1 installations. Choose compatible components
-from GitHub Releases; see [compatibility](docs/COMPATIBILITY.md).
+![PawTalk client interface](website/assets/home-en.png)
 
-## Downloads
+## Why PawTalk?
 
-- [Windows Client](https://ilyarusskikh.github.io/PawTalk/downloads/#client)
-- [Permanent Server](https://ilyarusskikh.github.io/PawTalk/downloads/#server)
-- [Server Manager](https://ilyarusskikh.github.io/PawTalk/downloads/#manager)
+Want a familiar place to talk and share messages, but prefer to control the server yourself? PawTalk combines voice channels, text chats, private invitations and a lightweight self-hosting workflow.
 
-Components have independent releases and updates. Updating Client or Manager does
-not replace an installed Server. Public versions and downloads come from GitHub
-Releases; source package versions do not announce a release.
+| | PawTalk | Discord | TeamSpeak |
+| --- | --- | --- | --- |
+| Hosting | Temporary server in the client or your own permanent server | Discord-hosted service | Self-hosted server options |
+| Getting started | No central account; join through a server invitation | Account and Discord service | Server connection/identity model |
+| Focus | Voice + text for small communities | Broad community/social platform | Voice-centric communication |
+| Encryption | Mandatory end-to-end encryption for voice and content in published API 2 | Different security architecture; do not infer equivalence | Depends on version and configuration |
 
-## API 2 features
+This is a difference in product approach, **not** a claim that one application is universally faster, safer or better. PawTalk is a **preview**: hardware and internet-network acceptance testing remains incomplete.
 
-- Multiple voice channels and text chats. Administrators create, rename and delete
-  channels; the default text and voice channels are protected from deletion.
-- Join a server and read its chats without entering voice or opening a microphone.
-  Membership keeps the server in your sidebar. Offline departures are saved and sent when the server returns. Leaving your own running selfhost stops it after confirmation.
-- Show or hide the participant list. Online status follows the background server
-  connection, including while viewing another server. Voice participants appear
-  beneath their channel.
-- Administrator, moderator and member roles. Moderators create invitations and
-  revoke their own; administrators also manage channels, roles, kicks and bans.
-- One-time invitations last 24 hours; reusable invitations last one hour. Each
-  type has a limit of 100 active links per server. Share full links privately.
-- Link your devices on a particular server, sharing profile display, message
-  editing and current permissions. One linked device can use voice at a time.
-- Mandatory E2EE for voice, messages and images. Key setup happens automatically
-  on clients; the server stores encrypted content and key packages. TLS pins,
-  signatures and membership protect different boundaries. [Security model](docs/E2EE.md).
-- Per-device server notification muting keeps unread counts and voice entry/exit
-  cues. Audio settings include PTT, RNNoise, echo cancellation and gain control.
-- English/Russian UI, profile avatars, message formatting, replies and images.
-  The first-run guide helps with profile and microphone setup.
+## What you can do
 
-## Getting started with API 2
+- Make a temporary server or join a permanent one; joining does not turn on your microphone or enter voice automatically.
+- Create voice and text channels, invite members, use administrator/moderator permissions.
+- Send formatted messages and images, reply to messages, link devices within a server.
+- Adjust microphone, output, Push-to-Talk, RNNoise noise reduction and notification sounds.
+- Use mandatory E2EE for voice, messages and attachments; see [security boundaries](architecture/security.en.md).
 
-1. Set your name and audio devices in the client.
-2. Create a server from the client; its creator becomes an administrator.
-3. Use **Invite participants** to create a timed link. Recipients paste it into
-   **Join server**. Joining does not automatically enter a voice channel.
+## Download and start
 
-On Windows, the installer sets only the Manager language. Choose
-a local Server package or explicitly download a compatible release in Manager UI;
-Server is installed and started only after confirmation.
+- [Windows Client](https://ilyarusskikh.github.io/PawTalk/downloads/#client) — communicate, create a temporary server.
+- [Server Manager](https://ilyarusskikh.github.io/PawTalk/downloads/#manager) — install and operate a permanent Server on Windows or Linux.
+- [Server](https://ilyarusskikh.github.io/PawTalk/downloads/#server) — independently published server component.
 
-For a clean permanent server, create a one-time **first administrator** invitation
-in Manager or the host CLI. The first client creates and saves encryption keys;
-there is no separate key generator. Further administrators join normally and are
-promoted by an existing administrator. [Operator guide](docs/SERVER-API2.md).
+Start with [first conversation](docs/client/first-steps.en.md), [Windows Manager](docs/manager/windows/installation.en.md), or [Linux VPS](docs/manager/linux/installation.en.md). [Full guide index](docs/README.md).
 
-For a clean Linux VPS, follow the **[Linux VPS Server API 2 installation guide](docs/SERVER-LINUX.md)**:
-trusted bootstrap, Docker/Compose, first-admin link, reboot checks, updates and backup/restore.
+## Important limits
 
-Self-hosting over the internet needs reachable ports: TCP 18443, TCP 18444 and UDP
-18445 by default. NAT/CGNAT, firewall and VPN behavior can affect connectivity.
-[Network check](docs/SELFHOST-CHECK.md). Local tests do not prove external UDP or
-physical microphone/game/PTT behavior.
+The published API 2 family is incompatible with API 1; there is **no automatic migration** of old server data or membership. All channels on one server currently share the E2EE root; there are no cryptographically private per-channel permissions or automatic key rotation after removal. A permanent server requires reachable TCP/UDP ports. Windows x64 is the published Client platform; Windows and Linux are **server-management platforms**, not additional desktop voice clients.
 
-## Development
-
-Windows x64: Node.js 24.22.1+, Go 1.27.3+, Visual Studio Build Tools with C++ and
-Windows SDK. Set PAWTALK_GO if Go is not on PATH.
-
-~~~powershell
-npm ci
-npm run native:build
-npm run dev
-~~~
-
-Client and permanent Server build the same server/ core. [Architecture](docs/ARCHITECTURE.md),
-[API 2](docs/API-V2.md), [implementation and verification journal](docs/MULTICHANNEL-PLAN.md).
-No new production dependencies, automatic key rotation, forward secrecy or
-cryptographic erasure of already delivered history are implied.
-
-Report problems in [GitHub Issues](https://github.com/IlyaRusskikh/PawTalk/issues/new/choose),
-without live invitations, secrets or personal network details. Report security
-issues privately as described in [SECURITY.md](SECURITY.md).
-
-Licensed AGPL-3.0-only. Preserve [third-party notices](THIRD_PARTY_NOTICES.md) and licenses/.
+PawTalk uses [AGPL-3.0-only](LICENSE); see [third-party notices](THIRD_PARTY_NOTICES.md). [Report issues](https://github.com/IlyaRusskikh/PawTalk/issues/new/choose) without invitations, secrets or private network reports. [Security disclosure](SECURITY.md).
