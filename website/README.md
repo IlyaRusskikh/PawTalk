@@ -18,13 +18,12 @@ manual release publication, or manual dispatch. GITHUB_TOKEN-triggered release
 events alone cannot be relied on to chain Actions. No full CI runs on main push,
 no generated catalog commits. See [owner settings](../agents/rules/github.md).
 For offline checks run node scripts/check-website.mjs and the fixture-based tests.
-Keep RU/EN presentation and limitations aligned with README; technical detail is
-in docs/ and SECURITY.md.
+Keep RU/EN presentation aligned with README and the published API 2 guides; technical content is in docs/, architecture/ and SECURITY.md.
 
 ## Screenshots
 
 `assets/pawtalk.svg` is copied from the project's existing `assets/pawtalk.svg`.
-PNG screenshots show the PawTalk 0.7.0 desktop interface in both languages.
+PNG screenshots are historical 0.7.x UI references; never use them as evidence of current published API 2 visual layout. Refresh from current release before claiming up-to-date UI.
 The capture uses an isolated profile, synthetic microphones and a temporary E2EE
 room populated with demo participants and messages. The invitation dialog is
 closed before capture. Audio settings show fake Chromium audio devices.
