@@ -1,3 +1,4 @@
+const {validatePoll}=require('../shared/polls.mjs');
 const {validMentions}=require('../shared/mentions.mjs');
 const { createHash, createPrivateKey, createPublicKey, randomBytes, sign, verify } = require('node:crypto');
 const { serverURL } = require('./address.cjs');
@@ -25,6 +26,11 @@ function validatedContent(content) {
     if (!image || !hexID(image.id, 32) || !['image/png', 'image/jpeg', 'image/webp'].includes(image.mime)) throw failure('INVALID_IMAGE');
     result.image = { id: image.id, mime: image.mime };
   }
+  if(content.poll!==undefined){
+    if(!hexID(content.poll.id,32)||!content.text.trim()||Array.from(content.text).length>300||content.image||content.reply)throw failure('INVALID_POLL');
+    result.poll={id:content.poll.id,...validatePoll(content.poll)};
+    if(content.pollResult!==undefined){if(content.pollResult!==true)throw failure('INVALID_POLL');result.pollResult=true;}
+  }else if(content.pollResult!==undefined)throw failure('INVALID_POLL');
   return result;
 }
 
@@ -342,6 +348,8 @@ class MembershipClient {
     if (!hexID(channelId, 32) || !content || typeof content.text !== 'string' || Buffer.byteLength(content.text) > 4096) throw failure('INVALID_MESSAGE');
     if (!content.text.trim() && !content.image) throw failure('EMPTY_MESSAGE');
     const connection = this.connections.get(serverId); if (!connection) throw failure('NOT_CONNECTED');
+    if(content.poll&&(!connection.config?.capabilities?.includes('polls-v1')||original||content.pollResult))throw failure('UNSUPPORTED_FEATURE');
+    if(original?.content?.image&&!content.image&&!connection.config?.capabilities?.includes('attachment-removal-v1'))throw failure('UNSUPPORTED_FEATURE');
     if(clientRequestId!==undefined&&!hexID(clientRequestId,32))throw failure('INVALID_MESSAGE');
     const identity = await this.identity(), resourceId = original?.requestId || clientRequestId || requestID(), author = original?.authorProfileId || identity.profileId;
     if (!hexID(resourceId, 32) || !hexID(author, 64) || (original && (!Number.isSafeInteger(original.id) || original.id < 1))) throw failure('INVALID_MESSAGE');
@@ -352,7 +360,12 @@ class MembershipClient {
     if(cached&&(cached.signature!==signature||cached.originalId!==original?.id))throw failure('REQUEST_CONFLICT');
     if(!cached){const packet=await cryptoV2.sealContent(connection.secret,serverId,'chat',channelId,resourceId,author,clear);cached={signature,originalId:original?.id,packet};if(cacheKey){this.pendingMessages.set(cacheKey,cached);if(this.pendingMessages.size>100)this.pendingMessages.delete(this.pendingMessages.keys().next().value);}}
     const packet=cached.packet,path=original?`/api/v2/messages/${original.id}`:`/api/v2/channels/${channelId}/messages`;
-    const result=await this.request(serverId,path,original?'PATCH':'POST',{requestId:original?(clientRequestId||requestID()):resourceId,keyId:packet.keyId,nonce:packet.nonce,ciphertext:packet.ciphertext,attachmentIds:original?[]:content.image?[content.image.id]:[],...(original?.content?.image&&!content.image?{removeAttachment:true}:{})});
+    if(content.poll&&!cached.poll){
+      if(content.poll.id!==resourceId)throw failure('INVALID_POLL');
+      const resultID=requestID(),resultPacket=await cryptoV2.sealContent(connection.secret,serverId,'chat',channelId,resultID,author,new TextEncoder().encode(JSON.stringify({...content,pollResult:true})));
+      cached.poll={optionCount:content.poll.options.length,duration:content.poll.duration,multiple:content.poll.multiple,anonymous:content.poll.anonymous,intermediate:content.poll.intermediate,result:{requestId:resultID,keyId:resultPacket.keyId,nonce:resultPacket.nonce,ciphertext:resultPacket.ciphertext,attachmentIds:[]}};
+    }
+    const result=await this.request(serverId,path,original?'PATCH':'POST',{requestId:original?(clientRequestId||requestID()):resourceId,keyId:packet.keyId,nonce:packet.nonce,ciphertext:packet.ciphertext,attachmentIds:original?[]:content.image?[content.image.id]:[],...(cached.poll?{poll:cached.poll}:{}),...(original?.content?.image&&!content.image?{removeAttachment:true}:{})});
     if(cacheKey)this.pendingMessages.delete(cacheKey);return result;
   }
 

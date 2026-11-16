@@ -1,3 +1,4 @@
+import type {PollDefinition} from '../shared/polls.mjs';
 import type {Mention} from '../shared/mentions.mjs';
 import { t } from './i18n';
 export interface ServerRecord { serverId: string; address: string; name: string; status: 'online'|'offline'|'locked'; source?:'selfhost'|'external';ownedSelfhost?:boolean;leaveError?:string }
@@ -11,9 +12,10 @@ export interface ServerState {
   devices: { id: string; label: string; originalProfileId: string; primary: boolean }[];
   voice: { profileId: string; deviceId: string; channelId: string; identity: string }[];
 }
-export interface Message { id: number; channelId: string; authorProfileId: string; requestId: string; sentAt: number; editedAt?: number; unreadable?: boolean; content: { text: string; mentions?:Mention[]; image?: { id: string; mime: string }; reply?:{id:number;author:string;text:string} } }
+export interface Message { id: number; channelId: string; authorProfileId: string; requestId: string; sentAt: number; editedAt?: number; unreadable?: boolean; content: { text: string; mentions?:Mention[];poll?:PollDefinition&{id:string};pollResult?:boolean; image?: { id: string; mime: string }; reply?:{id:number;author:string;text:string} } }
 export interface MessagePage { messages: Message[]; first: number; last: number; hasOlder: boolean; hasNewer: boolean; unread: number }
 const errors: Record<string, () => string> = {
+  INVALID_POLL:()=>t('Проверьте вопрос и варианты опроса.'), POLL_CLOSED:()=>t('Опрос уже завершен.'), POLL_NOT_FOUND:()=>t('Опрос недоступен.'), POLL_LIMIT:()=>t('Слишком много активных опросов в этом чате.'), POLL_IMMUTABLE:()=>t('Опубликованный опрос нельзя редактировать.'),
   UNSUPPORTED_FEATURE:()=>t('Для этой функции обновите сервер.'),
   SERVER_NAME_CHANGED:()=>t('Название сервера изменилось. Откройте окно переименования заново.'), INVALID_SERVER_NAME:()=>t('Введите название сервера длиной от 1 до 64 символов.'),
   MESSAGE_TOO_LARGE:()=>t('Сообщение слишком длинное.'), PRIMARY_DEVICE_REQUIRED:()=>t('Это действие доступно на основном устройстве.'),

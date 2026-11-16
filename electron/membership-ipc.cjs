@@ -91,6 +91,10 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       const result = await client.changeAddress(serverId, string(input.address));
       statuses.set(serverId, 'online'); send('membership-changed', { serverId }); return result;
     },
+    async 'poll.create'(input){const pollId=id(input.requestId);return client.send(id(input.serverId),id(input.channelId),{text:string(input.question,600),poll:{...input.definition,id:pollId}},undefined,pollId);},
+    async 'poll.state'(input){return client.request(id(input.serverId),'/api/v2/polls/'+id(input.pollId));},
+    async 'poll.vote'(input){if(!Array.isArray(input.choices)||input.choices.length>10||input.choices.some(i=>!Number.isInteger(i)||i<0||i>9))fail('INVALID_INPUT');return client.request(id(input.serverId),'/api/v2/polls/'+id(input.pollId)+'/vote','PUT',{choices:input.choices,requestId:id(input.requestId)});},
+    async 'poll.close'(input){return client.request(id(input.serverId),'/api/v2/polls/'+id(input.pollId)+'/close','POST',{requestId:id(input.requestId)});},
     async messages(input) { return client.messages(id(input.serverId), id(input.channelId), input.options || {}); },
     async send(input) { return client.send(id(input.serverId), id(input.channelId), input.content, input.original, input.requestId===undefined?undefined:id(input.requestId)); },
     async upload(input) {

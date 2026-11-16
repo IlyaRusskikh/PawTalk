@@ -123,7 +123,7 @@ func (a *membershipAPI) messages(w http.ResponseWriter, r *http.Request) {
 }
 func (a *membershipAPI) postMessage(w http.ResponseWriter, r *http.Request) {
 	var input memberMessageInput
-	if _, err := decodeMemberJSON(w, r, 20000, &input); err != nil {
+	if _, err := decodeMemberJSON(w, r, 50000, &input); err != nil {
 		memberFail(w, err)
 		return
 	}

@@ -89,6 +89,7 @@ class MembershipLinks {
   }
   async cancel(linkId) {
     const ctx=this.context(linkId);
+    if(!ctx.connection.config.capabilities?.includes('link-cancel-v1'))throw error('UNSUPPORTED_FEATURE');
     await this.client.signed(ctx.connection,`/api/v2/links/${linkId}/cancel`,{});
     this.pending.delete(linkId);return true;
   }

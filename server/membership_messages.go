@@ -9,12 +9,13 @@ import (
 )
 
 type memberMessageInput struct {
-	RemoveAttachment bool     `json:"removeAttachment,omitempty"`
-	RequestID        string   `json:"requestId"`
-	KeyID            string   `json:"keyId"`
-	Nonce            string   `json:"nonce"`
-	Ciphertext       string   `json:"ciphertext"`
-	AttachmentIDs    []string `json:"attachmentIds"`
+	Poll             *memberPollCreate `json:"poll,omitempty"`
+	RemoveAttachment bool              `json:"removeAttachment,omitempty"`
+	RequestID        string            `json:"requestId"`
+	KeyID            string            `json:"keyId"`
+	Nonce            string            `json:"nonce"`
+	Ciphertext       string            `json:"ciphertext"`
+	AttachmentIDs    []string          `json:"attachmentIds"`
 }
 type memberMessage struct {
 	ID              int64    `json:"id"`
@@ -103,6 +104,13 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 	if keyID != input.KeyID {
 		return 0, memberError(409, "KEY_ID_MISMATCH")
 	}
+	var reserved int
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM polls WHERE result_request_id=?", input.RequestID).Scan(&reserved); err != nil {
+		return 0, err
+	}
+	if reserved > 0 {
+		return 0, memberError(409, "REQUEST_CONFLICT")
+	}
 	var id int64
 	var oldChannel string
 	var oldNonce, oldCipher []byte
@@ -130,6 +138,9 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 		if len(attachments) != len(input.AttachmentIDs) || (len(attachments) == 1 && attachments[0] != input.AttachmentIDs[0]) {
 			return 0, memberError(409, "REQUEST_CONFLICT")
 		}
+		if err = s.checkPollRetryTx(ctx, tx, id, input.Poll); err != nil {
+			return 0, err
+		}
 		return id, tx.Commit()
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -149,6 +160,11 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 	id, err = result.LastInsertId()
 	if err != nil {
 		return 0, err
+	}
+	if input.Poll != nil {
+		if err = s.createPollTx(ctx, tx, id, input); err != nil {
+			return 0, err
+		}
 	}
 	for _, attachment := range input.AttachmentIDs {
 		result, err = tx.ExecContext(ctx, "UPDATE attachments SET message_id=? WHERE attachment_id=? AND channel_id=? AND owner_device_id=? AND message_id IS NULL", id, attachment, channel, access.DeviceID)
@@ -170,7 +186,7 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 }
 
 func (s *membershipStore) editMessage(ctx context.Context, token string, id int64, input memberMessageInput) error {
-	if id < 1 || len(input.AttachmentIDs) != 0 {
+	if id < 1 || len(input.AttachmentIDs) != 0 || input.Poll != nil {
 		return memberError(400, "INVALID_MESSAGE")
 	}
 	nonce, cipher, err := validateMessageInput(input)
@@ -179,6 +195,13 @@ func (s *membershipStore) editMessage(ctx context.Context, token string, id int6
 	}
 	payload, _ := json.Marshal([]any{id, input})
 	return s.mutate(ctx, token, input.RequestID, "message.edit", "chat.write", payload, func(tx *sql.Tx, access memberAccess) error {
+		var polls int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM polls WHERE message_id=? OR result_message_id=?", id, id).Scan(&polls); err != nil {
+			return err
+		}
+		if polls > 0 {
+			return memberError(409, "POLL_IMMUTABLE")
+		}
 		var original, keyID string
 		err := tx.QueryRowContext(ctx, "SELECT author_profile_id,crypto_context_id FROM messages WHERE message_id=?", id).Scan(&original, &keyID)
 		if errors.Is(err, sql.ErrNoRows) {

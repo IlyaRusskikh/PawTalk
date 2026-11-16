@@ -384,6 +384,17 @@ func (s *membershipStore) mergeLinkTx(ctx context.Context, tx *sql.Tx, v memberL
 	if err != nil {
 		return err
 	}
+	for _, profile := range append(source, target...) {
+		if profile == v.ChosenProfileID {
+			continue
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO poll_votes(poll_id,profile_id,choices,updated_at) SELECT poll_id,?,choices,updated_at FROM poll_votes WHERE profile_id=? AND poll_id IN(SELECT poll_id FROM polls WHERE closed_at IS NULL) ON CONFLICT(poll_id,profile_id) DO UPDATE SET choices=excluded.choices,updated_at=excluded.updated_at WHERE excluded.updated_at>poll_votes.updated_at`, v.ChosenProfileID, profile); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, "DELETE FROM poll_votes WHERE profile_id=? AND poll_id IN(SELECT poll_id FROM polls WHERE closed_at IS NULL)", profile); err != nil {
+			return err
+		}
+	}
 	if _, err = tx.ExecContext(ctx, "DELETE FROM profile_bindings WHERE target_profile_id IN (?,?)", v.SourceProfileID, v.TargetProfileID); err != nil {
 		return err
 	}
