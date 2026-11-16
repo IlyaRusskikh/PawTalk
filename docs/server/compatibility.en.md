@@ -15,3 +15,9 @@ These are **a dated verified combination, not installation pins**. For any newer
 API 2 requires server API/data schema 2 and mandatory E2EE. **API 1 clients and servers cannot interoperate with API 2; no automatic migration of old membership, chat databases, passwords or backups exists.** Keep legacy data separate rather than importing it as API 2. Updating Manager does not automatically upgrade an installed Server.
 
 The Server and Manager each have their own release tag even though the Manager package contains Windows and Linux tooling. No separate OS-specific Manager version exists.
+
+## Development feature capabilities
+
+The source retains API/data schema 2 and adds optional activity-v1, attachment-removal-v1, link-cancel-v1, server-avatar-v1 and polls-v1. Upgrade Server first. Without capabilities, basic chat/voice remain available; avatar/poll creation is hidden and unsupported attachment removal/link cancellation asks for a Server update. Older Clients ignore extra state fields and display a poll as question text without voting controls. Notification mutes and the jump button are local Client features. Manager API and release contracts are unchanged.
+
+Existing API 2 databases gain additive tables without rewriting identities or legacy tables; this is not API 1 migration. See [implementation contracts](../../architecture/chat-features.en.md).
