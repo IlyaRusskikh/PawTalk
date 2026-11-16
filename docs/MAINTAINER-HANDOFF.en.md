@@ -26,7 +26,7 @@ Install dependencies with `npm ci` only in an isolated environment before broade
 2. Audit the Linux CLI commands on a safe supported Debian 12 or Ubuntu 24.04 LTS host. Do not apply install/uninstall/restore to a production host without a backup.
 3. Compare technical architecture with the published tag sources and actual Go API/SQLite schema. The architecture docs are a **map**; they are not an exhaustive generated endpoint specification.
 4. Verify links and the static Pages layout in both locales. The website's old 0.7.x screenshots remain **historical illustrations**; capture fresh, sanitized images with the **published API 2 Client** before presenting them as current.
-5. Review translated per-release pages in `releases/<tag>.en.md` and `.ru.md` against frozen `releases/<tag>.md`. The latter retain exact historical bilingual bytes for digest/CI and cannot simply be discarded. Three failed candidate tags must stay classified as unpublished.
+5. Review translated per-release pages in `releases/<tag>.en.md` and `.ru.md` against canonical local `releases/<tag>.md` sources. Their bytes are preserved from the previous documentation tree for digest/CI; they are not necessarily exact copies of public Release bodies. See the [recorded differences](../releases/README.md). Three failed candidate tags must stay classified as unpublished.
 6. Confirm new changelog summaries for historical unified Voicecord/PawTalk tags. Early tags do not prove independent Client/Server/Manager binaries.
 
 ## Open limitations

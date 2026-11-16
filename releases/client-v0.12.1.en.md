@@ -1,6 +1,6 @@
 # PawTalk Client 0.12.1 — Servers, channels and linked devices
 
-[Русский](client-v0.12.1.ru.md) · [Exact historical release body](client-v0.12.1.md)
+[Русский](client-v0.12.1.ru.md) · [Canonical local publication source](client-v0.12.1.md)
 
 This is a published preview release; it is not necessarily the latest compatible version.
 
@@ -33,4 +33,6 @@ Install Client 0.12.1. Permanent hosting requires Server 0.11.1 and Manager 0.5.
 
 ## Full release record
 
-The [immutable body snapshot](client-v0.12.1.md) keeps the complete published/approved text, original download links, limitations, signature and verification details. For current installation use the [live component catalog](https://ilyarusskikh.github.io/PawTalk/downloads/) and current compatibility guide.
+The [canonical local source](client-v0.12.1.md) keeps the complete published/approved text, original download links, limitations, signature and verification details. For current installation use the [live component catalog](https://ilyarusskikh.github.io/PawTalk/downloads/) and current compatibility guide.
+
+The local source differs from the public GitHub body; see the [recorded differences](README.md). A public correction requires separate owner approval.

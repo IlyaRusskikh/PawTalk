@@ -6,31 +6,31 @@ Client releases and early combined Voicecord/PawTalk tags.
 
 ## client-v0.12.1 — 2026-11-15
 
-**Changes:** Servers, channels and linked devices. 
+**Changes:** Servers, channels and linked devices.
 
 [Release details](../../releases/client-v0.12.1.en.md)
 
 ## client-v0.11.0 — 2026-11-12
 
-**Changes:** First-run setup, shared server core and responsive sounds. 
+**Changes:** First-run setup, shared server core and responsive sounds.
 
 [Release details](../../releases/client-v0.11.0.en.md)
 
 ## client-v0.10.1 — 2026-11-12
 
-**Changes:** Reliable saved-room reconnects. 
+**Changes:** Reliable saved-room reconnects.
 
 [Release details](../../releases/client-v0.10.1.en.md)
 
 ## client-v0.10.0 — 2026-11-12
 
-**Changes:** Invitations, LAN connections and room privacy. 
+**Changes:** Invitations, LAN connections and room privacy.
 
 [Release details](../../releases/client-v0.10.0.en.md)
 
 ## client-v0.9.0 — 2026-11-11
 
-**Changes:** Independent updates and server compatibility. 
+**Changes:** Independent updates and server compatibility.
 
 [Release details](../../releases/client-v0.9.0.en.md)
 

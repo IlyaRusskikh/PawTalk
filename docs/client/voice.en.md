@@ -2,7 +2,7 @@
 
 [Русский](voice.ru.md) · [Documentation](../README.md)
 
-Open **Settings → Audio / Voice** to select an input and output device, adjust input gain and output volume, and test your microphone. If you hear no speech, first verify the device selection and OS microphone permissions.
+Open **Settings → Audio and devices → Voice** to select an input and output device, adjust input gain and output volume, and test your microphone. If you hear no speech, first verify the device selection and OS microphone permissions.
 
 **Input mode:** choose voice activation with automatic sensitivity, tune a manual threshold if needed, or enable Push-to-Talk and set its shortcut. A high manual threshold can cut quiet speech; an incorrect PTT shortcut can make the microphone appear silent.
 

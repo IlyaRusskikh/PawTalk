@@ -6,19 +6,19 @@ Server-specific tags and early combined Voicecord/PawTalk history. Early tags do
 
 ## server-v0.11.1 — 2026-11-15
 
-**Changes:** API 2 membership and multiple channels. 
+**Changes:** API 2 membership and multiple channels.
 
 [Release details](../../releases/server-v0.11.1.en.md)
 
 ## server-v0.10.1 — 2026-11-12
 
-**Changes:** Activity privacy and IP changes. 
+**Changes:** Activity privacy and IP changes.
 
 [Release details](../../releases/server-v0.10.1.en.md)
 
 ## server-v0.9.0 — 2026-11-11
 
-**Changes:** Signed updates and native Windows hosting. 
+**Changes:** Signed updates and native Windows hosting.
 
 [Release details](../../releases/server-v0.9.0.en.md)
 

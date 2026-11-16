@@ -2,6 +2,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isCanonicalNotesFile } from './check-release-notes.mjs';
 
 const root = path.resolve(fileURLToPath(new URL('../', import.meta.url)));
 const markdown = [];
@@ -29,12 +30,12 @@ for (const filename of markdown) {
     const defaultEn = filename.replace(/\.ru\.md$/, '.md');
     if (!files.has(en) && !files.has(defaultEn)) errors.push(filename + ': missing English partner');
   }
-  if (filename.startsWith('releases/') && /^(?:client|server|manager)-v\d+\.\d+\.\d+(?:-[\w.-]+)?\.md$/.test(path.posix.basename(filename))) {
+  if (filename.startsWith('releases/') && isCanonicalNotesFile(path.posix.basename(filename))) {
     for (const lang of ['en','ru']) {
       const counterpart = filename.replace(/\.md$/, '.' + lang + '.md');
       if (!files.has(counterpart)) errors.push(filename + ': missing ' + counterpart);
     }
-    // Canonical bodies are immutable published/failed-candidate snapshots.
+    // Preserve canonical publication sources and frozen failed-candidate bodies.
     continue;
   }
   if (!filename.includes('.en.') && !filename.includes('.ru.') && filename.endsWith('.md')

@@ -1,6 +1,6 @@
 # PawTalk Manager 0.5.1 — UI-first setup and API 2 admission
 
-[Русский](manager-v0.5.1.ru.md) · [Canonical snapshot](manager-v0.5.1.md)
+[Русский](manager-v0.5.1.ru.md) · [Canonical local publication source](manager-v0.5.1.md)
 
 Published preview release; check newer tags for current compatible versions.
 
@@ -28,4 +28,6 @@ Manually install Manager 0.5.1 from a verified EXE/bundle; older Manager lines m
 
 ## Full release record
 
-The [unchanged bilingual snapshot](manager-v0.5.1.md) retains original release limitations, assets and verification details exactly. Consult the [current download catalog](https://ilyarusskikh.github.io/PawTalk/downloads/) for today's supported pairings.
+The [canonical local bilingual source](manager-v0.5.1.md) retains original release limitations, assets and verification details exactly. Consult the [current download catalog](https://ilyarusskikh.github.io/PawTalk/downloads/) for today's supported pairings.
+
+The local source differs from the public GitHub body; see the [recorded differences](README.md). A public correction requires separate owner approval.

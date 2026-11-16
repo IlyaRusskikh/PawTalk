@@ -2,7 +2,9 @@
 
 [Русский](README.ru.md) · [Change history](../changelog/README.md)
 
-Published release bodies are immutable records. The bilingual unmodified `<tag>.md` snapshots are still used by signed release publication checks; `<tag>.en.md` and `<tag>.ru.md` provide human-readable language-specific versions. Failed candidate notes do **not** imply publication.
+The bilingual `<tag>.md` files are canonical local publication sources, preserved unchanged during this documentation move; `<tag>.en.md` and `<tag>.ru.md` provide human-readable language-specific versions. Candidate plans bind the canonical source digest. Failed candidate notes do **not** imply publication.
+
+Local sources are not automatically exact snapshots of public Release bodies. The audit on 17 November 2026 found that `client-v0.12.1`, `server-v0.11.1` and `manager-v0.5.1` still have temporary publication/CI wording on GitHub that has already been removed locally. Compare with `node scripts/check-release-notes.mjs --published <tag>`; any public correction requires [separate owner approval](../architecture/release-recovery.en.md). Do not overwrite local sources or public descriptions to hide a mismatch.
 
 ## Client
 

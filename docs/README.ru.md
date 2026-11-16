@@ -18,4 +18,4 @@
 
 **Linux:** [Установка](manager/linux/installation.ru.md) · [Первый сервер](manager/linux/first-server.ru.md) · [Управление](manager/linux/management.ru.md) · [Обслуживание](manager/linux/maintenance.ru.md)
 
-[История изменений](../changelog/README.ru.md) · [Релизы](../releases/README.ru.md) · [Сообщить об уязвимости](../SECURITY.md). **Не публикуйте** полные приглашения, ключи, состояние сервера и личные отчёты диагностики.
+[История изменений](../changelog/README.ru.md) · [Релизы](../releases/README.ru.md) · [Сообщить об уязвимости](../SECURITY.ru.md). **Не публикуйте** полные приглашения, ключи, состояние сервера и личные отчёты диагностики.

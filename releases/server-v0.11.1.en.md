@@ -1,6 +1,6 @@
 # PawTalk Server 0.11.1 — API 2 membership and multiple channels
 
-[Русский](server-v0.11.1.ru.md) · [Canonical snapshot](server-v0.11.1.md)
+[Русский](server-v0.11.1.ru.md) · [Canonical local publication source](server-v0.11.1.md)
 
 Published preview release; check newer tags for current compatible versions.
 
@@ -31,4 +31,6 @@ Install Manager 0.5.1 and Client 0.12.1, then Server 0.11.1 with a fresh API 2 d
 
 ## Full release record
 
-The [unchanged bilingual snapshot](server-v0.11.1.md) retains original release limitations, assets and verification details exactly. Consult the [current download catalog](https://ilyarusskikh.github.io/PawTalk/downloads/) for today's supported pairings.
+The [canonical local bilingual source](server-v0.11.1.md) retains original release limitations, assets and verification details exactly. Consult the [current download catalog](https://ilyarusskikh.github.io/PawTalk/downloads/) for today's supported pairings.
+
+The local source differs from the public GitHub body; see the [recorded differences](README.md). A public correction requires separate owner approval.

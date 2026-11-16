@@ -6,6 +6,9 @@ import { execFileSync } from 'node:child_process';
 
 export const normalizeNotes = text => text.replaceAll('\r\n', '\n');
 export const notesDigest = text => createHash('sha256').update(normalizeNotes(text)).digest('hex');
+// Locale views share the tag's stem, including for SemVer prereleases.
+export const isCanonicalNotesFile = name => !/\.(?:en|ru)\.md$/.test(name)
+  && /^(?:client|server|manager)-v\d+\.\d+\.\d+(?:-[\w.-]+)?\.md$/.test(name);
 // Frozen failed-release drafts, retained as history. Never exempt a release candidate.
 const historicalDrafts = {
   'client-v0.12.0': '01776e6272b22cb3eeb8d84761e73164418a53e6d26551d6ef18ea6204af23a6',
@@ -82,7 +85,7 @@ async function main() {
   const tags = published ? args.slice(1) : args;
   if (published && !tags.length) throw Error('Supply published release tags');
   const directory = path.resolve(import.meta.dirname, '../releases');
-  const files = tags.length ? tags.map(tag => `${tag}.md`) : (await readdir(directory)).filter(name => /^(?:client|server|manager)-v\d+\.\d+\.\d+(?:-[\w.-]+)?\.md$/.test(name));
+  const files = tags.length ? tags.map(tag => `${tag}.md`) : (await readdir(directory)).filter(isCanonicalNotesFile);
   let failures = 0;
   for (const file of files) {
     const tag = path.basename(file, '.md');
