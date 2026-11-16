@@ -31,7 +31,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const serverId=state.serverId,channelId=channel.id,key=`${serverId}:${channelId}`,positionKey=`pawtalk.v2.position.${key}`,limit=loadChatWindow();
   const [messages,setMessages]=useState<Message[]>([]),rows=useRef<Message[]>([]),predecessor=useRef<Message|undefined>(undefined);
   const [text,setText]=useState(()=>drafts.get(key)?.text||''),[file,setFile]=useState<File|undefined>(()=>drafts.get(key)?.file),[reply,setReply]=useState<Message|undefined>(()=>drafts.get(key)?.reply);
-  const [editing,setEditing]=useState<Message>(),[editText,setEditText]=useState(''),[deleting,setDeleting]=useState<Message>();
+  const [editing,setEditing]=useState<Message>(),[editText,setEditText]=useState(''),[removeImage,setRemoveImage]=useState(false),[deleting,setDeleting]=useState<Message>();
   const [sending,setSending]=useState(false),[mutating,setMutating]=useState(false),[loading,setLoading]=useState(true),[ready,setReady]=useState(false);
   const [failure,setFailure]=useState(''),[sendError,setSendError]=useState(''),[mutationError,setMutationError]=useState(''),[notice,setNotice]=useState('');
   const [bounds,setBounds]=useState({first:0,last:0}),boundsRef=useRef(bounds);boundsRef.current=bounds;
@@ -141,7 +141,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   },[menu]);
   function quote(id:number,fallback?:Message['content']['reply']){const source=messages.find(m=>m.id===id)??quotes.get(id);return {source,author:source?profileFor(state,source.authorProfileId)?.nickname||t('Участник'):t('Участник'),text:source===null?t('Исходное сообщение уже недоступно.'):source?.unreadable?t('Не удалось расшифровать сообщение.'):source?(source.content.text||t('Изображение')):t('Загрузка истории…')};}
   function beginReply(message:Message){setReply(message);setMenu(undefined);focusInput();void refreshQuotes(rows.current,epoch.current).catch(()=>{});}
-  function beginEdit(message:Message){if(mutationRef.current)return;setEditing(message);setEditText(message.content.text);setMutationError('');setMenu(undefined);}
+  function beginEdit(message:Message){if(mutationRef.current)return;setEditing(message);setRemoveImage(false);setEditText(message.content.text);setMutationError('');setMenu(undefined);}
   function cancelEdit(){if(mutationRef.current)return;setEditing(undefined);setMutationError('');focusInput();}
   function highlight(row:HTMLElement){row.classList.add('chat-message-target');clearTimeout(highlightTimer.current);highlightTimer.current=setTimeout(()=>row.classList.remove('chat-message-target'),1600);}
   async function jump(id:number){
@@ -169,15 +169,15 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     finally{sendingRef.current=false;if(generation===epoch.current){setSending(false);focusInput();}}
   }
   async function mutate(message:Message,value?:string){
-    if(mutationRef.current)return;if(value!==undefined&&((!value.trim()&&!message.content.image)||new TextEncoder().encode(value.trim()).length>4096))return;
-    if(value!==undefined&&value.trim()===message.content.text.trim()){cancelEdit();return;}
+    if(mutationRef.current)return;const content={...message.content,text:value?.trim()||''};if(value!==undefined&&removeImage)delete content.image;if(value!==undefined&&new TextEncoder().encode(content.text).length>4096)return;if(value!==undefined&&!content.text&&!content.image)value=undefined;
+    if(value!==undefined&&value.trim()===message.content.text.trim()&&!removeImage){cancelEdit();return;}
     mutationRef.current=true;setMutating(true);setMutationError('');const generation=epoch.current;
     try{
       if(value===undefined)await membership('message.delete',{serverId,messageId:message.id});
-      else await membership('send',{serverId,channelId,content:{...message.content,text:value.trim()},original:message});
+      else await membership('send',{serverId,channelId,content,original:message});
       if(generation!==epoch.current)return;
       if(value===undefined){deletedMessages.current.add(message.id);if(deletedMessages.current.size>1000)deletedMessages.current.delete(deletedMessages.current.values().next().value!);}
-      pendingPosition.current=follow.current?{bottom:true}:{anchor:anchor()};rows.current=value===undefined?rows.current.filter(m=>m.id!==message.id):rows.current.map(m=>m.id===message.id?{...m,content:{...m.content,text:value.trim()},editedAt:Date.now()}:m);
+      pendingPosition.current=follow.current?{bottom:true}:{anchor:anchor()};rows.current=value===undefined?rows.current.filter(m=>m.id!==message.id):rows.current.map(m=>m.id===message.id?{...m,content,editedAt:Date.now()}:m);
       if(value===undefined&&message.id===Math.max(boundsRef.current.last,reportedLast)){
         const last=rows.current.at(-1)?.id||0;setBounds(previous=>({...previous,last}));
         if(follow.current)setAway(false);
@@ -206,8 +206,8 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
             <div className="member-message-content chat-message-body">
               {!continuation&&<div className="member-message-heading chat-meta"><strong>{author?.nickname||t('Участник')}</strong><MessageTime sent={message.sentAt}/></div>}
               {reference&&<button type="button" className="member-reply chat-reply-quote" onClick={()=>{if(reference.source===null)setNotice(t('Исходное сообщение уже недоступно.'));else void jump(message.content.reply!.id);}}><Icon name="reply" size={13}/><strong>{reference.author}</strong><span className="chat-reply-text"><MessageText text={reference.text.slice(0,240)} preview/></span></button>}
-              {isEditing?<form className="chat-inline-edit" aria-label={t('Редактировать сообщение')} onSubmit={event=>{event.preventDefault();void mutate(message,editText);}}><FormattingTextarea ref={editInput} rows={1} value={editText} maxLength={4096} readOnly={mutating} aria-label={t('Сообщение')} onChange={event=>setEditText(event.target.value)} onEscape={cancelEdit} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();cancelEdit();}else if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229){event.preventDefault();if(!event.repeat)void mutate(message,editText);}}}/><div className="chat-edit-hint"><span>{t('Esc для')}</span> <button type="button" disabled={mutating} onClick={cancelEdit}>{t('отмены')}</button><span> · {t('Enter чтобы')}</span> <button type="submit" disabled={mutating}>{t('сохранить')}</button></div>{mutationError&&<p role="alert" className="text-error">{mutationError}</p>}</form>:<div className="member-message-text">{message.unreadable?<em>{t('Не удалось расшифровать сообщение.')}</em>:<MessageText text={message.content.text}/>}{!!message.editedAt&&<small className="chat-edited">{t('изменено')}</small>}</div>}
-              {message.content.image&&<EncryptedImage serverId={serverId} channelId={channelId} image={message.content.image}/>}
+              {isEditing?<form className="chat-inline-edit" aria-label={t('Редактировать сообщение')} onSubmit={event=>{event.preventDefault();void mutate(message,editText);}}><FormattingTextarea ref={editInput} rows={1} value={editText} maxLength={4096} readOnly={mutating} aria-label={t('Сообщение')} onChange={event=>setEditText(event.target.value)} onEscape={cancelEdit} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();cancelEdit();}else if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229){event.preventDefault();if(!event.repeat)void mutate(message,editText);}}}/>{message.content.image&&<button type="button" disabled={mutating||removeImage} onClick={()=>setRemoveImage(true)}>{t(removeImage?'Вложение будет удалено':'Удалить вложение')}</button>}<div className="chat-edit-hint"><span>{t('Esc для')}</span> <button type="button" disabled={mutating} onClick={cancelEdit}>{t('отмены')}</button><span> · {t('Enter чтобы')}</span> <button type="submit" disabled={mutating}>{t('сохранить')}</button></div>{mutationError&&<p role="alert" className="text-error">{mutationError}</p>}</form>:<div className="member-message-text">{message.unreadable?<em>{t('Не удалось расшифровать сообщение.')}</em>:<MessageText text={message.content.text}/>}{!!message.editedAt&&<small className="chat-edited">{t('изменено')}</small>}</div>}
+              {message.content.image&&!(isEditing&&removeImage)&&<EncryptedImage serverId={serverId} channelId={channelId} image={message.content.image}/>}
             </div>
             {!message.unreadable&&!isEditing&&<div className="member-message-actions"><button type="button" className="icon-button" title={t('Ответить')} aria-label={t('Ответить')} onClick={()=>beginReply(message)}><Icon name="reply" size={16}/></button>{own&&<><button type="button" className="icon-button" title={t('Редактировать')} aria-label={t('Редактировать')} onClick={()=>beginEdit(message)}><Icon name="edit" size={16}/></button><button type="button" className="icon-button" title={t('Удалить сообщение')} aria-label={t('Удалить сообщение')} onClick={event=>requestDelete(message,event.shiftKey)}><Icon name="trash" size={16}/></button></>}</div>}
           </div><div className="chat-read-end" data-read-id={message.id}/>

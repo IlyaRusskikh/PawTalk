@@ -332,7 +332,7 @@ class MembershipClient {
     if(cached&&(cached.signature!==signature||cached.originalId!==original?.id))throw failure('REQUEST_CONFLICT');
     if(!cached){const packet=await cryptoV2.sealContent(connection.secret,serverId,'chat',channelId,resourceId,author,clear);cached={signature,originalId:original?.id,packet};if(cacheKey){this.pendingMessages.set(cacheKey,cached);if(this.pendingMessages.size>100)this.pendingMessages.delete(this.pendingMessages.keys().next().value);}}
     const packet=cached.packet,path=original?`/api/v2/messages/${original.id}`:`/api/v2/channels/${channelId}/messages`;
-    const result=await this.request(serverId,path,original?'PATCH':'POST',{requestId:original?(clientRequestId||requestID()):resourceId,keyId:packet.keyId,nonce:packet.nonce,ciphertext:packet.ciphertext,attachmentIds:original?[]:content.image?[content.image.id]:[]});
+    const result=await this.request(serverId,path,original?'PATCH':'POST',{requestId:original?(clientRequestId||requestID()):resourceId,keyId:packet.keyId,nonce:packet.nonce,ciphertext:packet.ciphertext,attachmentIds:original?[]:content.image?[content.image.id]:[],...(original?.content?.image&&!content.image?{removeAttachment:true}:{})});
     if(cacheKey)this.pendingMessages.delete(cacheKey);return result;
   }
 

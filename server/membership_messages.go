@@ -9,11 +9,12 @@ import (
 )
 
 type memberMessageInput struct {
-	RequestID     string   `json:"requestId"`
-	KeyID         string   `json:"keyId"`
-	Nonce         string   `json:"nonce"`
-	Ciphertext    string   `json:"ciphertext"`
-	AttachmentIDs []string `json:"attachmentIds"`
+	RemoveAttachment bool     `json:"removeAttachment,omitempty"`
+	RequestID        string   `json:"requestId"`
+	KeyID            string   `json:"keyId"`
+	Nonce            string   `json:"nonce"`
+	Ciphertext       string   `json:"ciphertext"`
+	AttachmentIDs    []string `json:"attachmentIds"`
 }
 type memberMessage struct {
 	ID              int64    `json:"id"`
@@ -198,6 +199,11 @@ func (s *membershipStore) editMessage(ctx context.Context, token string, id int6
 		}
 		if _, err = tx.ExecContext(ctx, "UPDATE messages SET nonce=?,ciphertext=?,edited_at=? WHERE message_id=?", nonce, cipher, s.now().UnixMilli(), id); err != nil {
 			return err
+		}
+		if input.RemoveAttachment {
+			if _, err = tx.ExecContext(ctx, "DELETE FROM attachments WHERE message_id=?", id); err != nil {
+				return err
+			}
 		}
 		return s.enforceMemberStorageTx(ctx, tx, id)
 	})
