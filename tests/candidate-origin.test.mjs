@@ -127,7 +127,7 @@ test('shared publisher stays draft-first, verifies exact assets and stops on fai
   const directory=await mkdtemp(path.join(os.tmpdir(),'pawtalk-publish-fixture-'));
   try {
     const p=fixture(['client']).index.plans.client, notes=path.join(directory,'notes.md');
-    const text=(await readFile(new URL('../docs/releases/client-v0.12.1.md',import.meta.url),'utf8')).replaceAll('0.12.1','1.2.3');
+    const text=(await readFile(new URL('../releases/client-v0.12.1.md',import.meta.url),'utf8')).replaceAll('0.12.1','1.2.3');
     await writeFile(notes,text);p.notesSha256=notesDigest(text);
     const metadata={tag_name:p.tag,name:text.split(/\r?\n/)[0].slice(2),body:text,prerelease:true};
     const assets=[];
