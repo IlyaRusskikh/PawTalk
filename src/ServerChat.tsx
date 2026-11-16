@@ -34,7 +34,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const [editing,setEditing]=useState<Message>(),[editText,setEditText]=useState(''),[removeImage,setRemoveImage]=useState(false),[deleting,setDeleting]=useState<Message>();
   const [sending,setSending]=useState(false),[mutating,setMutating]=useState(false),[loading,setLoading]=useState(true),[ready,setReady]=useState(false);
   const [failure,setFailure]=useState(''),[sendError,setSendError]=useState(''),[mutationError,setMutationError]=useState(''),[notice,setNotice]=useState('');
-  const [bounds,setBounds]=useState({first:0,last:0}),boundsRef=useRef(bounds);boundsRef.current=bounds;
+  const [newCount,setNewCount]=useState(0),[bounds,setBounds]=useState({first:0,last:0}),boundsRef=useRef(bounds);boundsRef.current=bounds;
   const [away,setAway]=useState(false),[quotes,setQuotes]=useState(new Map<number,Message|null>()),[preview,setPreview]=useState('');
   const [menu,setMenu]=useState<{message:Message;x:number;y:number}>(),menuRef=useRef<HTMLDivElement>(null),[attachmentMenu,setAttachmentMenu]=useState(false);
   const pane=useRef<HTMLDivElement>(null),content=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null),editInput=useRef<HTMLTextAreaElement>(null),picker=useRef<HTMLInputElement>(null);
@@ -64,7 +64,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     if(lastAnchor.current)localStorage.setItem(positionKey,JSON.stringify({...lastAnchor.current,follow:follow.current}));
   }
   function restoreAnchor(value?:Anchor){const list=pane.current,row=value&&list?.querySelector<HTMLElement>(`[data-message-row="${value.id}"]`);if(list&&row){const target=row.querySelector<HTMLElement>('.member-message-text')||row;list.scrollTop+=target.getBoundingClientRect().top-list.getBoundingClientRect().top+value!.offset;}}
-  function markRead(last:number){if(last<=read.current)return;read.current=last;localStorage.setItem(cursorKey(serverId,channelId),String(last));current.current.onRead(last);}
+  function markRead(last:number){if(last>=Math.max(boundsRef.current.last,current.current.channel.lastMessageId))setNewCount(0);if(last<=read.current)return;read.current=last;localStorage.setItem(cursorKey(serverId,channelId),String(last));current.current.onRead(last);}
   async function refreshQuotes(next:Message[],generation:number){
     const live=new Map(next.map(m=>[m.id,m])),ids=[...new Set([...next.map(m=>m.content.reply?.id),current.current.reply?.id].filter((id):id is number=>!!id))].filter(id=>!live.has(id));
     const resolved=new Map<number,Message|null>();
@@ -100,7 +100,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
         next=next.filter(message=>!deletedMessages.current.has(message.id));
         predecessor.current=undefined;
         if(next.length&&next[0].id>page.first){const preceding=await membership<MessagePage>('messages',{serverId,channelId,options:{before:next[0].id,limit:1}});if(generation!==epoch.current)return;predecessor.current=preceding.messages.at(-1);}
-        rows.current=next;setMessages(next);setBounds({first:page.first,last:page.last});setAway(!follow.current);setReady(true);setFailure('');
+        setNewCount(page.unread);rows.current=next;setMessages(next);setBounds({first:page.first,last:page.last});setAway(!follow.current);setReady(true);setFailure('');
         await refreshQuotes(next,generation);
       }catch(error){if(generation===epoch.current)setFailure((error as Error).message);}
       finally{if(generation===epoch.current)setLoading(false);}
@@ -214,7 +214,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
         </article>;
       })}
       {hasNewer&&!follow.current&&<button className="member-load chat-page-loader" disabled={loading} onClick={()=>void navigate('newer')}>{t('Следующие сообщения')}</button>}
-    </div></div>{(away||hasNewer&&!follow.current)&&<button className="member-load chat-jump" onClick={()=>{follow.current=true;void navigate('latest');focusInput();}}>{t('К новым сообщениям')}<Icon name="arrow-down" size={14}/></button>}</div>
+    </div></div>{(away||hasNewer&&!follow.current)&&<button className="member-load chat-jump" title={t('К новым сообщениям')} aria-label={newCount?t('Новых сообщений: {0}',newCount):t('К новым сообщениям')} onClick={()=>{follow.current=true;void navigate('latest');focusInput();}}><Icon name="arrow-down" size={20}/>{newCount>0&&<b className="chat-jump-count">{newCount}</b>}</button>}</div>
     {failure&&<p className="member-chat-error text-error" role="alert">{failure}<button onClick={()=>void load('sync')}>{t('Повторить')}</button></p>}
     {sendError&&<p className="text-error" role="alert">{sendError}</p>}
     {tooLong&&<p className="text-error" role="status">{t('Сообщение слишком длинное.')}</p>}

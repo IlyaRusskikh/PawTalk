@@ -100,3 +100,5 @@
 .member-roster-label{display:flex;align-items:center;gap:6px}.member-roster-nickname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.member-self-pin{flex:none;padding:2px 5px;border-radius:calc(var(--ui-radius)*.3333);background:var(--raised);color:var(--muted);font-size:10px;line-height:1.2}
 
 .member-call-controls{display:flex;justify-content:center;flex:none;padding:8px 0}.member-call-controls .member-audio-buttons{display:flex;align-items:center;gap:8px}
+
+.member-load.chat-jump{left:auto;right:16px;bottom:12px;transform:none;width:40px;height:40px;padding:0;justify-content:center;border-radius:50%}.chat-jump-count{position:absolute;top:-7px;right:-7px;min-width:19px;padding:2px 5px;border-radius:12px;background:var(--accent);color:var(--on-accent);font-size:10px}
