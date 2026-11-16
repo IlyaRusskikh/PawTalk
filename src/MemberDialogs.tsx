@@ -20,7 +20,7 @@ export function BansDialog({state,onClose}:{state:ServerState;onClose():void}) {
   useEffect(()=>{void refresh().catch(error=>setError(error.message));},[state.serverId]);
   return <Modal title={t('Заблокированные участники')} onClose={onClose}>{error&&<p className="text-error" role="alert">{error}</p>}<div className="member-management-list">{!bans.length&&<p className="host-hint">{t('Нет действующих блокировок.')}</p>}{bans.map(ban=><div className="member-management-row" key={ban.id}><div><strong>{ban.subjects.map(id=>state.profiles.find(profile=>profile.id===id)?.nickname||id.slice(0,12)).join(', ')}</strong><small>{ban.expiresAt?t('До {0}',new Date(ban.expiresAt).toLocaleString()):t('Навсегда')}</small><small>{ban.reason}</small><details><summary>{t('Затронутые профили')}</summary>{ban.subjects.map(id=><p className="member-profile-id" key={id}>{id}</p>)}</details></div><button disabled={busy} onClick={()=>{setBusy(true);void membership('ban.revoke',{serverId:state.serverId,banId:ban.id}).then(refresh).catch(error=>setError(error.message)).finally(()=>setBusy(false));}}>{t('Снять блокировку')}</button></div>)}</div></Modal>;
 }
-export function LinkDialog({ state, nickname, initialText = '', initialID='', onClose, onJoined }: { state?: ServerState; nickname: string; initialText?: string; initialID?:string; onClose(): void; onJoined(state: ServerState): void }) {
+export function LinkDialog({ state, nickname, initialText = '', initialID='', onID, onClose, onJoined }: { state?: ServerState; nickname: string; initialText?: string; initialID?:string; onID?(id:string):void; onClose(): void; onJoined(state: ServerState): void }) {
   const [side, setSide] = useState<'target'|'source'>(!initialID&&(initialText || !state?.devices.some(device=>device.id===state.self.deviceId&&device.primary)) ? 'source' : 'target'), [text, setText] = useState(initialText), [id, setID] = useState(initialID), [chosen, setChosen] = useState('target');
   const [status, setStatus] = useState<LinkStatus>(), [error, setError] = useState(''), [busy, setBusy] = useState(false), [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -31,17 +31,20 @@ export function LinkDialog({ state, nickname, initialText = '', initialID='', on
   async function run(action: string, input: Record<string, unknown>) {
     setBusy(true); setError('');
     try {
-      if (action === 'link.start') { const value = await membership<{ id: string; text: string }>(action, input); setID(value.id); setText(value.text); }
-      else if (action === 'link.propose') { const value = await membership<LinkStatus>(action, input); setID(value.id); setStatus(value); }
+      if (action === 'link.start') { const value = await membership<{ id: string; text: string }>(action, input); setID(value.id);onID?.(value.id); setText(value.text); }
+      else if (action === 'link.propose') { const value = await membership<LinkStatus>(action, input); setID(value.id);onID?.(value.id); setStatus(value); }
       else if (action === 'link.finish') onJoined(await membership<ServerState>(action, input));
       else setStatus(await membership<LinkStatus>(action, input));
     } catch (error) { setError((error as Error).message); } finally { setBusy(false); }
   }
   function close(){
     if(busy)return;
-    if(id&&status?.state!=='confirmed'&&(side==='source'||status?.state==='proposed'||status?.state==='approved')){
-      setBusy(true);void membership('link.cancel',{linkId:id}).then(onClose).catch(error=>setError(error.message)).finally(()=>setBusy(false));
-    }else onClose();
+    if(!id){onClose();return;}
+    setBusy(true);
+    void membership<LinkStatus>('link.status',{linkId:id}).then(async latest=>{
+      if(!['confirmed','cancelled','expired'].includes(latest.state)&&(side==='source'||['proposed','approved'].includes(latest.state)))await membership('link.cancel',{linkId:id});
+      onClose();
+    }).catch(error=>setError(error.message)).finally(()=>setBusy(false));
   }
   const targetMain = state?.devices.some(device => device.id === state.self.deviceId && device.primary);
   return <Modal title={t('Связать устройства')} onClose={close}>

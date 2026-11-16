@@ -117,3 +117,13 @@ test('a rejected leave does not suppress a subsequent real ban',async()=>{
  }finally{f.service.stop();}
  const kick=fixture();try{await kick.call('servers');kick.client.state=async()=>{throw failure('NOT_A_MEMBER');};await kick.call('connect',{serverId});assert.equal(kick.events.find(event=>event[1]?.departure)[1].departure.kind,'kick');}finally{kick.service.stop();}
 });
+
+test('incoming link attention restores and focuses once, including a hidden main window',async()=>{
+ let handler,restores=0,shows=0,focuses=0;const linkId='d'.repeat(32);let state='proposed';
+ const links={pending:new Map([[linkId,{side:'target',connection:{config:{serverId}}}]]),prune(){},status:async()=>({state})};
+ const service=registerMembershipIPC({ipcMain:{handle(_name,value){handler=value;}},authorized(){},client:{connections:new Map()},links,send(){},getWindow:()=>({isDestroyed:()=>false,isMinimized:()=>true,restore(){restores++;},show(){shows++;},focus(){focuses++;}})});
+ try{const first=await handler({},'link.pending',{});assert.deepEqual(first.value,[{linkId,serverId}]);await handler({},'link.pending',{});assert.deepEqual([restores,shows,focuses],[1,1,1]);state='cancelled';assert.deepEqual((await handler({},'link.pending',{})).value,[]);}finally{service.stop();}
+});
+test('automatic idle threshold uses native system inactivity and exposes no manual setter',async()=>{
+ let idle=299;const f=fixture({getIdleSeconds:()=>idle});try{assert.equal((await f.call('activity')).value.away,false);idle=300;assert.equal((await f.call('activity')).value.away,true);assert.equal((await f.call('activity.set',{away:true})).error.code,'INVALID_ACTION');}finally{f.service.stop();}
+});
