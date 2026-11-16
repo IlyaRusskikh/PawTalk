@@ -1,5 +1,7 @@
 # Agent knowledge index
 
+[Русский](README.ru.md)
+
 Read [../AGENTS.md](../AGENTS.md) first. Load only the row relevant to the task;
 source code and executable contracts outrank stale descriptive documentation.
 

@@ -1,5 +1,7 @@
 # Working on PawTalk
 
+[Русский](AGENTS.ru.md)
+
 Mandatory entry point for every agent. Read [agents/README.md](agents/README.md),
 then only the relevant rules/skills. Use the [component map](agents/architecture/components.md)
 before broad search; verify descriptive docs against code.
