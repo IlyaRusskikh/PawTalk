@@ -12,5 +12,5 @@
 Version sources: Client package.json + both package-lock version fields; Server
 server/VERSION; Manager manager/VERSION + manager/desktop/package.json. These are
 development versions, not proof of a public release. Read [invariants](invariants.md)
-before changing cross-component code. See [architecture detail](../../docs/ARCHITECTURE.md)
-and [shared-core build contract](../../docs/BUNDLED-SERVER.md).
+before changing cross-component code. See [architecture detail](../../architecture/overview.en.md)
+and [shared-core build contract](../../architecture/components.en.md).

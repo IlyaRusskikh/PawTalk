@@ -18,10 +18,10 @@ before broad search; verify descriptive docs against code.
   while covered inputs/code/config/dependencies/environment remain unchanged.
   Report unavailable checks; distinguish synthetic, integration, container,
   native and hardware/external-network verification. Do not hide failures.
-- Keep English/Russian READMEs aligned; technical detail belongs in docs/ and
+- Keep English/Russian READMEs aligned; technical detail belongs in architecture/; user guidance in docs/ and
   SECURITY.md. Follow shared form geometry, action-button alignment and enum
   localization rules in [development rules](agents/rules/development.md).
-- Releases follow [docs/RELEASING.md](docs/RELEASING.md): successful exact-main-SHA
+- Releases follow [architecture/releasing.en.md](architecture/releasing.en.md): successful exact-main-SHA
   Preflight and prepared artifacts precede separate release-tag/release-publish approvals;
   publish the checked bytes without rebuilding. Never replace published
   tags/binaries/images. Public versions and download links derive from GitHub

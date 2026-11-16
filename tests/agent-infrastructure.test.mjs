@@ -20,7 +20,7 @@ test('agent index and native adapters resolve without duplicated knowledge files
   }
 });
 test('verification routes docs narrowly and cross-component dependencies conservatively', () => {
-  for (const file of ['docs/ARCHITECTURE.md', '.agents/skills/pawtalk-verify/SKILL.md', 'website/ru/index.html', '.github/workflows/release.yml', 'tests/release-catalog.test.mjs']) assert.deepEqual(testPlan([file]), ['infrastructure']);
+  for (const file of ['architecture/overview.en.md', '.agents/skills/pawtalk-verify/SKILL.md', 'website/ru/index.html', '.github/workflows/release.yml', 'tests/release-catalog.test.mjs']) assert.deepEqual(testPlan([file]), ['infrastructure']);
   assert.deepEqual(testPlan(['src/App.tsx']), ['infrastructure', 'client']);
   assert.deepEqual(testPlan(['manager/windows/main.go']), ['infrastructure', 'manager', 'compatibility']);
   for (const file of ['server/main.go', 'shared/protocol.cjs', 'scripts/server-core.mjs', 'package-lock.json', 'unknown-config']) assert.deepEqual(testPlan([file]), ['infrastructure', 'client', 'server', 'manager', 'compatibility']);

@@ -6,7 +6,7 @@ metadata:
 ---
 
 1. Read [invariants](../../../agents/architecture/invariants.md) and
-   [compatibility matrix](../../../docs/COMPATIBILITY.md).
+   [compatibility matrix](../../../docs/server/compatibility.en.md).
 2. Identify both consumers and producers, legacy missing fields, explicit unknown
    values, data/launcher schemas and signed metadata. Release numbers are independent.
 3. Keep Client selfhost and Server serve on one server/ implementation and identical

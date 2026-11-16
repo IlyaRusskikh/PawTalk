@@ -1,6 +1,6 @@
-# Contributing / Участие в разработке
+# Contributing to PawTalk
 
-## English
+[Русский](CONTRIBUTING.ru.md)
 
 Start with [README.md](README.md). Fork the repository, create a branch, make a
 focused change and open a pull request describing the problem, the resulting
@@ -18,24 +18,4 @@ recordings, local diagnostics or `manager/generated/`. Replace real addresses
 with documentation examples. Inspect `git diff --cached` before committing.
 For a suspected security issue, use GitHub's private vulnerability reporting
 if enabled; never post credentials in a public issue.
-Release steps are in [docs/RELEASING.md](docs/RELEASING.md).
-
-## Русский
-
-Начните с [README.ru.md](README.ru.md). Создайте fork и отдельную ветку, внесите
-изменение и откройте pull request: опишите проблему, новое поведение и проверки.
-Если меняется поведение, добавьте или обновите подходящие тесты. При изменениях
-запуска или возможностей обновляйте оба корневых README. Вклад в проект
-предоставляется под его лицензией `AGPL-3.0-only`.
-
-Следуйте [AGENTS.md](AGENTS.md) и [маршрутизации проверок](agents/testing/README.md)
-перед push. Ветка — от актуального main; squash merge требует успешного PR CI и
-отдельного разрешения владельца. Укажите недоступные проверки. Не отслеживайте CI
-без поручения.
-
-Не добавляйте пароли комнат, приглашения, ключи E2EE, приватные TLS-ключи,
-личные записи, локальные отчёты и `manager/generated/`. Реальные адреса заменяйте
-примерами. Перед коммитом просматривайте `git diff --cached`. Уязвимости сообщайте
-через private vulnerability reporting GitHub, если он включён; не публикуйте
-секреты в открытом issue.
-Порядок выпусков: [docs/RELEASING.md](docs/RELEASING.md).
+Release steps are in [architecture/releasing.en.md](architecture/releasing.en.md).
