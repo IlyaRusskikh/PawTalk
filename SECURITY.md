@@ -44,5 +44,5 @@ Response times and fix timelines are not guaranteed. Security fixes are shipped 
 
 - API 2 in the development tree requires E2EE for voice, text and attachments. Clients create and retain the root; the server stores encrypted packages. This does not update published API 1 binaries. [E2EE model](architecture/security.en.md).
 - Leaving, kicks and bans revoke server access but cannot erase delivered data or keys. Automatic rotation and forward secrecy are absent. The server sees metadata, roles and presence; issued LiveKit tokens retain a documented reuse window.
-- Windows installers are not yet Authenticode-signed. Published SHA-256 checksums and Ed25519-signed update manifests serve different purposes and do not replace a Windows publisher signature. [Updates](docs/UPDATES.md).
+- Windows installers are not yet Authenticode-signed. Published SHA-256 checksums and Ed25519-signed update manifests serve different purposes and do not replace a Windows publisher signature. [Updates](architecture/updates.en.md).
 - Hardware acceptance remains open for physical microphones, game/PTT behavior, external networks, and 30-participant loads. [Acceptance checklist](architecture/verification.en.md).
