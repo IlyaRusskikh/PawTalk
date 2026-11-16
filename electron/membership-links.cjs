@@ -87,6 +87,11 @@ class MembershipLinks {
     return { id: linkId, state: link.state, code: ctx.frame ? digest(ctx.frame).slice(0, 10) : '', chosenProfileId: link.chosenProfileId,
       sourceProfileId: link.sourceProfileId, targetProfileId: link.targetProfileId, sourceNickname: typeof link.sourceNickname==='string'&&link.sourceNickname.length<=128?link.sourceNickname:undefined, targetNickname: typeof link.targetNickname==='string'&&link.targetNickname.length<=128?link.targetNickname:undefined, expiresAt: link.expiresAt };
   }
+  async cancel(linkId) {
+    const ctx=this.context(linkId);
+    await this.client.signed(ctx.connection,`/api/v2/links/${linkId}/cancel`,{});
+    this.pending.delete(linkId);return true;
+  }
   async approve(linkId) {
     const ctx = this.context(linkId); if (ctx.side !== 'target') throw error('PRIMARY_DEVICE_REQUIRED');
     await this.status(linkId);

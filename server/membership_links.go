@@ -498,3 +498,29 @@ func (s *membershipStore) linkStatus(ctx context.Context, proof membershipProof,
 	}
 	return result, tx.Commit()
 }
+
+func (s *membershipStore) cancelLink(ctx context.Context, proof membershipProof, method, uri string, raw []byte, linkID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	id, err := s.proveDeviceTx(ctx, tx, proof, method, uri, raw, "", "", false)
+	if err != nil {
+		return err
+	}
+	link, err := s.loadLinkTx(ctx, tx, linkID)
+	if err != nil {
+		return err
+	}
+	if id.DeviceID != link.SourceDeviceID && id.DeviceID != link.TargetDeviceID {
+		return memberError(403, "FORBIDDEN")
+	}
+	if link.State == "confirmed" {
+		return memberError(409, "LINK_CHANGED")
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE device_link_requests SET state='cancelled',key_envelope=NULL WHERE request_id=?", linkID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

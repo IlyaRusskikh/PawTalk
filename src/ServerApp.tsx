@@ -50,6 +50,8 @@ export function ServerApp() {
   const [onboarding,setOnboarding]=useState(()=>localStorage.getItem('pawtalk.onboarding')==='pending'||(!localStorage.getItem('pawtalk.onboarding')&&!localStorage.getItem('pawtalk.nickname')));
   const onboardingActive=useRef(onboarding);onboardingActive.current=onboarding;
   useEffect(()=>{if(onboarding)localStorage.setItem('pawtalk.onboarding','pending');},[onboarding]);
+  const [incomingLink,setIncomingLink]=useState<{linkId:string;serverId:string}>();
+  useEffect(()=>{let alive=true,pending=false;async function poll(){if(pending)return;pending=true;try{const links=await membership<{linkId:string;serverId:string}[]>('link.pending');if(alive)setIncomingLink(links[0]);}catch{}finally{pending=false;}}void poll();const timer=setInterval(()=>void poll(),2000);return()=>{alive=false;clearInterval(timer);};},[]);
   const [departures,setDepartures]=useState<{serverId:string;name:string;kind:'kick'|'ban';expiresAt?:number|null}[]>([]);
   const [roster, setRoster] = useState(() => localStorage.getItem('pawtalk.v2.roster') !== 'hidden'), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<'join'|'invite'|'link'|'devices'|'bans'|'settings'|'create'|'host-share'|null>(onboarding?'settings':null), [address, setAddress] = useState(''), [linkText, setLinkText] = useState(''), [nickname, setNickname] = useState(() => localStorage.getItem('pawtalk.nickname') || t('Гость'));
@@ -71,7 +73,7 @@ export function ServerApp() {
   const [channelDialog, setChannelDialog] = useState<{ kind: 'text'|'voice'; channel?: Channel; deleting?: boolean }>(), [channelName, setChannelName] = useState('');
   const [moderation, setModeration] = useState<{ profileId: string; mode: 'role'|'kick'|'ban' }>(), [role, setRole] = useState('member'), [banDuration, setBanDuration] = useState('3600000');
   const [unread, setUnread] = useState<Record<string, number>>({}), [focused, setFocused] = useState(true), [, updatePrefs] = useState(0), [personPrefs, setPersonPrefs] = useState<Record<string, { volume: number; muted: boolean }>>({});
-  const contentFocused=focused&&!departures.length&&!modal&&!channelDialog&&!moderation&&!leaveServer&&!muteServer&&!muteChannel&&!addressServer&&!renameServer;
+  const contentFocused=focused&&!incomingLink&&!departures.length&&!modal&&!channelDialog&&!moderation&&!leaveServer&&!muteServer&&!muteChannel&&!addressServer&&!renameServer;
   const controller = useRef<VoiceSession | undefined>(undefined), current = useRef({ settings, states, selected, chatIDs, focused:contentFocused, deafened, voice }); current.current = { settings, states, selected, chatIDs, focused:contentFocused, deafened, voice };
   const seen = useRef(new Map<string, { revision: number; last: number }>()), polling = useRef(false), mounted = useRef(true), joiningVoice = useRef(false);
   const voiceAttempt=useRef(0),pendingVoiceServer=useRef('');
@@ -252,6 +254,7 @@ export function ServerApp() {
     </Modal>}
     {modal === 'invite' && state && <InvitationDialog state={state} onClose={() => setModal(null)}/>}
     {modal === 'link' && <LinkDialog state={state} nickname={nickname} initialText={linkText} onClose={() => { setModal(null); void refresh(); }} onJoined={joined}/>}
+    {incomingLink&&modal!=='link'&&<LinkDialog key={incomingLink.linkId} initialID={incomingLink.linkId} state={states[incomingLink.serverId]} nickname={nickname} onClose={()=>{setIncomingLink(undefined);void refresh();}} onJoined={joined}/>}
     {modal === 'devices' && state && <DevicesDialog state={state} onClose={() => setModal(null)} onRefresh={() => void refresh()}/>}
     {modal === 'bans' && state && <BansDialog state={state} onClose={() => setModal(null)}/>}
     {(muteServer||muteChannel) && <Modal title={t('Заглушить уведомления')} onClose={() => {setMuteServer(undefined);setMuteChannel(undefined);}}><div className="member-mute-options">{[[15, t('На 15 минут')], [60, t('На 1 час')], [180, t('На 3 часа')], [480, t('На 8 часов')], [1440, t('На 24 часа')], [0, t('До тех пор, пока не включу')]].map(([minutes, label]) => <button key={minutes} onClick={() => { localStorage.setItem(muteChannel?channelMuteKey(muteChannel.serverId,muteChannel.channelId):`pawtalk.v2.mute.${muteServer}`, String(minutes ? Date.now() + Number(minutes) * 60000 : Number.MAX_SAFE_INTEGER)); setMuteServer(undefined);setMuteChannel(undefined); updatePrefs(value => value + 1); }}>{label}</button>)}</div></Modal>}

@@ -46,6 +46,7 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	mux.HandleFunc("POST /api/v2/links/{id}/propose", api.limited(api.proposeLink))
 	mux.HandleFunc("POST /api/v2/links/{id}/approve", api.limited(api.approveLink))
 	mux.HandleFunc("POST /api/v2/links/{id}/confirm", api.limited(api.acceptLink))
+	mux.HandleFunc("POST /api/v2/links/{id}/cancel", api.limited(api.cancelLink))
 	mux.HandleFunc("POST /api/v2/links/{id}/status", api.limited(api.linkStatus))
 	mux.HandleFunc("POST /api/v2/control", api.transferControl)
 	mux.HandleFunc("POST /api/v2/devices/{id}/unlink", api.limited(api.unlinkDevice))

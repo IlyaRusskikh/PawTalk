@@ -8,7 +8,8 @@ function string(value, max = 14000) { if (typeof value !== 'string' || value.len
 function id(value, size = 32) { if (typeof value !== 'string' || !new RegExp(`^[0-9a-f]{${size}}$`).test(value)) fail('INVALID_INPUT'); return value; }
 
 function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, getHost, stopHost, setVoiceEndpoint = () => {} }) {
-  const statuses = new Map(), connecting = new Map(), knownRecords = new Map(), departed = new Set(), intentionalDepartures = new Set(); let activeVoice, preparedVoice, voiceEpoch=0,voiceBusy=false, stopped = false, timer, lastNotification = 0, departureTask;
+  const linkAlerts=new Set();
+ const statuses = new Map(), connecting = new Map(), knownRecords = new Map(), departed = new Set(), intentionalDepartures = new Set(); let activeVoice, preparedVoice, voiceEpoch=0,voiceBusy=false, stopped = false, timer, lastNotification = 0, departureTask;
   const locked=error=>['SERVER_KEY_CHANGED','SERVER_ID_CHANGED','INVALID_SERVER_IDENTITY','SERVER_BINDING_MISMATCH'].includes(error.code);
   async function reportDeparture(serverId,error,record=knownRecords.get(serverId)){
     if(error.local||intentionalDepartures.has(serverId)||!record||!['NOT_A_MEMBER','BANNED'].includes(error.code)||departed.has(serverId))return;
@@ -143,6 +144,19 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     async 'ban.list'(input) { return client.request(id(input.serverId), '/api/v2/bans'); },
     async 'link.start'(input) { return links.start(id(input.serverId)); },
     async 'link.propose'(input) { return links.propose(string(input.text), string(input.nickname, 64), string(input.deviceLabel || t('Компьютер'), 64), input.chosen || 'target'); },
+    async 'link.pending'() {
+      links.prune();const pending=[];
+      for(const [linkId,ctx] of links.pending){
+        if(ctx.side!=='target')continue;
+        try{const status=await links.status(linkId);
+          if(status.state==='proposed'){
+            pending.push({linkId,serverId:ctx.connection.config.serverId});
+            if(!linkAlerts.has(linkId)){linkAlerts.add(linkId);const win=getWindow();if(win&&!win.isDestroyed()){if(win.isMinimized())win.restore();win.show();win.focus();}}
+          }else if(['cancelled','expired','confirmed'].includes(status.state)){links.pending.delete(linkId);linkAlerts.delete(linkId);}
+        }catch(error){if(['LINK_EXPIRED','LINK_NOT_FOUND'].includes(error.code)){links.pending.delete(linkId);linkAlerts.delete(linkId);}}
+      }return pending;
+    },
+    async 'link.cancel'(input){return links.cancel(id(input.linkId));},
     async 'link.status'(input) { return links.status(id(input.linkId)); },
     async 'link.approve'(input) { return links.approve(id(input.linkId)); },
     async 'link.finish'(input) { const result = await links.finish(id(input.linkId)); intentionalDepartures.delete(result.serverId);departed.delete(result.serverId);send('membership-changed', {}); return result; },

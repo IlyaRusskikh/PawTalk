@@ -122,3 +122,17 @@ func (a *membershipAPI) endDevice(w http.ResponseWriter, r *http.Request, revoke
 	}
 	respond(w, 200, map[string]bool{"ok": true})
 }
+
+func (a *membershipAPI) cancelLink(w http.ResponseWriter, r *http.Request) {
+	var input struct{}
+	proof, raw, err := a.linkRequest(w, r, &input)
+	if err != nil {
+		memberFail(w, err)
+		return
+	}
+	if err = a.store.cancelLink(r.Context(), proof, r.Method, r.URL.RequestURI(), raw, r.PathValue("id")); err != nil {
+		memberFail(w, err)
+		return
+	}
+	respond(w, 200, map[string]bool{"ok": true})
+}

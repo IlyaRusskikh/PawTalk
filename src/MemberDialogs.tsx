@@ -20,8 +20,8 @@ export function BansDialog({state,onClose}:{state:ServerState;onClose():void}) {
   useEffect(()=>{void refresh().catch(error=>setError(error.message));},[state.serverId]);
   return <Modal title={t('Заблокированные участники')} onClose={onClose}>{error&&<p className="text-error" role="alert">{error}</p>}<div className="member-management-list">{!bans.length&&<p className="host-hint">{t('Нет действующих блокировок.')}</p>}{bans.map(ban=><div className="member-management-row" key={ban.id}><div><strong>{ban.subjects.map(id=>state.profiles.find(profile=>profile.id===id)?.nickname||id.slice(0,12)).join(', ')}</strong><small>{ban.expiresAt?t('До {0}',new Date(ban.expiresAt).toLocaleString()):t('Навсегда')}</small><small>{ban.reason}</small><details><summary>{t('Затронутые профили')}</summary>{ban.subjects.map(id=><p className="member-profile-id" key={id}>{id}</p>)}</details></div><button disabled={busy} onClick={()=>{setBusy(true);void membership('ban.revoke',{serverId:state.serverId,banId:ban.id}).then(refresh).catch(error=>setError(error.message)).finally(()=>setBusy(false));}}>{t('Снять блокировку')}</button></div>)}</div></Modal>;
 }
-export function LinkDialog({ state, nickname, initialText = '', onClose, onJoined }: { state?: ServerState; nickname: string; initialText?: string; onClose(): void; onJoined(state: ServerState): void }) {
-  const [side, setSide] = useState<'target'|'source'>(initialText || !state?.devices.some(device=>device.id===state.self.deviceId&&device.primary) ? 'source' : 'target'), [text, setText] = useState(initialText), [id, setID] = useState(''), [chosen, setChosen] = useState('target');
+export function LinkDialog({ state, nickname, initialText = '', initialID='', onClose, onJoined }: { state?: ServerState; nickname: string; initialText?: string; initialID?:string; onClose(): void; onJoined(state: ServerState): void }) {
+  const [side, setSide] = useState<'target'|'source'>(!initialID&&(initialText || !state?.devices.some(device=>device.id===state.self.deviceId&&device.primary)) ? 'source' : 'target'), [text, setText] = useState(initialText), [id, setID] = useState(initialID), [chosen, setChosen] = useState('target');
   const [status, setStatus] = useState<LinkStatus>(), [error, setError] = useState(''), [busy, setBusy] = useState(false), [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!id) return; let alive = true, pending = false;
@@ -37,8 +37,14 @@ export function LinkDialog({ state, nickname, initialText = '', onClose, onJoine
       else setStatus(await membership<LinkStatus>(action, input));
     } catch (error) { setError((error as Error).message); } finally { setBusy(false); }
   }
+  function close(){
+    if(busy)return;
+    if(id&&status?.state!=='confirmed'&&(side==='source'||status?.state==='proposed'||status?.state==='approved')){
+      setBusy(true);void membership('link.cancel',{linkId:id}).then(onClose).catch(error=>setError(error.message)).finally(()=>setBusy(false));
+    }else onClose();
+  }
   const targetMain = state?.devices.some(device => device.id === state.self.deviceId && device.primary);
-  return <Modal title={t('Связать устройства')} onClose={onClose}>
+  return <Modal title={t('Связать устройства')} onClose={close}>
     {!id && <div className="form-fields"><label>{t('Действие')}<select value={side} onChange={event => setSide(event.target.value as 'target'|'source')}><option value="target" disabled={!targetMain}>{t('Выдать строку на основном устройстве')}</option><option value="source">{t('Вставить строку с другого устройства')}</option></select></label>
       {side === 'target' ? <p>{t('Скопируйте строку на второе устройство. Оба устройства должны оставаться в сети. Строка действует 10 минут.')}</p> : <><label>{t('Строка привязки')}<textarea rows={4} value={text} onChange={event => setText(event.target.value)}/></label><label>{t('Какой профиль станет основным?')}<select value={chosen} onChange={event => setChosen(event.target.value)}><option value="target">{t('Профиль устройства, выдавшего строку')}</option><option value="source">{t('Профиль этого устройства')}</option></select></label><p className="host-hint">{t('Сохранятся имя, аватар и права выбранного основного профиля.')}</p></>}
     </div>}
