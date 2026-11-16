@@ -5,7 +5,7 @@ has not started. The owner resolved the main Q1–Q7 product choices: one voice 
 main-device-approved group merging, retained roles, administrative CLI/Manager links,
 ten-minute online linking and server-local profile data. Remaining onboarding and
 edge-case proposals are explicitly marked. Detailed contracts and verification are tracked in
-[the implementation plan](../../docs/MULTICHANNEL-PLAN.md).
+[the implementation plan](../../architecture/api.en.md).
 
 Context: the current shared server core couples login to one LiveKit room and one
 chat feed. Persistent membership, multiple channels and reversible device linking

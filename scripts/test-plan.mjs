@@ -3,11 +3,11 @@ import { pathToFileURL } from 'node:url';
 
 export function testPlan(paths) {
   const suites = new Set(['infrastructure']);
-  const scripts = new Set(['check-release-notes', 'check-agents', 'check-public', 'check-website', 'release-catalog', 'release-image-smoke', 'release-candidate', 'candidate-origin', 'release-contract', 'release-metadata', 'website-smoke', 'test-plan']);
-  const tests = new Set(['release-notes', 'agent-infrastructure', 'release-catalog', 'ci-scope', 'release-routing', 'release-metadata', 'release-candidate', 'candidate-origin']);
+  const scripts = new Set(['check-docs', 'check-release-notes', 'check-agents', 'check-public', 'check-website', 'release-catalog', 'release-image-smoke', 'release-candidate', 'candidate-origin', 'release-contract', 'release-metadata', 'website-smoke', 'test-plan']);
+  const tests = new Set(['documentation', 'release-notes', 'agent-infrastructure', 'release-catalog', 'ci-scope', 'release-routing', 'release-metadata', 'release-candidate', 'candidate-origin']);
   for (const raw of paths) {
     const file = raw.replaceAll('\\', '/');
-    if (/^(?:agents\/|\.agents\/|\.cursor\/|website\/|docs\/|\.github\/)|^(?:AGENTS|CLAUDE|GEMINI|README(?:\.ru)?|CONTRIBUTING|SECURITY|CHANGELOG)\.md$|^\.gitignore$/.test(file)) continue;
+    if (/^(?:agents\/|\.agents\/|\.cursor\/|website\/|docs\/|architecture\/|changelog\/|releases\/|\.github\/)|^(?:AGENTS|CLAUDE|GEMINI|README|CONTRIBUTING|SECURITY|CHANGELOG)(?:\.ru)?\.md$|^\.gitignore$/.test(file)) continue;
     if (scripts.has(file.match(/^scripts\/(.+)\.mjs$/)?.[1]) || tests.has(file.match(/^tests\/(.+)\.test\.mjs$/)?.[1]) || ['tests/website-ui.cjs','scripts/extract-candidate.py'].includes(file)) continue;
     if (/^(?:src\/|electron\/|native\/|assets\/)/.test(file)) suites.add('client');
     else if (/^manager\//.test(file)) { suites.add('manager'); suites.add('compatibility'); }

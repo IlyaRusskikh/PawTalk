@@ -7,8 +7,8 @@ assignees: ""
 ---
 
 <!-- English or Russian is welcome. Можно писать по-русски или по-английски.
-Start with README and docs/GUIDE.ru.md; Linux server setup is in docs/SERVER.md.
-Начните с README и docs/GUIDE.ru.md; установка Linux-сервера — docs/SERVER.md.
+Start with docs/client/first-steps.en.md; Linux server setup is in docs/manager/linux/installation.en.md.
+Начните с docs/client/first-steps.ru.md; установка Linux-сервера — docs/manager/linux/installation.ru.md.
 Never include invitations, passwords, keys, your public IP or full network reports.
 Не добавляйте приглашения, пароли, ключи, свой публичный IP и полные сетевые отчёты. -->
 
@@ -16,8 +16,8 @@ Never include invitations, passwords, keys, your public IP or full network repor
 
 ## Setup / Окружение
 
-- PawTalk version and Windows version / Версия PawTalk и Windows:
-- Room / Комната: built-in / встроенная, or / или Linux VPS
+- Client/Server/Manager release tags and OS / Теги Client/Server/Manager и ОС:
+- Host / Хост: temporary Windows / Windows Manager / Linux Manager
 - Same LAN or separate networks / Одна локальная сеть или разные сети:
 - For VPS: Linux, architecture and image tag / Для VPS: Linux, архитектура и тег образа:
 

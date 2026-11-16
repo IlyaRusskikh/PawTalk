@@ -45,4 +45,4 @@ must stay unchanged during review. API checks, main updates, tag creation and Gi
 GHCR publication are not atomic; partial writes still require owner investigation
 and the existing new-version policy. Hosted approvals remain external configuration.
 Synthetic API/signing/ZIP tests and a real local OCI roundtrip do not prove production
-signing or hosted reviewer enforcement. See [release process](../../docs/RELEASING.md).
+signing or hosted reviewer enforcement. See [release process](../../architecture/releasing.en.md).

@@ -7,7 +7,7 @@ metadata:
 
 1. Read [SECURITY.md](../../../SECURITY.md) and
    [invariants](../../../agents/architecture/invariants.md); load only relevant
-   docs/E2EE.md, docs/UPDATE-SIGNING.md or docs/RELEASING.md details.
+   architecture/security.en.md, architecture/updates.en.md or architecture/releasing.en.md details.
 2. Trace untrusted inputs to auth, IPC, filesystem/process and download boundaries.
    Preserve TLS pin-before-password, separate signing roots, digest/signature
    checks, bounded parsing and fail-closed behavior. The website catalog is not trust.

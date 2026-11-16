@@ -35,6 +35,8 @@ jobs:
           node-version: '24.22.1'
       - run: npm ci --ignore-scripts
       - run: node scripts/check-release-notes.mjs
+      - run: node scripts/check-docs.mjs
+      - run: node --test tests/documentation.test.mjs
       - run: node scripts/check-agents.mjs
       - run: node scripts/check-website.mjs
       - run: node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/release-candidate.test.mjs tests/candidate-origin.test.mjs tests/release-notes.test.mjs

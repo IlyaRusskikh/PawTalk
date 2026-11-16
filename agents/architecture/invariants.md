@@ -6,7 +6,7 @@
   differ in lifetime/storage. Server release alone does not patch installed Client.
 - API protocol 2 and capabilities, not release numbers, determine compatibility.
   Missing/legacy/unknown protocol is rejected before identity or admission proofs.
-  API 1 has no production fallback or data migration. Follow docs/COMPATIBILITY.md.
+  API 1 has no production fallback or data migration. Follow docs/server/compatibility.en.md.
 - TLS invitation fingerprint is checked before HTTP credentials. E2EE is mandatory:
   clients create/retain the server root and derive channel/purpose keys; the host
   stores opaque packages only. No automatic rotation or forward secrecy is promised.

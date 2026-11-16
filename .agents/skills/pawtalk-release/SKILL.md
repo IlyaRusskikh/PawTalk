@@ -5,18 +5,18 @@ metadata:
   short-description: Prepare and gate component releases
 ---
 
-1. Read [release process](../../../docs/RELEASING.md),
+1. Read [release process](../../../architecture/releasing.en.md),
    [Git rules](../../../agents/rules/development.md) and
    [GitHub setup](../../../agents/rules/github.md). Determine the component and
    previous published release using GitHub Releases, not source versions.
 2. In work/{service}-v{version} from current main prepare independent version
-   sources, CHANGELOG and reviewed RU/EN docs/releases/<tag>.md with exact assets,
+   sources, CHANGELOG and reviewed RU/EN releases/<tag>.md with exact assets,
    upgrade requirements and limitations. Follow REL-NOTES-01…06 in RELEASING.md:
    write final public text before PR merge, accurate before and after publication;
    review RU/EN equally. No pending CI/publication statuses or advance success claims.
    Actual results belong in Actions; confirmed run links are optional. Preserve
    accurate history of failed earlier tags. Existing public body corrections need
-   separate owner approval; use docs/RELEASE-NOTES-RECOVERY.md without replacing assets.
+   separate owner approval; use architecture/release-recovery.en.md without replacing assets.
 3. Run applicable final-state CI locally plus packaged smoke after Client installer;
    report unavailable environments. Run node scripts/check-release-notes.mjs and
    its tests; selected-candidate checks never exempt historical failed drafts.

@@ -56,4 +56,4 @@
 Review settings in GitHub UI. Repository files cannot prove Required reviewers,
 rulesets, artifact limits or GHCR permission are configured. No settings are changed
 by local checks. Source versions with existing historical failed tags are rejected;
-never delete/reuse those tags. See [release process](../../docs/RELEASING.md).
+never delete/reuse those tags. See [release process](../../architecture/releasing.en.md).

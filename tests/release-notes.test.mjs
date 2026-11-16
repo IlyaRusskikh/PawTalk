@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { checkNotes, notesDigest, verifyReleaseNotes } from '../scripts/check-release-notes.mjs';
 
 const tag = 'client-v0.12.1';
-const text = await readFile(new URL(`../docs/releases/${tag}.md`,import.meta.url),'utf8');
+const text = await readFile(new URL(`../releases/${tag}.md`,import.meta.url),'utf8');
 test('publication-independent bilingual notes preserve previous failed tag history', () => {
   assert.deepEqual(checkNotes(text,{tag,channel:'preview'}),[]);
   assert.deepEqual(checkNotes(text+'\nThe client-v0.12.0 tag failed verification before publication.\n',{tag}),[]);
@@ -43,7 +43,7 @@ test('missing sections, wrong identity/channel and mutable or obsolete links are
 
 test('only exact historical failed drafts are exempt, never selected release candidates', async () => {
   for (const oldTag of ['client-v0.12.0','server-v0.11.0','manager-v0.5.0']) {
-    const old = await readFile(new URL(`../docs/releases/${oldTag}.md`,import.meta.url),'utf8');
+    const old = await readFile(new URL(`../releases/${oldTag}.md`,import.meta.url),'utf8');
     assert.deepEqual(checkNotes(old,{tag:oldTag,historical:true}),[]);
     assert.ok(checkNotes(old+'\nModified\n',{tag:oldTag,historical:true}).length);
     assert.ok(checkNotes(old,{tag:oldTag}).length);

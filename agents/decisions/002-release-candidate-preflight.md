@@ -41,5 +41,5 @@ Changing main, run attempt or relevant signing/build inputs requires a new candi
 Local synthetic signing, YAML tests, actionlint and isolated OCI roundtrip cannot
 prove hosted approvals, production signing, native runner variants or hardware.
 
-See [release process](../../docs/RELEASING.md) and
+See [release process](../../architecture/releasing.en.md) and
 [owner settings/first run](../rules/github.md).

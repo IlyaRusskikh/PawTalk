@@ -1,5 +1,7 @@
 # Agent knowledge index
 
+[Русский](README.ru.md)
+
 Read [../AGENTS.md](../AGENTS.md) first. Load only the row relevant to the task;
 source code and executable contracts outrank stale descriptive documentation.
 
@@ -7,9 +9,9 @@ source code and executable contracts outrank stale descriptive documentation.
 | --- | --- | --- |
 | Locate ownership/dependencies | [Component map](architecture/components.md) | — |
 | Any change, branch, PR | [Development rules](rules/development.md), [test routing](testing/README.md) | [pawtalk-verify](../.agents/skills/pawtalk-verify/SKILL.md) |
-| API, storage, shared core, updater | [Compatibility](../docs/COMPATIBILITY.md), [invariants](architecture/invariants.md) | [pawtalk-compat](../.agents/skills/pawtalk-compat/SKILL.md) |
+| API, storage, shared core, updater | [Compatibility](../docs/server/compatibility.en.md), [invariants](architecture/invariants.md) | [pawtalk-compat](../.agents/skills/pawtalk-compat/SKILL.md) |
 | Auth, crypto, downloads, trust boundaries | [Security](../SECURITY.md), [invariants](architecture/invariants.md) | [pawtalk-security](../.agents/skills/pawtalk-security/SKILL.md) |
-| Release preparation/publication | [Release process](../docs/RELEASING.md), [GitHub setup](rules/github.md) | [pawtalk-release](../.agents/skills/pawtalk-release/SKILL.md) |
+| Release preparation/publication | [Release process](../architecture/releasing.en.md), [GitHub setup](rules/github.md) | [pawtalk-release](../.agents/skills/pawtalk-release/SKILL.md) |
 | Agent/CI/catalog infrastructure | [Decision 001](decisions/001-agent-and-release-infrastructure.md), [official sources](rules/tooling.md) | pawtalk-verify |
 
 Product/operator guides live in [docs/](../docs/README.md). Historical verification

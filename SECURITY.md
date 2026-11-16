@@ -1,55 +1,6 @@
-# Security policy / Политика безопасности
+# Security policy
 
-[Русский](#русский) · [English](#english)
-
-## Русский
-
-### Поддерживаемые версии
-
-PawTalk находится в стадии **публичного предварительного выпуска**, а не стабильного релиза. Версии компонентов независимы. Актуальные опубликованные версии:
-
-| Компонент | Актуальный опубликованный выпуск |
-| --- | --- |
-| Client | [Client](https://ilyarusskikh.github.io/PawTalk/downloads/#client) |
-| Server (постоянные комнаты Linux/Windows) | [Server](https://ilyarusskikh.github.io/PawTalk/downloads/#server) |
-| Manager | [Manager](https://ilyarusskikh.github.io/PawTalk/downloads/#manager) |
-
-Исправления безопасности выпускаются новыми версиями затронутых компонентов.
-Поддерживается последний опубликованный выпуск каждой линии; отдельное исправление
-предыдущих версий **не гарантируется**. Совместимость по API со старым сервером
-не означает его поддержку по безопасности. Обновление Client или Manager
-не заменяет установленный постоянный Server: обновляйте его отдельно.
-
-В текущих исходниках Client и Server используют одно ядро [server/](server/).
-Исправления авторизации, чата и API применяются к обоим режимам; отдельной копии
-ядра и backport-патча в текущей сборке нет. Временные комнаты получают исправления
-через выпуск Client, постоянные — через выпуск Server. Обновление одного компонента
-не обновляет уже установленные бинарники другого.
-
-Опубликованный Client 0.10.1 ещё использует Go Server 0.8.0 с security backport:
-[исторический pin](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/bundled-server.json)
-и [патч](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/build/bundled-server-security.patch).
-Client 0.11.0 уже доставляет общее ядро; исторический Client 0.10.1 не меняется.
-[Сборка и проверки](docs/BUNDLED-SERVER.md), [совместимость](docs/COMPATIBILITY.md).
-
-### Как сообщить об уязвимости
-
-Пожалуйста, **не создавайте публичный Issue с работающим эксплойтом, секретами или подробностями неисправленной уязвимости**.
-
-1. Откройте вкладку **Security** репозитория и проверьте, доступна ли кнопка **Report a vulnerability** (приватное сообщение через GitHub Security Advisories).
-2. Если приватная отправка доступна, используйте её. Укажите затронутые версии, ожидаемое и фактическое поведение, способ безопасно воспроизвести проблему и возможные последствия. Не прикладывайте настоящие пароли, ключи или действующие приглашения.
-3. Если приватная отправка недоступна, не публикуйте детали в Issues. Можно создать обычный Issue **только с просьбой предоставить приватный канал**, без технических подробностей.
-
-Время ответа и срок исправления пока не гарантируются. Исправления публикуются отдельными релизами, без замены старых тегов или бинарников.
-
-### Важные ограничения
-
-- В текущем дереве API 2 E2EE **обязательно** для голоса, текста и вложений. Секрет создаётся клиентом и хранится на устройствах; сервер получает зашифрованные пакеты. Опубликованные API 1 бинарники этим изменением не обновляются. [Модель E2EE](docs/E2EE.md).
-- Уход, кик и бан отзывают серверный доступ, но не стирают уже полученные данные/ключи. Автоматической ротации и forward secrecy нет. Сервер видит метаданные, роли и присутствие; уже выданные LiveKit-токены имеют оговорённое окно повторного использования.
-- Windows-установщик пока не имеет Authenticode-подписи. SHA-256 и подпись Ed25519 манифеста обновлений проверяют другие свойства и не являются подписью издателя Windows. [Обновления](docs/UPDATES.md).
-- Реальные микрофоны, игры/PTT, внешние сети и нагрузка до 30 участников ещё требуют аппаратной приёмки. [План проверки](docs/ACCEPTANCE.md).
-
-## English
+[Русский](SECURITY.ru.md)
 
 ### Supported versions
 
@@ -77,7 +28,7 @@ Published Client 0.10.1 still uses Go Server 0.8.0 with a security backport:
 [historical pin](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/bundled-server.json)
 and [patch](https://github.com/IlyaRusskikh/PawTalk/blob/client-v0.10.1/build/bundled-server-security.patch).
 Client 0.11.0 delivers the shared core; historical Client 0.10.1 is unchanged. See
-[build and verification details](docs/BUNDLED-SERVER.md) and [compatibility](docs/COMPATIBILITY.md).
+[build and verification details](architecture/components.en.md) and [compatibility](docs/server/compatibility.en.md).
 
 ### Reporting a vulnerability
 
@@ -91,7 +42,7 @@ Response times and fix timelines are not guaranteed. Security fixes are shipped 
 
 ### Known limitations
 
-- API 2 in the development tree requires E2EE for voice, text and attachments. Clients create and retain the root; the server stores encrypted packages. This does not update published API 1 binaries. [E2EE model](docs/E2EE.md).
+- API 2 in the development tree requires E2EE for voice, text and attachments. Clients create and retain the root; the server stores encrypted packages. This does not update published API 1 binaries. [E2EE model](architecture/security.en.md).
 - Leaving, kicks and bans revoke server access but cannot erase delivered data or keys. Automatic rotation and forward secrecy are absent. The server sees metadata, roles and presence; issued LiveKit tokens retain a documented reuse window.
-- Windows installers are not yet Authenticode-signed. Published SHA-256 checksums and Ed25519-signed update manifests serve different purposes and do not replace a Windows publisher signature. [Updates](docs/UPDATES.md).
-- Hardware acceptance remains open for physical microphones, game/PTT behavior, external networks, and 30-participant loads. [Acceptance checklist](docs/ACCEPTANCE.md).
+- Windows installers are not yet Authenticode-signed. Published SHA-256 checksums and Ed25519-signed update manifests serve different purposes and do not replace a Windows publisher signature. [Updates](architecture/updates.en.md).
+- Hardware acceptance remains open for physical microphones, game/PTT behavior, external networks, and 30-participant loads. [Acceptance checklist](architecture/verification.en.md).
