@@ -49,7 +49,7 @@ async function plan(component, env = process.env, origin) {
   const tag = `${component}-v${source[component]}`;
   const p = releasePlan(tag, source);
   const channel = channelFor(p.version, env[`PAWTALK_${component.toUpperCase()}_CHANNEL`] || 'preview');
-  const notes = await readFile(path.join(root,`docs/releases/${tag}.md`),'utf8');
+  const notes = await readFile(path.join(root,`releases/${tag}.md`),'utf8');
   assertNotes(notes, {tag, channel});
   return {repository:env.GITHUB_REPOSITORY, sha:origin?.sha ?? env.GITHUB_SHA, run:origin?.run ?? env.GITHUB_RUN_ID,
     attempt:origin?.attempt ?? env.GITHUB_RUN_ATTEMPT, component, version:p.version, channel, tag, notesSha256:notesDigest(notes)};
@@ -104,7 +104,7 @@ export async function createTags(plans, request = api) {
     console.log(`Created ${p.tag} at ${p.sha}; do not retry a partially completed promotion.`);
   }
 }
-export async function publishAssets(p, directory, {request=api,execute=run,notes=path.join(root,`docs/releases/${p.tag}.md`)} = {}) {
+export async function publishAssets(p, directory, {request=api,execute=run,notes=path.join(root,`releases/${p.tag}.md`)} = {}) {
   const text = await readFile(notes,'utf8');
   const title = assertNotes(text,p);
   if (!p.notesSha256 || notesDigest(text) !== p.notesSha256) throw Error('Approved release notes digest mismatch');

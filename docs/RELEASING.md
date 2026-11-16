@@ -8,7 +8,7 @@ notes below do not authorize repeating old publication steps.
 ## Approval sequence / Этапы согласования
 
 1. Prepare a working branch from current main, component versions, CHANGELOG and
-   reviewed bilingual docs/releases/<tag>.md. Infrastructure-only PRs need no product
+   reviewed bilingual releases/<tag>.md. Infrastructure-only PRs need no product
    version bump. Run final checks/public review, push and open PR; hand off CI URL.
    Do not monitor CI without an explicit request. Squash merge requires successful
    current PR CI and separate explicit owner permission.
@@ -204,8 +204,8 @@ drafts are exempt only from the general scan. Pattern checks do not prove all pr
 true; bilingual review remains mandatory. See [recovery](RELEASE-NOTES-RECOVERY.md)
 for separately approved body-only corrections, preserving historical assets.
 
-До push тега подготовьте и проверьте `docs/releases/<tag>.md`, например
-`docs/releases/client-v0.10.1.md`. Это полный текст GitHub Release, а не ссылка
+До push тега подготовьте и проверьте `releases/<tag>.md`, например
+`releases/client-v0.10.1.md`. Это полный текст GitHub Release, а не ссылка
 на PR или автоматически сгенерированный список коммитов. Сравнивайте с предыдущим
 выпуском **того же компонента**; для первого выпуска перечислите его возможности.
 Описывайте результат для пользователя, не внутреннюю историю разработки.
@@ -237,7 +237,7 @@ Workflow проверяет полный файл заметок до сборк
 описание после завершения выпуска. Редактирование описания не меняет теги, бинарники,
 хэши, даты выпуска или stable/preview flags.
 
-Before tagging, review a complete bilingual `docs/releases/<tag>.md`. Lead with the
+Before tagging, review a complete bilingual `releases/<tag>.md`. Lead with the
 component/version and user benefit; group actual additions, fixes and changes since
 the previous release of that component, omitting empty groups. Include upgrade/data/
 downtime and cross-component requirements, accurate limitations, exact downloads,

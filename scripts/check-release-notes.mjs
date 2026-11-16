@@ -81,8 +81,8 @@ async function main() {
   const published = args[0] === '--published';
   const tags = published ? args.slice(1) : args;
   if (published && !tags.length) throw Error('Supply published release tags');
-  const directory = path.resolve(import.meta.dirname, '../docs/releases');
-  const files = tags.length ? tags.map(tag => `${tag}.md`) : (await readdir(directory)).filter(name => name.endsWith('.md'));
+  const directory = path.resolve(import.meta.dirname, '../releases');
+  const files = tags.length ? tags.map(tag => `${tag}.md`) : (await readdir(directory)).filter(name => /^(?:client|server|manager)-v\d+\.\d+\.\d+(?:-[\w.-]+)?\.md$/.test(name));
   let failures = 0;
   for (const file of files) {
     const tag = path.basename(file, '.md');

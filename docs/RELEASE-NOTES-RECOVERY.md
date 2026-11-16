@@ -2,7 +2,7 @@
 
 ## Русский
 
-Подготовлены исправления только текста `docs/releases/client-v0.12.1.md`,
+Подготовлены исправления только текста `releases/client-v0.12.1.md`,
 `server-v0.11.1.md`, `manager-v0.5.1.md`. Удалены RU/EN фразы об ожидании публикации
 и tag CI, включая «Описание подготовлено; публикация и tag CI ещё не выполнены»,
 `Prepared notes; publication/tag verification are pending`,
@@ -30,9 +30,9 @@ GitHub Releases автоматически не синхронизирует и�
    checkout. Они меняют только текст; никаких upload/delete/create или флагов канала:
 
 ```powershell
-gh release edit client-v0.12.1 --repo IlyaRusskikh/PawTalk --notes-file docs/releases/client-v0.12.1.md
-gh release edit server-v0.11.1 --repo IlyaRusskikh/PawTalk --notes-file docs/releases/server-v0.11.1.md
-gh release edit manager-v0.5.1 --repo IlyaRusskikh/PawTalk --notes-file docs/releases/manager-v0.5.1.md
+gh release edit client-v0.12.1 --repo IlyaRusskikh/PawTalk --notes-file releases/client-v0.12.1.md
+gh release edit server-v0.11.1 --repo IlyaRusskikh/PawTalk --notes-file releases/server-v0.11.1.md
+gh release edit manager-v0.5.1 --repo IlyaRusskikh/PawTalk --notes-file releases/manager-v0.5.1.md
 ```
 
 4. После каждой команды проверить exit code; при ошибке остановиться и выяснить

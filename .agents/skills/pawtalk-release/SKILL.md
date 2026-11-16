@@ -10,7 +10,7 @@ metadata:
    [GitHub setup](../../../agents/rules/github.md). Determine the component and
    previous published release using GitHub Releases, not source versions.
 2. In work/{service}-v{version} from current main prepare independent version
-   sources, CHANGELOG and reviewed RU/EN docs/releases/<tag>.md with exact assets,
+   sources, CHANGELOG and reviewed RU/EN releases/<tag>.md with exact assets,
    upgrade requirements and limitations. Follow REL-NOTES-01…06 in RELEASING.md:
    write final public text before PR merge, accurate before and after publication;
    review RU/EN equally. No pending CI/publication statuses or advance success claims.

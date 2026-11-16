@@ -64,7 +64,7 @@ return new Response(value?JSON.stringify(value):'{}',{status:value?200:404});};
   promoted.PAWTALK_CLIENT_CHANNEL='stable';
   await assert.rejects(run('promote-plan'),/Indexed version\/channel\/source contract mismatch|channel differs/);
   promoted.PAWTALK_CLIENT_CHANNEL='preview';
-  const notesFile=path.join(directory,'docs/releases/client-v1.2.3.md');
+  const notesFile=path.join(directory,'releases/client-v1.2.3.md');
   const originalNotes=await readFile(notesFile,'utf8');
   await writeFile(notesFile,originalNotes+'\nAdditional reviewed content.\n');
   await assert.rejects(run('promote-plan'),/Indexed version\/channel\/source contract mismatch/);
@@ -114,7 +114,7 @@ test('real seal/validation rejects missing, corrupted, foreign and re-signed rec
     await writeFile(path.join(directory,'server/VERSION'),'2.3.4');
     await writeFile(path.join(directory,'manager/VERSION'),'3.4.5');
     await writeFile(path.join(directory,'manager/desktop/package.json'),JSON.stringify({version:'3.4.5'}));
-    await writeFile(path.join(directory,'docs/releases/client-v1.2.3.md'),(await readFile(new URL('../docs/releases/client-v0.12.1.md',import.meta.url),'utf8')).replaceAll('0.12.1','1.2.3'));
+    await writeFile(path.join(directory,'releases/client-v1.2.3.md'),(await readFile(new URL('../releases/client-v0.12.1.md',import.meta.url),'utf8')).replaceAll('0.12.1','1.2.3'));
     const keys = generateKeyPairSync('ed25519');
     await writeFile(path.join(directory,'electron/update-keys.json'),JSON.stringify({test:keys.publicKey.export({type:'spki',format:'pem'}).toString()}));
     const env = {...process.env,GITHUB_REPOSITORY:'IlyaRusskikh/PawTalk',GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_REF:'refs/heads/main',GITHUB_SHA:sha,GITHUB_RUN_ID:'123',GITHUB_RUN_ATTEMPT:'1',COMPONENTS:'client',PAWTALK_CLIENT_CHANNEL:'preview',PAWTALK_PRERELEASE:'true',GITHUB_OUTPUT:path.join(directory,'output'),PAWTALK_UPDATE_PRIVATE_KEY:keys.privateKey.export({type:'pkcs8',format:'pem'}).toString()};
@@ -130,7 +130,7 @@ test('real seal/validation rejects missing, corrupted, foreign and re-signed rec
     env.RECEIPTS=JSON.stringify({client:hash(receipt)});
     await cp(path.join(directory,'release/client'),path.join(directory,'candidate/client'),{recursive:true});
     await run('release-candidate',['validate']);
-    const notesFile=path.join(directory,'docs/releases/client-v1.2.3.md');
+    const notesFile=path.join(directory,'releases/client-v1.2.3.md');
     const originalNotes=await readFile(notesFile,'utf8');
     await writeFile(notesFile,originalNotes+'\nPublication pending.\n');
     for (const command of ['plan','tag','publish']) await assert.rejects(run('release-candidate',[command]),/temporary publication\/CI status/);
