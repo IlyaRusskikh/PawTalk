@@ -40,6 +40,9 @@ type memberDevice struct {
 	Primary           bool   `json:"primary"`
 }
 type membershipState struct {
+	AvatarEnvelope  []byte                `json:"avatarEnvelope,omitempty"`
+	AvatarAuthor    string                `json:"avatarAuthor,omitempty"`
+	AvatarRevision  int64                 `json:"avatarRevision"`
 	Capabilities    []string              `json:"capabilities"`
 	ServerID        string                `json:"serverId"`
 	Name            string                `json:"name"`
@@ -78,6 +81,9 @@ func (s *membershipStore) state(ctx context.Context, token string) (membershipSt
 		return result, err
 	}
 	if err = tx.QueryRowContext(ctx, "SELECT server_id,name,COALESCE(e2ee_key_id,''),revision FROM server_state WHERE id=1").Scan(&result.ServerID, &result.Name, &result.KeyID, &result.Revision); err != nil {
+		return result, err
+	}
+	if err = tx.QueryRowContext(ctx, "SELECT envelope,author_profile_id,revision FROM server_avatar WHERE id=1").Scan(&result.AvatarEnvelope, &result.AvatarAuthor, &result.AvatarRevision); err != nil {
 		return result, err
 	}
 	rows, err := tx.QueryContext(ctx, "SELECT channel_id,kind,name,position,protected_kind IS NOT NULL,revision,message_revision,COALESCE((SELECT MAX(message_id) FROM messages m WHERE m.channel_id=channels.channel_id),0) FROM channels ORDER BY position,channel_id")

@@ -270,10 +270,28 @@ class MembershipClient {
       if (this.profileCache.size > 1000) this.profileCache.delete(this.profileCache.keys().next().value);
       return output;
     }));
+    if(result.avatarEnvelope){
+      try{
+        if(typeof result.avatarEnvelope!=='string'||result.avatarEnvelope.length>24000||!hexID(result.avatarAuthor,64))throw failure('INVALID_AVATAR');
+        const packet=JSON.parse(Buffer.from(result.avatarEnvelope,'base64').toString('utf8'));
+        const clear=await cryptoV2.openContent(connection.secret,serverId,'avatar','','server-avatar',result.avatarAuthor,packet);
+        const value=new TextDecoder('utf-8',{fatal:true}).decode(clear);this.validateAvatar(value);result.avatar=value;
+      }catch{/* Unreadable server artwork does not block membership. */}
+    }
     if(connection && result.name !== (connection.displayName ?? connection.config.name)){
       await this.remember({...connection,displayName:result.name});connection.displayName=result.name;
     }
     return result;
+  }
+  validateAvatar(value){
+    if(typeof value!=='string'||value.length>12000||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value))throw failure('INVALID_AVATAR');
+    const image=inspectImage(Buffer.from(value.slice(value.indexOf(',')+1),'base64'));if(!image||image.width!==image.height||image.width>512)throw failure('INVALID_AVATAR');
+  }
+  async serverAvatar(serverId,value,expectedRevision){
+    const connection=this.connections.get(serverId);if(!connection?.config?.capabilities?.includes('server-avatar-v1'))throw failure('UNSUPPORTED_FEATURE');
+    const state=await this.state(serverId);let envelope=null;
+    if(value!==null){this.validateAvatar(value);envelope=await cryptoV2.sealContent(connection.secret,serverId,'avatar','','server-avatar',state.self.effectiveProfileId,new TextEncoder().encode(value));}
+    await this.request(serverId,'/api/v2/server/avatar','PATCH',{envelope,expectedRevision,requestId:requestID()});return this.state(serverId);
   }
   async profile(serverId, nickname, avatar, expectedRevision) {
     const state = await this.state(serverId), owner = state.self.effectiveProfileId;

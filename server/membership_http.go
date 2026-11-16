@@ -29,6 +29,7 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	mux.HandleFunc("GET /api/v2/challenge", api.challenge)
 	mux.HandleFunc("POST /api/v2/session", api.session)
 	mux.HandleFunc("GET /api/v2/state", api.state)
+	mux.HandleFunc("PATCH /api/v2/server/avatar", api.patchServerAvatar)
 	mux.HandleFunc("PATCH /api/v2/server", api.renameServer)
 	mux.HandleFunc("POST /api/v2/activity", api.activity)
 	mux.HandleFunc("POST /api/v2/heartbeat", api.heartbeat)

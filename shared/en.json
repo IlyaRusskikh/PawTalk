@@ -797,5 +797,7 @@
   "Понятно": "Got it",
   "Вложение будет удалено": "Attachment will be removed",
   "Новых сообщений: {0}": "New messages: {0}",
-  "Отошел": "Away"
+  "Отошел": "Away",
+  "Аватар сервера": "Server avatar",
+  "Для этой функции обновите сервер.": "Update the server to use this feature."
 }

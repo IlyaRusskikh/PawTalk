@@ -3,7 +3,7 @@ export interface ServerRecord { serverId: string; address: string; name: string;
 export interface Profile { id: string; nickname: string; revision: number; avatar?: string }
 export interface Channel { id: string; name: string; kind: 'text'|'voice'; protected: boolean; position: number; revision: number; messageRevision: number; lastMessageId: number }
 export interface ServerState {
-  capabilities?:string[]; serverId: string; name: string; revision: number; controlRevision: number;
+  avatar?:string;avatarRevision?:number;capabilities?:string[]; serverId: string; name: string; revision: number; controlRevision: number;
   self: { effectiveProfileId: string; profileId: string; deviceId: string; role: 'member'|'moderator'|'admin'; permissions: string[] };
   profiles: Profile[]; channels: Channel[]; bindings: { source: string; target: string }[];
   members: { profileId: string; online: boolean; away?:boolean; role: string }[];
@@ -13,6 +13,7 @@ export interface ServerState {
 export interface Message { id: number; channelId: string; authorProfileId: string; requestId: string; sentAt: number; editedAt?: number; unreadable?: boolean; content: { text: string; image?: { id: string; mime: string }; reply?:{id:number;author:string;text:string} } }
 export interface MessagePage { messages: Message[]; first: number; last: number; hasOlder: boolean; hasNewer: boolean; unread: number }
 const errors: Record<string, () => string> = {
+  UNSUPPORTED_FEATURE:()=>t('Для этой функции обновите сервер.'),
   SERVER_NAME_CHANGED:()=>t('Название сервера изменилось. Откройте окно переименования заново.'), INVALID_SERVER_NAME:()=>t('Введите название сервера длиной от 1 до 64 символов.'),
   MESSAGE_TOO_LARGE:()=>t('Сообщение слишком длинное.'), PRIMARY_DEVICE_REQUIRED:()=>t('Это действие доступно на основном устройстве.'),
   ADMIN_ROLE_MUST_BE_REMOVED:()=>t('Сначала снимите роль администратора.'), GROUP_CHANGED:()=>t('Состав устройств изменился. Повторите действие.'),

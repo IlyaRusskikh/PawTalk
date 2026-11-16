@@ -79,6 +79,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       if (!record) fail('NOT_A_MEMBER'); return connectRecord(record);
     },
     async state(input) { return client.state(id(input.serverId)); },
+    async 'server.avatar'(input){return client.serverAvatar(id(input.serverId),input.avatar,input.expectedRevision);},
     async 'server.rename'(input) {
       const serverId=id(input.serverId);
       await client.request(serverId,'/api/v2/server','PATCH',{name:string(input.name,256),expectedName:string(input.expectedName,256),requestId:randomID()});
