@@ -3,10 +3,10 @@ export interface ServerRecord { serverId: string; address: string; name: string;
 export interface Profile { id: string; nickname: string; revision: number; avatar?: string }
 export interface Channel { id: string; name: string; kind: 'text'|'voice'; protected: boolean; position: number; revision: number; messageRevision: number; lastMessageId: number }
 export interface ServerState {
-  serverId: string; name: string; revision: number; controlRevision: number;
+  capabilities?:string[]; serverId: string; name: string; revision: number; controlRevision: number;
   self: { effectiveProfileId: string; profileId: string; deviceId: string; role: 'member'|'moderator'|'admin'; permissions: string[] };
   profiles: Profile[]; channels: Channel[]; bindings: { source: string; target: string }[];
-  members: { profileId: string; online: boolean; role: string }[];
+  members: { profileId: string; online: boolean; away?:boolean; role: string }[];
   devices: { id: string; label: string; originalProfileId: string; primary: boolean }[];
   voice: { profileId: string; deviceId: string; channelId: string; identity: string }[];
 }

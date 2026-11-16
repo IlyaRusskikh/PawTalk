@@ -7,7 +7,7 @@ function fail(code) { throw Object.assign(Error(code), { code, local: true }); }
 function string(value, max = 14000) { if (typeof value !== 'string' || value.length > max) fail('INVALID_INPUT'); return value; }
 function id(value, size = 32) { if (typeof value !== 'string' || !new RegExp(`^[0-9a-f]{${size}}$`).test(value)) fail('INVALID_INPUT'); return value; }
 
-function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, getHost, stopHost, setVoiceEndpoint = () => {} }) {
+function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, getIdleSeconds = () => 0, getHost, stopHost, setVoiceEndpoint = () => {} }) {
   const linkAlerts=new Set();
  const statuses = new Map(), connecting = new Map(), knownRecords = new Map(), departed = new Set(), intentionalDepartures = new Set(); let activeVoice, preparedVoice, voiceEpoch=0,voiceBusy=false, stopped = false, timer, lastNotification = 0, departureTask;
   const locked=error=>['SERVER_KEY_CHANGED','SERVER_ID_CHANGED','INVALID_SERVER_IDENTITY','SERVER_BINDING_MISMATCH'].includes(error.code);
@@ -44,7 +44,9 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
           const record = records[index++];
           try {
             await connectRecord(record);
-            await client.request(record.serverId, '/api/v2/heartbeat', 'POST', {}); statuses.set(record.serverId, 'online');
+            await client.request(record.serverId, '/api/v2/heartbeat', 'POST', {});
+            if(client.connections.get(record.serverId)?.config?.capabilities?.includes('activity-v1'))await client.request(record.serverId,'/api/v2/activity','POST',{away:getIdleSeconds()>=300});
+            statuses.set(record.serverId, 'online');
             if (activeVoice?.serverId === record.serverId) {
               try { await client.request(record.serverId, '/api/v2/voice/heartbeat', 'POST', {}); }
               catch(error) { if(['NOT_A_MEMBER','BANNED'].includes(error.code))await reportDeparture(record.serverId,error,record);else{await voiceLeave();send('membership-voice-lost',{serverId:record.serverId});} }
@@ -65,6 +67,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
   }
   const actions = {
     async servers() { const host=getHost?.();const records=await client.registry();for(const record of records)knownRecords.set(record.serverId,record);return records.map(record => ({ ...record, ownedSelfhost:!!(host?.running&&host.serverId===record.serverId),source:host?.running&&host.serverId===record.serverId?'selfhost':'external',status: statuses.get(record.serverId) || 'offline' })); },
+    async activity(){return {away:getIdleSeconds()>=300};},
     async identity() { const identity = await client.identity(); return { profileId: identity.profileId, deviceId: identity.deviceId }; },
     async join(input) {
       const result = await client.join(string(input.address), string(input.nickname, 64), string(input.deviceLabel || t('Компьютер'), 64));

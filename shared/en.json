@@ -796,5 +796,6 @@
   "Доступ к серверу «{0}» заблокирован. Срок не указан сервером.": "Access to “{0}” has been blocked. The server did not specify the duration.",
   "Понятно": "Got it",
   "Вложение будет удалено": "Attachment will be removed",
-  "Новых сообщений: {0}": "New messages: {0}"
+  "Новых сообщений: {0}": "New messages: {0}",
+  "Отошел": "Away"
 }

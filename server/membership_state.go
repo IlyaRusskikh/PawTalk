@@ -29,6 +29,7 @@ type memberBinding struct {
 }
 type memberRosterEntry struct {
 	ProfileID string `json:"profileId"`
+	Away      bool   `json:"away"`
 	Online    bool   `json:"online"`
 	Role      string `json:"role"`
 }
@@ -39,6 +40,7 @@ type memberDevice struct {
 	Primary           bool   `json:"primary"`
 }
 type membershipState struct {
+	Capabilities    []string              `json:"capabilities"`
 	ServerID        string                `json:"serverId"`
 	Name            string                `json:"name"`
 	KeyID           string                `json:"keyId"`
@@ -63,6 +65,7 @@ type memberVoicePresence struct {
 func (s *membershipStore) state(ctx context.Context, token string) (membershipState, error) {
 	result := membershipState{Channels: []memberChannel{}, Members: []memberRosterEntry{}, Profiles: []memberProfile{}, Bindings: []memberBinding{}, Devices: []memberDevice{}}
 	result.Voice = []memberVoicePresence{}
+	result.Capabilities = membershipCapabilities
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return result, err
@@ -142,16 +145,18 @@ func (s *membershipStore) state(ctx context.Context, token string) (membershipSt
 	rows, err = tx.QueryContext(ctx, `SELECT m.profile_id,
         EXISTS(SELECT 1 FROM sessions s JOIN devices d ON d.device_id=s.device_id WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.last_seen_at>? AND
           (d.original_profile_id=m.profile_id OR d.original_profile_id IN(SELECT source_profile_id FROM profile_bindings WHERE target_profile_id=m.profile_id))),
+        NOT EXISTS(SELECT 1 FROM sessions s JOIN devices d ON d.device_id=s.device_id LEFT JOIN session_activity a ON a.session_id=s.session_id WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.last_seen_at>? AND COALESCE(a.away,0)=0 AND
+ (d.original_profile_id=m.profile_id OR d.original_profile_id IN(SELECT source_profile_id FROM profile_bindings WHERE target_profile_id=m.profile_id))),
         COALESCE((SELECT MAX(CASE r.system_kind WHEN 'admin' THEN 3 WHEN 'moderator' THEN 2 ELSE 1 END) FROM effective_profile_roles pr JOIN roles r ON r.role_id=pr.role_id WHERE pr.profile_id=m.profile_id),1)
         FROM memberships m WHERE m.state='active' AND NOT EXISTS(SELECT 1 FROM profile_bindings b WHERE b.source_profile_id=m.profile_id)
-        AND NOT EXISTS(SELECT 1 FROM ban_subjects bs JOIN ban_actions ba ON ba.ban_id=bs.ban_id WHERE bs.profile_id=m.profile_id AND ba.revoked_at IS NULL AND (ba.expires_at IS NULL OR ba.expires_at>?)) ORDER BY m.joined_at,m.profile_id`, s.now().UnixMilli(), s.now().UnixMilli()-45000, s.now().UnixMilli())
+        AND NOT EXISTS(SELECT 1 FROM ban_subjects bs JOIN ban_actions ba ON ba.ban_id=bs.ban_id WHERE bs.profile_id=m.profile_id AND ba.revoked_at IS NULL AND (ba.expires_at IS NULL OR ba.expires_at>?)) ORDER BY m.joined_at,m.profile_id`, s.now().UnixMilli(), s.now().UnixMilli()-45000, s.now().UnixMilli(), s.now().UnixMilli()-45000, s.now().UnixMilli())
 	if err != nil {
 		return result, err
 	}
 	for rows.Next() {
 		var v memberRosterEntry
 		var role int
-		if err = rows.Scan(&v.ProfileID, &v.Online, &role); err != nil {
+		if err = rows.Scan(&v.ProfileID, &v.Online, &v.Away, &role); err != nil {
 			rows.Close()
 			return result, err
 		}
