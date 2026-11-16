@@ -13,7 +13,7 @@ app.whenReady().then(async () => {
   const count = () => run('window.notifications');
   const baseline=async()=>{await until("window.ready&&!!document.querySelector('.member-server-list button')",'server ready');await run("document.querySelector('.member-server-list button').click()");await until("document.querySelectorAll('.member-message').length===100",'history ready');await delay(200);await run('window.setWindowActive(true)');};
   const bottom = async () => {
-    await run(`[...document.querySelectorAll('.member-load')].find(e=>e.textContent==='К новым сообщениям')?.click()`); await delay(250);
+    await run(`document.querySelector('.chat-jump')?.click()`); await delay(250);
     await run(`(()=>{const list=document.querySelector('.member-history');list.scrollTop=list.scrollHeight;list.dispatchEvent(new Event('scroll'));})()`); await delay(100);
   };
   const incoming = async (amount = 1, own = false) => { await run(`window.addMessages(${amount},${own})`); await delay(350); };

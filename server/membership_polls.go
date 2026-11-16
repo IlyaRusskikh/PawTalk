@@ -160,9 +160,6 @@ func (s *membershipStore) pollState(ctx context.Context, token, pollID string) (
 	if !validHexID(pollID, 32) {
 		return result, memberError(400, "INVALID_POLL")
 	}
-	if err := s.closeExpiredPolls(ctx); err != nil {
-		return result, err
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return result, err
@@ -182,6 +179,15 @@ func (s *membershipStore) pollState(ctx context.Context, token, pollID string) (
 	}
 	if err != nil {
 		return result, err
+	}
+	if result.ClosedAt == nil && result.ClosesAt <= s.now().UnixMilli() {
+		if err = s.finishPollTx(ctx, tx, pollID, result.ClosesAt); err != nil {
+			return result, err
+		}
+		if err = tx.Commit(); err != nil {
+			return result, err
+		}
+		return s.pollState(ctx, token, pollID)
 	}
 	visible := result.Intermediate || result.ClosedAt != nil
 	if visible {

@@ -198,8 +198,8 @@ async function test(window) {
   assert.equal(await run("document.querySelector('.room-participants').getBoundingClientRect().height>0"),true,'switching chat keeps voice visible');
   assert.equal(await run("[...document.querySelectorAll('.member-channel.selected')].length"),2,'voice and text selections coexist');
   assert.equal(await run("document.querySelector('.member-link-button')"),null,'link action lives in profile context menu');
-  const audioFlags=()=>run("[...document.querySelectorAll('.member-audio-buttons button[title=\"Микрофон\"],.member-audio-buttons button[title=\"Звук\"]')].map(e=>e.getAttribute('aria-pressed')==='true')");
-  const clickMic=()=>run("document.querySelector('.member-audio-buttons button[title=\"Микрофон\"]').click()");
+  const audioFlags=async()=>{const flags=await run("[...document.querySelectorAll('.member-audio-buttons button[title=\"Микрофон\"],.member-audio-buttons button[title=\"Звук\"]')].map(e=>e.getAttribute('aria-pressed')==='true')");assert.equal(flags.length,4,'bottom and call controls both exist');assert.deepEqual(flags.slice(2),flags.slice(0,2),'duplicated controls stay synchronized');return flags.slice(0,2);};
+  const clickMic=()=>run("document.querySelector('.member-call-controls button[title=\"Микрофон\"]').click()");
   const clickSound=()=>run("document.querySelector('.member-audio-buttons button[title=\"Звук\"]').click()");
   await until("!!document.querySelector('.member-channel-person')",'active voice channel avatar');
   const channelIconCount=count=>until(`document.querySelector('.member-channel-person .member-channel-audio-status').querySelectorAll('svg').length===${count}`,'channel audio status icons: '+count);

@@ -116,6 +116,7 @@ export function ServerApp() {
               if (previous?.revision === channel.messageRevision&&previous.read===read) continue;
               const page = await membership<MessagePage>('messages', { serverId: next.serverId, channelId: channel.id, options: { limit: 1, readAfter: read } });
               if (!mounted.current) return;seen.current.set(key,{revision:channel.messageRevision,last:channel.lastMessageId,read}); setUnread(values => ({ ...values, [key]: page.unread }));
+              const value = current.current, visible = value.selected === next.serverId && (value.chatIDs[next.serverId] || next.channels.find(channel => channel.kind === 'text')?.id) === channel.id && value.focused && viewports.current.get(key)!==false;
               const mentions:Message[]=[];let cursor=read;
               for(;;){
                 const batch=await membership<MessagePage>('messages',{serverId:next.serverId,channelId:channel.id,options:{limit:500,...(cursor?{after:cursor}:{around:1})}});
@@ -124,7 +125,6 @@ export function ServerApp() {
               }
               if(!mounted.current)return;setMentionIDs(values=>({...values,[key]:mentions.map(message=>message.id)}));
               const newMention=previous&&mentions.filter(message=>message.id>previous.last).at(-1);
-              const value = current.current, visible = value.selected === next.serverId && (value.chatIDs[next.serverId] || next.channels.find(channel => channel.kind === 'text')?.id) === channel.id && value.focused && viewports.current.get(key)!==false;
               if (previous && channel.lastMessageId > previous.last && page.unread && !visible && (!notificationsMuted(next.serverId,channel.id)||newMention)) {
                 const added=read>=previous.last?page.unread:(await membership<MessagePage>('messages',{serverId:next.serverId,channelId:channel.id,options:{limit:1,readAfter:previous.last}})).unread;
                 if(!added)continue;

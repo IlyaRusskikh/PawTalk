@@ -834,5 +834,6 @@
   "Опрос уже завершен.": "The poll has already ended.",
   "Опрос недоступен.": "Poll unavailable.",
   "Слишком много активных опросов в этом чате.": "Too many active polls in this chat.",
-  "Опубликованный опрос нельзя редактировать.": "Published polls cannot be edited."
+  "Опубликованный опрос нельзя редактировать.": "Published polls cannot be edited.",
+  "Загрузка…": "Loading…"
 }

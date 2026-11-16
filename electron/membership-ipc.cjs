@@ -153,7 +153,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     async 'link.start'(input) { return links.start(id(input.serverId)); },
     async 'link.propose'(input) { return links.propose(string(input.text), string(input.nickname, 64), string(input.deviceLabel || t('Компьютер'), 64), input.chosen || 'target'); },
     async 'link.pending'() {
-      links.prune();const pending=[];
+      links.prune();for(const linkId of linkAlerts)if(!links.pending.has(linkId))linkAlerts.delete(linkId);const pending=[];
       for(const [linkId,ctx] of links.pending){
         if(ctx.side!=='target')continue;
         try{const status=await links.status(linkId);
