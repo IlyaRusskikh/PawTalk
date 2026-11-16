@@ -1,10 +1,15 @@
+import type {Mention} from '../shared/mentions.mjs';
 import { messageMarkdown, type MarkdownNode } from '../shared/chat-format.mjs';
 import { t } from './i18n';
 
-function render(nodes: MarkdownNode[], preview: boolean): React.ReactNode {
+function render(nodes: MarkdownNode[], preview: boolean, labels: string[]): React.ReactNode {
   return nodes.map((node, i) => {
-    if (typeof node === 'string') return node;
-    const children = node.children ? render(node.children, preview) : node.text;
+    if (typeof node === 'string') {
+      if(!labels.length)return node;
+      const escaped=labels.map(label=>label.split('').map(char=>'\\u'+char.charCodeAt(0).toString(16).padStart(4,'0')).join('')).join('|');
+      return node.split(new RegExp('('+escaped+')','g')).map((part,j)=>labels.includes(part)?<span className="chat-mention" key={i+'-'+j}>{part}</span>:part);
+    }
+    const children = node.children ? render(node.children, preview, labels) : node.text;
     switch (node.type) {
       case 'bold': return <strong key={i}>{children}</strong>;
       case 'italic': return <em key={i}>{children}</em>;
@@ -19,4 +24,4 @@ function render(nodes: MarkdownNode[], preview: boolean): React.ReactNode {
     }
   });
 }
-export function MessageText({ text, preview = false }: { text: string; preview?: boolean }) { return <>{render(messageMarkdown(text), preview)}</>; }
+export function MessageText({ text, preview = false, mentions=[] }: { text: string; preview?: boolean; mentions?:Mention[] }) { return <>{render(messageMarkdown(text), preview,mentions.map(m=>text.slice(m.start,m.end)))}</>; }

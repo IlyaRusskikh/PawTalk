@@ -1,3 +1,4 @@
+const {validMentions}=require('../shared/mentions.mjs');
 const { createHash, createPrivateKey, createPublicKey, randomBytes, sign, verify } = require('node:crypto');
 const { serverURL } = require('./address.cjs');
 const { mediaEndpoint } = require('./media-endpoint.cjs');
@@ -13,6 +14,7 @@ function validatedContent(content) {
   if (!content || typeof content !== 'object' || typeof content.text !== 'string') throw failure('INVALID_MESSAGE');
   if (Buffer.byteLength(content.text) > 4096) throw failure('MESSAGE_TOO_LARGE');
   const result = { text: content.text };
+  if(content.mentions!==undefined)result.mentions=validMentions(content.text,content.mentions);
   if (content.reply !== undefined) {
     const reply = content.reply;
     if (!reply || !Number.isSafeInteger(reply.id) || reply.id <= 0 || typeof reply.author !== 'string' || reply.author.length > 64 || typeof reply.text !== 'string' || Buffer.byteLength(reply.text) > 4096) throw failure('INVALID_MESSAGE');

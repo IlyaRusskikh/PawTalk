@@ -1,3 +1,4 @@
+import type {Mention} from '../shared/mentions.mjs';
 import { t } from './i18n';
 export interface ServerRecord { serverId: string; address: string; name: string; status: 'online'|'offline'|'locked'; source?:'selfhost'|'external';ownedSelfhost?:boolean;leaveError?:string }
 export interface Profile { id: string; nickname: string; revision: number; avatar?: string }
@@ -10,7 +11,7 @@ export interface ServerState {
   devices: { id: string; label: string; originalProfileId: string; primary: boolean }[];
   voice: { profileId: string; deviceId: string; channelId: string; identity: string }[];
 }
-export interface Message { id: number; channelId: string; authorProfileId: string; requestId: string; sentAt: number; editedAt?: number; unreadable?: boolean; content: { text: string; image?: { id: string; mime: string }; reply?:{id:number;author:string;text:string} } }
+export interface Message { id: number; channelId: string; authorProfileId: string; requestId: string; sentAt: number; editedAt?: number; unreadable?: boolean; content: { text: string; mentions?:Mention[]; image?: { id: string; mime: string }; reply?:{id:number;author:string;text:string} } }
 export interface MessagePage { messages: Message[]; first: number; last: number; hasOlder: boolean; hasNewer: boolean; unread: number }
 const errors: Record<string, () => string> = {
   UNSUPPORTED_FEATURE:()=>t('Для этой функции обновите сервер.'),

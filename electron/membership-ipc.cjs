@@ -170,7 +170,8 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     async 'control.accept'(input) { return links.transferAccept(id(input.serverId), string(input.text, 4096)); },
     async 'control.finish'(input) { const value=await links.transferFinish(id(input.serverId), string(input.text, 4096)); send('membership-changed', {}); return value; },
     async notify(input) {
-      const serverId = id(input.serverId), channelId=id(input.channelId); if (!client.connections.has(serverId) || getWindow()?.isFocused() || Date.now() - lastNotification < 3000 || !Notification?.isSupported()) return false;
+      const serverId = id(input.serverId), channelId=id(input.channelId); if (!client.connections.has(serverId) || (!input.mention&&(getWindow()?.isFocused() || Date.now() - lastNotification < 3000)) || !Notification?.isSupported()) return false;
+      if(input.mention!==undefined&&typeof input.mention!=='boolean')fail('INVALID_INPUT');
       const channelName=string(input.channelName,128).replace(/[\u0000-\u001f\u007f-\u009f]/g,' ').trim();
       const author=string(input.authorName||t('Участник'),128).replace(/[\u0000-\u001f\u007f-\u009f]/g,' ').trim();
       if(input.hasImage!==undefined&&typeof input.hasImage!=='boolean')fail('INVALID_INPUT');
