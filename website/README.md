@@ -28,15 +28,4 @@ The capture uses an isolated profile, synthetic microphones and a temporary E2EE
 room populated with demo participants and messages. The invitation dialog is
 closed before capture. Audio settings show fake Chromium audio devices.
 
-After building, regenerate on Windows from the repository root:
-
-```powershell
-.\node_modules\electron\dist\electron.exe scripts/capture-docs.cjs
-```
-
-The script captures home, room creation, language and audio settings, circular
-avatar cropping, notification volume/sound previews and the room chat in Russian and English. It requires the built
-native module and bundled server. It uses a new temporary profile and
-disables mute/deafen shortcuts in that profile to avoid conflicts with another
-running client. It does not change the user's profile. Inspect every screenshot
-before publication for layout, personal data and secrets.
+The screenshots were captured from a legacy 0.7.x preview and must not be presented as current API 2 UI. The old capture script is no longer part of the documented build workflow. A maintainer should run a **published Client binary** in a clean, synthetic profile and manually replace both English/Russian screenshots. Inspect every image for secrets, personal data and layout before publication.

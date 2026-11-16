@@ -4,8 +4,6 @@
 
 **PawTalk** is an open-source voice and text chat application for friends and gaming groups. Create a temporary server right in the Windows client, or run your own always-on server on Windows or Linux with PawTalk Manager. There is no central PawTalk account.
 
-![PawTalk client interface](website/assets/home-en.png)
-
 ## Why PawTalk?
 
 Want a familiar place to talk and share messages, but prefer to control the server yourself? PawTalk combines voice channels, text chats, private invitations and a lightweight self-hosting workflow.
