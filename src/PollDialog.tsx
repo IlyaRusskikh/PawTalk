@@ -1,4 +1,4 @@
-import {useRef, useState} from 'react';
+import {useRef, useState, useId} from 'react';
 import {Modal} from './Modal';
 import {membership} from './membership';
 import {pollDurations, validatePoll} from '../shared/polls.mjs';
@@ -9,6 +9,7 @@ export function PollDialog({serverId, channelId, onClose, onPosted}: {serverId: 
   const [duration, setDuration] = useState(86400), [multiple, setMultiple] = useState(false);
   const [anonymous, setAnonymous] = useState(true), [intermediate, setIntermediate] = useState(true);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const formId=useId();
   const pending = useRef<{signature: string; id: string}|undefined>(undefined);
   const valid = !!question.trim() && Array.from(question).length <= 300 && options.every(option => !!option.trim());
   async function publish() {
@@ -23,16 +24,16 @@ export function PollDialog({serverId, channelId, onClose, onPosted}: {serverId: 
     } catch (error) { setError((error as Error).message); }
     finally { setBusy(false); }
   }
-  return <Modal title={t('Создание опроса')} className="poll-dialog" onClose={() => {if (!busy) onClose();}}>
-    <form onSubmit={event => {event.preventDefault(); void publish();}}>
+  return <Modal title={t('Создание опроса')} className="poll-dialog" footer={<div className="modal-actions"><button type="button" disabled={busy} onClick={onClose}>{t('Отмена')}</button><button form={formId} type="submit" className="primary" disabled={busy || !valid}>{t('Публикация')}</button></div>} onClose={() => {if (!busy) onClose();}}>
+    <form id={formId} onSubmit={event => {event.preventDefault(); void publish();}}>
       <div className="form-fields">
         <label>{t('Вопрос')}<input autoFocus required maxLength={300} disabled={busy} placeholder={t('Какой вопрос вы хотите задать?')} value={question} onChange={event => setQuestion(event.target.value)}/><small className="poll-question-limit">{Array.from(question).length} / 300</small></label>
-        <fieldset disabled={busy} className="poll-options"><legend>{t('Ответы')}</legend>
+        <fieldset disabled={busy} className="poll-options"><legend>{t('Ответы')}</legend><div className="form-fields">
           {options.map((option, index) => <div className="poll-option-field" key={index}>
             <input required maxLength={100} aria-label={t('Ответ {0}', index + 1)} placeholder={t('Введите ответ (можно с эмодзи)')} value={option} onChange={event => setOptions(values => values.map((value, i) => i === index ? event.target.value : value))}/>
             <button type="button" className="icon-button" disabled={options.length <= 2} aria-label={t('Удалить ответ {0}', index + 1)} onClick={() => setOptions(values => values.filter((_, i) => i !== index))}>×</button>
           </div>)}
-          <button type="button" className="poll-add-option" disabled={options.length >= 10} onClick={() => setOptions(values => [...values, ''])}>+ {t('Добавить еще один ответ')}</button>
+          <button type="button" className="poll-add-option" disabled={options.length >= 10} onClick={() => setOptions(values => [...values, ''])}>+ {t('Добавить еще один ответ')}</button></div>
         </fieldset>
         <label>{t('Срок')}<select disabled={busy} value={duration} onChange={event => setDuration(Number(event.target.value))}>{pollDurations.map((value, index) => <option key={value} value={value}>{[t('1 ч.'), t('4 ч.'), t('8 ч.'), t('24 ч.'), t('3 дня'), t('1 неделя'), t('2 недели')][index]}</option>)}</select></label>
         <div className="poll-settings">
@@ -42,7 +43,7 @@ export function PollDialog({serverId, channelId, onClose, onPosted}: {serverId: 
         </div>
       </div>
       {error && <p role="alert" className="text-error">{error}</p>}
-      <div className="modal-actions"><button type="button" disabled={busy} onClick={onClose}>{t('Отмена')}</button><button type="submit" className="primary" disabled={busy || !valid}>{t('Публикация')}</button></div>
+      
     </form>
   </Modal>;
 }

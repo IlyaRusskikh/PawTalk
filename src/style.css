@@ -277,3 +277,5 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:radial-gra
 .avatar-crop-preview:active { cursor: grabbing; }
 .avatar-crop-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .avatar-crop-help { color: var(--muted); font-size: 12px; line-height: 1.5; text-align: center; }
+
+dialog.modal>.modal-footer{flex:none;padding:16px 28px 24px;border-top:1px solid var(--line)}.modal-footer>.modal-actions{margin-top:0}
