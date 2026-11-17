@@ -132,16 +132,16 @@ export function ServerApp() {
                 let message=newMention||page.messages.at(-1);
                 // A burst may end with our own reply. Preview the newest incoming
                 // message rather than attributing the notification to ourselves.
-                if(message&&effectiveProfile(next,message.authorProfileId)===next.self.effectiveProfileId){
+                if(message&&!message.systemKind&&effectiveProfile(next,message.authorProfileId)===next.self.effectiveProfileId){
                   const recent=await membership<MessagePage>('messages',{serverId:next.serverId,channelId:channel.id,options:{limit:100}});
-                  message=[...recent.messages].reverse().find(item=>item.id>previous.last&&effectiveProfile(next,item.authorProfileId)!==next.self.effectiveProfileId);
+                  message=[...recent.messages].reverse().find(item=>item.id>previous.last&&(!!item.systemKind||effectiveProfile(next,item.authorProfileId)!==next.self.effectiveProfileId));
                 }
                 const now=current.current,nowRead=Number(localStorage.getItem(cursorKey(next.serverId,channel.id)))||0;
                 const visibleNow=now.selected===next.serverId&&(now.chatIDs[next.serverId]||next.channels.find(c=>c.kind==='text')?.id)===channel.id&&now.focused&&viewports.current.get(key)!==false;
                 if(visibleNow||nowRead>=channel.lastMessageId)continue;
                 if(message&&!now.deafened)void playSound('message',now.settings);
                 if(message)void membership('notify', { serverId: next.serverId, channelId: channel.id, channelName: channel.name,
-                  authorName:profileFor(next,message.authorProfileId)?.nickname||t('Участник'),
+                  authorName:message.systemKind?t('Система'):profileFor(next,message.authorProfileId)?.nickname||t('Участник'),
                   mention:!!newMention,text:message.unreadable?t('Не удалось расшифровать сообщение.'):message.content.text,hasImage:!!message.content.image });
               }
             }

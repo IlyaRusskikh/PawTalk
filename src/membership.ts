@@ -12,7 +12,7 @@ export interface ServerState {
   devices: { id: string; label: string; originalProfileId: string; primary: boolean }[];
   voice: { profileId: string; deviceId: string; channelId: string; identity: string }[];
 }
-export interface Message { id: number; channelId: string; authorProfileId: string; requestId: string; sentAt: number; editedAt?: number; unreadable?: boolean; content: { text: string; mentions?:Mention[];poll?:PollDefinition&{id:string};pollResult?:boolean; image?: { id: string; mime: string }; reply?:{id:number;author:string;text:string} } }
+export interface Message { systemKind?:'poll-result';locked?:boolean; id: number; channelId: string; authorProfileId: string; requestId: string; sentAt: number; editedAt?: number; unreadable?: boolean; content: { text: string; mentions?:Mention[];poll?:PollDefinition&{id:string};pollResult?:boolean; image?: { id: string; mime: string }; reply?:{id:number;author:string;text:string} } }
 export interface MessagePage { messages: Message[]; first: number; last: number; hasOlder: boolean; hasNewer: boolean; unread: number }
 const errors: Record<string, () => string> = {
   INVALID_POLL:()=>t('Проверьте вопрос и варианты опроса.'), POLL_CLOSED:()=>t('Опрос уже завершен.'), POLL_NOT_FOUND:()=>t('Опрос недоступен.'), POLL_LIMIT:()=>t('Слишком много активных опросов в этом чате.'), POLL_IMMUTABLE:()=>t('Опубликованный опрос нельзя редактировать.'),

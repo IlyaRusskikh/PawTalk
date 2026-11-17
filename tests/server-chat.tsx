@@ -4,7 +4,7 @@ import {ServerChat} from '../src/ServerChat';
 import {changeLanguage,t} from '../src/i18n';
 import {applyTheme,defaultTheme} from '../src/theme';
 import type {Message,ServerState} from '../src/membership';
-import '../src/style.css';import '../src/interface.css';import '../src/membership.css';
+import '../src/membership.css';import '../src/style.css';import '../src/interface.css';
 const test=window as any,sid='1'.repeat(32),cid='2'.repeat(32),other='3'.repeat(32),me='a'.repeat(64),friend='b'.repeat(64);
 await changeLanguage(new URLSearchParams(location.search).get('lang')==='en'?'en':'ru');applyTheme(defaultTheme);
 localStorage.clear();localStorage.setItem('pawtalk.chat.window','25');
@@ -16,6 +16,8 @@ const features=new URLSearchParams(location.search).has('features');
 if(features){state.capabilities=['polls-v1'];state.members=[{profileId:me,online:true,role:'member'},{profileId:friend,online:true,role:'member'}];}
 const pollStates=new Map<string,any>();
 let refresh=()=>{},selected=cid,release:undefined|(()=>void);
+test.addImage=()=>{const id=Math.max(...records.map(m=>m.id))+1;records.push({id,channelId:cid,authorProfileId:me,requestId:id.toString(16).padStart(32,'0'),sentAt:Date.now(),content:{text:'Editable photo',image:{id:'9'.repeat(32),mime:'image/png'}}});state.channels[0].lastMessageId=id;state.channels[0].messageRevision++;refresh();return id;};
+test.renameFriend=()=>{state.profiles.find(p=>p.id===friend)!.nickname='ИльяТестит';refresh();};
 test.sendRequests=[];test.read=[];test.failNext=false;test.hold=false;test.release=()=>release?.();
 test.update=(id:number,text:string)=>{const message=records.find(m=>m.id===id)!;message.content.text=text;message.editedAt=Date.now();state.channels[0].messageRevision++;refresh();};
 test.reply=(id:number,target:number)=>{records.find(m=>m.id===id)!.content.reply={id:target,author:'Old name',text:'Stale snapshot'};state.channels[0].messageRevision++;refresh();};
@@ -23,6 +25,7 @@ test.remove=(id:number)=>{records=records.filter(m=>m.id!==id);state.channels[0]
 test.select=(id:string)=>{selected=id==='other'?other:cid;refresh();};test.cid=cid;
 test.desktop={membership:async(action:string,input:any={})=>{
  await new Promise(resolve=>setTimeout(resolve,15));
+ if(action==='image'){const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#888';ctx.fillRect(0,0,320,180);return{value:canvas.toDataURL('image/png')};}
  if(action==='poll.create'){
   const id=Math.max(...records.map(m=>m.id))+1,poll={id:input.requestId,...input.definition};
   records.push({id,channelId:input.channelId,authorProfileId:me,requestId:input.requestId,sentAt:Date.now(),content:{text:input.question,poll}});
@@ -32,7 +35,7 @@ test.desktop={membership:async(action:string,input:any={})=>{
  if(action==='poll.vote'){const value=pollStates.get(input.pollId);value.own=input.choices;value.total=input.choices.length?1:0;value.counts=[0,1].map(i=>input.choices.includes(i)?1:0);return{value:true};}
  if(action==='poll.close'){
   const value=pollStates.get(input.pollId);value.closedAt=Date.now();const original=records.find(m=>m.id===value.messageId)!;const id=Math.max(...records.map(m=>m.id))+1;
-  records.push({...original,id,requestId:'e'.repeat(32),content:{...original.content,pollResult:true}});state.channels[0].lastMessageId=id;state.channels[0].messageRevision++;refresh();return{value:true};
+  original.locked=true;records.push({...original,id,systemKind:'poll-result',locked:true,requestId:'e'.repeat(32),content:{...original.content,pollResult:true}});state.channels[0].lastMessageId=id;state.channels[0].messageRevision++;refresh();return{value:true};
  }
  if(action==='messages'){
   const o=input.options||{},all=records.filter(m=>m.channelId===input.channelId),limit=o.limit||100;let eligible=all.filter(m=>(!o.before||m.id<o.before)&&(!o.after||m.id>o.after));

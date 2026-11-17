@@ -71,7 +71,7 @@ func (s *membershipStore) messagePage(ctx context.Context, token, channel string
 		limit = len(selection.IDs)
 	}
 	args = append(args, limit)
-	rows, err := tx.QueryContext(ctx, `SELECT m.message_id,m.channel_id,m.author_profile_id,m.author_device_id,m.request_id,m.sent_at,m.edited_at,m.crypto_context_id,m.nonce,m.ciphertext,COALESCE((SELECT attachment_id FROM attachments a WHERE a.message_id=m.message_id),'') FROM messages m WHERE m.channel_id=?`+clause+" ORDER BY m.message_id "+order+" LIMIT ?", args...)
+	rows, err := tx.QueryContext(ctx, `SELECT m.message_id,m.channel_id,m.author_profile_id,m.author_device_id,m.request_id,m.sent_at,m.edited_at,m.crypto_context_id,m.nonce,m.ciphertext,COALESCE((SELECT attachment_id FROM attachments a WHERE a.message_id=m.message_id),''),COALESCE((SELECT kind FROM system_messages sm WHERE sm.message_id=m.message_id),''),EXISTS(SELECT 1 FROM system_messages sm WHERE sm.message_id=m.message_id) OR EXISTS(SELECT 1 FROM polls p WHERE p.message_id=m.message_id AND p.closed_at IS NOT NULL) FROM messages m WHERE m.channel_id=?`+clause+" ORDER BY m.message_id "+order+" LIMIT ?", args...)
 	if err != nil {
 		return page, err
 	}
@@ -79,7 +79,7 @@ func (s *membershipStore) messagePage(ctx context.Context, token, channel string
 		var v memberMessage
 		var nonce, cipher []byte
 		var attachment string
-		if err = rows.Scan(&v.ID, &v.ChannelID, &v.AuthorProfileID, &v.AuthorDeviceID, &v.RequestID, &v.SentAt, &v.EditedAt, &v.KeyID, &nonce, &cipher, &attachment); err != nil {
+		if err = rows.Scan(&v.ID, &v.ChannelID, &v.AuthorProfileID, &v.AuthorDeviceID, &v.RequestID, &v.SentAt, &v.EditedAt, &v.KeyID, &nonce, &cipher, &attachment, &v.SystemKind, &v.Locked); err != nil {
 			rows.Close()
 			return page, err
 		}
@@ -101,7 +101,7 @@ func (s *membershipStore) messagePage(ctx context.Context, token, channel string
 		page.HasOlder = page.First < page.Messages[0].ID
 		page.HasNewer = page.Last > page.Messages[len(page.Messages)-1].ID
 	}
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE channel_id=? AND message_id>? AND author_profile_id<>? AND author_profile_id NOT IN(SELECT source_profile_id FROM profile_bindings WHERE target_profile_id=?)`, channel, readAfter, access.EffectiveProfileID, access.EffectiveProfileID).Scan(&page.Unread); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages m WHERE channel_id=? AND message_id>? AND (EXISTS(SELECT 1 FROM system_messages sm WHERE sm.message_id=m.message_id) OR (author_profile_id<>? AND author_profile_id NOT IN(SELECT source_profile_id FROM profile_bindings WHERE target_profile_id=?)))`, channel, readAfter, access.EffectiveProfileID, access.EffectiveProfileID).Scan(&page.Unread); err != nil {
 		return page, err
 	}
 	return page, tx.Commit()

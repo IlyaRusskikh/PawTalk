@@ -18,6 +18,8 @@ type memberMessageInput struct {
 	AttachmentIDs    []string          `json:"attachmentIds"`
 }
 type memberMessage struct {
+	SystemKind      string   `json:"systemKind,omitempty"`
+	Locked          bool     `json:"locked,omitempty"`
 	ID              int64    `json:"id"`
 	ChannelID       string   `json:"channelId"`
 	AuthorProfileID string   `json:"authorProfileId"`
@@ -196,7 +198,7 @@ func (s *membershipStore) editMessage(ctx context.Context, token string, id int6
 	payload, _ := json.Marshal([]any{id, input})
 	return s.mutate(ctx, token, input.RequestID, "message.edit", "chat.write", payload, func(tx *sql.Tx, access memberAccess) error {
 		var polls int
-		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM polls WHERE message_id=? OR result_message_id=?", id, id).Scan(&polls); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT (SELECT COUNT(*) FROM polls WHERE message_id=? OR result_message_id=?)+(SELECT COUNT(*) FROM system_messages WHERE message_id=?)", id, id, id).Scan(&polls); err != nil {
 			return err
 		}
 		if polls > 0 {
@@ -238,6 +240,13 @@ func (s *membershipStore) deleteMessage(ctx context.Context, token string, id in
 	}
 	payload, _ := json.Marshal(id)
 	return s.mutate(ctx, token, requestID, "message.delete", "chat.write", payload, func(tx *sql.Tx, access memberAccess) error {
+		var locked int
+		if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM system_messages WHERE message_id=?) OR EXISTS(SELECT 1 FROM polls WHERE message_id=? AND (closed_at IS NOT NULL OR closes_at<=?))", id, id, s.now().UnixMilli()).Scan(&locked); err != nil {
+			return err
+		}
+		if locked != 0 {
+			return memberError(409, "POLL_IMMUTABLE")
+		}
 		var original string
 		err := tx.QueryRowContext(ctx, "SELECT author_profile_id FROM messages WHERE message_id=?", id).Scan(&original)
 		if errors.Is(err, sql.ErrNoRows) {

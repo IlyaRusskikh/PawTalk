@@ -101,6 +101,9 @@ func (s *membershipStore) finishPollTx(ctx context.Context, tx *sql.Tx, pollID s
 	if _, err = tx.ExecContext(ctx, "UPDATE polls SET closed_at=?,result_message_id=? WHERE poll_id=? AND closed_at IS NULL", closedAt, resultID, pollID); err != nil {
 		return err
 	}
+	if _, err = tx.ExecContext(ctx, "INSERT INTO system_messages(message_id,kind) VALUES(?,'poll-result')", resultID); err != nil {
+		return err
+	}
 	return s.enforceMemberStorageTx(ctx, tx, resultID)
 }
 func (s *membershipStore) closeExpiredPolls(ctx context.Context) error {

@@ -25,3 +25,10 @@ CREATE TABLE IF NOT EXISTS poll_votes (
  profile_id TEXT NOT NULL REFERENCES profiles(profile_id),
  choices TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(poll_id,profile_id)
 ) STRICT;
+
+-- System attribution is server-owned metadata; encrypted author contexts stay immutable.
+CREATE TABLE IF NOT EXISTS system_messages (
+ message_id INTEGER PRIMARY KEY REFERENCES messages(message_id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind='poll-result')
+) STRICT;
+INSERT OR IGNORE INTO system_messages(message_id,kind) SELECT result_message_id,'poll-result' FROM polls WHERE result_message_id IS NOT NULL;

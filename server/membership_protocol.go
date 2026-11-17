@@ -16,7 +16,7 @@ const membershipSessionSeconds = 43200
 const membershipReservationSeconds = 120
 const membershipLinkSeconds = 600
 
-var membershipCapabilities = []string{"membership-v1", "channels-v1", "device-links-v1", "invites-v1", "mandatory-e2ee-v1", "activity-v1", "attachment-removal-v1", "link-cancel-v1", "server-avatar-v1", "polls-v1"}
+var membershipCapabilities = []string{"membership-v1", "channels-v1", "device-links-v1", "invites-v1", "mandatory-e2ee-v1", "activity-v1", "attachment-removal-v1", "link-cancel-v1", "server-avatar-v1", "polls-v1", "system-poll-results-v1"}
 
 func signatureFrame(fields ...string) ([]byte, error) {
 	var out bytes.Buffer

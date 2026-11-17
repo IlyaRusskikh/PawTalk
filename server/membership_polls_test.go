@@ -145,3 +145,46 @@ func TestPollPublicMultipleResultsEarlyCloseAndRestart(t *testing.T) {
 		t.Fatal("unauthenticated results")
 	}
 }
+
+func TestCompletedPollAndSystemResultCannotBeDeleted(t *testing.T) {
+	s := testMembershipStore(t)
+	ctx := context.Background()
+	owner := bootstrapTestServer(t, s, newTestMemberSigner(1))
+	var channel string
+	s.db.QueryRow("SELECT channel_id FROM channels WHERE kind='text'").Scan(&channel)
+	input := newPollMessage('a', true, true, false)
+	id, err := s.postMessage(ctx, owner.Token, channel, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.closePoll(ctx, owner.Token, input.RequestID, strings.Repeat("c", 32)); err != nil {
+		t.Fatal(err)
+	}
+	page, err := s.messagePage(ctx, owner.Token, channel, 100, 0, 0, 0)
+	if err != nil || len(page.Messages) != 2 {
+		t.Fatal(err)
+	}
+	result := page.Messages[1]
+	if !page.Messages[0].Locked || !result.Locked || result.SystemKind != "poll-result" || page.Unread != 1 {
+		t.Fatal("missing server-owned system attribution", page)
+	}
+	for i, message := range []int64{id, result.ID} {
+		if err = s.deleteMessage(ctx, owner.Token, message, strings.Repeat(string(rune('d'+i)), 32)); err == nil {
+			t.Fatal("deleted completed poll/result", message)
+		}
+	}
+	if err = s.editMessage(ctx, owner.Token, result.ID, testMessage('f')); err == nil {
+		t.Fatal("edited system result")
+	}
+	// Retention may remove the original; the surviving result stays system-owned.
+	if _, err = s.db.Exec("DELETE FROM messages WHERE message_id=?", id); err != nil {
+		t.Fatal(err)
+	}
+	page, err = s.messagePage(ctx, owner.Token, channel, 100, 0, 0, 0)
+	if err != nil || len(page.Messages) != 1 || page.Messages[0].SystemKind != "poll-result" {
+		t.Fatal("system origin lost with original", err)
+	}
+	if err = s.deleteMessage(ctx, owner.Token, result.ID, strings.Repeat("f", 32)); err == nil {
+		t.Fatal("deleted orphaned system result")
+	}
+}

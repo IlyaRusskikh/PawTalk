@@ -335,6 +335,7 @@ class MembershipClient {
     const connection = this.connections.get(serverId);
     page.messages = await Promise.all(page.messages.map(async message => {
       if (!Number.isSafeInteger(message.id) || message.id <= 0 || message.channelId !== channelId || !hexID(message.authorProfileId, 64) || !hexID(message.requestId, 32)) throw failure('INVALID_API_RESPONSE');
+      if((message.locked!==undefined&&typeof message.locked!=='boolean')||(message.systemKind!==undefined&&message.systemKind!==''&&message.systemKind!=='poll-result'))throw failure('INVALID_API_RESPONSE');
       try {
         const clear = await cryptoV2.openContent(connection.secret, serverId, 'chat', channelId, message.requestId, message.authorProfileId, { version: 2, keyId: message.keyId, nonce: message.nonce, ciphertext: message.ciphertext });
         const content = validatedContent(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(clear)));

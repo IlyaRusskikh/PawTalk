@@ -7,7 +7,7 @@ interface PollState {
   multiple: boolean; anonymous: boolean; intermediate: boolean;
   counts: number[]; total: number; own: number[]; voters?: string[][];
 }
-export function PollCard({message, state, onJump}: {message: Message; state: ServerState; onJump(id: number): void}) {
+export function PollCard({message, state, onJump, onClosed}: {message: Message; state: ServerState; onJump(id: number): void;onClosed?():void}) {
   const poll = message.content.poll!;
   const [status, setStatus] = useState<PollState>(), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const inFlight = useRef(false), generation = useRef(0), sequence = useRef(0);
@@ -27,6 +27,7 @@ export function PollCard({message, state, onJump}: {message: Message; state: Ser
     return () => {generation.current++; clearInterval(timer);};
   }, [refresh]);
   const closed = status?.closedAt != null;
+  useEffect(()=>{if(closed)onClosed?.();},[closed]);
   const countsVisible = status && status.counts.length === poll.options.length;
   const author = effectiveProfile(state, message.authorProfileId) === state.self.effectiveProfileId;
   async function act(action: 'poll.vote' | 'poll.close', choices?: number[]) {
