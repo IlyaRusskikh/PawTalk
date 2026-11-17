@@ -60,6 +60,7 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	mux.HandleFunc("POST /api/v2/channel-order", api.reorderChannels)
 	mux.HandleFunc("PATCH /api/v2/channels/{id}", api.patchChannel)
 	mux.HandleFunc("DELETE /api/v2/channels/{id}", api.deleteChannel)
+	mux.HandleFunc("GET /api/v2/channels/{id}/events", api.chatEvents)
 	mux.HandleFunc("GET /api/v2/channels/{id}/messages", api.messages)
 	mux.HandleFunc("POST /api/v2/channels/{id}/messages", api.postMessage)
 	mux.HandleFunc("PATCH /api/v2/messages/{id}", api.editMessage)
@@ -77,7 +78,15 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		mux.ServeHTTP(w, r)
+		if r.Method != "GET" && chatMutation(r.URL.Path) {
+			response := &eventResponse{ResponseWriter: w}
+			mux.ServeHTTP(response, r)
+			if response.status >= 200 && response.status < 300 {
+				store.events.notify()
+			}
+		} else {
+			mux.ServeHTTP(w, r)
+		}
 	})
 }
 

@@ -9,6 +9,7 @@ function id(value, size = 32) { if (typeof value !== 'string' || !new RegExp(`^[
 
 function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, getIdleSeconds = () => 0, getHost, stopHost, setVoiceEndpoint = () => {} }) {
   const linkAlerts=new Set();
+  const live=new (require('./membership-live.cjs').MembershipLive)(client,send);
  const statuses = new Map(), connecting = new Map(), knownRecords = new Map(), departed = new Set(), intentionalDepartures = new Set(); let activeVoice, preparedVoice, voiceEpoch=0,voiceBusy=false, stopped = false, timer, lastNotification = 0, departureTask;
   const locked=error=>['SERVER_KEY_CHANGED','SERVER_ID_CHANGED','INVALID_SERVER_IDENTITY','SERVER_BINDING_MISMATCH'].includes(error.code);
   async function reportDeparture(serverId,error,record=knownRecords.get(serverId)){
@@ -95,6 +96,8 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     async 'poll.state'(input){return client.request(id(input.serverId),'/api/v2/polls/'+id(input.pollId));},
     async 'poll.vote'(input){if(!Array.isArray(input.choices)||input.choices.length>10||input.choices.some(i=>!Number.isInteger(i)||i<0||i>9))fail('INVALID_INPUT');return client.request(id(input.serverId),'/api/v2/polls/'+id(input.pollId)+'/vote','PUT',{choices:input.choices,requestId:id(input.requestId)});},
     async 'poll.close'(input){return client.request(id(input.serverId),'/api/v2/polls/'+id(input.pollId)+'/close','POST',{requestId:id(input.requestId)});},
+    async 'chat.watch'(input){return live.watch(id(input.serverId),id(input.channelId),id(input.subscriptionId));},
+    async 'chat.unwatch'(input){return live.unwatch(id(input.subscriptionId));},
     async messages(input) { return client.messages(id(input.serverId), id(input.channelId), input.options || {}); },
     async send(input) { return client.send(id(input.serverId), id(input.channelId), input.content, input.original, input.requestId===undefined?undefined:id(input.requestId)); },
     async upload(input) {
@@ -200,7 +203,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       return { error: { code } };
     }
   });
-  return { start() { void background(); }, stop() { stopped = true; clearTimeout(timer); void voiceLeave(); }, suspend() { void voiceLeave(); },
+  return { start() { void background(); }, stop() { stopped = true; live.stop(); clearTimeout(timer); void voiceLeave(); }, suspend() { void voiceLeave(); },
     async serverEnded(serverId) { intentionalDepartures.add(serverId);knownRecords.delete(serverId);if(activeVoice?.serverId===serverId||preparedVoice?.serverId===serverId){await voiceLeave();send('membership-voice-lost',{serverId});} await client.forget(serverId);statuses.delete(serverId);send('membership-changed',{serverId}); },statuses };
 }
 module.exports = { registerMembershipIPC };

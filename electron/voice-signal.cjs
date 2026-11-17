@@ -8,7 +8,8 @@ const tls = require('node:tls');
 const { isIP } = require('node:net');
 const { randomBytes, createHash } = require('node:crypto');
 class VoiceSignal {
-  async open(address, fingerprint) {
+  async open(address, fingerprint, {eventPath, eventToken} = {}) {
+    if(eventPath!==undefined&&(!/^\/api\/v2\/channels\/[a-f0-9]{32}\/events$/.test(eventPath)||typeof eventToken!=='string'||! /^[\w-]{43}$/.test(eventToken)))throw Error('Invalid event endpoint');
     this.close();
     const remote = new URL(address);
     if (remote.protocol !== 'wss:' || remote.username || remote.password || remote.search || remote.hash || (fingerprint && !/^[a-f0-9]{64}$/.test(fingerprint))) throw Error('Invalid media endpoint');
@@ -31,9 +32,10 @@ class VoiceSignal {
     function upstream(request, response, socket, head) {
       if (!request.url.startsWith(capability + '/') || pending.size >= 16 || request.headers.host !== `127.0.0.1:${server.address()?.port}`) { response?.writeHead(404).end(); socket?.destroy(); return; }
       const suffix = request.url.slice(capability.length);
-      if (!/^\/rtc(?:\/|\?)/.test(suffix) || suffix.includes('\\') || suffix.length > 16384) { response?.writeHead(404).end(); socket?.destroy(); return; }
+      if ((eventPath ? !socket || suffix !== eventPath : !/^\/rtc(?:\/|\?)/.test(suffix)) || suffix.includes('\\') || suffix.length > 16384) { response?.writeHead(404).end(); socket?.destroy(); return; }
       const headers = { ...request.headers, host: remote.host };
       delete headers.cookie; delete headers['proxy-authorization'];
+      if(eventPath)headers.authorization='Bearer '+eventToken;
       const upstream = https.request({ hostname, port: Number(remote.port) || 443, path: remote.pathname.replace(/\/$/, '') + suffix, method: request.method, headers, agent });
       pending.add(upstream); upstream.once('close', () => pending.delete(upstream));
       upstream.on('error', () => { if (response && !response.headersSent) response.writeHead(502).end(); else response?.destroy(); socket?.destroy(); });
@@ -42,9 +44,16 @@ class VoiceSignal {
         upstream.on('upgrade', (incoming, peer, upstreamHead) => {
           peer.setTimeout(0); socket.setTimeout(0);
           socket.write(`HTTP/1.1 ${incoming.statusCode} ${incoming.statusMessage}\r\n` + incoming.rawHeaders.reduce((lines, value, index) => index % 2 ? lines + value + '\r\n' : lines + value + ': ', '') + '\r\n');
-          if (head?.length) peer.write(head); if (upstreamHead.length) socket.write(upstreamHead);
+          if (head?.length) peer.write(head);
+          if(eventPath){
+            // This purpose only accepts tiny, unfragmented server invalidations
+            // and control frames; reject oversized declarations before buffering.
+            let buffered=Buffer.alloc(0);
+            const receive=chunk=>{if(chunk.length>4096){peer.destroy();socket.destroy();return;}buffered=Buffer.concat([buffered,chunk]);while(buffered.length>=2){const opcode=buffered[0]&15,length=buffered[1];if((buffered[0]&240)!==128||length>125||![1,8,9,10].includes(opcode)){peer.destroy();socket.destroy();return;}if(buffered.length<length+2)return;socket.write(buffered.subarray(0,length+2));buffered=buffered.subarray(length+2);}};
+            peer.on('data',receive);if(upstreamHead.length)receive(upstreamHead);
+          }else{if(upstreamHead.length)socket.write(upstreamHead);peer.pipe(socket);}
           peer.on('error', () => socket.destroy()); socket.on('error', () => peer.destroy());
-          peer.once('close', () => socket.destroy()); socket.once('close', () => peer.destroy()); socket.pipe(peer).pipe(socket);
+          peer.once('close', () => socket.destroy()); socket.once('close', () => peer.destroy()); socket.pipe(peer);
         });
         upstream.on('response', incoming => { incoming.resume(); socket.destroy(); }); upstream.end();
       } else {

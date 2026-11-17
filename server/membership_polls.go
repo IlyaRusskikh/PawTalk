@@ -140,7 +140,10 @@ func (s *membershipStore) closeExpiredPolls(ctx context.Context) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err == nil && len(pending) > 0 {
+		s.events.notify()
+	}
+	return err
 }
 
 // runPollClock publishes encrypted, pre-authorized replies without any client online.

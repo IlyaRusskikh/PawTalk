@@ -28,6 +28,7 @@ var membershipFeaturesSchema string
 const membershipSchemaVersion = 2
 
 type membershipStore struct {
+	events   chatEvents
 	db       *sql.DB
 	now      func() time.Time
 	maxBytes int64

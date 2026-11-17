@@ -114,6 +114,12 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   }
   async function navigate(kind:LoadKind,target?:number){if(navigation.current)return;navigation.current=true;try{if(kind!=='latest')follow.current=false;await load(kind,target);}finally{navigation.current=false;}}
   useEffect(()=>{const generation=++epoch.current;void load('initial');return()=>{if(epoch.current===generation)epoch.current++;clearTimeout(highlightTimer.current);};},[key]);
+  useEffect(()=>{const subscriptionId=crypto.randomUUID().replaceAll('-','');let cancelled=false,pending=false,dirty=false;
+    const sync=async()=>{if(pending){dirty=true;return;}pending=true;do{dirty=false;await load('sync');}while(dirty&&!cancelled);pending=false;};
+    const off=window.desktop?.onMembershipChatChanged?.(event=>{if(event.serverId===serverId&&event.channelId===channelId)void sync();});
+    if(off)void membership('chat.watch',{serverId,channelId,subscriptionId}).catch(()=>{});
+    return()=>{cancelled=true;off?.();if(off)void membership('chat.unwatch',{subscriptionId}).catch(()=>{});};
+  },[key]);
   useEffect(()=>{if(ready)void load('sync');},[channel.messageRevision,ready]);
   useEffect(()=>{if(ready)void navigate(follow.current?'latest':'around',lastAnchor.current?.id||rows.current[0]?.id);},[limit]);
   useEffect(()=>{if(!failure)return;const timer=setInterval(()=>void load('sync'),3500);return()=>clearInterval(timer);},[failure]);

@@ -18,6 +18,6 @@ The Server and Manager each have their own release tag even though the Manager p
 
 ## Development feature capabilities
 
-The source retains API/data schema 2 and adds optional activity-v1, attachment-removal-v1, link-cancel-v1, server-avatar-v1 and polls-v1. Upgrade Server first. Without capabilities, basic chat/voice remain available; avatar/poll creation is hidden and unsupported attachment removal/link cancellation asks for a Server update. Older Clients ignore extra state fields and display a poll as question text without voting controls. Notification mutes and the jump button are local Client features. Manager API and release contracts are unchanged.
+The source retains API/data schema 2 and adds optional activity-v1, attachment-removal-v1, link-cancel-v1, server-avatar-v1, polls-v1, system-poll-results-v1 and chat-events-v1. Upgrade Server first. Without capabilities, basic chat/voice remain available; avatar/poll creation is hidden and unsupported attachment removal/link cancellation asks for a Server update. Older Clients ignore extra state fields and display a poll as question text without voting controls. Notification mutes and the jump button are local Client features. Active chats use an authenticated WebSocket when chat-events-v1 is advertised; older Servers keep polling. Manager API and release contracts are unchanged.
 
 Existing API 2 databases gain additive tables without rewriting identities or legacy tables; this is not API 1 migration. See [implementation contracts](../../architecture/chat-features.en.md).

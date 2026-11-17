@@ -11,6 +11,7 @@ function listen(channel, callback) {
 }
 contextBridge.exposeInMainWorld('desktop', {
   membership: (action,input) => ipcRenderer.invoke('membership',action,input),
+  onMembershipChatChanged: callback=>listen('membership-chat-changed',callback),
   onMembershipChanged: callback=>listen('membership-changed',callback),
   onMembershipVoiceLost: callback=>listen('membership-voice-lost',callback),
   onMembershipOpenChannel: callback=>listen('membership-open-channel',callback),

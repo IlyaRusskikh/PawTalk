@@ -10,6 +10,7 @@ interface HostCheckResult {
 interface Window {
   desktop?: {
     membership?(action:string,input?:Record<string,unknown>):Promise<{value?:unknown;error?:{code:string}}>;
+    onMembershipChatChanged?(callback:(event:{serverId:string;channelId:string})=>void):()=>void;
     onMembershipChanged?(callback:(event:{serverId?:string;leaveError?:string;departure?:{serverId:string;name:string;kind:'kick'|'ban';expiresAt?:number|null}})=>void):()=>void;
     onMembershipVoiceLost?(callback:(event:{serverId:string})=>void):()=>void;
     onMembershipOpenChannel?(callback:(event:{serverId:string;channelId:string})=>void):()=>void;
