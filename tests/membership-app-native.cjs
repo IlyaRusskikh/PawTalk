@@ -6,6 +6,8 @@ app.setPath('userData', path.join(process.env.PAWTALK_APP_TEST_DIR, 'profile'));
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 delete process.env.PAWTALK_DEV_URL;
+const NativeWebSocket=global.WebSocket,chatSockets=[];
+global.WebSocket=class extends NativeWebSocket{constructor(...args){super(...args);chatSockets.push(this);}};
 let testWindow;
 app.on('browser-window-created', (_event, window) => {
   if (testWindow) return; testWindow = window;
@@ -64,6 +66,17 @@ async function test(window) {
   const savedArtwork=await run(`window.desktop.membership('server.avatar',{serverId:${JSON.stringify(fixture.serverId)},avatar:${JSON.stringify(artwork)},expectedRevision:${artState.value.avatarRevision}})`);
   assert.equal(savedArtwork.error,undefined,'realistic encrypted WebP avatar passes the artwork limit');
   assert.equal(savedArtwork.value.avatar,artwork,'shared avatar decrypts after real IPC/Go round trip');
+  await run("window.__chatEvents=[];window.desktop.onMembershipChatChanged(e=>window.__chatEvents.push(e));true;");
+  await until("window.__chatEvents.some(e=>e.serverId==='"+fixture.serverId+"')",'actual pinned chat WebSocket connects');
+  await run("window.__chatEvents=[]");
+  const liveState=await run(`window.desktop.membership('state',{serverId:${JSON.stringify(fixture.serverId)}})`),liveChannel=liveState.value.channels.find(c=>c.kind==='text').id;
+  const liveStart=Date.now();await run(`window.desktop.membership('send',{serverId:${JSON.stringify(fixture.serverId)},channelId:${JSON.stringify(liveChannel)},content:{text:'Synthetic WebSocket arrival'}})`);
+  await until("window.__chatEvents.length>0&&document.querySelector('.member-history').innerText.includes('Synthetic WebSocket arrival')",'WebSocket delivers new message');assert.ok(Date.now()-liveStart<2500,'active chat delivery avoids the 3.5 second polling interval');
+  console.log('PASS active chat WebSocket arrival: '+(Date.now()-liveStart)+' ms');
+  assert.ok(chatSockets.length>0);chatSockets.at(-1).close();await run('window.__chatEvents=[]');
+  await run(`window.desktop.membership('send',{serverId:${JSON.stringify(fixture.serverId)},channelId:${JSON.stringify(liveChannel)},content:{text:'Synthetic WebSocket reconnect catchup'}})`);
+  await until("window.__chatEvents.length>0&&document.querySelector('.member-history').innerText.includes('Synthetic WebSocket reconnect catchup')",'reconnected WebSocket catches missed messages');
+  console.log('PASS active chat reconnect and missed-message catchup');
   await set('.member-composer textarea', '**Synthetic encrypted message**');
   await run("document.querySelector('.member-composer').requestSubmit()");
   await until("document.querySelector('.member-history').innerText.includes('Synthetic encrypted message')", 'encrypted message roundtrip');
@@ -208,6 +221,9 @@ async function test(window) {
   const clickSound=()=>run("document.querySelector('.member-audio-buttons button[title=\"Звук\"]').click()");
   await until("!!document.querySelector('.member-channel-person')",'active voice channel avatar');
   const channelIconCount=count=>until(`document.querySelector('.member-channel-person .member-channel-audio-status').querySelectorAll('svg').length===${count}`,'channel audio status icons: '+count);
+  await run("document.querySelector('.room-divider').dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}))");
+  await new Promise(resolve=>setTimeout(resolve,150));
+  const spacing=await run("(()=>{const pane=document.querySelector('.room-participants').getBoundingClientRect(),avatar=document.querySelector('.room-participants .person-visual').getBoundingClientRect(),buttons=document.querySelector('.member-call-controls').getBoundingClientRect();return {above:avatar.top-pane.top,below:buttons.top-avatar.bottom}})()");assert.ok(Math.abs(spacing.above-spacing.below)<2,'equal gaps above avatars and below avatars: '+JSON.stringify(spacing));
   assert.deepEqual(await audioFlags(),[false,false]);
   assert.equal(await run("(()=>{const call=document.querySelector('.member-call-controls').getBoundingClientRect(),pane=document.querySelector('.room-participants').getBoundingClientRect(),mic=document.querySelector('.member-call-controls button[title=\"Микрофон\"]').getBoundingClientRect();return Math.abs(call.left+call.width/2-pane.left-pane.width/2)<1&&mic.width===40&&mic.height===40&&!document.querySelector('.member-call-controls .person-network')})()"),true,'old call controls are centered, full-size and separate from user panel');
   await channelIconCount(0);

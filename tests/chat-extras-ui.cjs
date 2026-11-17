@@ -23,6 +23,7 @@ app.whenReady().then(async()=>{
  assert.equal(await run('window.sendRequests[0].content.mentions[0].profileId'),'b'.repeat(64));
  await until("document.querySelector('.chat-attach')?.disabled===false",'send finished');
  await run("window.renameFriend()");await set('.member-composer textarea','@Илья');await until("document.querySelector('.mention-options')?.textContent.includes('ИльяТестит')",'Cyrillic autocomplete');
+ assert.equal(await run("document.querySelectorAll('.mention-options button .avatar').length===document.querySelectorAll('.mention-options button').length"),true,'autocomplete displays avatars');
  await run("document.querySelector('.mention-options button').click()");await run("document.querySelector('.member-composer').requestSubmit()");
  await until("[...document.querySelectorAll('.chat-mention')].some(e=>e.textContent==='@ИльяТестит')",'Cyrillic mention sent');
  await until("document.querySelector('.chat-attach')?.disabled===false",'mention send settled');
@@ -49,6 +50,14 @@ app.whenReady().then(async()=>{
  assert.equal(await run("document.querySelector('.poll-result').closest('[data-message-row]').querySelector('.chat-meta strong').textContent"),language==='en'?'System':'Система');
  assert.equal(await run("!!document.querySelector('.poll-result').closest('[data-message-row]').querySelector('.member-message-actions')"),false,'system result has no user toolbar');
  assert.equal(await run("!!document.querySelector('.poll-card').closest('[data-message-row]').querySelector("+JSON.stringify('button[title="'+(language==='en'?'Delete message':'Удалить сообщение')+'"]')+")"),false,'completed original has no delete action');
+ await set('.member-composer textarea','Drag ');
+ await run("(()=>{const d=new DataTransfer();d.setData('application/x-pawtalk-member',JSON.stringify({serverId:'1'.repeat(32),profileId:'b'.repeat(64)}));document.querySelector('.member-chat').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:d}));})()");
+ assert.equal(await run("document.querySelector('.member-composer textarea').value.includes('@ИльяТестит')"),true,'roster identity drop inserts nickname');
+ await run("document.querySelector('.member-composer').requestSubmit()");await until("window.sendRequests.at(-1).content.mentions?.[0]?.profileId==='b'.repeat(64)",'dragged mention keeps identity');await until("document.querySelector('.chat-attach')?.disabled===false",'drop send settled');
+ const publicID=await run('window.showVoters()');await until("!!document.querySelector('[data-message-row=\""+publicID+"\"] .poll-voters .avatar-strip-more')",'public voter overflow');
+ await wait(100);await run("document.querySelector('[data-message-row=\""+publicID+"\"] .avatar-strip-more').scrollIntoView({block:'center'})");win.webContents.sendInputEvent({type:'mouseMove',x:5,y:5});await wait(50);
+ const more=await run("(()=>{const r=document.querySelector('[data-message-row=\""+publicID+"\"] .avatar-strip-more').getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})()");win.webContents.sendInputEvent({type:'mouseMove',...more});await until("document.querySelectorAll('.avatar-strip-popover .avatar').length===24",'all voter avatars in overflow popover');
+ await run('window.openAvatar()');await until("!!document.querySelector('.avatar-crop-safe')",'square crop guide');assert.equal(await run("getComputedStyle(document.querySelector('.avatar-crop-preview')).borderRadius"),'0px');assert.equal(await run("getComputedStyle(document.querySelector('.avatar-crop-safe')).borderTopStyle"),'dashed');await wait(150);await fs.writeFile(path.join(os.tmpdir(),'pawtalk-square-crop-'+language+'.png'),(await win.webContents.capturePage()).toPNG());await run("document.querySelector('.avatar-editor .modal-heading button').click()");
  const imageID=await run('window.addImage()');await until("!!document.querySelector('[data-message-row=\""+imageID+"\"] .chat-image img')",'photo loaded');
  await run("document.querySelector("+JSON.stringify('[data-message-row="'+imageID+'"] button[title="'+(language==='en'?'Edit':'Редактировать')+'"]')+").click()");await until("!!document.querySelector('.chat-image-remove')",'edit photo trash');
  win.webContents.sendInputEvent({type:'mouseMove',x:5,y:5});await wait(50);

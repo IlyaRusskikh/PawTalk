@@ -1,3 +1,4 @@
+import {AvatarEditor} from '../src/AvatarEditor';
 import {useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ServerChat} from '../src/ServerChat';
@@ -55,5 +56,7 @@ test.desktop={membership:async(action:string,input:any={})=>{
  if(action==='copy'){test.copied=input.text;return{value:true};}
  return{value:true};
 }};
-function App(){const[,render]=useState(0);refresh=()=>render(n=>n+1);const channel=state.channels.find(c=>c.id===selected)!;return <ServerChat key={selected} state={{...state}} channel={{...channel}} focused onRead={id=>test.read.push(id)} onError={error=>{test.error=error;}}/>;}
+test.showVoters=()=>{const id=Math.max(...records.map(m=>m.id))+1,poll={id:'d'.repeat(32),duration:3600,anonymous:false,intermediate:true,multiple:false,options:['Public answer','Other']};const voters=Array.from({length:24},(_,i)=>(i+1).toString(16).padStart(64,'0'));for(const [i,id] of voters.entries())state.profiles.push({id,nickname:'Voter '+(i+1),revision:1});pollStates.set(poll.id,{id:poll.id,messageId:id,closesAt:Date.now()+3600000,closedAt:null,multiple:false,anonymous:false,intermediate:true,counts:[24,0],total:24,own:[],voters:[voters,[]]});records.push({id,channelId:cid,authorProfileId:friend,requestId:'d'.repeat(32),sentAt:Date.now(),content:{text:'Public poll',poll}});state.channels[0].lastMessageId=id;state.channels[0].messageRevision++;refresh();return id;};
+let openAvatar:(file:File)=>void;test.openAvatar=async()=>{const canvas=document.createElement('canvas');canvas.width=400;canvas.height=200;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#649';ctx.fillRect(0,0,400,200);canvas.toBlob(blob=>openAvatar(new File([blob!],'test.png',{type:'image/png'})));};
+function App(){const[avatar,setAvatar]=useState<File>();openAvatar=setAvatar;const[,render]=useState(0);refresh=()=>render(n=>n+1);const channel=state.channels.find(c=>c.id===selected)!;return <><ServerChat key={selected} state={{...state}} channel={{...channel}} focused onRead={id=>test.read.push(id)} onError={error=>{test.error=error;}}/>{avatar&&<AvatarEditor file={avatar} onClose={()=>setAvatar(undefined)} onSave={()=>true}/>}</>;}
 createRoot(document.getElementById('root')!).render(<App/>);
