@@ -40,3 +40,5 @@ The published API 2 family is incompatible with API 1; there is **no automatic m
 PawTalk uses [AGPL-3.0-only](LICENSE); see [third-party notices](THIRD_PARTY_NOTICES.md). [Report issues](https://github.com/IlyaRusskikh/PawTalk/issues/new/choose) without invitations, secrets or private network reports. [Security disclosure](SECURITY.md).
 
 Development source also includes channel notification mutes, identity-bound mentions, automatic away status, administrator-managed server avatars and encrypted polls. These require compatible Client/Server builds; published installers are unchanged. See [development chat guide](docs/client/chat.en.md#development-source-additions).
+
+For an isolated Server from current Windows source, use **npm run review:server**, then **npm run review** for Client. [Server review setup](architecture/development.en.md#native-server-review-on-windows).

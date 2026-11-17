@@ -34,7 +34,8 @@
     "server:prepare": "node scripts/prepare-server.mjs",
     "icons:generate": "node scripts/generate-icons.cjs",
     "check:public": "node scripts/check-public.mjs",
-    "licenses:prepare": "node scripts/prepare-licenses.mjs"
+    "licenses:prepare": "node scripts/prepare-licenses.mjs",
+    "review:server": "node scripts/review-server.mjs"
   },
   "dependencies": {
     "@shiguredo/rnnoise-wasm": "2025.1.5",
