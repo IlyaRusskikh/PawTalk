@@ -296,5 +296,8 @@ func (s *membershipStore) enforceMemberStorageTx(ctx context.Context, tx *sql.Tx
 		if _, err = tx.ExecContext(ctx, "DELETE FROM messages WHERE message_id=?", oldest); err != nil {
 			return err
 		}
+		s.events.mu.Lock()
+		s.events.retention = true
+		s.events.mu.Unlock()
 	}
 }

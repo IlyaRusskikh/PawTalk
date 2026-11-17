@@ -5,9 +5,12 @@ import (
 	"context"
 	"crypto/sha1" // RFC 6455 handshake, not an identity primitive.
 	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,20 +19,38 @@ import (
 
 // Coalesced invalidations carry no plaintext, ciphertext or user identities.
 // HTTP reads remain the authenticated source of history and poll data.
+type memberEvent struct {
+	Sequence  uint64 `json:"sequence"`
+	Type      string `json:"type"`
+	ChannelID string `json:"channelId,omitempty"`
+	Revision  int64  `json:"revision"`
+	Last      int64  `json:"last"`
+	Rescan    bool   `json:"rescan,omitempty"`
+}
+type eventSubscription struct {
+	device, channel string
+	pending         map[string]memberEvent
+}
 type chatEvents struct {
 	mu          sync.Mutex
-	subscribers map[chan struct{}]string
+	sequence    uint64
+	presence    int64
+	retention   bool
+	subscribers map[chan struct{}]*eventSubscription
 }
 
 func (e *chatEvents) subscribe(device string) (chan struct{}, func(), bool) {
+	return e.subscribeChannel(device, "")
+}
+func (e *chatEvents) subscribeChannel(device, channel string) (chan struct{}, func(), bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if len(e.subscribers) >= 1024 {
+	if len(e.subscribers) >= 8192 {
 		return nil, nil, false
 	}
 	count := 0
-	for _, id := range e.subscribers {
-		if id == device {
+	for _, sub := range e.subscribers {
+		if sub.device == device {
 			count++
 		}
 	}
@@ -37,21 +58,85 @@ func (e *chatEvents) subscribe(device string) (chan struct{}, func(), bool) {
 		return nil, nil, false
 	}
 	if e.subscribers == nil {
-		e.subscribers = make(map[chan struct{}]string)
+		e.subscribers = make(map[chan struct{}]*eventSubscription)
 	}
 	ch := make(chan struct{}, 1)
-	e.subscribers[ch] = device
+	e.subscribers[ch] = &eventSubscription{device: device, channel: channel, pending: make(map[string]memberEvent)}
 	return ch, func() { e.mu.Lock(); delete(e.subscribers, ch); e.mu.Unlock() }, true
 }
-func (e *chatEvents) notify() {
+func (e *chatEvents) publish(event memberEvent) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	for ch := range e.subscribers {
+	e.sequence++
+	event.Sequence = e.sequence
+	for wake, sub := range e.subscribers {
+		if sub.channel != "" && event.ChannelID != "" && event.ChannelID != sub.channel {
+			continue
+		}
+		queued := event
+		key := event.Type + event.ChannelID
+		if old, ok := sub.pending[key]; ok {
+			queued.Rescan = event.Rescan || old.Rescan
+		}
+		if event.Type == "resync" || len(sub.pending) >= 64 {
+			clear(sub.pending)
+			sub.pending["resync"] = memberEvent{Type: "resync", Sequence: event.Sequence}
+		} else if full, ok := sub.pending["resync"]; ok {
+			full.Sequence = event.Sequence
+			sub.pending["resync"] = full
+		} else {
+			sub.pending[key] = queued
+		}
 		select {
-		case ch <- struct{}{}:
+		case wake <- struct{}{}:
 		default:
 		}
 	}
+}
+func (e *chatEvents) notify() { e.publish(memberEvent{Type: "resync"}) }
+func (e *chatEvents) drain(wake chan struct{}) []memberEvent {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	sub := e.subscribers[wake]
+	if sub == nil {
+		return nil
+	}
+	events := make([]memberEvent, 0, len(sub.pending))
+	for _, event := range sub.pending {
+		events = append(events, event)
+	}
+	clear(sub.pending)
+	return events
+}
+func (s *membershipStore) publishChannel(channel string, rescan bool) {
+	var revision, last int64
+	err := s.db.QueryRow("SELECT message_revision,COALESCE((SELECT MAX(message_id) FROM messages WHERE channel_id=?),0) FROM channels WHERE channel_id=?", channel, channel).Scan(&revision, &last)
+	if err != nil {
+		s.events.notify()
+		return
+	}
+	s.events.publish(memberEvent{Type: "chat", ChannelID: channel, Revision: revision, Last: last, Rescan: rescan})
+}
+
+// Resolve identifiers before deletion; no user-supplied identity or channel metadata is broadcast.
+func (s *membershipStore) mutationChannel(path string) string {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) < 4 {
+		return ""
+	}
+	if parts[2] == "channels" && len(parts) >= 5 && parts[4] == "messages" && validHexID(parts[3], 32) {
+		return parts[3]
+	}
+	var channel string
+	if parts[2] == "messages" {
+		if id, err := strconv.ParseInt(parts[3], 10, 64); err == nil {
+			s.db.QueryRow("SELECT channel_id FROM messages WHERE message_id=?", id).Scan(&channel)
+		}
+	}
+	if parts[2] == "polls" {
+		s.db.QueryRow("SELECT m.channel_id FROM polls p JOIN messages m ON m.message_id=p.message_id WHERE p.poll_id=?", parts[3]).Scan(&channel)
+	}
+	return channel
 }
 func (s *membershipStore) eventAccess(ctx context.Context, token, channel string) (memberAccess, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -62,6 +147,9 @@ func (s *membershipStore) eventAccess(ctx context.Context, token, channel string
 	access, err := s.sessionAccessTx(ctx, tx, token)
 	if err != nil {
 		return access, err
+	}
+	if channel == "" {
+		return access, nil
 	}
 	return access, memberTextChannelTx(ctx, tx, channel)
 }
@@ -75,7 +163,7 @@ func headerToken(value, token string) bool {
 }
 func (a *membershipAPI) chatEvents(w http.ResponseWriter, r *http.Request) {
 	channel := r.PathValue("id")
-	if !validHexID(channel, 32) {
+	if channel != "" && !validHexID(channel, 32) {
 		memberFail(w, memberError(400, "INVALID_CHANNEL"))
 		return
 	}
@@ -90,7 +178,7 @@ func (a *membershipAPI) chatEvents(w http.ResponseWriter, r *http.Request) {
 		memberFail(w, memberError(400, "INVALID_WEBSOCKET"))
 		return
 	}
-	changes, unsubscribe, ok := a.store.events.subscribe(access.DeviceID)
+	changes, unsubscribe, ok := a.store.events.subscribeChannel(access.DeviceID, channel)
 	if !ok {
 		memberFail(w, memberError(429, "RATE_LIMIT"))
 		return
@@ -118,9 +206,16 @@ func (a *membershipAPI) chatEvents(w http.ResponseWriter, r *http.Request) {
 	done := make(chan struct{})
 	go func() { defer close(done); readWSControls(conn, rw.Reader, controls) }()
 	// Always invalidate on connect: covers writes during handshake and offline gaps.
-	if writeWS(conn, 1, []byte("changed")) != nil {
+	initial := []byte("changed")
+	if channel == "" {
+		a.store.events.mu.Lock()
+		initial, _ = json.Marshal(memberEvent{Type: "resync", Sequence: a.store.events.sequence})
+		a.store.events.mu.Unlock()
+	}
+	if writeWS(conn, 1, initial) != nil {
 		return
 	}
+	awaitingPong := false
 	tick := time.NewTicker(15 * time.Second)
 	defer tick.Stop()
 	for {
@@ -141,24 +236,53 @@ func (a *membershipAPI) chatEvents(w http.ResponseWriter, r *http.Request) {
 				writeWS(conn, 8, c.data)
 				return
 			}
+			if c.op == 10 && channel == "" && awaitingPong {
+				awaitingPong = false
+				if _, err = a.store.heartbeat(r.Context(), token); err != nil {
+					writeWS(conn, 8, []byte{3, 240})
+					return
+				}
+			}
 			if c.op == 9 {
 				if writeWS(conn, 10, c.data) != nil {
 					return
 				}
 			}
 		case <-changes:
+			// One access check per bounded batch, including during a busy channel burst.
+			timer := time.NewTimer(80 * time.Millisecond)
+			select {
+			case <-timer.C:
+			case <-done:
+				timer.Stop()
+				return
+			case <-r.Context().Done():
+				timer.Stop()
+				return
+			}
 			if _, err = a.store.eventAccess(r.Context(), token, channel); err != nil {
 				writeWS(conn, 8, []byte{3, 240})
 				return
 			}
-			if writeWS(conn, 1, []byte("changed")) != nil {
-				return
+			events := a.store.events.drain(changes)
+			for _, event := range events {
+				payload := []byte("changed")
+				if channel == "" {
+					payload, _ = json.Marshal(event)
+				}
+				if writeWS(conn, 1, payload) != nil {
+					return
+				}
+				if channel != "" {
+					break
+				}
 			}
 		case <-tick.C:
 			if _, err = a.store.eventAccess(r.Context(), token, channel); err != nil {
 				writeWS(conn, 8, []byte{3, 240})
 				return
 			}
+			awaitingPong = true
 			if writeWS(conn, 9, nil) != nil {
 				return
 			}
@@ -202,9 +326,7 @@ func readWSControls(conn net.Conn, r *bufio.Reader, out chan<- wsControl) {
 				return
 			}
 		}
-		if op == 10 {
-			continue
-		}
+
 		select {
 		case out <- wsControl{op, data}:
 		default:
@@ -217,7 +339,12 @@ func readWSControls(conn net.Conn, r *bufio.Reader, out chan<- wsControl) {
 }
 func writeWS(conn net.Conn, op byte, data []byte) error {
 	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	_, err := conn.Write(append([]byte{128 | op, byte(len(data))}, data...))
+	header := []byte{128 | op, byte(len(data))}
+	if len(data) > 125 {
+		header = []byte{128 | op, 126, 0, 0}
+		binary.BigEndian.PutUint16(header[2:], uint16(len(data)))
+	}
+	_, err := conn.Write(append(header, data...))
 	return err
 }
 
@@ -234,6 +361,37 @@ func (w *eventResponse) Write(p []byte) (int, error) {
 	}
 	return w.ResponseWriter.Write(p)
 }
-func chatMutation(path string) bool {
-	return strings.Contains(path, "/messages") || strings.Contains(path, "/polls") || strings.Contains(path, "/channels") || strings.Contains(path, "/members") || strings.Contains(path, "/bans") || strings.HasSuffix(path, "/leave") || strings.Contains(path, "/devices/")
+func eventMutation(path string) bool {
+	if !strings.HasPrefix(path, "/api/v2/") || strings.HasSuffix(path, "/status") || strings.HasSuffix(path, "/heartbeat") || path == "/api/v2/activity" || path == "/api/v2/session" {
+		return false
+	}
+	return true
+}
+
+func (a *membershipAPI) eventStatus(w http.ResponseWriter, r *http.Request) {
+	if _, err := a.store.eventAccess(r.Context(), memberBearer(r), ""); err != nil {
+		memberFail(w, err)
+		return
+	}
+	a.store.events.mu.Lock()
+	sequence := a.store.events.sequence
+	a.store.events.mu.Unlock()
+	respond(w, 200, map[string]uint64{"sequence": sequence})
+}
+
+// One server-wide expiry check, independent of subscriber count. Heartbeats
+// update sessions; roster invalidation occurs only when the live count changes.
+func (s *membershipStore) refreshPresenceEvents(ctx context.Context) {
+	var count int64
+	now := s.now().UnixMilli()
+	if s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sessions WHERE revoked_at IS NULL AND expires_at>? AND last_seen_at>?", now, now-45000).Scan(&count) != nil {
+		return
+	}
+	s.events.mu.Lock()
+	changed := count != s.events.presence
+	s.events.presence = count
+	s.events.mu.Unlock()
+	if changed {
+		s.events.publish(memberEvent{Type: "state"})
+	}
 }

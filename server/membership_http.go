@@ -31,6 +31,8 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	mux.HandleFunc("GET /api/v2/polls/{id}", api.pollState)
 	mux.HandleFunc("PUT /api/v2/polls/{id}/vote", api.pollVote)
 	mux.HandleFunc("POST /api/v2/polls/{id}/close", api.pollClose)
+	mux.HandleFunc("GET /api/v2/events", api.chatEvents)
+	mux.HandleFunc("GET /api/v2/events/status", api.eventStatus)
 	mux.HandleFunc("GET /api/v2/state", api.state)
 	mux.HandleFunc("PATCH /api/v2/server/avatar", api.patchServerAvatar)
 	mux.HandleFunc("PATCH /api/v2/server", api.renameServer)
@@ -78,11 +80,24 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		if r.Method != "GET" && chatMutation(r.URL.Path) {
+		if r.Method != "GET" && eventMutation(r.URL.Path) {
+			channel := store.mutationChannel(r.URL.Path)
 			response := &eventResponse{ResponseWriter: w}
 			mux.ServeHTTP(response, r)
 			if response.status >= 200 && response.status < 300 {
-				store.events.notify()
+				store.events.mu.Lock()
+				retention := store.events.retention
+				store.events.retention = false
+				store.events.mu.Unlock()
+				if retention {
+					store.events.notify()
+				} else if strings.Contains(r.URL.Path, "/attachments/") {
+					// Uploads only invalidate if quota enforcement changed visible history.
+				} else if channel != "" {
+					store.publishChannel(channel, r.Method == "PATCH" || r.Method == "DELETE")
+				} else {
+					store.events.publish(memberEvent{Type: "state"})
+				}
 			}
 		} else {
 			mux.ServeHTTP(w, r)

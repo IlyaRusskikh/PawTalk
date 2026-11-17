@@ -15,10 +15,18 @@ func (s *membershipStore) setActivity(ctx context.Context, token string, away bo
 	if err != nil {
 		return err
 	}
+	var previous bool
+	prior := tx.QueryRowContext(ctx, "SELECT away FROM session_activity WHERE session_id=?", access.SessionID).Scan(&previous)
+	if prior == nil && previous == away {
+		return nil
+	}
 	if _, err = tx.ExecContext(ctx, "INSERT INTO session_activity(session_id,away) VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET away=excluded.away", access.SessionID, away); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err == nil {
+		s.events.publish(memberEvent{Type: "state"})
+	}
+	return err
 }
 func (a *membershipAPI) activity(w http.ResponseWriter, r *http.Request) {
 	var input struct {

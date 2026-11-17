@@ -156,3 +156,93 @@ func TestChatWebSocketControlFrameBounds(t *testing.T) {
 		})
 	}
 }
+
+func TestServerEventScopeCoalescingAndOverflow(t *testing.T) {
+	var events chatEvents
+	wide, off, _ := events.subscribe("wide")
+	defer off()
+	a, offA, _ := events.subscribeChannel("narrow-a", strings.Repeat("a", 32))
+	defer offA()
+	b, offB, _ := events.subscribeChannel("narrow-b", strings.Repeat("b", 32))
+	defer offB()
+	for i := int64(1); i <= 3; i++ {
+		events.publish(memberEvent{Type: "chat", ChannelID: strings.Repeat("a", 32), Revision: i, Last: i, Rescan: i == 2})
+	}
+	if len(b) != 0 {
+		t.Fatal("unrelated legacy channel woke")
+	}
+	for _, wake := range []chan struct{}{wide, a} {
+		batch := events.drain(wake)
+		if len(batch) != 1 || batch[0].Revision != 3 || !batch[0].Rescan {
+			t.Fatal("coalesced edit lost", batch)
+		}
+	}
+	for i := 0; i < 70; i++ {
+		events.publish(memberEvent{Type: "chat", ChannelID: fmt.Sprintf("%032x", i), Revision: 1})
+	}
+	batch := events.drain(wide)
+	if len(batch) != 1 || batch[0].Type != "resync" || batch[0].Sequence != events.sequence {
+		t.Fatal("overflow did not retain a bounded current checkpoint", batch)
+	}
+}
+func TestServerEventSequenceAndPresenceExpiry(t *testing.T) {
+	s := testMembershipStore(t)
+	owner := bootstrapTestServer(t, s, newTestMemberSigner(3))
+	clock := s.now()
+	s.now = func() time.Time { return clock }
+	wake, off, _ := s.events.subscribe("observer")
+	defer off()
+	s.refreshPresenceEvents(context.Background())
+	if len(s.events.drain(wake)) != 1 {
+		t.Fatal("initial online transition")
+	}
+	s.refreshPresenceEvents(context.Background())
+	if len(s.events.drain(wake)) != 0 {
+		t.Fatal("unchanged presence generated traffic")
+	}
+	clock = clock.Add(46 * time.Second)
+	s.refreshPresenceEvents(context.Background())
+	batch := s.events.drain(wake)
+	if len(batch) != 1 || batch[0].Type != "state" {
+		t.Fatal("offline expiry did not invalidate roster")
+	}
+	handler := newMembershipHandler(s, config{})
+	r := httptest.NewRequest("GET", "/api/v2/events/status", nil)
+	r.Header.Set("Authorization", "Bearer "+owner.Token)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	var status struct{ Sequence uint64 }
+	json.Unmarshal(w.Body.Bytes(), &status)
+	if w.Code != 200 || status.Sequence != s.events.sequence {
+		t.Fatal("sequence checkpoint", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest("GET", "/api/v2/events/status", nil))
+	if w.Code == 200 {
+		t.Fatal("unauthenticated checkpoint")
+	}
+}
+
+func TestPollReadCompletionPublishesResync(t *testing.T) {
+	s := testMembershipStore(t)
+	ctx := context.Background()
+	owner := bootstrapTestServer(t, s, newTestMemberSigner(5))
+	clock := s.now()
+	s.now = func() time.Time { return clock }
+	var channel string
+	s.db.QueryRow("SELECT channel_id FROM channels WHERE kind='text'").Scan(&channel)
+	input := newPollMessage('a', false, true, false)
+	if _, err := s.postMessage(ctx, owner.Token, channel, input); err != nil {
+		t.Fatal(err)
+	}
+	wake, off, _ := s.events.subscribe("observer")
+	defer off()
+	clock = clock.Add(2 * time.Hour)
+	if _, err := s.pollState(ctx, owner.Token, input.RequestID); err != nil {
+		t.Fatal(err)
+	}
+	events := s.events.drain(wake)
+	if len(events) != 1 || events[0].Type != "resync" {
+		t.Fatal("GET completion changed history without invalidating", events)
+	}
+}

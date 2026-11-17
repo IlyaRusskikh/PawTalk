@@ -151,6 +151,7 @@ func (s *membershipStore) runPollClock(ctx context.Context) {
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	for {
+		s.refreshPresenceEvents(ctx)
 		if err := s.closeExpiredPolls(ctx); err != nil && ctx.Err() == nil {
 			log.Print("poll completion failed: ", err)
 		}
@@ -193,6 +194,7 @@ func (s *membershipStore) pollState(ctx context.Context, token, pollID string) (
 		if err = tx.Commit(); err != nil {
 			return result, err
 		}
+		s.events.notify()
 		return s.pollState(ctx, token, pollID)
 	}
 	visible := result.Intermediate || result.ClosedAt != nil
