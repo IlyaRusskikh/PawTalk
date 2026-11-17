@@ -91,7 +91,7 @@
 .member-control-copy{align-self:flex-start}
 .member-link-profiles{display:flex;justify-content:center;gap:18px;flex-wrap:wrap}
 .member-link-profile{display:flex;align-items:center;gap:9px;text-align:left;min-width:0}
-.member-link-profile .avatar{width:32px;height:32px;flex:none;margin:0}
+.member-link-profile .avatar{width:32px;height:32px;font-size:14px;line-height:1;flex:none;margin:0}
 .member-link-profile span{overflow-wrap:anywhere}
 .server-voice-preview .server-preview-people.avatar-strip{padding:0;gap:6px;flex-wrap:nowrap}
 .server-voice-preview .server-preview-people .avatar{width:27px;height:27px}
@@ -99,7 +99,7 @@
 
 .member-roster-label{display:flex;align-items:center;gap:6px}.member-roster-nickname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.member-self-pin{flex:none;padding:2px 5px;border-radius:calc(var(--ui-radius)*.3333);background:var(--raised);color:var(--muted);font-size:10px;line-height:1.2}
 
-.member-call-controls{display:flex;justify-content:center;flex:none;padding:8px 0}.member-call-controls .member-audio-buttons{display:flex;align-items:center;gap:8px}
+.member-call-controls.call-controls{width:auto;align-self:center;margin:14px 0 6px;padding:0;justify-content:center}
 
 .member-load.chat-jump{left:auto;right:16px;bottom:12px;transform:none;width:40px;height:40px;padding:0;justify-content:center;border-radius:50%}.chat-jump-count{position:absolute;top:-7px;right:-7px;min-width:19px;padding:2px 5px;border-radius:calc(var(--ui-radius) * 1);background:var(--accent);color:var(--on-accent);font-size:10px}
 
