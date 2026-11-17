@@ -84,7 +84,7 @@ export function ServerApp() {
   const mentionCache=useRef(new Map<string,Message[]>()),rescan=useRef(new Map<string,number>()),refreshAgain=useRef(false),soundAt=useRef(0);
   const seen = useRef(new Map<string, { revision: number; last: number; read?:number }>()), polling = useRef(false), mounted = useRef(true), joiningVoice = useRef(false);
   const voiceAttempt=useRef(0),pendingVoiceServer=useRef('');
-  const periodicRefreshAt=useRef(0),notificationsRetry=useRef(false);
+  const periodicRefreshAt=useRef(0),notificationsRetry=useRef(false),deliveries=useRef(new Map<string,import('./membership').ServerEvent[]>()),knownUnread=useRef(new Map<string,number>()),deliveryGaps=useRef(new Map<string,number>());
   const viewports=useRef(new Map<string,boolean>());
   const hiddenVoice=useRef(new Map<string,string>());
   const [serverOrder,setServerOrder]=useState<string[]>(()=>storedJSON('pawtalk.v2.server-order',[]));
@@ -114,20 +114,27 @@ export function ServerApp() {
             for (const channel of next.channels.filter(channel => channel.kind === 'text')) {
               const key = `${next.serverId}:${channel.id}`, previous = seen.current.get(key);
               const read = Number(localStorage.getItem(cursorKey(next.serverId, channel.id))) || 0;
-              if (channel.lastMessageId <= read) { seen.current.set(key,{revision:channel.messageRevision,last:channel.lastMessageId,read});setUnread(values => ({ ...values, [key]: 0 }));setMentionIDs(values=>({...values,[key]:[]}));mentionCache.current.delete(key);rescan.current.delete(key); continue; }
-              if (previous?.revision === channel.messageRevision&&previous.read===read) continue;
-              const page = await membership<MessagePage>('messages', { serverId: next.serverId, channelId: channel.id, options: { limit: 1, readAfter: read } });
-              if (!mounted.current) return; setUnread(values => ({ ...values, [key]: page.unread }));
-              const value = current.current, visible = value.selected === next.serverId && (value.chatIDs[next.serverId] || next.channels.find(channel => channel.kind === 'text')?.id) === channel.id && value.focused && viewports.current.get(key)!==false;
+              if (channel.lastMessageId <= read) { seen.current.set(key,{revision:channel.messageRevision,last:channel.lastMessageId,read});setUnread(values => ({ ...values, [key]: 0 }));setMentionIDs(values=>({...values,[key]:[]}));mentionCache.current.delete(key);rescan.current.delete(key);knownUnread.current.set(key,0);deliveries.current.set(key,(deliveries.current.get(key)||[]).filter(e=>e.revision!>channel.messageRevision)); continue; }
+              if (previous?.revision === channel.messageRevision&&previous.read===read){rescan.current.delete(key);deliveries.current.set(key,(deliveries.current.get(key)||[]).filter(e=>e.revision!>previous.revision));continue;}
               const requestedScan=rescan.current.get(key)||0,fullScan=!previous||requestedScan||(!next.eventsLive&&previous.revision!==channel.messageRevision&&previous.last>=channel.lastMessageId);
-              const mentions:Message[]=fullScan?[]:(mentionCache.current.get(key)||[]).filter(m=>m.id>read),arrivals:Message[]=[];let cursor=fullScan?read:Math.max(read,previous?.last||0);
-              const scanThrough=Math.max(channel.lastMessageId,page.last);
-              while(cursor<scanThrough){
-                const batch=await membership<MessagePage>('messages',{serverId:next.serverId,channelId:channel.id,options:{limit:500,...(cursor?{after:cursor}:{around:1})}});
-                arrivals.push(...batch.messages);
-                for(const message of batch.messages)if(message.id>read&&effectiveProfile(next,message.authorProfileId)!==next.self.effectiveProfileId&&message.content.mentions?.some(mention=>effectiveProfile(next,mention.profileId)===next.self.effectiveProfileId))mentions.push(message);
-                const last=batch.messages.at(-1)?.id||cursor;if(last<=cursor||last>=scanThrough){cursor=last;break;}cursor=last;
+              const queued=(deliveries.current.get(key)||[]).filter(e=>e.revision!>(previous?.revision??-1)).sort((a,b)=>a.revision!-b.revision!);
+              let revision=previous?.revision,fast=!!previous&&!requestedScan&&(previous.read===read||read>=previous.last);
+              for(const packet of queued){if(packet.previous!==revision)fast=false;revision=packet.revision;}
+              fast=fast&&queued.length>0&&revision===channel.messageRevision;
+              if(!fast&&queued.length&&previous&&!fullScan&&(previous.read===read||read>=previous.last)){let deadline=deliveryGaps.current.get(key);if(!deadline){deadline=Date.now()+200;deliveryGaps.current.set(key,deadline);setTimeout(()=>{if(mounted.current&&deliveryGaps.current.get(key)===deadline)void refresh();},210);}if(Date.now()<deadline)continue;}if(fast)deliveryGaps.current.delete(key);
+              let page:MessagePage,mentions:Message[],arrivals:Message[]=[],cursor=read,scanThrough=channel.lastMessageId;
+              if(fast){
+                let count=read>=previous!.last?0:knownUnread.current.get(key)||0;const byId=new Map((mentionCache.current.get(key)||[]).filter(m=>m.id>read).map(m=>[m.id,m]));
+                const incoming=(m:{authorProfileId:string;systemKind?:string})=>!!m.systemKind||effectiveProfile(next,m.authorProfileId)!==next.self.effectiveProfileId,newRows=new Map<number,Message>(),removed=new Set<number>();
+                for(const packet of queued){for(const m of packet.messages||[]){if(m.id>previous!.last){if(!newRows.has(m.id)&&m.id>read&&incoming(m))count++;newRows.set(m.id,m);removed.delete(m.id);}byId.delete(m.id);if(m.id>read&&incoming(m)&&m.content.mentions?.some(mention=>effectiveProfile(next,mention.profileId)===next.self.effectiveProfileId))byId.set(m.id,m);}for(const d of packet.deleted||[]){byId.delete(d.id);newRows.delete(d.id);if(!removed.has(d.id)&&d.id>read&&incoming(d))count--;removed.add(d.id);}}
+                arrivals=[...newRows.values()];mentions=[...byId.values()];page={messages:[],first:queued.at(-1)!.first||0,last:queued.at(-1)!.last!,unread:Math.max(0,count),hasOlder:false,hasNewer:false};cursor=scanThrough=page.last;
+              }else{
+                page=await membership<MessagePage>('messages',{serverId:next.serverId,channelId:channel.id,options:{limit:1,readAfter:read}});
+                mentions=fullScan?[]:(mentionCache.current.get(key)||[]).filter(m=>m.id>read);cursor=fullScan?read:Math.max(read,previous?.last||0);scanThrough=Math.max(channel.lastMessageId,page.last);
+                while(cursor<scanThrough){const batch=await membership<MessagePage>('messages',{serverId:next.serverId,channelId:channel.id,options:{limit:500,...(cursor?{after:cursor}:{around:1})}});arrivals.push(...batch.messages);for(const message of batch.messages)if(message.id>read&&effectiveProfile(next,message.authorProfileId)!==next.self.effectiveProfileId&&message.content.mentions?.some(mention=>effectiveProfile(next,mention.profileId)===next.self.effectiveProfileId))mentions.push(message);const last=batch.messages.at(-1)?.id||cursor;if(last<=cursor||last>=scanThrough){cursor=last;break;}cursor=last;}
               }
+              if(!mounted.current)return;knownUnread.current.set(key,page.unread);setUnread(values=>({...values,[key]:page.unread}));deliveries.current.set(key,(deliveries.current.get(key)||[]).filter(e=>e.revision!>channel.messageRevision));
+              const value=current.current,visible=value.selected===next.serverId&&(value.chatIDs[next.serverId]||next.channels.find(channel=>channel.kind==='text')?.id)===channel.id&&value.focused&&viewports.current.get(key)!==false;
               if(!mounted.current)return;if(rescan.current.get(key)===requestedScan)rescan.current.delete(key);seen.current.set(key,{revision:channel.messageRevision,last:Math.max(scanThrough,cursor),read});mentionCache.current.set(key,mentions);setMentionIDs(values=>({...values,[key]:mentions.map(message=>message.id)}));
               const newMention=previous&&mentions.filter(message=>message.id>previous.last).at(-1);
               if (previous && channel.lastMessageId > previous.last && page.unread && !visible && (!notificationsMuted(next.serverId,channel.id)||newMention)) {
@@ -150,7 +157,7 @@ export function ServerApp() {
   }, []);
   useEffect(() => {
     mounted.current = true; void refresh(); const timer = setInterval(() => {const values=Object.values(current.current.states);if(values.length&&values.every(s=>s.eventsLive)&&!notificationsRetry.current&&Date.now()-periodicRefreshAt.current<30000)return;periodicRefreshAt.current=Date.now();void refresh();}, 3500);
-    const serverEvent=window.desktop?.onMembershipServerEvent?.(event=>{if(event.rescan&&event.channelId)rescan.current.set(event.serverId+':'+event.channelId,(rescan.current.get(event.serverId+':'+event.channelId)||0)+1);if(event.type==='resync')for(const key of seen.current.keys())if(key.startsWith(event.serverId+':'))rescan.current.set(key,(rescan.current.get(key)||0)+1);void refresh();});
+    const serverEvent=window.desktop?.onMembershipServerEvent?.(event=>{if(event.delivery&&event.channelId){const key=event.serverId+':'+event.channelId;if([...deliveries.current.values()].reduce((n,v)=>n+v.length,0)>=64){deliveries.current.clear();for(const k of seen.current.keys())rescan.current.set(k,(rescan.current.get(k)||0)+1);}else deliveries.current.set(key,[...(deliveries.current.get(key)||[]),event]);void refresh();return;}if(event.rescan&&event.channelId)rescan.current.set(event.serverId+':'+event.channelId,(rescan.current.get(event.serverId+':'+event.channelId)||0)+1);if(event.type==='resync')for(const key of seen.current.keys())if(key.startsWith(event.serverId+':'))rescan.current.set(key,(rescan.current.get(key)||0)+1);void refresh();});
     const liveStatus=window.desktop?.onMembershipLiveStatus?.(event=>{setStates(values=>values[event.serverId]?{...values,[event.serverId]:{...values[event.serverId],eventsLive:event.live}}:values);if(!event.live)for(const key of seen.current.keys())if(key.startsWith(event.serverId+':'))rescan.current.set(key,(rescan.current.get(key)||0)+1);void refresh();});
     const changed = window.desktop?.onMembershipChanged?.(event => {if(event?.departure){setDepartures(values=>[...values,event.departure!]);setModal(null);setChannelDialog(undefined);setModeration(undefined);setLeaveServer(undefined);setMuteServer(undefined);setAddressServer(undefined);setRenameServer(undefined);setError('');}if(event?.leaveError==='LAST_ADMIN')setError(t('Сервер отклонил отложенный выход: сначала назначьте другого администратора. Сервер возвращён в список.'));void refresh();});
     const receive = (value: string) => { if (value) { setAddress(value); if(!onboardingActive.current)setModal('join'); } };

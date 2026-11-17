@@ -79,10 +79,29 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     for(let i=0;i<missing.length;i+=500){const requested=missing.slice(i,i+500),page=await membership<MessagePage>('messages',{serverId,channelId,options:{ids:requested,limit:requested.length}});for(const id of requested)resolved.set(id,page.messages.find(m=>m.id===id)||null);}
     if(generation===epoch.current){quotesRef.current=resolved;setQuotes(resolved);}
   }
+  const deliveryWaiters=useRef(new Map<number,ReturnType<typeof setTimeout>>());
+  function deliver(event:import('./membership').ServerEvent,retry=false){
+    const generation=epoch.current;
+    const job=queue.current.catch(()=>{}).then(async()=>{
+      if(generation!==epoch.current||!event.delivery||event.revision! <=loadedRevision.current)return;
+      if(loadedRevision.current!==event.previous){if(!retry&&deliveryWaiters.current.size<64){if(!deliveryWaiters.current.has(event.revision!))deliveryWaiters.current.set(event.revision!,setTimeout(()=>{deliveryWaiters.current.delete(event.revision!);if(generation===epoch.current)deliver(event,true);},200));return;}fullSync.current=true;queueMicrotask(()=>void load('sync'));return;}
+      const old=rows.current,saved=anchor(),deleted=new Set((event.deleted||[]).map(d=>d.id)),updates=event.messages||[],state=current.current.state,previousLast=boundsRef.current.last;
+      const incoming=(m:{authorProfileId:string;systemKind?:string})=>!!m.systemKind||effectiveProfile(state,m.authorProfileId)!==state.self.effectiveProfileId;
+      const countChange=updates.filter(m=>m.id>previousLast&&m.id>read.current&&incoming(m)).length-(event.deleted||[]).filter(d=>d.id>read.current&&incoming(d)).length;
+      setNewCount(count=>Math.max(0,count+countChange));
+      const visible=new Set(old.map(m=>m.id));let next=merge(old.filter(m=>!deleted.has(m.id)),updates.filter(m=>visible.has(m.id)||follow.current&&m.id>(old.at(-1)?.id||0))).slice(-limit);
+      for(const id of deleted)deletedMessages.current.add(id);
+      const known=new Map(quotesRef.current),available=new Map([...old,...updates].map(m=>[m.id,m]));for(const m of updates)if(known.has(m.id))known.set(m.id,m);for(const m of next){const id=m.content.reply?.id;if(id&&available.has(id))known.set(id,available.get(id)!);}for(const id of deleted)if(known.has(id))known.set(id,null);quotesRef.current=known;setQuotes(known);
+      if(next.length){const at=old.findIndex(m=>m.id===next[0].id);if(at>0)predecessor.current=old[at-1];if(predecessor.current&&deleted.has(predecessor.current.id))predecessor.current=undefined;}
+      pendingPosition.current=follow.current?{bottom:true}:{anchor:saved};rows.current=next;setMessages(next);boundsRef.current={first:event.first!,last:event.last!};setBounds(boundsRef.current);loadedRevision.current=event.revision!;setAway(!follow.current);setFailure('');
+      try{await refreshQuotes(next,generation,true);}catch(error){if(generation===epoch.current)setFailure((error as Error).message);}
+    });queue.current=job;
+  }
   function load(kind:LoadKind='sync',target?:number):Promise<void>{
     const generation=epoch.current;
     const job=queue.current.catch(()=>{}).then(async()=>{
       if(generation!==epoch.current)return;
+      if(kind==='sync'&&current.current.state.eventsLive&&deliveryWaiters.current.size&&!fullSync.current)return;
       const revision=Math.max(current.current.channel.messageRevision,eventRevision.current),force=fullSync.current||!current.current.state.eventsLive;
       if(kind==='sync'&&!force&&loadedRevision.current>=revision)return;
       if(kind==='sync')fullSync.current=false;
@@ -121,18 +140,18 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
         if(incremental&&oldBefore>0)predecessor.current=existing[oldBefore-1];
         else if(incremental&&oldBefore===0)predecessor.current=oldPredecessor;
         else if(next.length&&next[0].id>page.first){const preceding=await membership<MessagePage>('messages',{serverId,channelId,options:{before:next[0].id,limit:1}});if(generation!==epoch.current)return;predecessor.current=preceding.messages.at(-1);}
-        setNewCount(page.unread);rows.current=next;setMessages(next);setBounds({first:page.first,last:page.last});setAway(!follow.current);setReady(true);setFailure('');
-        loadedRevision.current=revision;await refreshQuotes(next,generation,!!incremental);
+        setNewCount(page.unread);rows.current=next;setMessages(next);boundsRef.current={first:page.first,last:page.last};setBounds(boundsRef.current);setAway(!follow.current);setReady(true);setFailure('');
+        loadedRevision.current=page.revision??revision;await refreshQuotes(next,generation,!!incremental);
       }catch(error){if(kind==='sync'&&force)fullSync.current=true;if(generation===epoch.current)setFailure((error as Error).message);}
       finally{if(generation===epoch.current)setLoading(false);}
     });queue.current=job;return job;
   }
   async function navigate(kind:LoadKind,target?:number){if(navigation.current)return;navigation.current=true;try{if(kind!=='latest')follow.current=false;await load(kind,target);}finally{navigation.current=false;}}
-  useEffect(()=>{const generation=++epoch.current;void load('initial');return()=>{if(epoch.current===generation)epoch.current++;clearTimeout(highlightTimer.current);};},[key]);
+  useEffect(()=>{const generation=++epoch.current;void load('initial');return()=>{if(epoch.current===generation)epoch.current++;clearTimeout(highlightTimer.current);for(const timer of deliveryWaiters.current.values())clearTimeout(timer);deliveryWaiters.current.clear();};},[key]);
   useEffect(()=>{const subscriptionId=crypto.randomUUID().replaceAll('-','');let cancelled=false,pending=false,dirty=false;
     const sync=async()=>{if(pending){dirty=true;return;}pending=true;do{dirty=false;await load('sync');}while(dirty&&!cancelled);pending=false;};
-    const events=window.desktop?.onMembershipServerEvent?.(event=>{if(event.serverId!==serverId)return;if(event.type==='resync')fullSync.current=true;if(event.channelId===channelId){eventRevision.current=Math.max(eventRevision.current,event.revision||0);eventLast.current=event.last||0;if(event.rescan)fullSync.current=true;}});
-    const off=window.desktop?.onMembershipChatChanged?.(event=>{if(event.serverId===serverId&&event.channelId===channelId)void sync();});
+    const events=window.desktop?.onMembershipServerEvent?.(event=>{if(event.serverId!==serverId)return;if(event.channelId===channelId&&event.delivery){eventRevision.current=Math.max(eventRevision.current,event.revision||0);eventLast.current=event.last||0;deliver(event);return;}if(event.type==='resync')fullSync.current=true;if(event.channelId===channelId){eventRevision.current=Math.max(eventRevision.current,event.revision||0);eventLast.current=event.last||0;if(event.rescan)fullSync.current=true;}});
+    const off=window.desktop?.onMembershipChatChanged?.(event=>{if(event.serverId===serverId&&event.channelId===channelId&&!event.delivery)void sync();});
     if(off)void membership('chat.watch',{serverId,channelId,subscriptionId}).catch(()=>{});
     return()=>{cancelled=true;off?.();events?.();if(off)void membership('chat.unwatch',{subscriptionId}).catch(()=>{});};
   },[key]);

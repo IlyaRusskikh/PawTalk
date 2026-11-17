@@ -26,7 +26,7 @@ export function PollCard({message, state, onJump, onClosed}: {message: Message; 
     const epoch = ++generation.current;
     const load = () => void refresh().catch(error => {if (generation.current === epoch) setError(error.message);});
     load(); const timer = status?.closedAt!=null||state.eventsLive?undefined:setInterval(load,3500);
-    const off=window.desktop?.onMembershipChatChanged?.(event=>{if(event.serverId===state.serverId&&event.channelId===message.channelId)load();});
+    const off=window.desktop?.onMembershipChatChanged?.(event=>{if(event.serverId===state.serverId&&event.channelId===message.channelId&&(!event.pollIds||event.pollIds.includes(poll.id)))load();});
     return () => {generation.current++; clearInterval(timer);off?.();};
   }, [refresh,state.eventsLive,status?.closedAt]);
   const closed = status?.closedAt != null;
