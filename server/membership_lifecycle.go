@@ -22,6 +22,7 @@ func (s *membershipStore) mutate(ctx context.Context, token, requestID, action, 
 		return err
 	}
 	defer tx.Rollback()
+	defer s.dropDeliveries(tx)
 	access, err := s.sessionAccessTx(ctx, tx, token)
 	if err != nil {
 		return err
@@ -52,7 +53,7 @@ func (s *membershipStore) mutate(ctx context.Context, token, requestID, action, 
 	if _, err = tx.ExecContext(ctx, "UPDATE server_state SET revision=revision+1 WHERE id=1"); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return s.commitDelivery(ctx, tx)
 }
 
 func (s *membershipStore) protectLastAdminTx(ctx context.Context, tx *sql.Tx, profileID string) error {

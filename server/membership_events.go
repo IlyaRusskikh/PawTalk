@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,25 +18,35 @@ import (
 	"unicode/utf8"
 )
 
-// Coalesced invalidations carry no plaintext, ciphertext or user identities.
-// HTTP reads remain the authenticated source of history and poll data.
+// Legacy routes carry metadata; the opt-in route also carries committed encrypted
+// message deltas. Plaintext and root keys remain exclusively in clients.
 type memberEvent struct {
-	Sequence  uint64 `json:"sequence"`
-	Type      string `json:"type"`
-	ChannelID string `json:"channelId,omitempty"`
-	Revision  int64  `json:"revision"`
-	Last      int64  `json:"last"`
-	Rescan    bool   `json:"rescan,omitempty"`
+	PollIDs        []string        `json:"pollIds,omitempty"`
+	Delivery       bool            `json:"delivery,omitempty"`
+	Previous       int64           `json:"previous"`
+	First          int64           `json:"first"`
+	Messages       []memberMessage `json:"messages"`
+	Deleted        []memberDeleted `json:"deleted,omitempty"`
+	wire           []byte
+	metadata       []byte
+	metadataRescan []byte
+	Sequence       uint64 `json:"sequence"`
+	Type           string `json:"type"`
+	ChannelID      string `json:"channelId,omitempty"`
+	Revision       int64  `json:"revision"`
+	Last           int64  `json:"last"`
+	Rescan         bool   `json:"rescan,omitempty"`
 }
 type eventSubscription struct {
 	device, channel string
+	payloads        bool
+	bytes           int
 	pending         map[string]memberEvent
 }
 type chatEvents struct {
 	mu          sync.Mutex
 	sequence    uint64
 	presence    int64
-	retention   bool
 	subscribers map[chan struct{}]*eventSubscription
 }
 
@@ -43,6 +54,9 @@ func (e *chatEvents) subscribe(device string) (chan struct{}, func(), bool) {
 	return e.subscribeChannel(device, "")
 }
 func (e *chatEvents) subscribeChannel(device, channel string) (chan struct{}, func(), bool) {
+	return e.subscribeStream(device, channel, false)
+}
+func (e *chatEvents) subscribeStream(device, channel string, payloads bool) (chan struct{}, func(), bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if len(e.subscribers) >= 8192 {
@@ -61,7 +75,7 @@ func (e *chatEvents) subscribeChannel(device, channel string) (chan struct{}, fu
 		e.subscribers = make(map[chan struct{}]*eventSubscription)
 	}
 	ch := make(chan struct{}, 1)
-	e.subscribers[ch] = &eventSubscription{device: device, channel: channel, pending: make(map[string]memberEvent)}
+	e.subscribers[ch] = &eventSubscription{device: device, channel: channel, payloads: payloads, pending: make(map[string]memberEvent)}
 	return ch, func() { e.mu.Lock(); delete(e.subscribers, ch); e.mu.Unlock() }, true
 }
 func (e *chatEvents) publish(event memberEvent) {
@@ -69,20 +83,46 @@ func (e *chatEvents) publish(event memberEvent) {
 	defer e.mu.Unlock()
 	e.sequence++
 	event.Sequence = e.sequence
+	event.wire, _ = json.Marshal(event)
+	meta := event
+	meta.Delivery = false
+	meta.Previous = 0
+	meta.Messages = nil
+	meta.Deleted = nil
+	event.metadata, _ = json.Marshal(meta)
+	meta.Rescan = true
+	event.metadataRescan, _ = json.Marshal(meta)
 	for wake, sub := range e.subscribers {
 		if sub.channel != "" && event.ChannelID != "" && event.ChannelID != sub.channel {
 			continue
 		}
 		queued := event
 		key := event.Type + event.ChannelID
+		if sub.payloads && event.Delivery {
+			key += ":" + strconv.FormatInt(event.Revision, 10)
+		}
+		if old, ok := sub.pending[key]; ok {
+			sub.bytes -= len(old.wire)
+		}
+		sub.bytes += len(event.wire)
 		if old, ok := sub.pending[key]; ok {
 			queued.Rescan = event.Rescan || old.Rescan
+			if queued.Rescan {
+				queued.metadata = event.metadataRescan
+			}
 		}
-		if event.Type == "resync" || len(sub.pending) >= 64 {
+		if event.Type == "resync" || len(sub.pending) >= 64 || sub.bytes > 262144 {
 			clear(sub.pending)
-			sub.pending["resync"] = memberEvent{Type: "resync", Sequence: event.Sequence}
+			resync := memberEvent{Type: "resync", Sequence: event.Sequence}
+			resync.wire, _ = json.Marshal(resync)
+			resync.metadata = resync.wire
+			sub.pending["resync"] = resync
+			sub.bytes = len(resync.wire)
 		} else if full, ok := sub.pending["resync"]; ok {
 			full.Sequence = event.Sequence
+			full.wire, _ = json.Marshal(full)
+			full.metadata = full.wire
+			sub.bytes = len(full.wire)
 			sub.pending["resync"] = full
 		} else {
 			sub.pending[key] = queued
@@ -106,6 +146,8 @@ func (e *chatEvents) drain(wake chan struct{}) []memberEvent {
 		events = append(events, event)
 	}
 	clear(sub.pending)
+	sub.bytes = 0
+	sort.Slice(events, func(i, j int) bool { return events[i].Sequence < events[j].Sequence })
 	return events
 }
 func (s *membershipStore) publishChannel(channel string, rescan bool) {
@@ -163,6 +205,7 @@ func headerToken(value, token string) bool {
 }
 func (a *membershipAPI) chatEvents(w http.ResponseWriter, r *http.Request) {
 	channel := r.PathValue("id")
+	payloads := r.URL.Path == "/api/v2/events/messages"
 	if channel != "" && !validHexID(channel, 32) {
 		memberFail(w, memberError(400, "INVALID_CHANNEL"))
 		return
@@ -178,7 +221,7 @@ func (a *membershipAPI) chatEvents(w http.ResponseWriter, r *http.Request) {
 		memberFail(w, memberError(400, "INVALID_WEBSOCKET"))
 		return
 	}
-	changes, unsubscribe, ok := a.store.events.subscribeChannel(access.DeviceID, channel)
+	changes, unsubscribe, ok := a.store.events.subscribeStream(access.DeviceID, channel, payloads)
 	if !ok {
 		memberFail(w, memberError(429, "RATE_LIMIT"))
 		return
@@ -260,7 +303,7 @@ func (a *membershipAPI) chatEvents(w http.ResponseWriter, r *http.Request) {
 				timer.Stop()
 				return
 			}
-			if _, err = a.store.eventAccess(r.Context(), token, channel); err != nil {
+			if access, err = a.store.eventAccess(r.Context(), token, channel); err != nil || payloads && !access.allows("chat.read") {
 				writeWS(conn, 8, []byte{3, 240})
 				return
 			}
@@ -268,7 +311,11 @@ func (a *membershipAPI) chatEvents(w http.ResponseWriter, r *http.Request) {
 			for _, event := range events {
 				payload := []byte("changed")
 				if channel == "" {
-					payload, _ = json.Marshal(event)
+					if payloads {
+						payload = event.wire
+					} else {
+						payload = event.metadata
+					}
 				}
 				if writeWS(conn, 1, payload) != nil {
 					return
@@ -340,6 +387,9 @@ func readWSControls(conn net.Conn, r *bufio.Reader, out chan<- wsControl) {
 func writeWS(conn net.Conn, op byte, data []byte) error {
 	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	header := []byte{128 | op, byte(len(data))}
+	if len(data) > 60000 {
+		return io.ErrShortBuffer
+	}
 	if len(data) > 125 {
 		header = []byte{128 | op, 126, 0, 0}
 		binary.BigEndian.PutUint16(header[2:], uint16(len(data)))

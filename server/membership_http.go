@@ -32,6 +32,7 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	mux.HandleFunc("PUT /api/v2/polls/{id}/vote", api.pollVote)
 	mux.HandleFunc("POST /api/v2/polls/{id}/close", api.pollClose)
 	mux.HandleFunc("GET /api/v2/events", api.chatEvents)
+	mux.HandleFunc("GET /api/v2/events/messages", api.chatEvents)
 	mux.HandleFunc("GET /api/v2/events/status", api.eventStatus)
 	mux.HandleFunc("GET /api/v2/state", api.state)
 	mux.HandleFunc("PATCH /api/v2/server/avatar", api.patchServerAvatar)
@@ -85,16 +86,10 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 			response := &eventResponse{ResponseWriter: w}
 			mux.ServeHTTP(response, r)
 			if response.status >= 200 && response.status < 300 {
-				store.events.mu.Lock()
-				retention := store.events.retention
-				store.events.retention = false
-				store.events.mu.Unlock()
-				if retention {
-					store.events.notify()
-				} else if strings.Contains(r.URL.Path, "/attachments/") {
-					// Uploads only invalidate if quota enforcement changed visible history.
+				if strings.Contains(r.URL.Path, "/attachments/") {
+					// Quota deletions are published by the upload transaction.
 				} else if channel != "" {
-					store.publishChannel(channel, r.Method == "PATCH" || r.Method == "DELETE")
+					// Message/poll transactions publish their own committed envelopes.
 				} else {
 					store.events.publish(memberEvent{Type: "state"})
 				}

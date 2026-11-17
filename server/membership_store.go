@@ -28,10 +28,11 @@ var membershipFeaturesSchema string
 const membershipSchemaVersion = 2
 
 type membershipStore struct {
-	events   chatEvents
-	db       *sql.DB
-	now      func() time.Time
-	maxBytes int64
+	events     chatEvents
+	deliveries messageDeliveries
+	db         *sql.DB
+	now        func() time.Time
+	maxBytes   int64
 }
 
 func randomHex(size int) (string, error) {

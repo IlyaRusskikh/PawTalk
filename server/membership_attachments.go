@@ -24,6 +24,7 @@ func (s *membershipStore) putAttachment(ctx context.Context, token, channel, id 
 		return err
 	}
 	defer tx.Rollback()
+	defer s.dropDeliveries(tx)
 	access, err := s.sessionAccessTx(ctx, tx, token)
 	if err != nil {
 		return err
@@ -69,7 +70,7 @@ func (s *membershipStore) putAttachment(ctx context.Context, token, channel, id 
 	if err = s.enforceMemberStorageTx(ctx, tx, 0); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return s.commitDelivery(ctx, tx)
 }
 
 func (s *membershipStore) attachment(ctx context.Context, token, channel, id string) (memberInvitePackage, string, error) {

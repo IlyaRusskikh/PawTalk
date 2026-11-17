@@ -33,6 +33,7 @@ type memberMessage struct {
 	AttachmentIDs   []string `json:"attachmentIds"`
 }
 type memberMessagePage struct {
+	Revision int64           `json:"revision"`
 	Messages []memberMessage `json:"messages"`
 	First    int64           `json:"first"`
 	Last     int64           `json:"last"`
@@ -89,6 +90,7 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 		return 0, err
 	}
 	defer tx.Rollback()
+	defer s.dropDeliveries(tx)
 	access, err := s.sessionAccessTx(ctx, tx, token)
 	if err != nil {
 		return 0, err
@@ -155,6 +157,9 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 	if recent >= 5 {
 		return 0, memberError(429, "MESSAGE_RATE_LIMIT")
 	}
+	if err = s.trackDelivery(ctx, tx, channel, 0, false); err != nil {
+		return 0, err
+	}
 	result, err := tx.ExecContext(ctx, "INSERT INTO messages(channel_id,author_profile_id,author_device_id,request_id,sent_at,crypto_context_id,nonce,ciphertext) VALUES(?,?,?,?,?,?,?,?)", channel, access.ProfileID, access.DeviceID, input.RequestID, s.now().UnixMilli(), input.KeyID, nonce, cipher)
 	if err != nil {
 		return 0, err
@@ -184,7 +189,8 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 	if err = s.enforceMemberStorageTx(ctx, tx, id); err != nil {
 		return 0, err
 	}
-	return id, tx.Commit()
+	s.noteDelivery(tx, channel, id)
+	return id, s.commitDelivery(ctx, tx)
 }
 
 func (s *membershipStore) editMessage(ctx context.Context, token string, id int64, input memberMessageInput) error {
@@ -221,6 +227,9 @@ func (s *membershipStore) editMessage(ctx context.Context, token string, id int6
 		}
 		if keyID != input.KeyID {
 			return memberError(409, "KEY_ID_MISMATCH")
+		}
+		if err = s.trackDelivery(ctx, tx, "", id, false); err != nil {
+			return err
 		}
 		if _, err = tx.ExecContext(ctx, "UPDATE messages SET nonce=?,ciphertext=?,edited_at=? WHERE message_id=?", nonce, cipher, s.now().UnixMilli(), id); err != nil {
 			return err
@@ -262,6 +271,9 @@ func (s *membershipStore) deleteMessage(ctx context.Context, token string, id in
 		if root != access.EffectiveProfileID {
 			return memberError(403, "MESSAGE_NOT_OWNED")
 		}
+		if err = s.trackDelivery(ctx, tx, "", id, true); err != nil {
+			return err
+		}
 		_, err = tx.ExecContext(ctx, "DELETE FROM messages WHERE message_id=?", id)
 		return err
 	})
@@ -293,11 +305,11 @@ func (s *membershipStore) enforceMemberStorageTx(ctx context.Context, tx *sql.Tx
 		if err != nil {
 			return err
 		}
+		if err = s.trackDelivery(ctx, tx, "", oldest, true); err != nil {
+			return err
+		}
 		if _, err = tx.ExecContext(ctx, "DELETE FROM messages WHERE message_id=?", oldest); err != nil {
 			return err
 		}
-		s.events.mu.Lock()
-		s.events.retention = true
-		s.events.mu.Unlock()
 	}
 }

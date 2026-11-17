@@ -89,6 +89,13 @@ func (s *membershipStore) finishPollTx(ctx context.Context, tx *sql.Tx, pollID s
 	if closed.Valid {
 		return nil
 	}
+	var channel string
+	if err := tx.QueryRowContext(ctx, "SELECT channel_id FROM messages WHERE message_id=?", id).Scan(&channel); err != nil {
+		return err
+	}
+	if err := s.trackDelivery(ctx, tx, channel, id, false); err != nil {
+		return err
+	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO messages(channel_id,author_profile_id,author_device_id,request_id,sent_at,crypto_context_id,nonce,ciphertext)
  SELECT m.channel_id,m.author_profile_id,m.author_device_id,p.result_request_id,?,m.crypto_context_id,p.result_nonce,p.result_ciphertext FROM polls p JOIN messages m ON m.message_id=p.message_id WHERE p.poll_id=?`, closedAt, pollID)
 	if err != nil {
@@ -104,6 +111,8 @@ func (s *membershipStore) finishPollTx(ctx context.Context, tx *sql.Tx, pollID s
 	if _, err = tx.ExecContext(ctx, "INSERT INTO system_messages(message_id,kind) VALUES(?,'poll-result')", resultID); err != nil {
 		return err
 	}
+	s.noteDelivery(tx, channel, resultID)
+	s.notePollDelivery(tx, channel, pollID)
 	return s.enforceMemberStorageTx(ctx, tx, resultID)
 }
 func (s *membershipStore) closeExpiredPolls(ctx context.Context) error {
@@ -112,6 +121,7 @@ func (s *membershipStore) closeExpiredPolls(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback()
+	defer s.dropDeliveries(tx)
 	rows, err := tx.QueryContext(ctx, "SELECT poll_id,closes_at FROM polls WHERE closed_at IS NULL AND closes_at<=? ORDER BY closes_at,poll_id", s.now().UnixMilli())
 	if err != nil {
 		return err
@@ -140,10 +150,7 @@ func (s *membershipStore) closeExpiredPolls(ctx context.Context) error {
 			return err
 		}
 	}
-	if err = tx.Commit(); err == nil && len(pending) > 0 {
-		s.events.notify()
-	}
-	return err
+	return s.commitDelivery(ctx, tx)
 }
 
 // runPollClock publishes encrypted, pre-authorized replies without any client online.
@@ -172,6 +179,7 @@ func (s *membershipStore) pollState(ctx context.Context, token, pollID string) (
 		return result, err
 	}
 	defer tx.Rollback()
+	defer s.dropDeliveries(tx)
 	access, err := s.sessionAccessTx(ctx, tx, token)
 	if err != nil {
 		return result, err
@@ -191,10 +199,9 @@ func (s *membershipStore) pollState(ctx context.Context, token, pollID string) (
 		if err = s.finishPollTx(ctx, tx, pollID, result.ClosesAt); err != nil {
 			return result, err
 		}
-		if err = tx.Commit(); err != nil {
+		if err = s.commitDelivery(ctx, tx); err != nil {
 			return result, err
 		}
-		s.events.notify()
 		return s.pollState(ctx, token, pollID)
 	}
 	visible := result.Intermediate || result.ClosedAt != nil
@@ -280,6 +287,14 @@ func (s *membershipStore) votePoll(ctx context.Context, token, pollID, requestID
 				return memberError(400, "INVALID_VOTE")
 			}
 		}
+		var channel string
+		if err = tx.QueryRowContext(ctx, "SELECT m.channel_id FROM polls p JOIN messages m ON m.message_id=p.message_id WHERE p.poll_id=?", pollID).Scan(&channel); err != nil {
+			return err
+		}
+		if err = s.trackDelivery(ctx, tx, channel, 0, false); err != nil {
+			return err
+		}
+		s.notePollDelivery(tx, channel, pollID)
 		raw, _ := json.Marshal(sorted)
 		if len(sorted) == 0 {
 			_, err = tx.ExecContext(ctx, "DELETE FROM poll_votes WHERE poll_id=? AND profile_id=?", pollID, access.EffectiveProfileID)

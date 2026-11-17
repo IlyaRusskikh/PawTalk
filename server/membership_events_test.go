@@ -223,7 +223,7 @@ func TestServerEventSequenceAndPresenceExpiry(t *testing.T) {
 	}
 }
 
-func TestPollReadCompletionPublishesResync(t *testing.T) {
+func TestPollReadCompletionPublishesDelivery(t *testing.T) {
 	s := testMembershipStore(t)
 	ctx := context.Background()
 	owner := bootstrapTestServer(t, s, newTestMemberSigner(5))
@@ -242,7 +242,7 @@ func TestPollReadCompletionPublishesResync(t *testing.T) {
 		t.Fatal(err)
 	}
 	events := s.events.drain(wake)
-	if len(events) != 1 || events[0].Type != "resync" {
-		t.Fatal("GET completion changed history without invalidating", events)
+	if len(events) != 1 || events[0].Type != "chat" || !events[0].Delivery || len(events[0].Messages) != 2 {
+		t.Fatal("GET completion did not deliver its original and result")
 	}
 }

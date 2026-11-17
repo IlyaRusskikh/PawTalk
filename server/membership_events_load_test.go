@@ -25,6 +25,7 @@ func TestServerEventFanoutLoad(t *testing.T) {
 	if os.Getenv("PAWTALK_EVENT_LOAD") != "1" {
 		t.Skip("opt-in: PAWTALK_EVENT_LOAD=1")
 	}
+	payloads := os.Getenv("PAWTALK_EVENT_PAYLOADS") == "1"
 	for _, size := range []int{100, 500, 1000} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
 			s := testMembershipStore(t)
@@ -80,7 +81,7 @@ func TestServerEventFanoutLoad(t *testing.T) {
 				}
 				connections = append(connections, conn)
 				conn.SetDeadline(time.Now().Add(40 * time.Second))
-				fmt.Fprintf(conn, "GET /api/v2/events HTTP/1.1\r\nHost: %s\r\nAuthorization: Bearer %s\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", server.Listener.Addr(), token)
+				fmt.Fprintf(conn, "GET %s HTTP/1.1\r\nHost: %s\r\nAuthorization: Bearer %s\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", map[bool]string{true: "/api/v2/events/messages", false: "/api/v2/events"}[payloads], server.Listener.Addr(), token)
 				r := bufio.NewReader(conn)
 				res, err := http.ReadResponse(r, nil)
 				if err != nil || res.StatusCode != 101 {
@@ -115,6 +116,14 @@ func TestServerEventFanoutLoad(t *testing.T) {
 							continue
 						}
 						received := time.Now()
+						if payloads {
+							if !event.Delivery || len(event.Messages) != 1 || event.Messages[0].Ciphertext != testMessage('a').Ciphertext {
+								done <- delivery{err: fmt.Errorf("missing committed envelope")}
+								return
+							}
+							done <- delivery{event: received, fetch: received}
+							return
+						}
 						req, _ := http.NewRequest("GET", server.URL+"/api/v2/channels/"+channel+"/messages?after=0&limit=1", nil)
 						req.Header.Set("Authorization", "Bearer "+token)
 						res, err := http.DefaultClient.Do(req)
@@ -132,11 +141,11 @@ func TestServerEventFanoutLoad(t *testing.T) {
 					}
 				}(token, conn, r)
 			}
+			start := time.Now()
 			if _, err := s.postMessage(context.Background(), owner.Token, channel, testMessage('a')); err != nil {
 				t.Fatal(err)
 			}
-			start := time.Now()
-			s.publishChannel(channel, false)
+
 			events, fetches := make([]time.Duration, 0, size), make([]time.Duration, 0, size)
 			deadline := time.NewTimer(25 * time.Second)
 			defer deadline.Stop()
@@ -155,7 +164,7 @@ func TestServerEventFanoutLoad(t *testing.T) {
 			readers.Wait()
 			sort.Slice(events, func(i, j int) bool { return events[i] < events[j] })
 			sort.Slice(fetches, func(i, j int) bool { return fetches[i] < fetches[j] })
-			t.Logf("clients=%d event_p50=%s event_p95=%s event_max=%s history_p95=%s history_max=%s", size, events[size/2], events[size*95/100], events[size-1], fetches[size*95/100], fetches[size-1])
+			t.Logf("clients=%d payloads=%t event_p50=%s event_p95=%s event_max=%s history_p95=%s history_max=%s", size, payloads, events[size/2], events[size*95/100], events[size-1], fetches[size*95/100], fetches[size-1])
 		})
 	}
 }
