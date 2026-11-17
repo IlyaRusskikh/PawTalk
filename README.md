@@ -42,3 +42,5 @@ PawTalk uses [AGPL-3.0-only](LICENSE); see [third-party notices](THIRD_PARTY_NOT
 Development source also includes channel notification mutes, identity-bound mentions, automatic away status, administrator-managed server avatars and encrypted polls. These require compatible Client/Server builds; published installers are unchanged. See [development chat guide](docs/client/chat.en.md#development-source-additions).
 
 For an isolated Server from current Windows source, use **npm run review:server**, then **npm run review** for Client. [Server review setup](architecture/development.en.md#native-server-review-on-windows).
+
+With GNU Make installed, **make client-start/client-stop**, **make manager-start/manager-stop** and **make server-start/server-stop** control development instances. Run **make help** for options; see [Make review commands](architecture/development.en.md#make-review-commands-on-windows).

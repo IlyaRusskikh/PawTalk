@@ -39,7 +39,8 @@ async function run(file, args, env, timeout = 15000) {
 }
 export async function stopReviewServer(options) {
   const paths = reviewServerPaths(options.profile);
-  const raw = await readFile(paths.runtime, 'utf8');
+  const raw = await readFile(paths.runtime, 'utf8').catch(error=>{if(error.code==='ENOENT')return null;throw error;});
+  if(raw===null)return false;
   if (raw.length > 4096) throw Error('Invalid review server runtime record');
   const runtime = JSON.parse(raw);
   if (!/^\\\\\.\\pipe\\pawtalk-review-[a-f0-9]{32}$/.test(runtime.pipe) || !/^[a-f0-9]{64}$/.test(runtime.token)) throw Error('Invalid review server control endpoint');

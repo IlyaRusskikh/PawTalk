@@ -42,3 +42,5 @@
 В исходном коде также доступны муты отдельных чатов, упоминания по ID, автоматический статус «отошел», аватар сервера от администратора и зашифрованные опросы. Нужны совместимые сборки Client/Server; опубликованные установщики не меняются. См. [руководство по новым функциям](docs/client/chat.ru.md#дополнения-в-исходном-коде).
 
 Для отдельного Server из текущего исходного кода в Windows: **npm run review:server**, затем **npm run review** для Client. [Настройка Server для review](architecture/development.ru.md#отдельный-server-для-review-в-windows).
+
+После установки GNU Make команды **make client-start/client-stop**, **make manager-start/manager-stop** и **make server-start/server-stop** управляют экземплярами разработки. Параметры: **make help**; подробнее — [команды Make](architecture/development.ru.md#команды-make-для-review-в-windows).

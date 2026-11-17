@@ -27,3 +27,14 @@ Data lives under release/review-server/data; binaries and the private first-admi
 Use **--profile NAME** for an independent server and **--port PORT** for its free group of four ports; include the same profile when stopping. Repeat custom IP/port options on restart. Use a new profile if changing the advertised IP rather than replacing a saved identity. Each launch rebuilds source; an already running profile is rejected. Close and relaunch to pick up code changes. Installed Manager/Server state is never used. This is development source, not a signed release.
 
 Verification: **node scripts/review-server-smoke.mjs** builds/starts the real native Server, joins over pinned TLS, sends encrypted chat, stops/restarts with the same identity/history and checks profile locking. Its synthetic profile is removed afterwards.
+
+## Make review commands on Windows
+
+Install GNU Make (for example, winget install --id ezwinports.make --exact --source winget --scope user), then reopen the terminal so its PATH refreshes. Run make from the repository root; bare make prints help. Existing make installer and make all still build the installer.
+
+- make client-start / make client-stop: build the current Client UI and open/quit its dedicated review profile. Closing the window normally still hides it in the tray. Stop addresses only the instance recorded by this launcher; it never kills processes by executable name.
+- make manager-start / make manager-stop: build the current Manager UI and open/quit its dedicated UI profile. When installed Manager is found in its registry record, use that host backend and data root; actions therefore manage that installed server and may request normal UAC authorization. Otherwise use the locally prepared Manager runtime. This is a UI review, not a separate server installation. Stopping this UI leaves Server services running, and refuses to interrupt a busy Manager operation.
+- make server-start / make server-stop: existing native Server review; start stays in the foreground. SERVER_IP, SERVER_PORT and SERVER_PROFILE configure that separate server.
+- make stop: stop the selected client, Manager UI and review server. PROFILE=name selects another client/Manager UI profile. Review state/logs live under release/review-apps and are ignored by Git.
+
+The launcher uses authenticated local pipes and graceful application shutdown; no forced process-name termination or new service installation is performed. A repeated start is harmless; a repeated stop succeeds. Validate actual window lifecycle with node scripts/review-app-smoke.mjs; the smoke test denies the Manager privileged broker synthetically instead of elevating or modifying a real host.
