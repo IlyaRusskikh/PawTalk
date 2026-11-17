@@ -25,10 +25,10 @@ export function PollCard({message, state, onJump, onClosed}: {message: Message; 
   useEffect(() => {
     const epoch = ++generation.current;
     const load = () => void refresh().catch(error => {if (generation.current === epoch) setError(error.message);});
-    load(); const timer = setInterval(load, 3500);
+    load(); const timer = status?.closedAt!=null||state.eventsLive?undefined:setInterval(load,3500);
     const off=window.desktop?.onMembershipChatChanged?.(event=>{if(event.serverId===state.serverId&&event.channelId===message.channelId)load();});
     return () => {generation.current++; clearInterval(timer);off?.();};
-  }, [refresh]);
+  }, [refresh,state.eventsLive,status?.closedAt]);
   const closed = status?.closedAt != null;
   useEffect(()=>{if(closed)onClosed?.();},[closed]);
   const countsVisible = status && status.counts.length === poll.options.length;

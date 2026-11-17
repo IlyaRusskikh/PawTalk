@@ -5,6 +5,7 @@ export interface ServerRecord { serverId: string; address: string; name: string;
 export interface Profile { id: string; nickname: string; revision: number; avatar?: string }
 export interface Channel { id: string; name: string; kind: 'text'|'voice'; protected: boolean; position: number; revision: number; messageRevision: number; lastMessageId: number }
 export interface ServerState {
+  eventsLive?:boolean;
   avatar?:string;avatarRevision?:number;capabilities?:string[]; serverId: string; name: string; revision: number; controlRevision: number;
   self: { effectiveProfileId: string; profileId: string; deviceId: string; role: 'member'|'moderator'|'admin'; permissions: string[] };
   profiles: Profile[]; channels: Channel[]; bindings: { source: string; target: string }[];

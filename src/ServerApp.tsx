@@ -56,7 +56,7 @@ export function ServerApp() {
   useEffect(()=>{let alive=true;const poll=()=>void membership<{away:boolean}>('activity').then(value=>{if(alive)setIdle(value.away);}).catch(()=>{});poll();const timer=setInterval(poll,5000);return()=>{alive=false;clearInterval(timer);};},[]);
   const [openLinkID,setOpenLinkID]=useState('');
   const [incomingLink,setIncomingLink]=useState<{linkId:string;serverId:string}>();
-  useEffect(()=>{let alive=true,pending=false;async function poll(){if(pending)return;pending=true;try{const links=await membership<{linkId:string;serverId:string}[]>('link.pending');if(alive)setIncomingLink(links[0]);}catch{}finally{pending=false;}}void poll();const timer=setInterval(()=>void poll(),2000);return()=>{alive=false;clearInterval(timer);};},[]);
+  useEffect(()=>{let alive=true,pending=false;async function poll(){if(pending)return;pending=true;try{const links=await membership<{linkId:string;serverId:string}[]>('link.pending');if(alive)setIncomingLink(links[0]);}catch{}finally{pending=false;}}void poll();const timer=setInterval(()=>void poll(),2000),off=window.desktop?.onMembershipServerEvent?.(event=>{if(event.type!=='chat')void poll();});return()=>{alive=false;clearInterval(timer);off?.();};},[]);
   const [departures,setDepartures]=useState<{serverId:string;name:string;kind:'kick'|'ban';expiresAt?:number|null}[]>([]);
   const [roster, setRoster] = useState(() => localStorage.getItem('pawtalk.v2.roster') !== 'hidden'), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<'join'|'invite'|'link'|'devices'|'bans'|'settings'|'create'|'host-share'|null>(onboarding?'settings':null), [address, setAddress] = useState(''), [linkText, setLinkText] = useState(''), [nickname, setNickname] = useState(() => localStorage.getItem('pawtalk.nickname') || t('Гость'));
@@ -81,8 +81,10 @@ export function ServerApp() {
   const [unread, setUnread] = useState<Record<string, number>>({}), [focused, setFocused] = useState(true), [, updatePrefs] = useState(0), [personPrefs, setPersonPrefs] = useState<Record<string, { volume: number; muted: boolean }>>({});
   const contentFocused=focused&&!avatarServer&&!incomingLink&&!departures.length&&!modal&&!channelDialog&&!moderation&&!leaveServer&&!muteServer&&!muteChannel&&!addressServer&&!renameServer;
   const controller = useRef<VoiceSession | undefined>(undefined), current = useRef({ settings, states, selected, chatIDs, focused:contentFocused, deafened, voice }); current.current = { settings, states, selected, chatIDs, focused:contentFocused, deafened, voice };
+  const mentionCache=useRef(new Map<string,Message[]>()),rescan=useRef(new Map<string,number>()),refreshAgain=useRef(false),soundAt=useRef(0);
   const seen = useRef(new Map<string, { revision: number; last: number; read?:number }>()), polling = useRef(false), mounted = useRef(true), joiningVoice = useRef(false);
   const voiceAttempt=useRef(0),pendingVoiceServer=useRef('');
+  const periodicRefreshAt=useRef(0),notificationsRetry=useRef(false);
   const viewports=useRef(new Map<string,boolean>());
   const hiddenVoice=useRef(new Map<string,string>());
   const [serverOrder,setServerOrder]=useState<string[]>(()=>storedJSON('pawtalk.v2.server-order',[]));
@@ -92,7 +94,7 @@ export function ServerApp() {
   const own = state && profileFor(state, state.self.effectiveProfileId), active = snapshot.state !== 'disconnected', admin = state?.self.role === 'admin', canInvite = admin || state?.self.role === 'moderator';
   async function refreshDevices() { try { setDevices(await navigator.mediaDevices.enumerateDevices()); } catch { setError(t('Не удалось получить список аудиоустройств')); } }
   const refresh = useCallback(async () => {
-    if (polling.current) return; polling.current = true;
+    if (polling.current){refreshAgain.current=true;return;} polling.current = true;notificationsRetry.current=false;
     try {
       const records = await membership<ServerRecord[]>('servers'); const order=orderRef.current;records.sort((a,b)=>(order.includes(a.serverId)?order.indexOf(a.serverId):1e6)-(order.includes(b.serverId)?order.indexOf(b.serverId):1e6)); if (!mounted.current) return; setServers(records);
       setStates(previous=>Object.fromEntries(Object.entries(previous).filter(([id])=>records.some(record=>record.serverId===id))));
@@ -102,7 +104,7 @@ export function ServerApp() {
         while (index < records.length && mounted.current) {
           const server = records[index++];
           try {
-            const next = await membership<ServerState>('connect', { serverId: server.serverId }).catch(error=>{for(const key of seen.current.keys())if(key.startsWith(server.serverId+':'))seen.current.delete(key);throw error;}); if (!mounted.current) return;
+            const next = await membership<ServerState>('connect', { serverId: server.serverId }); if (!mounted.current) return;
             const hidden=hiddenVoice.current.get(next.serverId);if(hidden){if(!next.voice.some(person=>person.deviceId===hidden))hiddenVoice.current.delete(next.serverId);else next.voice=next.voice.filter(person=>person.deviceId!==hidden);}
             setStates(previous => ({ ...previous, [next.serverId]: next }));
             setServers(previous=>previous.map(record=>record.serverId===next.serverId?{...record,name:next.name}:record));
@@ -112,52 +114,50 @@ export function ServerApp() {
             for (const channel of next.channels.filter(channel => channel.kind === 'text')) {
               const key = `${next.serverId}:${channel.id}`, previous = seen.current.get(key);
               const read = Number(localStorage.getItem(cursorKey(next.serverId, channel.id))) || 0;
-              if (channel.lastMessageId <= read) { seen.current.set(key,{revision:channel.messageRevision,last:channel.lastMessageId,read});setUnread(values => ({ ...values, [key]: 0 }));setMentionIDs(values=>({...values,[key]:[]})); continue; }
+              if (channel.lastMessageId <= read) { seen.current.set(key,{revision:channel.messageRevision,last:channel.lastMessageId,read});setUnread(values => ({ ...values, [key]: 0 }));setMentionIDs(values=>({...values,[key]:[]}));mentionCache.current.delete(key);rescan.current.delete(key); continue; }
               if (previous?.revision === channel.messageRevision&&previous.read===read) continue;
               const page = await membership<MessagePage>('messages', { serverId: next.serverId, channelId: channel.id, options: { limit: 1, readAfter: read } });
-              if (!mounted.current) return;seen.current.set(key,{revision:channel.messageRevision,last:channel.lastMessageId,read}); setUnread(values => ({ ...values, [key]: page.unread }));
+              if (!mounted.current) return; setUnread(values => ({ ...values, [key]: page.unread }));
               const value = current.current, visible = value.selected === next.serverId && (value.chatIDs[next.serverId] || next.channels.find(channel => channel.kind === 'text')?.id) === channel.id && value.focused && viewports.current.get(key)!==false;
-              const mentions:Message[]=[];let cursor=read;
-              for(;;){
+              const requestedScan=rescan.current.get(key)||0,fullScan=!previous||requestedScan||(!next.eventsLive&&previous.revision!==channel.messageRevision&&previous.last>=channel.lastMessageId);
+              const mentions:Message[]=fullScan?[]:(mentionCache.current.get(key)||[]).filter(m=>m.id>read),arrivals:Message[]=[];let cursor=fullScan?read:Math.max(read,previous?.last||0);
+              const scanThrough=Math.max(channel.lastMessageId,page.last);
+              while(cursor<scanThrough){
                 const batch=await membership<MessagePage>('messages',{serverId:next.serverId,channelId:channel.id,options:{limit:500,...(cursor?{after:cursor}:{around:1})}});
+                arrivals.push(...batch.messages);
                 for(const message of batch.messages)if(message.id>read&&effectiveProfile(next,message.authorProfileId)!==next.self.effectiveProfileId&&message.content.mentions?.some(mention=>effectiveProfile(next,mention.profileId)===next.self.effectiveProfileId))mentions.push(message);
-                const last=batch.messages.at(-1)?.id||cursor;if(last<=cursor||last>=channel.lastMessageId)break;cursor=last;
+                const last=batch.messages.at(-1)?.id||cursor;if(last<=cursor||last>=scanThrough){cursor=last;break;}cursor=last;
               }
-              if(!mounted.current)return;setMentionIDs(values=>({...values,[key]:mentions.map(message=>message.id)}));
+              if(!mounted.current)return;if(rescan.current.get(key)===requestedScan)rescan.current.delete(key);seen.current.set(key,{revision:channel.messageRevision,last:Math.max(scanThrough,cursor),read});mentionCache.current.set(key,mentions);setMentionIDs(values=>({...values,[key]:mentions.map(message=>message.id)}));
               const newMention=previous&&mentions.filter(message=>message.id>previous.last).at(-1);
               if (previous && channel.lastMessageId > previous.last && page.unread && !visible && (!notificationsMuted(next.serverId,channel.id)||newMention)) {
-                const added=read>=previous.last?page.unread:(await membership<MessagePage>('messages',{serverId:next.serverId,channelId:channel.id,options:{limit:1,readAfter:previous.last}})).unread;
-                if(!added)continue;
-
-                let message=newMention||page.messages.at(-1);
-                // A burst may end with our own reply. Preview the newest incoming
-                // message rather than attributing the notification to ourselves.
-                if(message&&!message.systemKind&&effectiveProfile(next,message.authorProfileId)===next.self.effectiveProfileId){
-                  const recent=await membership<MessagePage>('messages',{serverId:next.serverId,channelId:channel.id,options:{limit:100}});
-                  message=[...recent.messages].reverse().find(item=>item.id>previous.last&&(!!item.systemKind||effectiveProfile(next,item.authorProfileId)!==next.self.effectiveProfileId));
-                }
+                const incoming=arrivals.filter(message=>message.id>previous.last&&(!!message.systemKind||effectiveProfile(next,message.authorProfileId)!==next.self.effectiveProfileId));
+                if(!incoming.length)continue;
+                const message=newMention||incoming.at(-1);
                 const now=current.current,nowRead=Number(localStorage.getItem(cursorKey(next.serverId,channel.id)))||0;
                 const visibleNow=now.selected===next.serverId&&(now.chatIDs[next.serverId]||next.channels.find(c=>c.kind==='text')?.id)===channel.id&&now.focused&&viewports.current.get(key)!==false;
                 if(visibleNow||nowRead>=channel.lastMessageId)continue;
-                if(message&&!now.deafened)void playSound('message',now.settings);
+                if(message&&!now.deafened&&Date.now()-soundAt.current>750){soundAt.current=Date.now();void playSound('message',now.settings);}
                 if(message)void membership('notify', { serverId: next.serverId, channelId: channel.id, channelName: channel.name,
                   authorName:message.systemKind?t('Система'):profileFor(next,message.authorProfileId)?.nickname||t('Участник'),
-                  mention:!!newMention,text:message.unreadable?t('Не удалось расшифровать сообщение.'):message.content.text,hasImage:!!message.content.image });
+                  messageId:message.id,batchCount:incoming.length,mention:!!newMention,text:message.unreadable?t('Не удалось расшифровать сообщение.'):message.content.text,hasImage:!!message.content.image });
               }
             }
-          } catch (error) { if(['BANNED','NOT_A_MEMBER'].includes((error as {code:string}).code))continue;const message=(error as Error).message;if (current.current.selected === server.serverId && mounted.current&&reportedConnectionErrors.current.get(server.serverId)!==message){reportedConnectionErrors.current.set(server.serverId,message);setError(message);} }
+          } catch (error) { if(['BANNED','NOT_A_MEMBER'].includes((error as {code:string}).code))continue;notificationsRetry.current=true;const message=(error as Error).message;if (current.current.selected === server.serverId && mounted.current&&reportedConnectionErrors.current.get(server.serverId)!==message){reportedConnectionErrors.current.set(server.serverId,message);setError(message);} }
         }
       }));
-    } catch (error) { if (mounted.current) setError((error as Error).message); } finally { polling.current = false; }
+    } catch (error) { notificationsRetry.current=true;if (mounted.current) setError((error as Error).message); } finally { polling.current = false;if(refreshAgain.current&&mounted.current){refreshAgain.current=false;queueMicrotask(()=>void refresh());} }
   }, []);
   useEffect(() => {
-    mounted.current = true; void refresh(); const timer = setInterval(() => void refresh(), 3500);
+    mounted.current = true; void refresh(); const timer = setInterval(() => {const values=Object.values(current.current.states);if(values.length&&values.every(s=>s.eventsLive)&&!notificationsRetry.current&&Date.now()-periodicRefreshAt.current<30000)return;periodicRefreshAt.current=Date.now();void refresh();}, 3500);
+    const serverEvent=window.desktop?.onMembershipServerEvent?.(event=>{if(event.rescan&&event.channelId)rescan.current.set(event.serverId+':'+event.channelId,(rescan.current.get(event.serverId+':'+event.channelId)||0)+1);if(event.type==='resync')for(const key of seen.current.keys())if(key.startsWith(event.serverId+':'))rescan.current.set(key,(rescan.current.get(key)||0)+1);void refresh();});
+    const liveStatus=window.desktop?.onMembershipLiveStatus?.(event=>{setStates(values=>values[event.serverId]?{...values,[event.serverId]:{...values[event.serverId],eventsLive:event.live}}:values);if(!event.live)for(const key of seen.current.keys())if(key.startsWith(event.serverId+':'))rescan.current.set(key,(rescan.current.get(key)||0)+1);void refresh();});
     const changed = window.desktop?.onMembershipChanged?.(event => {if(event?.departure){setDepartures(values=>[...values,event.departure!]);setModal(null);setChannelDialog(undefined);setModeration(undefined);setLeaveServer(undefined);setMuteServer(undefined);setAddressServer(undefined);setRenameServer(undefined);setError('');}if(event?.leaveError==='LAST_ADMIN')setError(t('Сервер отклонил отложенный выход: сначала назначьте другого администратора. Сервер возвращён в список.'));void refresh();});
     const receive = (value: string) => { if (value) { setAddress(value); if(!onboardingActive.current)setModal('join'); } };
     const invitation = window.desktop?.onInvitation(receive); void window.desktop?.pendingInvitation().then(receive);
     const open = window.desktop?.onMembershipOpenChannel?.(value => { setSelected(value.serverId); setChatIDs(previous => ({ ...previous, [value.serverId]: value.channelId }));  });
     const focus = window.desktop?.onWindowActive?.(value=>{if(!value)current.current.focused=false;setFocused(value);}); void window.desktop?.windowActive?.().then(setFocused);
-    return () => { mounted.current = false; clearInterval(timer); changed?.(); invitation?.(); open?.(); focus?.(); };
+    return () => { mounted.current = false; clearInterval(timer); changed?.();serverEvent?.();liveStatus?.(); invitation?.(); open?.(); focus?.(); };
   }, [refresh]);
   useEffect(() => {
     const session = new VoiceSession(current.current.settings); controller.current = session;

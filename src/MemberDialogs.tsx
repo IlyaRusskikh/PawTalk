@@ -26,8 +26,8 @@ export function LinkDialog({ state, nickname, initialText = '', initialID='', on
   useEffect(() => {
     if (!id) return; let alive = true, pending = false;
     async function poll() { if (pending) return; pending = true; try { const value = await membership<LinkStatus>('link.status', { linkId: id }); if (alive) setStatus(value); } catch (error) { if (alive) setError((error as Error).message); } finally { pending = false; } }
-    void poll(); const timer = setInterval(() => void poll(), 2000); return () => { alive = false; clearInterval(timer); };
-  }, [id]);
+    void poll(); const timer = setInterval(() => void poll(), side==='target'&&state?.eventsLive?30000:2000);const off=window.desktop?.onMembershipServerEvent?.(event=>{if(event.serverId===state?.serverId&&event.type!=='chat')void poll();}); return () => { alive = false; clearInterval(timer);off?.(); };
+  }, [id,state?.eventsLive,side]);
   async function run(action: string, input: Record<string, unknown>) {
     setBusy(true); setError('');
     try {
