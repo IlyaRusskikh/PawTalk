@@ -9,14 +9,15 @@ class MembershipLive {
  ensure(serverId,state,channelId){
   const wide=state.capabilities?.includes('server-events-v1');if(!wide&&!channelId)return;
   if(!wide&&!state.capabilities?.includes('chat-events-v1'))return;
-  const path=wide?'/api/v2/events':'/api/v2/channels/'+channelId+'/events',previous=this.entries.get(serverId);
+  const payloads=wide&&state.capabilities?.includes('message-events-v1');
+  const path=wide?(payloads?'/api/v2/events/messages':'/api/v2/events'):'/api/v2/channels/'+channelId+'/events',previous=this.entries.get(serverId);
   if(previous?.path===path)return;
   if(previous)this.closeEntry(previous);
-  const entry={serverId,path,wide,channelId,online:false,attempts:0,closed:false,pending:new Map()};this.entries.set(serverId,entry);
+  const entry={serverId,path,wide,payloads,channelId,decodeEpoch:0,decodeCount:0,decodeBytes:0,decoding:Promise.resolve(),online:false,attempts:0,closed:false,pending:new Map()};this.entries.set(serverId,entry);
   const signal=(type,payload={})=>{if(entry.closed)return;this.send(type,{serverId,...payload});};
-  const flush=()=>{entry.flush=undefined;for(const event of entry.pending.values()){
+  const flush=()=>{entry.flush=undefined;entry.pendingBytes=0;for(const event of [...entry.pending.values()].sort((a,b)=>a.channelId===b.channelId?(a.revision||0)-(b.revision||0):(a.sequence||0)-(b.sequence||0))){
    signal('membership-server-event',event);
-   if(event.type==='chat')signal('membership-chat-changed',{channelId:event.channelId});
+   if(event.type==='chat')signal('membership-chat-changed',{channelId:event.channelId,delivery:event.delivery,pollIds:event.delivery?[...(event.pollIds||[]),...(event.messages||[]).flatMap(m=>m.content.poll?[m.content.poll.id]:[])]:undefined});
    else if(event.type==='resync'&&this.active?.serverId===serverId)signal('membership-chat-changed',{channelId:this.active.channelId});
   }entry.pending.clear();};
   const connect=async initial=>{
@@ -28,15 +29,27 @@ class MembershipLive {
     const address=await bridge.open(connection.base.replace(/^https:/,'wss:'),connection.fingerprint,{eventPath:path,eventToken:connection.token,onEventActivity:()=>{entry.lastFrame=Date.now();}});
     if(entry.closed){bridge.close();return;}
     const socket=new WebSocket(address+path);entry.socket=socket;
-    socket.addEventListener('open',()=>{if(entry.closed)return;entry.online=true;entry.opened=Date.now();entry.lastFrame=Date.now();entry.sequence=0;signal('membership-live-status',{live:wide});});
-    socket.addEventListener('message',message=>{if(entry.closed)return;let event;
+    socket.addEventListener('open',()=>{if(entry.closed)return;entry.online=true;entry.opened=Date.now();entry.lastFrame=Date.now();entry.sequence=0;entry.decodeEpoch++;signal('membership-live-status',{live:wide});});
+    socket.addEventListener('message',message=>{if(entry.closed)return;const bytes=typeof message.data==='string'?Buffer.byteLength(message.data):60001;
+     if(bytes>60000||entry.decodeCount>=64||entry.decodeBytes+bytes>262144){signal('membership-server-event',{type:'resync'});socket.close(1013);return;}
+     const epoch=entry.decodeEpoch;entry.decodeCount++;entry.decodeBytes+=bytes;
+     entry.decoding=entry.decoding.then(async()=>{if(entry.closed||epoch!==entry.decodeEpoch)return;let event;
      try{if(!wide){if(message.data!=='changed')throw Error();signal('membership-chat-changed',{channelId});return;}
       event=JSON.parse(message.data);if(!event||!['resync','state','chat'].includes(event.type))throw Error();
       if(!Number.isSafeInteger(event.sequence)||event.sequence<0)throw Error();entry.sequence=Math.max(entry.sequence||0,event.sequence);
       if(event.type==='chat'&&(!id(event.channelId)||!Number.isSafeInteger(event.revision)||event.revision<0||!Number.isSafeInteger(event.last)||event.last<0||(event.rescan!==undefined&&typeof event.rescan!=='boolean')))throw Error();
-     }catch{socket.close(1002);return;}
-     const key=event.type+(event.channelId||'');if(entry.pending.size>=64){entry.pending.clear();entry.pending.set('resync',{type:'resync'});}else{const old=entry.pending.get(key);entry.pending.set(key,{...event,rescan:!!event.rescan||!!old?.rescan});}
+     }catch(error){socket.close(1002);return;}
+     if(event.pollIds!==undefined&&(!Array.isArray(event.pollIds)||event.pollIds.length>32||event.pollIds.some(p=>!id(p))))throw Error('Invalid poll update');
+
+     if(event.delivery){
+      if(!payloads||!Number.isSafeInteger(event.previous)||event.previous<0||event.previous>=event.revision||!Number.isSafeInteger(event.first)||event.first<0||!Array.isArray(event.messages)||event.messages.length>32||!Array.isArray(event.deleted||[])||(event.deleted||[]).length>32)throw Error('Invalid delivery');
+      for(const d of event.deleted||[])if(!Number.isSafeInteger(d.id)||d.id<1||! /^[a-f0-9]{64}$/.test(d.authorProfileId)||!['',undefined,'poll-result'].includes(d.systemKind))throw Error('Invalid removal');
+      event.messages=await this.client.decodeMessages(serverId,event.channelId,event.messages);
+      event.deleted=event.deleted||[];if(entry.closed||epoch!==entry.decodeEpoch)return;
+     }
+     const key=event.type+(event.channelId||'')+(event.delivery?':'+event.revision:'');const oldSize=entry.pending.get(key)?._bytes||0;entry.pendingBytes=(entry.pendingBytes||0)-oldSize+bytes;event._bytes=bytes;if(entry.pending.size>=64||entry.pendingBytes>262144){entry.pending.clear();entry.pending.set('resync',{type:'resync'});entry.pendingBytes=0;}else{const old=entry.pending.get(key);entry.pending.set(key,{...event,rescan:!!event.rescan||!!old?.rescan});}
      if(!entry.flush)entry.flush=setTimeout(flush,40);
+     }).catch(error=>{signal('membership-server-event',{type:'resync'});socket.close(1002);}).finally(()=>{entry.decodeCount--;entry.decodeBytes-=bytes;});
     });
     socket.addEventListener('error',()=>{});
     socket.addEventListener('close',()=>{if(Date.now()-entry.opened>30000)entry.attempts=0;bridge.close();entry.online=false;signal('membership-live-status',{live:false});if(!entry.closed)retry();});

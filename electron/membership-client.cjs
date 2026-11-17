@@ -332,8 +332,13 @@ class MembershipClient {
     if(options.ids!==undefined){if(!Array.isArray(options.ids)||!options.ids.length||options.ids.length>500||options.ids.some(id=>!Number.isSafeInteger(id)||id<1))throw failure('INVALID_PAGE');query.set('ids',[...new Set(options.ids)].join(','));}
     const page = await this.request(serverId, `/api/v2/channels/${channelId}/messages?${query}`);
     if (!Array.isArray(page.messages) || page.messages.length > 500) throw failure('INVALID_API_RESPONSE');
+    page.messages=await this.decodeMessages(serverId,channelId,page.messages);
+    return page;
+  }
+  async decodeMessages(serverId,channelId,messages){
+    if(!Array.isArray(messages)||messages.length>500)throw failure('INVALID_API_RESPONSE');
     const connection = this.connections.get(serverId);
-    page.messages = await Promise.all(page.messages.map(async message => {
+    return Promise.all(messages.map(async message => {
       if (!Number.isSafeInteger(message.id) || message.id <= 0 || message.channelId !== channelId || !hexID(message.authorProfileId, 64) || !hexID(message.requestId, 32)) throw failure('INVALID_API_RESPONSE');
       if((message.locked!==undefined&&typeof message.locked!=='boolean')||(message.systemKind!==undefined&&message.systemKind!==''&&message.systemKind!=='poll-result'))throw failure('INVALID_API_RESPONSE');
       try {
@@ -342,7 +347,6 @@ class MembershipClient {
         return { ...message, content };
       } catch { return { ...message, unreadable: true, content: { text: '' } }; }
     }));
-    return page;
   }
   async send(serverId, channelId, content, original, clientRequestId) {
     content = validatedContent(content);

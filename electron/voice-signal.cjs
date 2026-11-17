@@ -9,7 +9,7 @@ const { isIP } = require('node:net');
 const { randomBytes, createHash } = require('node:crypto');
 class VoiceSignal {
   async open(address, fingerprint, {eventPath, eventToken, onEventActivity} = {}) {
-    if(eventPath!==undefined&&(!/^\/api\/v2\/(?:events|channels\/[a-f0-9]{32}\/events)$/.test(eventPath)||typeof eventToken!=='string'||! /^[\w-]{43}$/.test(eventToken)))throw Error('Invalid event endpoint');
+    if(eventPath!==undefined&&(!/^\/api\/v2\/(?:events(?:\/messages)?|channels\/[a-f0-9]{32}\/events)$/.test(eventPath)||typeof eventToken!=='string'||! /^[\w-]{43}$/.test(eventToken)))throw Error('Invalid event endpoint');
     this.close();
     const remote = new URL(address);
     if (remote.protocol !== 'wss:' || remote.username || remote.password || remote.search || remote.hash || (fingerprint && !/^[a-f0-9]{64}$/.test(fingerprint))) throw Error('Invalid media endpoint');
@@ -46,10 +46,10 @@ class VoiceSignal {
           socket.write(`HTTP/1.1 ${incoming.statusCode} ${incoming.statusMessage}\r\n` + incoming.rawHeaders.reduce((lines, value, index) => index % 2 ? lines + value + '\r\n' : lines + value + ': ', '') + '\r\n');
           if (head?.length) peer.write(head);
           if(eventPath){
-            // This purpose only accepts tiny, unfragmented server invalidations
-            // and control frames; reject oversized declarations before buffering.
+            // Accept bounded, unfragmented event/control frames. Only the opt-in
+            // message stream permits larger envelopes; reject before buffering.
             let buffered=Buffer.alloc(0),paused=false;
-            const receive=chunk=>{if(chunk.length>65536){peer.destroy();socket.destroy();return;}buffered=Buffer.concat([buffered,chunk]);while(buffered.length>=2){const opcode=buffered[0]&15,marker=buffered[1];let length=marker,header=2;if(marker===126){if(buffered.length<4)return;length=buffered.readUInt16BE(2);header=4;}if((buffered[0]&240)!==128||marker>126||length>2048||![1,8,9,10].includes(opcode)||(opcode!==1&&length>125)){peer.destroy();socket.destroy();return;}if(buffered.length<length+header)return;onEventActivity?.();if(!socket.write(buffered.subarray(0,length+header))&&!paused){paused=true;peer.pause();socket.once('drain',()=>{paused=false;peer.resume();});}buffered=buffered.subarray(length+header);}};
+            const receive=chunk=>{if(chunk.length>65536){peer.destroy();socket.destroy();return;}buffered=Buffer.concat([buffered,chunk]);while(buffered.length>=2){const opcode=buffered[0]&15,marker=buffered[1];let length=marker,header=2;if(marker===126){if(buffered.length<4)return;length=buffered.readUInt16BE(2);header=4;}if((buffered[0]&240)!==128||marker>126||length>(eventPath==='/api/v2/events/messages'?60000:2048)||![1,8,9,10].includes(opcode)||(opcode!==1&&length>125)){peer.destroy();socket.destroy();return;}if(buffered.length<length+header)return;onEventActivity?.();if(!socket.write(buffered.subarray(0,length+header))&&!paused){paused=true;peer.pause();socket.once('drain',()=>{paused=false;peer.resume();});}buffered=buffered.subarray(length+header);}};
             peer.on('data',receive);if(upstreamHead.length)receive(upstreamHead);
           }else{if(upstreamHead.length)socket.write(upstreamHead);peer.pipe(socket);}
           peer.on('error', () => socket.destroy()); socket.on('error', () => peer.destroy());

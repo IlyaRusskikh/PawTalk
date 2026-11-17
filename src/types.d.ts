@@ -10,9 +10,9 @@ interface HostCheckResult {
 interface Window {
   desktop?: {
     membership?(action:string,input?:Record<string,unknown>):Promise<{value?:unknown;error?:{code:string}}>;
-    onMembershipServerEvent?(callback:(event:{serverId:string;type:'chat'|'state'|'resync';channelId?:string;revision?:number;last?:number;rescan?:boolean})=>void):()=>void;
+    onMembershipServerEvent?(callback:(event:import('./membership').ServerEvent)=>void):()=>void;
     onMembershipLiveStatus?(callback:(event:{serverId:string;live:boolean})=>void):()=>void;
-    onMembershipChatChanged?(callback:(event:{serverId:string;channelId:string})=>void):()=>void;
+    onMembershipChatChanged?(callback:(event:{serverId:string;channelId:string;delivery?:boolean;pollIds?:string[]})=>void):()=>void;
     onMembershipChanged?(callback:(event:{serverId?:string;leaveError?:string;departure?:{serverId:string;name:string;kind:'kick'|'ban';expiresAt?:number|null}})=>void):()=>void;
     onMembershipVoiceLost?(callback:(event:{serverId:string})=>void):()=>void;
     onMembershipOpenChannel?(callback:(event:{serverId:string;channelId:string})=>void):()=>void;
