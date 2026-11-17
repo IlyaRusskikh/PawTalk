@@ -41,3 +41,19 @@ func TestServerAvatarAuthorizationAndRevision(t *testing.T) {
 		t.Fatal("avatar not removed", err)
 	}
 }
+
+func TestServerAvatarAcceptsArtworkLargerThanInvitationKeys(t *testing.T) {
+	s := testMembershipStore(t)
+	owner := bootstrapTestServer(t, s, newTestMemberSigner(1))
+	ctx := context.Background()
+	packet := memberInvitePackage{Version: 2, KeyID: strings.Repeat("a", 64), Nonce: b64.EncodeToString(make([]byte, 12)), Ciphertext: b64.EncodeToString(make([]byte, 8000))}
+	raw, _ := json.Marshal(packet)
+	if err := s.patchServerAvatar(ctx, owner.Token, serverAvatarPatch{Envelope: raw, ExpectedRevision: 1, RequestID: strings.Repeat("a", 32)}); err != nil {
+		t.Fatal("valid artwork rejected", err)
+	}
+	packet.Ciphertext = b64.EncodeToString(make([]byte, 12017))
+	bad, _ := json.Marshal(packet)
+	if _, err := validateAvatarEnvelope(bad); err == nil {
+		t.Fatal("oversized artwork accepted")
+	}
+}

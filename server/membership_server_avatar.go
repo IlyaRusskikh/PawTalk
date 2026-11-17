@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 )
@@ -22,15 +20,10 @@ func (s *membershipStore) patchServerAvatar(ctx context.Context, token string, i
 	var stored any
 	var packet memberInvitePackage
 	if string(input.Envelope) != "null" {
-		digest := sha256.Sum256(input.Envelope)
 		var err error
-		packet, err = validateMemberPackage(input.Envelope, hex.EncodeToString(digest[:]))
+		packet, err = validateAvatarEnvelope(input.Envelope)
 		if err != nil {
 			return err
-		}
-		cipher, err := b64.Strict().DecodeString(packet.Ciphertext)
-		if err != nil || len(cipher) > 12016 {
-			return memberError(400, "INVALID_AVATAR")
 		}
 		stored = []byte(input.Envelope)
 	}
