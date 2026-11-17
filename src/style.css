@@ -273,7 +273,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:radial-gra
 .avatar-editor { width: min(430px, calc(100vw - 48px)); }
 .avatar-crop-preview {
   display: block; width: min(256px, 100%); height: auto; justify-self: center; align-self: center;
-  aspect-ratio: 1; border-radius:50%; background: var(--surface); cursor: grab; touch-action: none;
+  aspect-ratio: 1; border-radius:0; background: var(--surface); cursor: grab; touch-action: none;
 }
 .avatar-crop-preview:active { cursor: grabbing; }
 .avatar-crop-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -282,3 +282,5 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:radial-gra
 dialog.modal>.modal-footer{flex:none;padding:16px 28px 24px;border-top:1px solid var(--line)}.modal-footer>.modal-actions{margin-top:0}
 
 .call-controls .audio-control>button:not(.audio-arrow){width:40px;min-width:40px}.call-controls .audio-control>.audio-arrow{width:28px;min-width:28px}
+
+.avatar-crop-viewport{position:relative;width:min(256px,100%);aspect-ratio:1;align-self:center;overflow:hidden;border:1px solid var(--line)}.avatar-crop-viewport>.avatar-crop-preview{width:100%}.avatar-crop-safe{position:absolute;inset:0;border:2px dashed var(--text);border-radius:50%;pointer-events:none;box-shadow:0 0 0 1px color-mix(in srgb,var(--shadow) 53%,transparent),inset 0 0 0 1px color-mix(in srgb,var(--shadow) 53%,transparent)}

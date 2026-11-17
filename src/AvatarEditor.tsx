@@ -39,7 +39,7 @@ export function AvatarEditor({ file, onClose, onSave }: { file: File; onClose():
   return <Modal title={t("Настроить аватар")} className="avatar-editor" onClose={onClose}>
     <div className="form-fields">
       {image && <>
-        <canvas ref={preview} width={256} height={256} className="avatar-crop-preview" tabIndex={0}
+        <div className="avatar-crop-viewport"><canvas ref={preview} width={256} height={256} className="avatar-crop-preview" tabIndex={0}
           aria-label={t("Область кадрирования аватара")}
           onPointerDown={event => {
             if (event.button !== 0 || !event.isPrimary) return;
@@ -64,7 +64,7 @@ export function AvatarEditor({ file, onClose, onSave }: { file: File; onClose():
             if (!dx && !dy) return;
             event.preventDefault();
             setCrop(current => ({ ...current, x: clamp(current.x + dx), y: clamp(current.y + dy) }));
-          }}/>
+          }}/><span className="avatar-crop-safe" aria-hidden="true"/></div>
         <p className="avatar-crop-help">{t("Перетащите изображение или используйте стрелки, чтобы выбрать область.")}</p>
         <label>{t("Масштаб")}<input type="range" min={1} max={4} step={0.05} value={crop.zoom} onChange={event => setCrop(current => ({ ...current, zoom: Number(event.target.value) }))}/></label>
       </>}
