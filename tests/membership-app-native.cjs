@@ -59,6 +59,11 @@ async function test(window) {
   assert.equal(await run("document.querySelectorAll('.member-channel').length"), 2);
   assert.equal(await run("document.querySelector('.member-chat').getBoundingClientRect().height>200"), true, 'chat visible without voice');
   assert.equal(await run("!!document.querySelector('.member-audio-buttons .person-network')"), false, 'chat-only does not join voice');
+  const artwork=await run("(()=>{const c=document.createElement('canvas');c.width=c.height=128;const ctx=c.getContext('2d',{alpha:false});let seed=12345;for(let y=0;y<128;y+=2)for(let x=0;x<128;x+=2){seed=(Math.imul(seed,1664525)+1013904223)>>>0;ctx.fillStyle='rgb('+(seed&255)+','+((seed>>>8)&255)+','+((seed>>>16)&255)+')';ctx.fillRect(x,y,2,2);}for(const q of [.6,.4,.2,.1,.05]){const value=c.toDataURL('image/webp',q);if(value.length<=12000&&value.length>4096)return value;}throw Error('Could not create realistic artwork fixture');})()");
+  const artState=await run(`window.desktop.membership('state',{serverId:${JSON.stringify(fixture.serverId)}})`);
+  const savedArtwork=await run(`window.desktop.membership('server.avatar',{serverId:${JSON.stringify(fixture.serverId)},avatar:${JSON.stringify(artwork)},expectedRevision:${artState.value.avatarRevision}})`);
+  assert.equal(savedArtwork.error,undefined,'realistic encrypted WebP avatar passes the artwork limit');
+  assert.equal(savedArtwork.value.avatar,artwork,'shared avatar decrypts after real IPC/Go round trip');
   await set('.member-composer textarea', '**Synthetic encrypted message**');
   await run("document.querySelector('.member-composer').requestSubmit()");
   await until("document.querySelector('.member-history').innerText.includes('Synthetic encrypted message')", 'encrypted message roundtrip');
@@ -198,12 +203,13 @@ async function test(window) {
   assert.equal(await run("document.querySelector('.room-participants').getBoundingClientRect().height>0"),true,'switching chat keeps voice visible');
   assert.equal(await run("[...document.querySelectorAll('.member-channel.selected')].length"),2,'voice and text selections coexist');
   assert.equal(await run("document.querySelector('.member-link-button')"),null,'link action lives in profile context menu');
-  const audioFlags=async()=>{const flags=await run("[...document.querySelectorAll('.member-audio-buttons button[title=\"Микрофон\"],.member-audio-buttons button[title=\"Звук\"]')].map(e=>e.getAttribute('aria-pressed')==='true')");assert.equal(flags.length,4,'bottom and call controls both exist');assert.deepEqual(flags.slice(2),flags.slice(0,2),'duplicated controls stay synchronized');return flags.slice(0,2);};
+  const audioFlags=async()=>{const flags=await run("[...document.querySelectorAll('.member-audio-buttons button[title=\"Микрофон\"],.member-audio-buttons button[title=\"Звук\"],.member-call-controls button[title=\"Микрофон\"],.member-call-controls button[title=\"Звук\"]')].map(e=>e.getAttribute('aria-pressed')==='true')");assert.equal(flags.length,4,'bottom and call controls both exist');assert.deepEqual(flags.slice(2),flags.slice(0,2),'duplicated controls stay synchronized');return flags.slice(0,2);};
   const clickMic=()=>run("document.querySelector('.member-call-controls button[title=\"Микрофон\"]').click()");
   const clickSound=()=>run("document.querySelector('.member-audio-buttons button[title=\"Звук\"]').click()");
   await until("!!document.querySelector('.member-channel-person')",'active voice channel avatar');
   const channelIconCount=count=>until(`document.querySelector('.member-channel-person .member-channel-audio-status').querySelectorAll('svg').length===${count}`,'channel audio status icons: '+count);
   assert.deepEqual(await audioFlags(),[false,false]);
+  assert.equal(await run("(()=>{const call=document.querySelector('.member-call-controls').getBoundingClientRect(),pane=document.querySelector('.room-participants').getBoundingClientRect(),mic=document.querySelector('.member-call-controls button[title=\"Микрофон\"]').getBoundingClientRect();return Math.abs(call.left+call.width/2-pane.left-pane.width/2)<1&&mic.width===40&&mic.height===40&&!document.querySelector('.member-call-controls .person-network')})()"),true,'old call controls are centered, full-size and separate from user panel');
   await channelIconCount(0);
   await clickSound();assert.deepEqual(await audioFlags(),[true,true],'deafen mutes both');
   await channelIconCount(2);

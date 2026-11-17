@@ -117,4 +117,6 @@
 
 .chat-image>.chat-image-remove{position:absolute;top:8px;right:8px;z-index:2;display:grid;place-items:center;width:32px;height:32px;padding:0;border-radius:calc(var(--ui-radius)*.5);background:var(--danger);color:var(--on-accent);opacity:0;pointer-events:none}.chat-image:hover>.chat-image-remove,.chat-image:focus-within>.chat-image-remove{opacity:1;pointer-events:auto}.chat-edit-removed{display:block;color:var(--muted);margin-top:8px}
 
-dialog.poll-dialog[open]{width:min(500px,calc(100vw - 32px));max-height:calc(100dvh - 32px);padding:0;overflow:hidden;display:flex;flex-direction:column}dialog.poll-dialog>.modal-body{flex:1 1 auto;min-height:0;overflow-y:auto;margin:0;padding:6px 28px 24px}.poll-dialog fieldset.poll-options{display:block}.poll-dialog .poll-options>.form-fields{gap:20px}
+dialog.poll-dialog[open]{width:min(500px,calc(100vw - 32px));max-height:calc(100dvh - 32px);padding:0;overflow:hidden;display:flex;flex-direction:column}dialog.poll-dialog>.modal-body{flex:1 1 auto;min-height:0;overflow-y:auto;margin:0;padding:6px 28px 24px}.poll-dialog fieldset.poll-options{display:block}
+
+.chat-system-avatar{display:grid;place-items:center;flex:none;width:40px;height:40px;border-radius:50%;color:var(--accent);background:var(--raised)}

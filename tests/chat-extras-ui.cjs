@@ -15,12 +15,17 @@ app.whenReady().then(async()=>{
  await set('.member-composer textarea','Hello @Fr');
  await run("(()=>{const e=document.querySelector('.member-composer textarea');e.focus();e.setSelectionRange(e.value.length,e.value.length);e.dispatchEvent(new Event('select',{bubbles:true}));})()");
  await until("!!document.querySelector('.mention-options button')",'mention suggestions');
+ assert.equal(await run("(()=>{const b=document.querySelector('.mention-options button').getBoundingClientRect();return !!document.elementFromPoint(b.left+b.width/2,b.top+b.height/2)?.closest('.mention-options')})()"),true,'suggestion is actually visible outside clipped composer');
  await run("document.querySelector('.member-composer textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}))");
  assert.equal(await run('window.sendRequests.length'),0,'selecting a mention must not send');
  await run("document.querySelector('.member-composer').requestSubmit()");
  await until("document.querySelector('[data-message-row=\"181\"] .chat-mention')?.textContent==='@Friend'",'mention rendered');
  assert.equal(await run('window.sendRequests[0].content.mentions[0].profileId'),'b'.repeat(64));
  await until("document.querySelector('.chat-attach')?.disabled===false",'send finished');
+ await run("window.renameFriend()");await set('.member-composer textarea','@Илья');await until("document.querySelector('.mention-options')?.textContent.includes('ИльяТестит')",'Cyrillic autocomplete');
+ await run("document.querySelector('.mention-options button').click()");await run("document.querySelector('.member-composer').requestSubmit()");
+ await until("[...document.querySelectorAll('.chat-mention')].some(e=>e.textContent==='@ИльяТестит')",'Cyrillic mention sent');
+ await until("document.querySelector('.chat-attach')?.disabled===false",'mention send settled');
  await run("document.querySelector('.chat-attach').click()");
  await until("!!document.querySelector('.chat-attachment-menu button')",'attachment menu');
  await run("document.querySelector('.chat-attachment-menu button:last-child').click()");
@@ -29,6 +34,7 @@ app.whenReady().then(async()=>{
  await set('.poll-option-field:nth-of-type(1) input','PawTalk');await set('.poll-option-field:nth-of-type(2) input','KitCast');
  const geometry=await run("(()=>{const d=document.querySelector('.poll-dialog'),r=d.getBoundingClientRect(),buttons=[...d.querySelectorAll('.modal-actions button')].map(e=>{const b=e.getBoundingClientRect();return b.top+b.height/2;});return {overflow:d.scrollWidth>d.clientWidth,top:r.top,bottom:r.bottom,buttons,options:[...d.querySelectorAll('select option')].map(e=>e.value)}})()");
  assert.equal(geometry.overflow,false);assert.ok(geometry.top>=0&&geometry.bottom<=900);assert.ok(Math.abs(geometry.buttons[0]-geometry.buttons[1])<1);assert.deepEqual(geometry.options,['3600','14400','28800','86400','259200','604800','1209600']);
+ for(const height of [650,900]){win.setSize(1100,height);await wait(100);const fixed=await run("(()=>{const d=document.querySelector('.poll-dialog'),body=d.querySelector('.modal-body'),footer=d.querySelector('.modal-footer').getBoundingClientRect(),button=d.querySelector('.poll-add-option').getBoundingClientRect(),last=[...d.querySelectorAll('.poll-option-field')].at(-1).getBoundingClientRect();return {bottom:footer.bottom,top:footer.top,gap:button.top-last.bottom,scroll:getComputedStyle(body).overflowY}})()");assert.ok(fixed.top>0&&fixed.bottom<=height,'footer remains visible at '+height);assert.ok(fixed.gap>=19,'shared 20px gap before add answer');assert.equal(fixed.scroll,'auto');}
  await fs.writeFile(path.join(os.tmpdir(),'pawtalk-poll-'+language+'.png'),(await win.webContents.capturePage()).toPNG());
  await run("document.querySelector('.poll-settings label:last-child input').click()");
  await run("document.querySelector('.poll-dialog form').requestSubmit()");
@@ -40,6 +46,15 @@ app.whenReady().then(async()=>{
  await run("document.querySelector('.poll-close').click()");await until("!!document.querySelector('.poll-result')&&!!document.querySelector('.poll-count')",'finished result reply');
  await until("document.querySelector('.poll-result')?.textContent.includes('KitCast')",'winner loaded');assert.equal(await run("!!document.querySelector('.poll-voters')"),false,'anonymous identities hidden');
  await fs.writeFile(path.join(os.tmpdir(),'pawtalk-poll-result-'+language+'.png'),(await win.webContents.capturePage()).toPNG());
+ assert.equal(await run("document.querySelector('.poll-result').closest('[data-message-row]').querySelector('.chat-meta strong').textContent"),language==='en'?'System':'Система');
+ assert.equal(await run("!!document.querySelector('.poll-result').closest('[data-message-row]').querySelector('.member-message-actions')"),false,'system result has no user toolbar');
+ assert.equal(await run("!!document.querySelector('.poll-card').closest('[data-message-row]').querySelector("+JSON.stringify('button[title="'+(language==='en'?'Delete message':'Удалить сообщение')+'"]')+")"),false,'completed original has no delete action');
+ const imageID=await run('window.addImage()');await until("!!document.querySelector('[data-message-row=\""+imageID+"\"] .chat-image img')",'photo loaded');
+ await run("document.querySelector("+JSON.stringify('[data-message-row="'+imageID+'"] button[title="'+(language==='en'?'Edit':'Редактировать')+'"]')+").click()");await until("!!document.querySelector('.chat-image-remove')",'edit photo trash');
+ win.webContents.sendInputEvent({type:'mouseMove',x:5,y:5});await wait(50);
+ assert.equal(await run("getComputedStyle(document.querySelector('.chat-image-remove')).opacity"),'0','trash hidden without hover');
+ const trash=await run("(()=>{const b=document.querySelector('.chat-image-remove').getBoundingClientRect();return {x:Math.round(b.left+b.width/2),y:Math.round(b.top+b.height/2)}})()");win.webContents.sendInputEvent({type:'mouseMove',...trash});await until("getComputedStyle(document.querySelector('.chat-image-remove')).opacity==='1'",'trash shown on photo hover');
+ await run("document.querySelector('.chat-image-remove').click()");await run("document.querySelector('.chat-inline-edit').requestSubmit()");await until("!document.querySelector('.chat-inline-edit')&&!document.querySelector('[data-message-row=\""+imageID+"\"] .chat-image')",'photo removal persisted');
  console.log('PASS chat extras '+language+': mention selection/identity, poll form geometry, durations, hidden results, voting, withdrawal, early close and reply');
  }
  assert.deepEqual(errors,[]);clearTimeout(timer);win.destroy();app.exit(0);

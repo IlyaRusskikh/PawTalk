@@ -39,6 +39,8 @@ app.whenReady().then(async()=>{
   }
   await run('window.openLink()');await click(en?'Create string':'Создать строку');
   await until("document.querySelector('.member-link-profiles')?.textContent.includes('Fresh profile')",'link shows incoming profile');
+  assert.equal(await run("!!document.querySelector('dialog textarea')"),false,'confirmation omits link string field');
+  assert.equal(await run("[...document.querySelectorAll('.member-link-profile .avatar')].every(e=>parseFloat(getComputedStyle(e).fontSize)<=e.getBoundingClientRect().width/2)"),true,'avatar initials fit their circles');
   await run('window.openDevices(true)');await click(en?'Make primary':'Сделать основным');
   await until("!!document.querySelector('.member-control-copy')",'transfer copy');
   assert.equal(await run("document.querySelector('.member-control-copy').disabled"),false);await run("document.querySelector('.member-control-copy').click()");

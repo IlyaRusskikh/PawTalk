@@ -279,3 +279,5 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:radial-gra
 .avatar-crop-help { color: var(--muted); font-size: 12px; line-height: 1.5; text-align: center; }
 
 dialog.modal>.modal-footer{flex:none;padding:16px 28px 24px;border-top:1px solid var(--line)}.modal-footer>.modal-actions{margin-top:0}
+
+.call-controls .audio-control>button:not(.audio-arrow){width:40px;min-width:40px}.call-controls .audio-control>.audio-arrow{width:28px;min-width:28px}

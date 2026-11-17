@@ -43,7 +43,7 @@ export function PollDialog({serverId, channelId, onClose, onPosted}: {serverId: 
         </div>
       </div>
       {error && <p role="alert" className="text-error">{error}</p>}
-      
+
     </form>
   </Modal>;
 }
