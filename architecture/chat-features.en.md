@@ -26,8 +26,6 @@ Creation atomically reserves the original message and a separately sealed result
 
 The result renderer links to the original poll; multiple-answer percentages use voters as the denominator and can sum above 100%. Ties show every highest option; zero votes has no winner.
 
-## Active chat delivery
+## Event delivery
 
-The optional chat-events-v1 capability enables one main-process subscription to GET /api/v2/channels/{id}/events for the selected text channel. The existing TLS-pinned bridge forwards the session bearer only after certificate verification; renderer receives invalidations, never the session token. No WebSocket library or production dependency is added. Only small unfragmented invalidations and control frames are accepted. Successful message/channel/poll mutations and timed poll completion coalesce notifications. Each subscriber rechecks current membership and channel access before delivery and every 15 seconds. Two subscriptions per device and 1024 total bound resources.
-
-Notifications carry no message data. Client reads/decrypts history using existing authenticated HTTP paths, preserving scroll position and edits. Opening/reopening a socket invalidates the view to recover missed writes. Reconnect uses bounded exponential backoff with jitter; HTTP state polling remains as compatibility and disconnect fallback. Non-anonymous visible ballots render a responsive avatar strip with all voters in the overflow popover; hidden interim results and anonymity still control identity disclosure on Server.
+server-events-v1 adds one authenticated server-wide subscription and a small sequence checkpoint. It serves active chat, notifications, polls, roster/profile changes and admitted-device link attention. chat-events-v1 remains for older peers; unsupported/disconnected peers poll. The selected chat appends new rows and reuses quote/predecessor caches; edits/deletes and resync reload affected data. Server access, E2EE and request/replay contracts remain unchanged. See [connection audit](connection-audit.en.md) for endpoints, resource bounds, retained heartbeats and verification limits.

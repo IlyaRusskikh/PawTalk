@@ -32,7 +32,7 @@ test.desktop={membership:async(action:string,input:any={})=>{
   records.push({id,channelId:input.channelId,authorProfileId:me,requestId:input.requestId,sentAt:Date.now(),content:{text:input.question,poll}});
   pollStates.set(poll.id,{id:poll.id,messageId:id,closesAt:Date.now()+poll.duration*1000,closedAt:null,multiple:poll.multiple,anonymous:poll.anonymous,intermediate:poll.intermediate,counts:[0,0],total:0,own:[]});state.channels[0].lastMessageId=id;state.channels[0].messageRevision++;refresh();return{value:{id}};
  }
- if(action==='poll.state'){const value=pollStates.get(input.pollId);return{value:{...structuredClone(value),counts:value.intermediate||value.closedAt?value.counts:[]}};}
+ if(action==='poll.state'){test.pollReads=(test.pollReads||0)+1;const value=pollStates.get(input.pollId);return{value:{...structuredClone(value),counts:value.intermediate||value.closedAt?value.counts:[]}};}
  if(action==='poll.vote'){const value=pollStates.get(input.pollId);value.own=input.choices;value.total=input.choices.length?1:0;value.counts=[0,1].map(i=>input.choices.includes(i)?1:0);return{value:true};}
  if(action==='poll.close'){
   const value=pollStates.get(input.pollId);value.closedAt=Date.now();const original=records.find(m=>m.id===value.messageId)!;const id=Math.max(...records.map(m=>m.id))+1;
@@ -56,6 +56,7 @@ test.desktop={membership:async(action:string,input:any={})=>{
  if(action==='copy'){test.copied=input.text;return{value:true};}
  return{value:true};
 }};
+test.enableLive=()=>{state.eventsLive=true;refresh();};
 test.showVoters=()=>{const id=Math.max(...records.map(m=>m.id))+1,poll={id:'d'.repeat(32),duration:3600,anonymous:false,intermediate:true,multiple:false,options:['Public answer','Other']};const voters=Array.from({length:24},(_,i)=>(i+1).toString(16).padStart(64,'0'));for(const [i,id] of voters.entries())state.profiles.push({id,nickname:'Voter '+(i+1),revision:1});pollStates.set(poll.id,{id:poll.id,messageId:id,closesAt:Date.now()+3600000,closedAt:null,multiple:false,anonymous:false,intermediate:true,counts:[24,0],total:24,own:[],voters:[voters,[]]});records.push({id,channelId:cid,authorProfileId:friend,requestId:'d'.repeat(32),sentAt:Date.now(),content:{text:'Public poll',poll}});state.channels[0].lastMessageId=id;state.channels[0].messageRevision++;refresh();return id;};
 let openAvatar:(file:File)=>void;test.openAvatar=async()=>{const canvas=document.createElement('canvas');canvas.width=400;canvas.height=200;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#649';ctx.fillRect(0,0,400,200);canvas.toBlob(blob=>openAvatar(new File([blob!],'test.png',{type:'image/png'})));};
 function App(){const[avatar,setAvatar]=useState<File>();openAvatar=setAvatar;const[,render]=useState(0);refresh=()=>render(n=>n+1);const channel=state.channels.find(c=>c.id===selected)!;return <><ServerChat key={selected} state={{...state}} channel={{...channel}} focused onRead={id=>test.read.push(id)} onError={error=>{test.error=error;}}/>{avatar&&<AvatarEditor file={avatar} onClose={()=>setAvatar(undefined)} onSave={()=>true}/>}</>;}

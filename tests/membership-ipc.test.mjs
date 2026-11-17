@@ -127,3 +127,18 @@ test('incoming link attention restores and focuses once, including a hidden main
 test('automatic idle threshold uses native system inactivity and exposes no manual setter',async()=>{
  let idle=299;const f=fixture({getIdleSeconds:()=>idle});try{assert.equal((await f.call('activity')).value.away,false);idle=300;assert.equal((await f.call('activity')).value.away,true);assert.equal((await f.call('activity.set',{away:true})).error.code,'INVALID_ACTION');}finally{f.service.stop();}
 });
+
+test('desktop notification batches deduplicate IDs and retain mention priority',async()=>{
+ const shown=[];class N{static isSupported(){return true;}constructor(options){shown.push(options);}on(){}show(){}}
+ const f=fixture({Notification:N});try{
+  const base={serverId,channelId,channelName:'General',authorName:'Friend',batchCount:1};
+  const first=f.call('notify',{...base,messageId:10,mention:true,text:'Important mention'});
+  const second=f.call('notify',{...base,messageId:11,text:'Later ordinary text'});
+  await Promise.all([first,second]);assert.equal(shown.length,1);assert.match(shown[0].body,/Important mention/);assert.match(shown[0].body,/2/);
+  assert.equal((await f.call('notify',{...base,messageId:11,text:'Duplicate'})).value,false);assert.equal(shown.length,1);
+ }finally{f.service.stop();}
+});
+test('shutdown cancels pending desktop batches without leaking unresolved IPC',async()=>{
+ const shown=[];class N{static isSupported(){return true;}constructor(options){shown.push(options);}on(){}show(){}}
+ const f=fixture({Notification:N});const pending=f.call('notify',{serverId,channelId,channelName:'General',authorName:'Friend',messageId:1,text:'Pending'});f.service.stop();assert.equal((await pending).value,false);assert.equal(shown.length,0);
+});
