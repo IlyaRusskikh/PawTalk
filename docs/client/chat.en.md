@@ -14,7 +14,7 @@ Permissions are server-wide in the current API 2 implementation: administrator, 
 
 This section describes development source, not the published installers listed in the guide index. Check your installed release for availability.
 
-- Active chat updates use a WebSocket when supported by Server, with automatic reconnection and missed-message catchup. Older Servers keep periodic updates.
+- Compatible builds deliver new encrypted messages, edits and deletions over WebSocket without a separate history request. Initial history, scrolling and gap recovery use HTTP. Sending still uses HTTP; older Servers retain event invalidation or periodic updates.
 - Edit your message to remove an image; saving without text or an image deletes the message completely.
 - Right-click a server/text chat to mute notifications for 15 minutes, 1, 3, 8 or 24 hours, or until you turn them on. Server mute takes priority; muted counters are gray. Preferences belong to this device.
 - Type **@** and select a member with the mouse or arrow keys and Enter/Tab. Suggestions include avatars. You can also drag a member from the roster into the chat to insert a mention. Only selected or dragged mentions address a profile; ordinary matching text does not. Mentions bypass server/chat mutes, use the theme accent, and leave an unread pin after an offline period. Sound settings, deafen and OS restrictions still apply. The down arrow at the lower right returns to the latest messages and shows a new-message counter.

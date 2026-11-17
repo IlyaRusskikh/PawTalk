@@ -23,7 +23,7 @@ This describes development source audited on 2026-11-17, not installed releases.
 
 ## Stream contract and limits
 
-API/data schema stays 2. Optional server-events-v1 adds GET /api/v2/events and GET /api/v2/events/status; chat-events-v1 and its selected-channel endpoint remain for older peers. Events contain no message content or keys. Main retains bearer credentials; the existing bridge pins TLS before forwarding headers. Server rechecks membership before bounded batches and every 15 s. The client detects absent upstream traffic, reconnects with jitter/backoff, and reloads on reconnect. Old/disconnected peers retain polling.
+API/data schema stays 2. Optional server-events-v1 adds GET /api/v2/events and GET /api/v2/events/status; chat-events-v1 and its selected-channel endpoint remain for older peers. This metadata-only route contains no message content or keys; the opt-in encrypted-payload route is described below. Main retains bearer credentials; the existing bridge pins TLS before forwarding headers. Server rechecks membership before bounded batches and every 15 s. The client detects absent upstream traffic, reconnects with jitter/backoff, and reloads on reconnect. Old/disconnected peers retain polling.
 
 Events coalesce per channel, with 64 pending keys per subscriber and a resync marker on overflow. Purpose-limited framing caps payloads at 2048 bytes and respects downstream backpressure. There are at most two subscriptions per device and 8192 total; these are resource guards, not tested capacity promises. A single server-side expiry check updates presence instead of one polling timer per subscriber. Anonymous/hidden poll identities remain protected by HTTP authorization.
 
@@ -42,3 +42,25 @@ Example final local run (milliseconds; timings vary):
 | 1000 | 980 | 1096 | 1128 |
 
 These are one-batch local measurements, not a sustained-rate or hardware recommendation. Repeated runs on the same machine varied; serialized authentication/history work remains visible at 1000 members.
+
+## Encrypted message delivery, 2026-11-18
+
+Optional message-events-v1 adds /api/v2/events/messages. The older /events route remains metadata-only with its original 2048-byte bound; payload-enabled connections accept at most 60000 bytes per event. Message writes capture envelopes and channel before/after revisions inside their transaction. Commit publishes a shared encoded snapshot; rollback publishes nothing and drops pending plans. Edits preserve author/request/key context, deletes carry IDs and author metadata, and poll completion carries its system result and locked original. Quota deletions use the same committed path. Server still validates each subscriber before delivery.
+
+Recipients decrypt through the existing main-process message decoder. Active rows, quotes, unread counters and mentions update from the delivered data; duplicates do not add rows/counts. A short reorder window precedes HTTP gap recovery. Initial/older history, missing quote lookups, images and reconnect/resync recovery remain HTTP. Per-subscriber queues are bounded by 64 events and 256 KiB; overflow emits resync rather than growing memory without limit. Poll ballot reads retain per-user HTTP privacy controls and only refresh for matching poll events.
+
+The native integration verifies zero receiver history HTTP calls for plain create/edit/delete, concurrent messages, a large encrypted envelope and background unread delivery. The load fixture can compare metadata-plus-HTTP against payload delivery by setting PAWTALK_EVENT_PAYLOADS=1; the payload branch performs zero history reads. Local TCP measurements exclude TLS/E2EE decoding/audio and are not sustained-capacity acceptance.
+
+## Redis assessment
+
+Redis and a generic HTTP response cache were not added. The dominant repeated live-message read is removed by committed snapshot delivery; the encoded packet is already shared in the single Go process. Remaining shared candidates are encrypted history rows or immutable encrypted attachments, keyed by server/channel/revision and selection, with memory limits and write invalidation. Authenticate and authorize before cache use; personal unread counts, own ballots and access/revocation decisions must not be reused across users. Measure those residual hot reads before choosing an in-process cache or a separate Redis service. Cache-aside requires explicit invalidation and bounded staleness; TTL alone does not provide immediate revocation. See [Redis cache-aside documentation](https://redis.io/docs/latest/develop/use-cases/cache-aside/).
+
+One local A/B run on 2026-11-18 (content-ready p95, milliseconds):
+
+| Recipients | Metadata event plus HTTP | Encrypted payload WS | Receiver history requests with payloads |
+| --- | ---: | ---: | ---: |
+| 100 | 160 | 110 | 0 |
+| 500 | 464 | 204 | 0 |
+| 1000 | 836 | 327 | 0 |
+
+Both modes use the same current shared core, synthetic members and local TCP. These single-batch values exclude TLS, client decryption and voice; they do not establish production capacity or sustained throughput.

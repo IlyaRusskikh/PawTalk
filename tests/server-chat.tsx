@@ -12,6 +12,7 @@ localStorage.clear();localStorage.setItem('pawtalk.chat.window','25');
 localStorage.setItem('pawtalk.v2.read.'+sid+'.'+cid,new URLSearchParams(location.search).get('unread')==='1'?'100':'180');
 let records:Message[]=Array.from({length:180},(_,i)=>({id:i+1,channelId:cid,authorProfileId:i===149?me:friend,requestId:(i+1).toString(16).padStart(32,'0'),sentAt:1700000000000+i*1000,content:{text:'Synthetic message '+(i+1)+': '+'wrapped content '.repeat(14)}}));
 records[19].content.text='Original **current**';records[179].content.reply={id:20,author:'Old name',text:'Stale snapshot'};
+const liveListeners=new Set<(event:any)=>void>();test.liveReads=[];
 const state:ServerState={serverId:sid,name:'Synthetic chat server',revision:1,controlRevision:1,self:{profileId:me,effectiveProfileId:me,deviceId:'c'.repeat(64),role:'member',permissions:[]},profiles:[{id:me,nickname:'Me',revision:1},{id:friend,nickname:'Friend',revision:1}],channels:[{id:cid,name:'General',kind:'text',protected:true,position:0,revision:1,messageRevision:1,lastMessageId:180},{id:other,name:'Other',kind:'text',protected:false,position:1,revision:1,messageRevision:1,lastMessageId:0}],members:[],devices:[],voice:[],bindings:[]};
 const features=new URLSearchParams(location.search).has('features');
 if(features){state.capabilities=['polls-v1'];state.members=[{profileId:me,online:true,role:'member'},{profileId:friend,online:true,role:'member'}];}
@@ -24,7 +25,7 @@ test.update=(id:number,text:string)=>{const message=records.find(m=>m.id===id)!;
 test.reply=(id:number,target:number)=>{records.find(m=>m.id===id)!.content.reply={id:target,author:'Old name',text:'Stale snapshot'};state.channels[0].messageRevision++;refresh();};
 test.remove=(id:number)=>{records=records.filter(m=>m.id!==id);state.channels[0].messageRevision++;refresh();};
 test.select=(id:string)=>{selected=id==='other'?other:cid;refresh();};test.cid=cid;
-test.desktop={membership:async(action:string,input:any={})=>{
+test.desktop={onMembershipServerEvent:(listener:(event:any)=>void)=>{liveListeners.add(listener);return()=>liveListeners.delete(listener);},membership:async(action:string,input:any={})=>{
  await new Promise(resolve=>setTimeout(resolve,15));
  if(action==='image'){const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#888';ctx.fillRect(0,0,320,180);return{value:canvas.toDataURL('image/png')};}
  if(action==='poll.create'){
@@ -38,7 +39,7 @@ test.desktop={membership:async(action:string,input:any={})=>{
   const value=pollStates.get(input.pollId);value.closedAt=Date.now();const original=records.find(m=>m.id===value.messageId)!;const id=Math.max(...records.map(m=>m.id))+1;
   original.locked=true;records.push({...original,id,systemKind:'poll-result',locked:true,requestId:'e'.repeat(32),content:{...original.content,pollResult:true}});state.channels[0].lastMessageId=id;state.channels[0].messageRevision++;refresh();return{value:true};
  }
- if(action==='messages'){
+ if(action==='messages'){test.liveReads.push(structuredClone(input.options||{}));
   const o=input.options||{},all=records.filter(m=>m.channelId===input.channelId),limit=o.limit||100;let eligible=all.filter(m=>(!o.before||m.id<o.before)&&(!o.after||m.id>o.after));
   if(o.ids)eligible=eligible.filter(m=>o.ids.includes(m.id));
   if(o.around){const at=eligible.findIndex(m=>m.id>=o.around);eligible=eligible.slice(Math.max(0,at-Math.floor(limit/2)));}
@@ -59,5 +60,19 @@ test.desktop={membership:async(action:string,input:any={})=>{
 test.enableLive=()=>{state.eventsLive=true;refresh();};
 test.showVoters=()=>{const id=Math.max(...records.map(m=>m.id))+1,poll={id:'d'.repeat(32),duration:3600,anonymous:false,intermediate:true,multiple:false,options:['Public answer','Other']};const voters=Array.from({length:24},(_,i)=>(i+1).toString(16).padStart(64,'0'));for(const [i,id] of voters.entries())state.profiles.push({id,nickname:'Voter '+(i+1),revision:1});pollStates.set(poll.id,{id:poll.id,messageId:id,closesAt:Date.now()+3600000,closedAt:null,multiple:false,anonymous:false,intermediate:true,counts:[24,0],total:24,own:[],voters:[voters,[]]});records.push({id,channelId:cid,authorProfileId:friend,requestId:'d'.repeat(32),sentAt:Date.now(),content:{text:'Public poll',poll}});state.channels[0].lastMessageId=id;state.channels[0].messageRevision++;refresh();return id;};
 let openAvatar:(file:File)=>void;test.openAvatar=async()=>{const canvas=document.createElement('canvas');canvas.width=400;canvas.height=200;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#649';ctx.fillRect(0,0,400,200);canvas.toBlob(blob=>openAvatar(new File([blob!],'test.png',{type:'image/png'})));};
+test.pushLive=(kind:string,id?:number,duplicate=false)=>{
+ if(duplicate){for(const fn of liveListeners)fn(test.lastLive);return test.lastLive.messages?.[0]?.id;}
+ const channel=state.channels[0],previous=channel.messageRevision;state.eventsLive=true;
+ const add=()=>{const next=Math.max(test.liveCounter||0,...records.map(m=>m.id))+1;test.liveCounter=next;const row:Message={id:next,channelId:cid,authorProfileId:friend,requestId:next.toString(16).padStart(32,'0'),sentAt:Date.now(),content:{text:'Pushed '+next}};records.push(row);channel.messageRevision++;return row;};
+ let updates:Message[]=[],deleted:any[]=[],delayed:any;
+ if(kind==='new')updates=[add()];
+ if(kind==='reply'){const row=add();row.content.reply={id:id!,author:'Old name',text:'Stale snapshot'};updates=[row];}
+ if(kind==='edit'){const row=records.find(m=>m.id===id)!;row.content={text:'Live edited '+id};row.editedAt=Date.now();updates=[row];channel.messageRevision++;}
+ if(kind==='delete'){const row=records.find(m=>m.id===id)!;deleted=[{id:row.id,authorProfileId:row.authorProfileId}];records=records.filter(m=>m.id!==id);channel.messageRevision++;}
+ if(kind==='gap'){add();updates=[add()];}
+ if(kind==='reorder'){const first=add();delayed={serverId:sid,channelId:cid,type:'chat',delivery:true,previous,revision:channel.messageRevision,first:records[0].id,last:first.id,messages:structuredClone([first]),deleted:[]};updates=[add()];}
+ channel.lastMessageId=records.at(-1)?.id||0;
+ const event={serverId:sid,channelId:cid,type:'chat',delivery:true,previous:kind==='gap'||kind==='reorder'?previous+1:previous,revision:channel.messageRevision,first:records[0]?.id||0,last:channel.lastMessageId,messages:structuredClone(updates),deleted};test.lastLive=event;for(const fn of liveListeners)fn(event);if(delayed)setTimeout(()=>{for(const fn of liveListeners)fn(delayed);},30);refresh();return updates[0]?.id;
+};
 function App(){const[avatar,setAvatar]=useState<File>();openAvatar=setAvatar;const[,render]=useState(0);refresh=()=>render(n=>n+1);const channel=state.channels.find(c=>c.id===selected)!;return <><ServerChat key={selected} state={{...state}} channel={{...channel}} focused onRead={id=>test.read.push(id)} onError={error=>{test.error=error;}}/>{avatar&&<AvatarEditor file={avatar} onClose={()=>setAvatar(undefined)} onSave={()=>true}/>}</>;}
 createRoot(document.getElementById('root')!).render(<App/>);
