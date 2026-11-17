@@ -1,3 +1,5 @@
+import {Avatar} from './Avatar';
+import {AvatarStrip} from './ui/AvatarStrip';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {effectiveProfile, membership, profileFor, type Message, type ServerState} from './membership';
 import {t} from './i18n';
@@ -62,7 +64,7 @@ export function PollCard({message, state, onJump, onClosed}: {message: Message; 
         <span className="poll-answer-label">{option}</span>
         {countsVisible && <span className="poll-count">{count} · {percent}%</span>}
         {chosen && <span aria-label={t('Ваш голос')}>✓</span>}
-      </button>{!status?.anonymous && countsVisible && !!status?.voters?.[index]?.length && <details className="poll-voters"><summary>{t('Кто проголосовал')}</summary>{status.voters[index].map(id => <span key={id}>{profileFor(state, id)?.nickname || t('Участник')}</span>)}</details>}</div>;
+      </button>{!status?.anonymous && countsVisible && !!status?.voters?.[index]?.length && <AvatarStrip className="poll-voters" size={24} expandable label={t('Кто проголосовал')}>{status.voters[index].map(id => {const p=profileFor(state,id),name=p?.nickname||t('Участник');return <span key={id} role="listitem" title={name} aria-label={name}><Avatar name={name} image={p?.avatar}/></span>;})}</AvatarStrip>}</div>;
     })}</div>
     <div className="poll-footer"><span>{status ? t('Участников: {0}', status.total) : t('Загрузка…')}</span><span>· {closed ? t('Опрос завершен') : status ? t('До {0}', new Date(status.closesAt).toLocaleString()) : ''}</span></div>
     {status?.anonymous && <small className="poll-hint">{t('Анонимное голосование')}</small>}
