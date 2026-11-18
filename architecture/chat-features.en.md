@@ -16,7 +16,7 @@ Link contexts/private exchange keys remain in the main process after the code di
 
 ## Mentions and notifications
 
-Mentions are encrypted UTF-16 ranges bound to selected profile IDs. Edits shift untouched ranges and drop changed labels. The roster currently covers all channels because channel access is server-wide. Unread history is scanned in bounded pages, including after reconnect. Mention pins are separate from ordinary unread counts; mention alerts bypass server/channel mutes, but not deafen, configured sound suppression or OS restrictions. Read cursors and mute deadlines are device-local. No absolute OS delivery guarantee is claimed.
+Mentions are encrypted UTF-16 ranges bound to selected profile IDs. Edits shift untouched ranges and drop changed labels. The roster currently covers all channels because channel access is server-wide. Unread history is scanned in bounded pages, including after reconnect. Mention pins are separate from ordinary unread counts; mention alerts bypass apps/server/channel mutes, but not deafen, configured sound suppression or OS restrictions. Read cursors and mute deadlines are device-local. No absolute OS delivery guarantee is claimed.
 
 ## Retained chat history
 

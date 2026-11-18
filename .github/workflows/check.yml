@@ -34,14 +34,14 @@ jobs:
         with:
           node-version: '24.22.1'
       - run: npm ci --ignore-scripts
-      - run: node scripts/check-release-notes.mjs
-      - run: node scripts/check-docs.mjs
-      - run: node --test tests/documentation.test.mjs
-      - run: node scripts/check-agents.mjs
-      - run: node scripts/check-website.mjs
-      - run: node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/release-candidate.test.mjs tests/candidate-origin.test.mjs tests/release-notes.test.mjs
+      - run: node tooling/ci/check-release-notes.mjs
+      - run: node tooling/ci/check-docs.mjs
+      - run: node --test tests/infrastructure/documentation.test.mjs
+      - run: node tooling/ci/check-agents.mjs
+      - run: node tooling/ci/check-website.mjs
+      - run: node --test tests/infrastructure/agent-infrastructure.test.mjs tests/release/release-catalog.test.mjs tests/infrastructure/ci-scope.test.mjs tests/release/release-routing.test.mjs tests/release/release-metadata.test.mjs tests/release/release-candidate.test.mjs tests/release/candidate-origin.test.mjs tests/release/release-notes.test.mjs
       - name: Verify prepared OCI digest through isolated local registry
-        run: node scripts/release-image-smoke.mjs
+        run: node tooling/ci/release-image-smoke.mjs
       - name: Lint all GitHub Actions workflows
         run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
   server:
@@ -60,7 +60,7 @@ jobs:
         id: scope
         env:
           PAWTALK_CI_COMPONENT: ${{ inputs.component || 'all' }}
-        run: node scripts/ci-scope.mjs
+        run: node tooling/ci/ci-scope.mjs
       - uses: actions/setup-go@v6
         if: steps.scope.outputs.server == 'true'
         with:
@@ -68,46 +68,46 @@ jobs:
           cache: false
       - run: go test -race ./... && go vet ./...
         if: steps.scope.outputs.server == 'true'
-        working-directory: server
+        working-directory: apps/server
       - name: Build current API 2 integration dependency
-        run: docker build -f server/standalone.Dockerfile -t pawtalk-server:local .
-      - run: node scripts/check-public.mjs
-      - run: node scripts/check-website.mjs
-      - run: node --check scripts/dev-server.mjs && node --check scripts/docker-smoke.mjs
+        run: docker build -f apps/server/deploy/standalone.Dockerfile -t pawtalk-server:local .
+      - run: node tooling/ci/check-public.mjs
+      - run: node tooling/ci/check-website.mjs
+      - run: node --check tooling/dev/dev-server.mjs && node --check apps/server/scripts/docker-smoke.mjs
       - name: Verify bundled server lifecycle and authentication with real Docker
         env:
           PAWTALK_TEST_IMAGE: pawtalk-server:local
-        run: node scripts/server-smoke.mjs
+        run: node apps/server/scripts/server-smoke.mjs
       - name: Verify actual developer Docker launch and TLS pinning
         if: steps.scope.outputs.server == 'true'
-        run: node scripts/dev-server.mjs --smoke
+        run: node tooling/dev/dev-server.mjs --smoke
       - name: Verify shared API 2 container and tokens without Compose
         if: steps.scope.outputs.server == 'true'
-        run: node scripts/docker-smoke.mjs --containers-only
+        run: node apps/server/scripts/docker-smoke.mjs --containers-only
       - name: Host tools and signed release contracts
         if: steps.scope.outputs.host == 'true'
-        run: sudo python3 -m unittest discover -s tests -p '*_test.py'
+        run: sudo python3 -m unittest discover -s apps/manager/tests -p '*_test.py'
       - name: Verify actual systemd units and oneshot execution
         if: steps.scope.outputs.host == 'true'
         run: |
-          sudo install -D -m 0755 manager/launcher /opt/pawtalk-manager/launcher
-          systemd-analyze verify manager/pawtalk-update.service manager/pawtalk-update.timer manager/pawtalk-health.service manager/pawtalk-health.timer
-          sudo systemd-run --wait --collect --unit="pawtalk-ci-selftest-${GITHUB_RUN_ID}" /usr/bin/python3 "$GITHUB_WORKSPACE/manager/pawtalkctl" --self-test
+          sudo install -D -m 0755 apps/manager/linux/launcher /opt/pawtalk-manager/launcher
+          systemd-analyze verify apps/manager/linux/deploy/pawtalk-update.service apps/manager/linux/deploy/pawtalk-update.timer apps/manager/linux/deploy/pawtalk-health.service apps/manager/linux/deploy/pawtalk-health.timer
+          sudo systemd-run --wait --collect --unit="pawtalk-ci-selftest-${GITHUB_RUN_ID}" /usr/bin/python3 "$GITHUB_WORKSPACE/apps/manager/linux/pawtalkctl" --self-test
       - name: Real Compose install, backup, upgrade, restore and crash recovery
         if: steps.scope.outputs.host == 'true'
-        run: sudo python3 tests/compose_integration.py
+        run: sudo python3 apps/manager/tests/compose_integration.py
         timeout-minutes: 25
       - name: Debian 12 userspace install and recovery with the real Docker engine
         if: steps.scope.outputs.host == 'true'
         run: |
-          docker build -f tests/vps.Dockerfile -t pawtalk-vps-test:debian12 .
-          docker run --rm --network host --mount "type=bind,source=$GITHUB_WORKSPACE,target=/work" --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -e PYTHONUNBUFFERED=1 pawtalk-vps-test:debian12 python3 tests/compose_integration.py
+          docker build -f tests/integration/vps.Dockerfile -t pawtalk-vps-test:debian12 .
+          docker run --rm --network host --mount "type=bind,source=$GITHUB_WORKSPACE,target=/work" --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock -e PYTHONUNBUFFERED=1 pawtalk-vps-test:debian12 python3 apps/manager/tests/compose_integration.py
         timeout-minutes: 25
       - name: Verify explicit rejection of frozen published Server 0.8.0
         if: steps.scope.outputs.client == 'true' || steps.scope.outputs.server == 'true'
         env:
           PAWTALK_TEST_IMAGE: ghcr.io/ilyarusskikh/pawtalk-server@sha256:601bd68f577c63a98b3dfec040b01379467576dfc6d16c15f2bf7501ac86b8f0
-        run: node scripts/server-smoke.mjs --legacy-rejection
+        run: node apps/server/scripts/server-smoke.mjs --legacy-rejection
   windows:
     name: Client + Server + Manager / Windows (${{ matrix.runner }})
     defaults:
@@ -130,7 +130,7 @@ jobs:
         id: scope
         env:
           PAWTALK_CI_COMPONENT: ${{ inputs.component || 'all' }}
-        run: node scripts/ci-scope.mjs
+        run: node tooling/ci/ci-scope.mjs
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
@@ -149,16 +149,16 @@ jobs:
       - name: Install Electron with retries
         env:
           electron_config_cache: ${{ runner.temp }}\electron-cache
-        run: node scripts/install-electron.mjs
+        run: node apps/client/windows/scripts/install-electron.mjs
       - name: Verify actual website downloads in English and Russian
-        run: node scripts/website-smoke.mjs
+        run: node tooling/ci/website-smoke.mjs
       - run: npm run check:public
       - name: Test release routing and CI component contracts
         if: steps.scope.outputs.client != 'true'
-        run: node --test tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/ci-scope.test.mjs
+        run: node --test tests/release/release-routing.test.mjs tests/release/release-metadata.test.mjs tests/infrastructure/ci-scope.test.mjs
       - run: npm run native:build
         if: steps.scope.outputs.client == 'true'
-      - run: node scripts/native-smoke.cjs
+      - run: node apps/client/windows/scripts/native-smoke.cjs
         if: steps.scope.outputs.client == 'true'
       - name: Build Client renderer for Client and host integration
         if: steps.scope.outputs.client == 'true' || steps.scope.outputs.host == 'true'
@@ -176,68 +176,68 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - name: Verify shared Go core on native Windows
         if: steps.scope.outputs.client == 'true' || steps.scope.outputs.server == 'true'
-        working-directory: server
+        working-directory: apps/server
         run: |
           go test ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet ./...
       - name: Verify native Manager host safeguards
         if: steps.scope.outputs.host == 'true'
-        working-directory: manager/windows
+        working-directory: apps/manager/windows/service
         run: |
           go test ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet ./...
       - name: Verify Windows handoff completion and read-only cleanup
         if: steps.scope.outputs.host == 'true'
-        run: python -m unittest discover -s tests -p windows_handoff_test.py
+        run: python -m unittest discover -s apps/manager/tests -p windows_handoff_test.py
       - name: Prepare host test audio assets
         if: steps.scope.outputs.host == 'true' && steps.scope.outputs.client != 'true'
-        run: node scripts/prepare-rnnoise.mjs
+        run: node apps/client/windows/scripts/prepare-rnnoise.mjs
       - name: Prepare LiveKit without the bundled Client API
         if: steps.scope.outputs.host == 'true' && steps.scope.outputs.client != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/prepare-server.mjs --livekit-only
+        run: node tooling/build/prepare-server.mjs --livekit-only
       - name: Build permanent Windows Server
         if: steps.scope.outputs.server == 'true'
-        run: node scripts/build-windows-server.mjs
+        run: node apps/server/scripts/build-windows-server.mjs
       - name: Verify identical Client and permanent Server cores
         if: steps.scope.outputs.server == 'true' && steps.scope.outputs.client == 'true'
-        run: node scripts/check-server-core.mjs
+        run: node tooling/build/check-server-core.mjs
       - name: Verify shared-core temporary rooms with real Electron IPC
         if: steps.scope.outputs.client == 'true'
-        run: node scripts/selfhost-main-smoke.mjs
+        run: node apps/client/windows/scripts/selfhost-main-smoke.mjs
       - name: Verify shared-core temporary API privacy and chat lifecycle
         if: steps.scope.outputs.client == 'true'
-        run: node scripts/selfhost-smoke.cjs
+        run: node apps/client/windows/scripts/selfhost-smoke.cjs
       - name: Build Windows Manager installer
         if: steps.scope.outputs.manager == 'true'
-        run: node scripts/build-manager-windows.mjs
+        run: node apps/manager/windows/scripts/build-manager-windows.mjs
       - name: Verify Manager desktop UI and native tray
         if: steps.scope.outputs.manager == 'true'
-        run: node scripts/manager-desktop-smoke.mjs
+        run: node apps/manager/windows/scripts/manager-desktop-smoke.mjs
       - name: Packaged Manager hidden startup
         if: steps.scope.outputs.manager == 'true'
-        run: node scripts/manager-packaged-smoke.mjs
+        run: node apps/manager/windows/scripts/manager-packaged-smoke.mjs
       - name: Prepare Manager test host without an installer
         if: steps.scope.outputs.host == 'true' && steps.scope.outputs.manager != 'true'
-        run: node scripts/build-manager-windows.mjs --runtime-only
+        run: node apps/manager/windows/scripts/build-manager-windows.mjs --runtime-only
       - name: Build current API 2 Windows Server test dependency
         if: steps.scope.outputs.manager == 'true' && steps.scope.outputs.server != 'true'
         id: api2fixture
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/build-windows-server.mjs --output-dir release/qa/api2-server
+          node apps/server/scripts/build-windows-server.mjs --output-dir release/qa/api2-server
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $version = (Get-Content server/VERSION -Raw).Trim()
+          $version = (Get-Content apps/server/VERSION -Raw).Trim()
           "zip=release/qa/api2-server/PawTalk.Server.$version.windows-x64.zip" >> $env:GITHUB_OUTPUT
       - name: Verify native Windows lifecycle with actual SCM services
         if: steps.scope.outputs.host == 'true'
         env:
           PAWTALK_WINDOWS_SERVER_ZIP: ${{ steps.api2fixture.outputs.zip }}
-        run: node scripts/windows-manager-smoke.mjs --scm ${{ steps.scope.outputs.manager == 'true' && '--installer' || '' }}
+        run: node apps/manager/windows/scripts/windows-manager-smoke.mjs --scm ${{ steps.scope.outputs.manager == 'true' && '--installer' || '' }}
       - name: Upload Windows Server package
         if: steps.scope.outputs.server == 'true' && matrix.runner == 'windows-2025'
         uses: actions/upload-artifact@v6
@@ -256,11 +256,11 @@ jobs:
         if: steps.scope.outputs.client == 'true'
       - run: npm run test:connection-ui
         if: steps.scope.outputs.client == 'true'
-      - run: node scripts/updates-ui-smoke.mjs
+      - run: node apps/client/windows/scripts/updates-ui-smoke.mjs
         if: steps.scope.outputs.client == 'true'
       - name: Verify update button geometry in Russian and English
         if: steps.scope.outputs.client == 'true'
-        run: node scripts/update-layout-smoke.mjs
+        run: node apps/client/windows/scripts/update-layout-smoke.mjs
       - name: Cache LiveKit server
         if: steps.scope.outputs.client == 'true'
         uses: actions/cache@v5
@@ -268,7 +268,7 @@ jobs:
           path: |
             resources/server/livekit-server.exe
             resources/server/LIVEKIT-LICENSE
-          key: livekit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/prepare-server.mjs') }}
+          key: livekit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tooling/build/prepare-server.mjs') }}
       - name: Cache electron-builder tools
         if: steps.scope.outputs.client == 'true'
         uses: actions/cache@v5
@@ -286,12 +286,12 @@ jobs:
         run: npm run package
       - name: Verify packaged Client, shared core and receipt
         if: steps.scope.outputs.client == 'true'
-        run: node scripts/packaged-smoke.mjs
+        run: node apps/client/windows/scripts/packaged-smoke.mjs
       - name: Prepare release files
         if: steps.scope.outputs.client == 'true'
         shell: pwsh
         run: |
-          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $version = (Get-Content apps/client/windows/package.json -Raw | ConvertFrom-Json).version
           $installer = "release/PawTalk Setup $version.exe"
           $publishedInstaller = "release/PawTalk.Setup.$version.exe"
           Move-Item -LiteralPath $installer -Destination $publishedInstaller

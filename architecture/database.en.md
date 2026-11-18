@@ -2,7 +2,7 @@
 
 [Русский](database.ru.md) · [Index](README.md)
 
-API 2 uses **SQLite STRICT schema 2** for permanent servers. Its authoritative DDL (columns, foreign keys, checks, indexes and triggers) is [`server/membership.sql`](../server/membership.sql). The persisted membership database is `membership-v2.sqlite`; the Server runtime also stores local TLS/media configuration in `state.json`. A temporary Client selfhost holds membership/chat in memory instead.
+API 2 uses **SQLite STRICT schema 2** for permanent servers. Its authoritative DDL (columns, foreign keys, checks, indexes and triggers) is [`apps/server/membership.sql`](../apps/server/membership.sql). The persisted membership database is `membership-v2.sqlite`; the Server runtime also stores local TLS/media configuration in `state.json`. A temporary Client selfhost holds membership/chat in memory instead.
 
 Key logical entities include server-local device and member identities, roles/bans, invitation reservations and key packages, linked devices, text/voice channels, encrypted messages/edits and encrypted attachments. Server membership and channel identifiers bind cryptographic contexts. An application may expose unread state or local display choices independently of persistent server storage.
 

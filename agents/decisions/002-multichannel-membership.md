@@ -11,8 +11,8 @@ Context: the current shared server core couples login to one LiveKit room and on
 chat feed. Persistent membership, multiple channels and reversible device linking
 need separate identity, authorization and connection lifecycles.
 
-Decision: preserve the single server/ implementation for selfhost and serve. Add
-invite-based persistent membership, separate server/voice connections, globally
+Decision: preserve the single apps/server/ implementation for selfhost and serve. Add
+invite-based persistent membership, separate apps/server/voice connections, globally
 recognizable public profile IDs, server-local reversible bindings and per-device
 keys. Original message authors remain immutable. The main profile supplies effective
 roles; unbinding never clears bans. One server secret derives purpose/channel keys;

@@ -38,7 +38,7 @@ jobs:
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-candidate.mjs promote-plan
+        run: node tooling/release/release-candidate.mjs promote-plan
   tag:
     if: needs.plan.result == 'success' && github.ref == 'refs/heads/main'
     needs: plan
@@ -61,7 +61,7 @@ jobs:
       - name: Revalidate the original candidate and create only its immutable tags
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-candidate.mjs promote-tag
+        run: node tooling/release/release-candidate.mjs promote-tag
   publish-client:
     if: needs.tag.result == 'success' && contains(fromJSON(needs.plan.outputs.components), 'client') && github.ref == 'refs/heads/main'
     needs: [plan, tag]
@@ -84,7 +84,7 @@ jobs:
       - name: Publish only original verified Client bytes
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-candidate.mjs promote-publish
+        run: node tooling/release/release-candidate.mjs promote-publish
   publish-server:
     if: needs.tag.result == 'success' && contains(fromJSON(needs.plan.outputs.components), 'server') && github.ref == 'refs/heads/main'
     needs: [plan, tag]
@@ -109,7 +109,7 @@ jobs:
       - name: Publish only original verified Server bytes and OCI digest
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-candidate.mjs promote-publish
+        run: node tooling/release/release-candidate.mjs promote-publish
   publish-manager:
     if: needs.tag.result == 'success' && contains(fromJSON(needs.plan.outputs.components), 'manager') && github.ref == 'refs/heads/main'
     needs: [plan, tag]
@@ -132,4 +132,4 @@ jobs:
       - name: Publish only original verified Manager bytes
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-candidate.mjs promote-publish
+        run: node tooling/release/release-candidate.mjs promote-publish

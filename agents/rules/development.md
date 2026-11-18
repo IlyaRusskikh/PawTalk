@@ -27,7 +27,7 @@ Use [test routing](../testing/README.md). Prefer targeted checks during developm
 Reuse successful checks only while code, inputs, config, dependencies and execution
 environment are unchanged; record command, tree/diff, environment and result in
 the task handoff. Rerun checks when their covered state changes. Never hide failures,
-skip required integration tests or replace them with a build/unit suite.
+skip required integration tests or replace them with a apps/client/windows/build/unit suite.
 Do not run npm ci while other jobs use node_modules; avoid unnecessary installs,
 full builds and heavy tests. No test-result hash cache is required.
 

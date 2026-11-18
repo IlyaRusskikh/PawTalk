@@ -43,3 +43,13 @@ Desktop.ini
 # Generated public catalog (prepared for Pages, never committed)
 /website/releases.json
 /website/releases.json.tmp
+
+# Application-local generated files
+/apps/client/windows/src/generated/
+/apps/client/windows/dist/
+/apps/client/windows/native/build/
+/apps/manager/generated/
+/apps/manager/windows/desktop/dist/
+/apps/manager/windows/desktop/icons/
+/apps/website/releases.json
+/apps/website/releases.json.tmp

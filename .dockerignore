@@ -1,12 +1,12 @@
 node_modules
 dist
 release
-native/build
+apps/client/windows/native/build
 .git
 .env
 manager/generated
 resources/server
-src/generated
+apps/client/windows/src/generated
 CONTINUE.md
 plans
 **/__pycache__
@@ -20,3 +20,10 @@ plans
 **/*.p12
 **/*.crt
 **/*.cer
+
+apps/client/windows/dist
+apps/client/windows/native/build
+apps/client/windows/src/generated
+apps/manager/generated
+apps/manager/windows/desktop/dist
+apps/manager/windows/desktop/icons

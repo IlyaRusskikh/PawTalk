@@ -16,7 +16,7 @@ This section describes the technical contracts of the **published API 2 release 
 - [Verification](verification.en.md) — test levels and claims
 - [Releasing](releasing.en.md) — independent candidate/publication process
 
-The authoritative detailed shapes remain [the server implementation](../server/), [schema SQL](../server/membership.sql), [Client](../src/) and [executable tests](../tests/). Treat descriptions as a maintained map, **not** a replacement for verified contracts.
+The authoritative detailed shapes remain [the server implementation](../apps/server), [schema SQL](../apps/server/membership.sql), [Client](../apps/client/windows/src) and [executable tests](../tests). Treat descriptions as a maintained map, **not** a replacement for verified contracts.
 
 - [Development chat extensions](chat-features.en.md) — optional capabilities, encrypted avatars/polls, mention and activity metadata (development source).
 

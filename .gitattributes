@@ -14,4 +14,4 @@
 *.png binary
 *.ico binary
 # Unified diff context prefixes intentionally contain space-before-tab/blank lines.
-build/bundled-server-security.patch -whitespace
+apps/client/windows/build/bundled-server-security.patch -whitespace

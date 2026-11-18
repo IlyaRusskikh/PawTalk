@@ -9,7 +9,7 @@ metadata:
    [compatibility matrix](../../../docs/server/compatibility.en.md).
 2. Identify both consumers and producers, legacy missing fields, explicit unknown
    values, data/launcher schemas and signed metadata. Release numbers are independent.
-3. Keep Client selfhost and Server serve on one server/ implementation and identical
+3. Keep Client selfhost and Server serve on one apps/server/ implementation and identical
    build tooling. Update the matrix for changed contracts; use server-first transitions.
 4. Select current+published-peer integration checks from
    [test routing](../../../agents/testing/README.md), including frozen fixtures.

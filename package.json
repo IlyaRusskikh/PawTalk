@@ -1,41 +1,40 @@
 {
-  "name": "pawtalk",
-  "version": "0.13.0",
+  "name": "pawtalk-workspace",
   "private": true,
-  "description": "Private, self-hosted voice room for Windows",
+  "description": "PawTalk monorepo build and development commands",
   "author": "PawTalk contributors",
   "license": "AGPL-3.0-only",
   "type": "module",
-  "main": "electron/main.cjs",
+  "main": "apps/client/windows/electron/main.cjs",
   "engines": {
     "node": ">=24.22.1"
   },
   "scripts": {
-    "dev": "node scripts/dev.mjs",
-    "review": "npm run build && electron scripts/review.cjs",
-    "dev:web": "node scripts/prepare-rnnoise.mjs && vite --host 127.0.0.1",
-    "build": "node scripts/prepare-licenses.mjs && node scripts/prepare-rnnoise.mjs && tsc --noEmit && vite build",
-    "test": "node --test tests/*.test.mjs",
-    "smoke": "node scripts/server-chat-ui-smoke.mjs && node scripts/reorder-ui-smoke.mjs && node scripts/reorder-ui-smoke.mjs tests/review-followup-ui.cjs && node scripts/membership-app-smoke.mjs --audio",
-    "test:connection-ui": "node scripts/connection-ui-smoke.mjs",
-    "test:chat-ui": "node scripts/membership-app-smoke.mjs",
-    "test:chat-features": "node scripts/server-chat-ui-smoke.mjs",
-    "test:external-links": "node scripts/external-links-smoke.mjs",
-    "test:chat-main": "node scripts/membership-app-smoke.mjs",
-    "test:sounds": "node scripts/sounds-smoke.mjs",
-    "test:docker": "node scripts/docker-smoke.mjs",
-    "test:server": "node scripts/server-smoke.mjs --audio",
-    "test:e2ee": "node scripts/membership-app-smoke.mjs --audio",
-    "test:e2ee:main": "node scripts/membership-app-smoke.mjs",
-    "native:build": "node-gyp rebuild --directory native",
-    "dev:server": "node scripts/dev-server.mjs",
-    "package": "npm run server:prepare && npm run build && electron-builder --win nsis --x64 --publish never",
-    "package:dir": "npm run server:prepare && npm run build && electron-builder --win dir --x64 --publish never",
-    "server:prepare": "node scripts/prepare-server.mjs",
-    "icons:generate": "node scripts/generate-icons.cjs",
-    "check:public": "node scripts/check-public.mjs",
-    "licenses:prepare": "node scripts/prepare-licenses.mjs",
-    "review:server": "node scripts/review-server.mjs"
+    "dev": "node apps/client/windows/scripts/dev.mjs",
+    "review": "npm run build && electron apps/client/windows/scripts/review.cjs",
+    "dev:web": "node apps/client/windows/scripts/prepare-rnnoise.mjs && vite --host 127.0.0.1",
+    "build": "node tooling/build/prepare-licenses.mjs && node apps/client/windows/scripts/prepare-rnnoise.mjs && tsc --noEmit -p apps/client/windows/tsconfig.json && vite build",
+    "test": "node --test apps/client/windows/tests/*.test.mjs apps/manager/windows/tests/*.test.mjs tests/infrastructure/*.test.mjs tests/compatibility/*.test.mjs tests/release/*.test.mjs",
+    "smoke": "node apps/client/windows/scripts/server-chat-ui-smoke.mjs && node apps/client/windows/scripts/reorder-ui-smoke.mjs && node apps/client/windows/scripts/reorder-ui-smoke.mjs apps/client/windows/tests/review-followup-ui.cjs && node apps/client/windows/scripts/membership-app-smoke.mjs --audio",
+    "test:connection-ui": "node apps/client/windows/scripts/connection-ui-smoke.mjs",
+    "test:chat-ui": "node apps/client/windows/scripts/membership-app-smoke.mjs",
+    "test:chat-features": "node apps/client/windows/scripts/server-chat-ui-smoke.mjs",
+    "test:external-links": "node apps/client/windows/scripts/external-links-smoke.mjs",
+    "test:chat-main": "node apps/client/windows/scripts/membership-app-smoke.mjs",
+    "test:sounds": "node apps/client/windows/scripts/sounds-smoke.mjs",
+    "test:docker": "node apps/server/scripts/docker-smoke.mjs",
+    "test:server": "node apps/server/scripts/server-smoke.mjs --audio",
+    "test:e2ee": "node apps/client/windows/scripts/membership-app-smoke.mjs --audio",
+    "test:e2ee:main": "node apps/client/windows/scripts/membership-app-smoke.mjs",
+    "native:build": "node-gyp rebuild --directory apps/client/windows/native",
+    "dev:server": "node tooling/dev/dev-server.mjs",
+    "package": "npm run server:prepare && npm run build && electron-builder --config apps/client/windows/electron-builder.cjs --win nsis --x64 --publish never",
+    "package:dir": "npm run server:prepare && npm run build && electron-builder --config apps/client/windows/electron-builder.cjs --win dir --x64 --publish never",
+    "server:prepare": "node tooling/build/prepare-server.mjs",
+    "icons:generate": "node apps/client/windows/scripts/generate-icons.cjs",
+    "check:public": "node tooling/ci/check-public.mjs",
+    "licenses:prepare": "node tooling/build/prepare-licenses.mjs",
+    "review:server": "node tooling/dev/review-server.mjs"
   },
   "dependencies": {
     "@shiguredo/rnnoise-wasm": "2025.1.5",
@@ -56,74 +55,8 @@
     "typescript": "7.0.2",
     "vite": "8.3.5"
   },
-  "build": {
-    "appId": "local.pawtalk.desktop",
-    "productName": "PawTalk",
-    "protocols": [
-      {
-        "name": "Приглашение PawTalk",
-        "schemes": [
-          "pawtalk"
-        ]
-      }
-    ],
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "shared/**/*",
-      "package.json",
-      "THIRD_PARTY_NOTICES.md",
-      "licenses/**/*",
-      "assets/**/*",
-      "LICENSE"
-    ],
-    "extraResources": [
-      {
-        "from": "scripts/check-selfhost.ps1",
-        "to": "diagnostics/check-selfhost.ps1"
-      },
-      {
-        "from": "native/build/Release/pawtalk.node",
-        "to": "pawtalk.node"
-      },
-      {
-        "from": "resources/server",
-        "to": "server",
-        "filter": [
-          "pawtalk-api.exe",
-          "livekit-server.exe",
-          "bundled-server.json",
-          "GO-LICENSE",
-          "LIVEKIT-LICENSE"
-        ]
-      },
-      {
-        "from": "scripts/install-update.ps1",
-        "to": "updates/install-update.ps1"
-      }
-    ],
-    "npmRebuild": false,
-    "win": {
-      "target": "nsis",
-      "signAndEditExecutable": true,
-      "icon": "assets/pawtalk.ico",
-      "signExecutable": false
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "installerIcon": "assets/pawtalk.ico",
-      "uninstallerIcon": "assets/pawtalk.ico",
-      "installerLanguages": [
-        "en_US",
-        "ru_RU"
-      ],
-      "displayLanguageSelector": true,
-      "include": "build/installer.nsh",
-      "deleteAppDataOnUninstall": false
-    }
-  }
+  "workspaces": [
+    "apps/client/windows",
+    "apps/manager/windows/desktop"
+  ]
 }

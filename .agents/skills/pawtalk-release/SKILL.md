@@ -18,7 +18,7 @@ metadata:
    accurate history of failed earlier tags. Existing public body corrections need
    separate owner approval; use architecture/release-recovery.en.md without replacing assets.
 3. Run applicable final-state CI locally plus packaged smoke after Client installer;
-   report unavailable environments. Run node scripts/check-release-notes.mjs and
+   report unavailable environments. Run node tooling/ci/check-release-notes.mjs and
    its tests; selected-candidate checks never exempt historical failed drafts.
    Review diff/public guard; push branch and PR when authorized by the user.
 4. Hand off PR CI link without polling. Successful CI plus explicit owner merge

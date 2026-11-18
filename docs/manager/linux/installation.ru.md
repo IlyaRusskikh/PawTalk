@@ -34,18 +34,18 @@ read -r -p 'Полный SHA проверенного коммита: ' PAWTALK_
 [[ "$PAWTALK_BOOTSTRAP_SHA" =~ ^[0-9a-f]{40}$ ]] &&
   git checkout --detach "$PAWTALK_BOOTSTRAP_SHA" &&
   test "$(git rev-parse HEAD)" = "$PAWTALK_BOOTSTRAP_SHA"
-sha256sum manager/trust.json
-python3 -B -I manager/pawtalkctl --self-test
+sha256sum apps/manager/linux/trust.json
+python3 -B -I apps/manager/linux/pawtalkctl --self-test
 ~~~
 
-Сверьте checkout и `manager/trust.json` с доверенным источником, не подставляйте случайные публичные ключи. При ошибке остановитесь.
+Сверьте checkout и `apps/manager/linux/trust.json` с доверенным источником, не подставляйте случайные публичные ключи. При ошибке остановитесь.
 
 ## 3. Установка Manager и Server
 
 Если Docker уже стоит, проверьте `sudo docker info --format '{{.OSType}}'` и `sudo docker compose version --short` (Linux, Compose major 2+). Если Docker отсутствует, штатный установщик может поставить его из **официального** apt-репозитория:
 
 ~~~bash
-sudo python3 -B -I manager/pawtalkctl --lang ru install --bootstrap-docker
+sudo python3 -B -I apps/manager/linux/pawtalkctl --lang ru install --bootstrap-docker
 sudo pawtalkctl --lang ru status
 sudo pawtalkctl doctor
 ~~~

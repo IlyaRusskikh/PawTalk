@@ -10,9 +10,9 @@ npm run native:build
 npm run dev
 ~~~
 
-Зоны ответственности: Client [React/TypeScript](../src/), [Electron](../electron/); общее ядро Server [Go](../server/); Windows Manager [Go controller](../manager/windows/) и [Electron UI](../manager/desktop/); Linux Manager [Python](../manager/pawtalk_manager/). Сетевое поведение проверяется контрактными, релизными и security-тестами, а не только локальным GUI.
+Зоны ответственности: Client [React/TypeScript](../apps/client/windows/src), [Electron](../apps/client/windows/electron); общее ядро Server [Go](../apps/server); Windows Manager [Go controller](../apps/manager/windows/service) и [Electron UI](../apps/manager/windows/desktop); Linux Manager [Python](../apps/manager/linux/pawtalk_manager). Сетевое поведение проверяется контрактными, релизными и security-тестами, а не только локальным GUI.
 
-Доступные проверки находятся в [package scripts](../package.json), [Go tests](../server/) и [CI](../.github/workflows/check.yml). Выбирайте тесты по затронутым компонентам и [правилам](../agents/testing/README.md). Не коммитьте сгенерированные assets, закрытые ключи, ссылки входа, локальные backup и отчёты диагностики.
+Доступные проверки находятся в [package scripts](../package.json), [Go tests](../apps/server) и [CI](../.github/workflows/check.yml). Выбирайте тесты по затронутым компонентам и [правилам](../agents/testing/README.md). Не коммитьте сгенерированные assets, закрытые ключи, ссылки входа, локальные backup и отчёты диагностики.
 
 **Важно:** актуальный исходный код и исторические harnesses могут отличаться от опубликованных бинарников API 2. Пользовательские документы сверяйте с неизменяемыми релизами/asset, а не только с новым `main`.
 
@@ -37,4 +37,4 @@ npm run dev
 - make server-start / make server-stop: существующий native review Server; запуск остается в текущем терминале. SERVER_IP, SERVER_PORT и SERVER_PROFILE задают настройки этого отдельного сервера.
 - make stop: остановка выбранных Client, UI Manager и review-сервера. PROFILE=name выбирает другой профиль Client/Manager UI. Состояние и логи находятся в release/review-apps и игнорируются Git.
 
-Launcher использует аутентифицированные локальные pipes и корректное завершение приложений; принудительного завершения по имени процесса и установки новых служб нет. Повторный запуск безопасен, повторная остановка успешна. Проверка окон: node scripts/review-app-smoke.mjs; в ней привилегированный broker Manager синтетически отклоняет запросы, вместо повышения прав и изменения настоящего хоста.
+Launcher использует аутентифицированные локальные pipes и корректное завершение приложений; принудительного завершения по имени процесса и установки новых служб нет. Повторный запуск безопасен, повторная остановка успешна. Проверка окон: node tooling/dev/review-app-smoke.mjs; в ней привилегированный broker Manager синтетически отклоняет запросы, вместо повышения прав и изменения настоящего хоста.

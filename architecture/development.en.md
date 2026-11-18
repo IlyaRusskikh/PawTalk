@@ -10,9 +10,9 @@ npm run native:build
 npm run dev
 ~~~
 
-Core ownership: Client [React/TypeScript](../src/), [Electron](../electron/); shared Server [Go](../server/); Windows Manager [Go controller](../manager/windows/) and [Electron UI](../manager/desktop/); Linux Manager [Python](../manager/pawtalk_manager/). All network-facing behavior is subject to protocol, release and security tests, not just a local GUI check.
+Core ownership: Client [React/TypeScript](../apps/client/windows/src), [Electron](../apps/client/windows/electron); shared Server [Go](../apps/server); Windows Manager [Go controller](../apps/manager/windows/service) and [Electron UI](../apps/manager/windows/desktop); Linux Manager [Python](../apps/manager/linux/pawtalk_manager). All network-facing behavior is subject to protocol, release and security tests, not just a local GUI check.
 
-Useful checks are defined by the repository's [package scripts](../package.json), [Go tests](../server/) and [CI workflow](../.github/workflows/check.yml). Choose tests according to the changed component and follow the [verification rules](../agents/testing/README.md). Never commit generated assets, private keys, login links, local backups or diagnostic reports.
+Useful checks are defined by the repository's [package scripts](../package.json), [Go tests](../apps/server) and [CI workflow](../.github/workflows/check.yml). Choose tests according to the changed component and follow the [verification rules](../agents/testing/README.md). Never commit generated assets, private keys, login links, local backups or diagnostic reports.
 
 **Important:** current source and historical test harnesses may diverge from published API 2 binaries. When writing user docs, check immutable release artifacts/notes rather than assuming newest `main` behavior is public.
 
@@ -37,4 +37,4 @@ Install GNU Make (for example, winget install --id ezwinports.make --exact --sou
 - make server-start / make server-stop: existing native Server review; start stays in the foreground. SERVER_IP, SERVER_PORT and SERVER_PROFILE configure that separate server.
 - make stop: stop the selected client, Manager UI and review server. PROFILE=name selects another client/Manager UI profile. Review state/logs live under release/review-apps and are ignored by Git.
 
-The launcher uses authenticated local pipes and graceful application shutdown; no forced process-name termination or new service installation is performed. A repeated start is harmless; a repeated stop succeeds. Validate actual window lifecycle with node scripts/review-app-smoke.mjs; the smoke test denies the Manager privileged broker synthetically instead of elevating or modifying a real host.
+The launcher uses authenticated local pipes and graceful application shutdown; no forced process-name termination or new service installation is performed. A repeated start is harmless; a repeated stop succeeds. Validate actual window lifecycle with node tooling/dev/review-app-smoke.mjs; the smoke test denies the Manager privileged broker synthetically instead of elevating or modifying a real host.

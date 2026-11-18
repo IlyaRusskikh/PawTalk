@@ -2,7 +2,7 @@
 
 [Русский](overview.ru.md) · [Index](README.md)
 
-PawTalk is a monorepository with **three independently released components**. The **Client** is an Electron/React Windows application. The **Server** is a Go API and LiveKit media runtime; both temporary Windows self-host and permanent Windows/Linux deployments use the shared `server/` core. **Manager** is the host-level installer/controller for permanent servers, with Windows UI/services and Linux CLI/Compose.
+PawTalk is a monorepository with **three independently released components**. The **Client** is an Electron/React Windows application. The **Server** is a Go API and LiveKit media runtime; both temporary Windows self-host and permanent Windows/Linux deployments use the shared `apps/server/` core. **Manager** is the host-level installer/controller for permanent servers, with Windows UI/services and Linux CLI/Compose.
 
 ~~~text
 Windows Client ─ TLS/API + media ─► PawTalk Server (Go API + LiveKit)
