@@ -55,7 +55,7 @@ app.whenReady().then(async()=>{
   await win.webContents.debugger.sendCommand('Emulation.setCPUThrottlingRate',{rate:1});
   await run("document.querySelector('.member-history').scrollTop=0;document.querySelector('.member-history').dispatchEvent(new Event('scroll'))");
   await until("Number(document.querySelector('[data-message-row]').dataset.messageRow)<8",'scroll loads previous page');
-  assert.ok(await run("document.querySelectorAll('[data-message-row]').length<=25"),'history window is bounded');
+  assert.ok(await run("document.querySelectorAll('[data-message-row]').length>25"),'older pages retain the already loaded messages');
   await set('.member-composer textarea','Saved draft');await run("window.select('other')");await until("!!document.querySelector('.member-chat-welcome')",'second chat');
   await run("window.select('general')");await until("document.querySelector('.member-composer textarea')?.value==='Saved draft'&&!!document.querySelector('[data-message-row]')",'draft and position restored');
   assert.ok(await run("Number(document.querySelector('[data-message-row]').dataset.messageRow)<100"),'reading position survives channel switch');
@@ -107,9 +107,9 @@ app.whenReady().then(async()=>{
   await run("document.querySelector('[data-message-row=\"182\"] .member-message-actions button:last-child').dispatchEvent(new MouseEvent('click',{bubbles:true,shiftKey:true}))");await until("!document.querySelector('[data-message-row=\"182\"]')",'Shift delete skips confirmation');assert.equal(await run("!!document.querySelector('dialog[open]')"),false);assert.equal(await run("!!document.querySelector('.chat-jump')"),false,'deleting latest message does not show phantom newer history: '+JSON.stringify(await run("(()=>{const l=document.querySelector('.member-history');return{ids:[...document.querySelectorAll('[data-message-row]')].map(e=>e.dataset.messageRow),loaders:[...document.querySelectorAll('.chat-page-loader')].map(e=>e.textContent),scroll:[l.scrollTop,l.scrollHeight,l.clientHeight]}})()")));
   assert.equal(await run("!!document.querySelector('.member-message-actions')"),true,'quick actions retained');
   await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/server-chat.html?lang='+language+'&unread=1');
-  await until("!!document.querySelector('.chat-divider')&&!!document.querySelector('[data-message-row=\"101\"]')",'unread window loads around first unread');
-  assert.ok(await run("(()=>{const list=document.querySelector('.member-history'),r=document.querySelector('.chat-divider').getBoundingClientRect(),p=list.getBoundingClientRect();return r.top>=p.top-2&&r.bottom<=p.bottom})()"),'opens at the unread marker instead of the end');
-  assert.equal(await run("!!document.querySelector('[data-message-row=\"180\"]')"),false,'does not initially load latest window over unread history');
+  await until("!!document.querySelector('[data-message-row=\"180\"]')",'unread chat starts with latest history batch');
+  assert.equal(await run("!!document.querySelector('[data-message-row=\"101\"]')"),false,'unread history is not fetched in full on entry');
+  assert.equal(await run("document.querySelectorAll('[data-message-row]').length"),25,'initial load respects the configured batch size');
   console.log(`PASS restored chat UI ${language}/${reduced}: live quotes, around jump, paging/resize/position, draft/focus, retry, inline edit, copy and Shift-delete`);
  }
  assert.deepEqual(errors,[]);app.exit(0);

@@ -127,3 +127,4 @@ dialog.poll-dialog[open]{width:min(500px,calc(100vw - 32px));max-height:calc(100
 
 .chat-message-pending .member-message-text,.chat-message-pending .member-message-text *,.chat-message-pending .member-reply{color:var(--muted)}
 .chat-message-pending .chat-pending-image{filter:grayscale(1);opacity:.6}
+.chat-history-edge{height:1px;pointer-events:none}.chat-history-loading{position:absolute;top:8px;left:50%;transform:translateX(-50%);padding:5px 10px;border-radius:var(--ui-radius);background:var(--surface);color:var(--muted);font-size:11px;pointer-events:none;z-index:3}

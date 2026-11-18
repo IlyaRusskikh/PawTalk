@@ -7,7 +7,7 @@ function fail(code) { throw Object.assign(Error(code), { code, local: true }); }
 function string(value, max = 14000) { if (typeof value !== 'string' || value.length > max) fail('INVALID_INPUT'); return value; }
 function id(value, size = 32) { if (typeof value !== 'string' || !new RegExp(`^[0-9a-f]{${size}}$`).test(value)) fail('INVALID_INPUT'); return value; }
 
-function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, getIdleSeconds = () => 0, getHost, stopHost, setVoiceEndpoint = () => {} }) {
+function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, getIdleSeconds = () => 0, getMemoryPressure=()=>{const os=require('node:os');return os.freemem()<Math.max(256*1024*1024,os.totalmem()*.05);}, getHost, stopHost, setVoiceEndpoint = () => {} }) {
   const linkAlerts=new Set(),notified=new Map(),notificationBatches=new Map(),notificationReads=new Map(),shownNotifications=new Map();
   const notificationID=key=>createHash('sha256').update(key).digest('hex').slice(0,16);
   function closeNotification(key){const shown=shownNotifications.get(key);shownNotifications.delete(key);try{shown?.notification.close?.();}catch{}}
@@ -192,6 +192,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     async 'control.create'(input) { return links.transferCreate(id(input.serverId), id(input.deviceId, 64)); },
     async 'control.accept'(input) { return links.transferAccept(id(input.serverId), string(input.text, 4096)); },
     async 'control.finish'(input) { const value=await links.transferFinish(id(input.serverId), string(input.text, 4096)); send('membership-changed', {}); return value; },
+    async 'memory.status'(){return{low:!!getMemoryPressure()};},
     async 'notify.read'(input){
       const serverId=id(input.serverId),channelId=id(input.channelId),read=input.messageId;if(!Number.isSafeInteger(read)||read<0)fail('INVALID_INPUT');
       const key=serverId+':'+channelId;notificationReads.set(key,Math.max(notificationReads.get(key)||0,read));if(notificationReads.size>2048)notificationReads.delete(notificationReads.keys().next().value);

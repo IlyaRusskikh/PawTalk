@@ -21,6 +21,8 @@ let refresh=()=>{},selected=cid,release:undefined|(()=>void);
 test.addImage=()=>{const id=Math.max(...records.map(m=>m.id))+1;records.push({id,channelId:cid,authorProfileId:me,requestId:id.toString(16).padStart(32,'0'),sentAt:Date.now(),content:{text:'Editable photo',image:{id:'9'.repeat(32),mime:'image/png'}}});state.channels[0].lastMessageId=id;state.channels[0].messageRevision++;refresh();return id;};
 test.renameFriend=()=>{state.profiles.find(p=>p.id===friend)!.nickname='ИльяТестит';refresh();};
 test.sendRequests=[];test.read=[];test.failNext=false;test.hold=false;test.release=()=>release?.();
+test.setBatch=(size:number)=>{localStorage.setItem('pawtalk.chat.window',String(size));refresh();};
+test.extendHistory=(last:number)=>{for(let id=records.at(-1)!.id+1;id<=last;id++)records.push({id,channelId:cid,authorProfileId:friend,requestId:id.toString(16).padStart(32,'0'),sentAt:1700000000000+id*1000,content:{text:'Extended history '+id}});state.channels[0].lastMessageId=last;state.channels[0].messageRevision++;refresh();};
 let releaseUpload:undefined|(()=>void);test.releaseUpload=()=>releaseUpload?.();
 test.attachImage=()=>{const input=document.querySelector<HTMLInputElement>('.chat-compose input[type=file]')!,data=new DataTransfer(),bytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aEAAAAABJRU5ErkJggg=='),c=>c.charCodeAt(0));data.items.add(new File([bytes],'pending.png',{type:'image/png'}));input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));};
 test.confirmPending=()=>{const input=test.sendRequests.at(-1),channel=state.channels.find(c=>c.id===input.channelId)!,previous=channel.messageRevision,id=Math.max(...records.map(m=>m.id))+1,row:Message={id,channelId:input.channelId,authorProfileId:me,requestId:input.requestId,sentAt:Date.now(),content:structuredClone(input.content)};records.push(row);channel.lastMessageId=id;channel.messageRevision++;state.eventsLive=true;for(const fn of liveListeners)fn({serverId:sid,channelId:input.channelId,type:'chat',delivery:true,previous,revision:channel.messageRevision,first:records[0].id,last:id,messages:[structuredClone(row)],deleted:[]});refresh();return id;};
@@ -31,6 +33,7 @@ test.select=(id:string)=>{selected=id==='other'?other:cid;refresh();};test.cid=c
 test.desktop={onMembershipServerEvent:(listener:(event:any)=>void)=>{liveListeners.add(listener);return()=>liveListeners.delete(listener);},membership:async(action:string,input:any={})=>{
  await new Promise(resolve=>setTimeout(resolve,15));
  if(action==='image'){const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#888';ctx.fillRect(0,0,320,180);return{value:canvas.toDataURL('image/png')};}
+ if(action==='memory.status')return{value:{low:!!test.lowMemory}};
  if(action==='upload'){if(test.holdUpload)await new Promise<void>(resolve=>{releaseUpload=resolve;});return{value:{id:'9'.repeat(32),mime:input.mime}};}
  if(action==='poll.create'){
   const id=Math.max(...records.map(m=>m.id))+1,poll={id:input.requestId,...input.definition};

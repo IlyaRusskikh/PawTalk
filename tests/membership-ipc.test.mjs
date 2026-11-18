@@ -128,6 +128,7 @@ test('incoming link attention restores and focuses once, including a hidden main
 test('automatic idle threshold uses native system inactivity and exposes no manual setter',async()=>{
  let idle=299;const f=fixture({getIdleSeconds:()=>idle});try{assert.equal((await f.call('activity')).value.away,false);idle=300;assert.equal((await f.call('activity')).value.away,true);assert.equal((await f.call('activity.set',{away:true})).error.code,'INVALID_ACTION');}finally{f.service.stop();}
 });
+test('memory pressure is a local read-only boolean behind the membership IPC authorizer',async()=>{let low=false;const f=fixture({getMemoryPressure:()=>low});try{assert.deepEqual((await f.call('memory.status')).value,{low:false});low=true;assert.deepEqual((await f.call('memory.status')).value,{low:true});await assert.rejects(f.unauthorized('memory.status'),/Unauthorized/);assert.equal(f.requests.length,0);}finally{f.service.stop();}});
 
 test('desktop notification batches deduplicate IDs and retain mention priority',async()=>{
  const shown=[];class N{static isSupported(){return true;}constructor(options){shown.push(options);}on(){}show(){}}
