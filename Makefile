@@ -7,6 +7,8 @@ SERVER_PORT ?= 28443
 
 help:
 	@echo make client-start / client-stop   - Client review
+	@echo make client-start-first / client-stop-first - named Client instance
+	@echo Replace first with second, third, or another profile name
 	@echo make manager-start / manager-stop - Manager review UI, installed host when available
 	@echo make server-start / server-stop   - isolated Server review
 	@echo make stop                         - stop all default review components
@@ -18,6 +20,10 @@ client-start:
 	node tooling/dev/review-app.mjs client start "$(PROFILE)"
 client-stop:
 	node tooling/dev/review-app.mjs client stop "$(PROFILE)"
+client-start-%:
+	node tooling/dev/review-app.mjs client start "$*"
+client-stop-%:
+	node tooling/dev/review-app.mjs client stop "$*"
 manager: manager-start
 manager-start:
 	node tooling/dev/review-app.mjs manager start "$(PROFILE)"
