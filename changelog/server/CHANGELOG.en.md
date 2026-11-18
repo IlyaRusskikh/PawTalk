@@ -4,6 +4,12 @@
 
 Server-specific tags and early combined Voicecord/PawTalk history. Early tags do not imply an independently published Server installer.
 
+## Release source: server-v0.12.0
+
+Changes are described in the bilingual release source; public availability is determined by GitHub Releases.
+
+[Release details](../../releases/server-v0.12.0.en.md)
+
 ## server-v0.11.1 — 2026-11-15
 
 **Changes:** API 2 membership and multiple channels.

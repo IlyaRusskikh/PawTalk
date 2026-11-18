@@ -14,6 +14,7 @@ Local sources are not automatically exact snapshots of public Release bodies. Th
 - [client-v0.11.0](client-v0.11.0.en.md)
 - [client-v0.12.0](client-v0.12.0.en.md) — failed, unpublished candidate
 - [client-v0.12.1](client-v0.12.1.en.md)
+- [client-v0.13.0](client-v0.13.0.en.md) — release source
 
 ## Server
 
@@ -21,6 +22,7 @@ Local sources are not automatically exact snapshots of public Release bodies. Th
 - [server-v0.10.1](server-v0.10.1.en.md)
 - [server-v0.11.0](server-v0.11.0.en.md) — failed, unpublished candidate
 - [server-v0.11.1](server-v0.11.1.en.md)
+- [server-v0.12.0](server-v0.12.0.en.md) — release source
 
 ## Manager
 

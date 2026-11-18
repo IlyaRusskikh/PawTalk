@@ -16,6 +16,14 @@ API 2 requires server API/data schema 2 and mandatory E2EE. **API 1 clients and 
 
 The Server and Manager each have their own release tag even though the Manager package contains Windows and Linux tooling. No separate OS-specific Manager version exists.
 
+## Prepared release sources
+
+The [Client 0.13.0](../../releases/client-v0.13.0.en.md) and
+[Server 0.12.0](../../releases/server-v0.12.0.en.md) release sources retain API/data
+schema 2. Upgrade Server first to enable the added capabilities below. Manager
+0.5.1 remains compatible and installs the Server separately; it does not bundle
+the new Server. This source combination does not change the published catalog.
+
 ## Development feature capabilities
 
 The source retains API/data schema 2 and adds optional activity-v1, attachment-removal-v1, link-cancel-v1, server-avatar-v1, polls-v1, system-poll-results-v1, chat-events-v1, server-events-v1 and message-events-v1. Upgrade Server first. Without capabilities, basic chat/voice remain available; avatar/poll creation is hidden and unsupported attachment removal/link cancellation asks for a Server update. Older Clients ignore extra state fields and display a poll as question text without voting controls. Notification mutes and the jump button are local Client features. Active chats use an authenticated WebSocket when chat-events-v1 is advertised; older Servers keep polling. Manager API and release contracts are unchanged.
