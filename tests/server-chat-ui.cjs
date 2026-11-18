@@ -72,7 +72,11 @@ app.whenReady().then(async()=>{
   await set('.member-composer textarea','Not yet');await enter({repeat:true});await enter({isComposing:true});await enter({shiftKey:true});await wait(80);assert.equal(await run('window.sendRequests.length'),2,'repeat, IME and Shift+Enter do not submit');
   await run('window.hold=true');await set('.member-composer textarea','Delayed send');await enter();await enter();
   await until("document.querySelector('.member-composer textarea').readOnly",'pending composer retains focus');assert.equal(await run("document.querySelector('.member-composer textarea').disabled"),false);
+  await until("document.querySelector('.chat-message-pending .member-message-text')?.textContent==='Delayed send'",'unconfirmed message appears immediately');
+  assert.equal(await run("(()=>{const e=document.querySelector('.chat-message-pending .member-message-text'),probe=document.createElement('span');probe.style.color='var(--muted)';document.body.append(probe);const muted=getComputedStyle(probe).color;probe.remove();return getComputedStyle(e).color===muted})()"),true,'unconfirmed text is gray');
+  assert.equal(await run("!!document.querySelector('.chat-message-pending .member-message-actions')"),false,'unconfirmed message cannot be edited/deleted');
   await run('window.hold=false;window.release()');await until("!!document.querySelector('[data-message-row=\"182\"]')",'delayed send');assert.equal(await run('window.sendRequests.length'),3,'double Enter creates one send');
+  await until("!document.querySelector('.chat-message-pending')",'confirmation restores normal message color');
   await run('window.reply(182,181)');
   await until("document.querySelector('[data-message-row=\"182\"] .member-reply')?.textContent.includes('Retry once')&&!document.querySelector('.chat-jump')",'recent reply is displayed at bottom');
   // The send flight transforms a descendant outside its normal bounds. Its

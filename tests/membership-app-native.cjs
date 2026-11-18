@@ -94,7 +94,7 @@ async function test(window) {
   console.log('PASS incoming chat contents use WS with zero history HTTP requests');
   await set('.member-composer textarea', '**Synthetic encrypted message**');
   await run("document.querySelector('.member-composer').requestSubmit()");
-  await until("document.querySelector('.member-history').innerText.includes('Synthetic encrypted message')", 'encrypted message roundtrip');
+  await until("!document.querySelector('.member-composer textarea').readOnly&&[...document.querySelectorAll('.member-message')].some(row=>row.querySelector('.member-message-text')?.textContent.trim()==='Synthetic encrypted message'&&row.querySelector('button[aria-label=\"Редактировать\"]'))", 'encrypted message confirmed, with server-backed actions');
   await run("[...document.querySelectorAll('.member-message')].find(row=>row.querySelector('.member-message-text')?.textContent.trim()==='Synthetic encrypted message').querySelector('button[aria-label=\"Редактировать\"]').click()");
   await run("document.querySelector('.chat-inline-edit').requestSubmit()");
   await until("!document.querySelector('.chat-inline-edit')",'unchanged edit closes');

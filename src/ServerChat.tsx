@@ -19,6 +19,7 @@ type Anchor = { id: number; offset: number };
 type Position = Anchor & { follow: boolean };
 type LoadKind = 'initial' | 'sync' | 'older' | 'newer' | 'latest' | 'around';
 type Draft = { text: string; mentions?:Mention[]; file?: File; reply?: Message };
+type Outgoing = {message:Message;preview?:string;confirmed:boolean};
 const drafts = new Map<string,Draft>();
 const merge = (a:Message[],b:Message[]) => [...new Map([...a,...b].map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);
 function readPosition(key:string):Position|undefined { try {const p=JSON.parse(localStorage.getItem(key)||'null');return p&&Number.isSafeInteger(p.id)&&p.id>0&&Number.isFinite(p.offset)&&typeof p.follow==='boolean'?p:undefined;}catch{return undefined;} }
@@ -39,6 +40,9 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const [mentions,setMentions]=useState<Mention[]>(()=>drafts.get(key)?.mentions||[]),[editMentions,setEditMentions]=useState<Mention[]>([]);
   const [editing,setEditing]=useState<Message>(),[editText,setEditText]=useState(''),[removeImage,setRemoveImage]=useState(false),[deleting,setDeleting]=useState<Message>();
   const [sending,setSending]=useState(false),[mutating,setMutating]=useState(false),[loading,setLoading]=useState(true),[ready,setReady]=useState(false);
+  const [outgoing,setOutgoing]=useState<Outgoing>(),outgoingRef=useRef<Outgoing|undefined>(undefined);
+  function showOutgoing(value:Outgoing){outgoingRef.current=value;setOutgoing(value);}
+  useEffect(()=>()=>{if(outgoing?.preview)URL.revokeObjectURL(outgoing.preview);},[outgoing?.preview]);
   const [failure,setFailure]=useState(''),[sendError,setSendError]=useState(''),[mutationError,setMutationError]=useState(''),[notice,setNotice]=useState('');
   const [newCount,setNewCount]=useState(0),[bounds,setBounds]=useState({first:0,last:0}),boundsRef=useRef(bounds);boundsRef.current=bounds;
   const [away,setAway]=useState(false),[quotes,setQuotes]=useState(new Map<number,Message|null>()),[preview,setPreview]=useState('');
@@ -53,6 +57,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const deletedMessages=useRef(new Set<number>()),fullSync=useRef(false),eventRevision=useRef(0),eventLast=useRef(0),loadedRevision=useRef(-1),quotesRef=useRef(new Map<number,Message|null>());
   const knownLast=Math.max(bounds.last,channel.lastMessageId),reportedLast=deletedMessages.current.has(knownLast)?messages.at(-1)?.id||0:knownLast;
   const hasOlder=!!messages.length&&messages[0].id>bounds.first,hasNewer=!!messages.length&&messages.at(-1)!.id<reportedLast;
+  function confirmOutgoing(updates:Message[]){const pending=outgoingRef.current;if(!pending)return;const state=current.current.state,confirmed=updates.find(m=>m.requestId===pending.message.requestId&&effectiveProfile(state,m.authorProfileId)===state.self.effectiveProfileId);if(confirmed)showOutgoing({...pending,message:confirmed,confirmed:true});}
   function focusInput(){if(current.current.focused&&!creatingPoll&&!document.querySelector('dialog[open]'))composer.current?.focus({preventScroll:true});}
   function anchor():Anchor|undefined {
     const list=pane.current;if(!list)return;
@@ -86,6 +91,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
       if(generation!==epoch.current||!event.delivery||event.revision! <=loadedRevision.current)return;
       if(loadedRevision.current!==event.previous){if(!retry&&deliveryWaiters.current.size<64){if(!deliveryWaiters.current.has(event.revision!))deliveryWaiters.current.set(event.revision!,setTimeout(()=>{deliveryWaiters.current.delete(event.revision!);if(generation===epoch.current)deliver(event,true);},200));return;}fullSync.current=true;queueMicrotask(()=>void load('sync'));return;}
       const old=rows.current,saved=anchor(),deleted=new Set((event.deleted||[]).map(d=>d.id)),updates=event.messages||[],state=current.current.state,previousLast=boundsRef.current.last;
+      confirmOutgoing(updates);
       const incoming=(m:{authorProfileId:string;systemKind?:string})=>!!m.systemKind||effectiveProfile(state,m.authorProfileId)!==state.self.effectiveProfileId;
       const countChange=updates.filter(m=>m.id>previousLast&&m.id>read.current&&incoming(m)).length-(event.deleted||[]).filter(d=>d.id>read.current&&incoming(d)).length;
       setNewCount(count=>Math.max(0,count+countChange));
@@ -140,7 +146,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
         if(incremental&&oldBefore>0)predecessor.current=existing[oldBefore-1];
         else if(incremental&&oldBefore===0)predecessor.current=oldPredecessor;
         else if(next.length&&next[0].id>page.first){const preceding=await membership<MessagePage>('messages',{serverId,channelId,options:{before:next[0].id,limit:1}});if(generation!==epoch.current)return;predecessor.current=preceding.messages.at(-1);}
-        setNewCount(page.unread);rows.current=next;setMessages(next);boundsRef.current={first:page.first,last:page.last};setBounds(boundsRef.current);setAway(!follow.current);setReady(true);setFailure('');
+        confirmOutgoing(page.messages);setNewCount(page.unread);rows.current=next;setMessages(next);boundsRef.current={first:page.first,last:page.last};setBounds(boundsRef.current);setAway(!follow.current);setReady(true);setFailure('');
         loadedRevision.current=page.revision??revision;await refreshQuotes(next,generation,!!incremental);
       }catch(error){if(kind==='sync'&&force)fullSync.current=true;if(generation===epoch.current)setFailure((error as Error).message);}
       finally{if(generation===epoch.current)setLoading(false);}
@@ -170,7 +176,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     const sent=arrival.current;if(sent){const row=list.querySelector<HTMLElement>(`[data-message-row="${sent.id}"] .member-message-text`);if(row){arrival.current=undefined;if(!matchMedia('(prefers-reduced-motion: reduce)').matches){const r=row.getBoundingClientRect();row.animate([{transform:`translate(${sent.x-r.left}px,${sent.y-r.top}px)`,opacity:.5},{transform:'none',opacity:1}],{duration:220,easing:'ease-out'});}}}
     if(!hasNewer&&list.scrollHeight-list.scrollTop-list.clientHeight<12){follow.current=true;setAway(false);}
     lastScroll.current=list.scrollTop;remember();current.current.onViewport?.(follow.current);
-  },[messages,hasNewer]);
+  },[messages,hasNewer,outgoing]);
   useEffect(()=>{
     const list=pane.current;if(!list)return;
     const observer=new ResizeObserver(()=>{const saved=resizeAnchor.current;if(follow.current)list.scrollTop=list.scrollHeight;else if(saved&&(saved.width!==list.clientWidth||saved.height!==list.clientHeight)){const row=list.querySelector<HTMLElement>(`[data-message-row="${saved.id}"]`);if(row)list.scrollTop+=row.getBoundingClientRect().bottom-list.getBoundingClientRect().bottom-saved.offset;}lastScroll.current=list.scrollTop;resizeAnchor.current=undefined;remember();});observer.observe(list);if(content.current)observer.observe(content.current);return()=>observer.disconnect();
@@ -204,15 +210,21 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     const value=text.trim();if(sendingRef.current||(!value&&!file)||new TextEncoder().encode(value).length>4096)return;
     sendTimes.current=sendTimes.current.filter(time=>Date.now()-time<1000);if(sendTimes.current.length>=3){setSendError(t('Слишком много сообщений. Подождите секунду.'));return;}
     sendingRef.current=true;setSending(true);setSendError('');const generation=epoch.current,origin=composer.current?.getBoundingClientRect();
+    const latestReply=reply&&quote(reply.id,{id:reply.id,author:profileFor(state,reply.authorProfileId)?.nickname||t('Участник'),text:reply.content.text});
+    const content:Message['content']={text:value,mentions:mentions.map(m=>({...m,start:m.start-(text.length-text.trimStart().length),end:m.end-(text.length-text.trimStart().length)})),...(reply?{reply:{id:reply.id,author:latestReply?.source?latestReply.author:profileFor(state,reply.authorProfileId)?.nickname||t('Участник'),text:latestReply?.source?latestReply.source.content.text:reply.content.text}}:{})};
+    showOutgoing({message:{id:-1,channelId,authorProfileId:state.self.profileId,requestId:crypto.randomUUID().replaceAll('-',''),sentAt:Date.now(),content},preview:file?URL.createObjectURL(file):undefined,confirmed:false});follow.current=true;setAway(false);pendingPosition.current={bottom:true};
     try{
       let image=file&&uploaded.current?.file===file?uploaded.current.image:undefined;
       if(file&&!image){image=await membership<{id:string;mime:string}>('upload',{serverId,channelId,mime:file.type,bytes:new Uint8Array(await file.arrayBuffer())});uploaded.current={file,image:image!};}
-      const latestReply=reply&&quote(reply.id,{id:reply.id,author:profileFor(state,reply.authorProfileId)?.nickname||t('Участник'),text:reply.content.text});
-      const body={text:value,mentions:mentions.map(m=>({...m,start:m.start-(text.length-text.trimStart().length),end:m.end-(text.length-text.trimStart().length)})),...(image?{image}:{}),...(reply?{reply:{id:reply.id,author:latestReply?.source?latestReply.author:profileFor(state,reply.authorProfileId)?.nickname||t('Участник'),text:latestReply?.source?latestReply.source.content.text:reply.content.text}}:{})},signature=JSON.stringify(body);
+      if(generation!==epoch.current)return;
+      const body={...content,...(image?{image}:{})},signature=JSON.stringify(body);
       if(pendingSend.current?.signature!==signature)pendingSend.current={signature,id:crypto.randomUUID().replaceAll('-','')};
-      const result=await membership<{id:number}>('send',{serverId,channelId,content:body,requestId:pendingSend.current!.id});
-      if(generation!==epoch.current)return;pendingSend.current=undefined;uploaded.current=undefined;sendTimes.current.push(Date.now());setHasSent(true);setMentions([]);setText('');setReply(undefined);setFile(undefined);follow.current=true;setAway(false);if(result?.id){markRead(result.id);if(origin)arrival.current={id:result.id,x:origin.left+14,y:origin.top+12};}await load('latest');
-    }catch(error){if(generation===epoch.current)setSendError((error as Error).message);}
+      showOutgoing({...outgoingRef.current!,message:{...outgoingRef.current!.message,content:body,requestId:pendingSend.current.id}});
+      let result:{id:number};
+      try{result=await membership<{id:number}>('send',{serverId,channelId,content:body,requestId:pendingSend.current.id});}
+      catch(error){if(!outgoingRef.current?.confirmed)throw error;result={id:outgoingRef.current.message.id};}
+      if(generation!==epoch.current)return;showOutgoing({...outgoingRef.current!,message:{...outgoingRef.current!.message,id:result.id},confirmed:true});pendingSend.current=undefined;uploaded.current=undefined;sendTimes.current.push(Date.now());setHasSent(true);setMentions([]);setText('');setReply(undefined);setFile(undefined);follow.current=true;setAway(false);if(result?.id){markRead(result.id);if(origin)arrival.current={id:result.id,x:origin.left+14,y:origin.top+12};}await load('latest');if(generation===epoch.current&&rows.current.some(m=>m.requestId===outgoingRef.current?.message.requestId)){outgoingRef.current=undefined;setOutgoing(undefined);}
+    }catch(error){if(generation===epoch.current){outgoingRef.current=undefined;setOutgoing(undefined);setSendError((error as Error).message);}}
     finally{sendingRef.current=false;if(generation===epoch.current){setSending(false);focusInput();}}
   }
   async function mutate(message:Message,value?:string){
@@ -235,29 +247,30 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   }
   function requestDelete(message:Message,skip=false){if(message.locked||message.systemKind)return;setMenu(undefined);setMutationError('');if(skip)void mutate(message);else setDeleting(message);}
   const tooLong=new TextEncoder().encode(text.trim()).length>4096;
+  const displayed=outgoing&&!messages.some(m=>m.requestId===outgoing.message.requestId&&effectiveProfile(state,m.authorProfileId)===state.self.effectiveProfileId)?[...messages,outgoing.message]:messages;
   return <section className="member-chat room-chat" aria-label={channel.name} onDragOver={event=>{if(event.dataTransfer.types.includes(memberDragType)){event.preventDefault();event.dataTransfer.dropEffect='copy';}}} onDrop={event=>{const raw=event.dataTransfer.getData(memberDragType);if(!raw)return;event.preventDefault();if(sendingRef.current)return;const field=composer.current,next=dropMemberMention(raw,state,text,mentions,field?.selectionStart??text.length,field?.selectionEnd??text.length);if(!next)return;setText(next.text);setMentions(next.mentions);requestAnimationFrame(()=>{field?.focus();field?.setSelectionRange(next.caret,next.caret);});}}>
     <div className="chat-feed"><div ref={pane} className="member-history chat-stream" tabIndex={0} role="log" aria-label={t('Сообщения чата')} aria-live="polite" aria-busy={loading} onLoadCapture={()=>{const list=pane.current;if(list){if(follow.current)list.scrollTop=list.scrollHeight;else restoreAnchor(lastAnchor.current);lastScroll.current=list.scrollTop;remember();}}} onScroll={()=>{
       const list=pane.current!,delta=list.scrollTop-lastScroll.current;lastScroll.current=list.scrollTop;if(!delta||resizeAnchor.current&&(resizeAnchor.current.width!==list.clientWidth||resizeAnchor.current.height!==list.clientHeight))return;follow.current=list.scrollHeight-list.scrollTop-list.clientHeight<12&&(!hasNewer||follow.current);setAway(!follow.current);remember();current.current.onViewport?.(follow.current);if(delta<0&&list.scrollTop<100&&hasOlder)void navigate('older');else if(delta>0&&list.scrollHeight-list.scrollTop-list.clientHeight<100&&hasNewer)void navigate('newer');
     }}><div ref={content}>
       {hasOlder&&<button className="member-load chat-page-loader" disabled={loading} onClick={()=>void navigate('older')}>{t('Предыдущие сообщения')}</button>}
       {!ready&&<p className="chat-empty" role="status">{t('Загрузка истории…')}</p>}
-      {ready&&!messages.length&&<div className="member-chat-welcome"><Icon name="chat" size={42}/><h2>{channel.name}</h2><p>{t('Начните общение в этом чате.')}</p></div>}
-      {messages.map((message,index)=>{
-        const author=profileFor(state,message.authorProfileId),system=message.systemKind==='poll-result',own=!system&&effectiveProfile(state,message.authorProfileId)===state.self.effectiveProfileId,previous=index?messages[index-1]:predecessor.current,isEditing=editing?.id===message.id;
-        const firstUnread=!hasSent&&message.id>entryRead.current&&(!previous||previous.id<=entryRead.current),continuation=!isEditing&&!firstUnread&&!message.content.reply&&!message.content.poll&&!previous?.content.poll&&previous&&effectiveProfile(state,previous.authorProfileId)===effectiveProfile(state,message.authorProfileId)&&message.sentAt>=previous.sentAt&&message.sentAt-previous.sentAt<=300000&&new Date(message.sentAt).toDateString()===new Date(previous.sentAt).toDateString();
+      {ready&&!displayed.length&&<div className="member-chat-welcome"><Icon name="chat" size={42}/><h2>{channel.name}</h2><p>{t('Начните общение в этом чате.')}</p></div>}
+      {displayed.map((message,index)=>{
+        const local=message===outgoing?.message,pending=local&&!outgoing!.confirmed,author=profileFor(state,message.authorProfileId),system=message.systemKind==='poll-result',own=!system&&effectiveProfile(state,message.authorProfileId)===state.self.effectiveProfileId,previous=index?displayed[index-1]:predecessor.current,isEditing=editing?.id===message.id;
+        const firstUnread=!local&&!hasSent&&message.id>entryRead.current&&(!previous||previous.id<=entryRead.current),continuation=!isEditing&&!firstUnread&&!message.content.reply&&!message.content.poll&&!previous?.content.poll&&previous&&effectiveProfile(state,previous.authorProfileId)===effectiveProfile(state,message.authorProfileId)&&message.sentAt>=previous.sentAt&&message.sentAt-previous.sentAt<=300000&&new Date(message.sentAt).toDateString()===new Date(previous.sentAt).toDateString();
         const reference=message.content.reply&&quote(message.content.reply.id,message.content.reply);
-        return <article className={`member-message chat-message${message.content.mentions?.some(m=>effectiveProfile(state,m.profileId)===state.self.effectiveProfileId)?' chat-message-mentioned':''}${continuation?' chat-message-continuation':''}`} key={message.id}>
+        return <article className={`member-message chat-message${pending?' chat-message-pending':''}${message.content.mentions?.some(m=>effectiveProfile(state,m.profileId)===state.self.effectiveProfileId)?' chat-message-mentioned':''}${continuation?' chat-message-continuation':''}`} key={message.id} aria-busy={pending||undefined}>
           {firstUnread&&<div className="chat-divider">{t('Новые сообщения')}</div>}
-          <div className={`chat-message-row${isEditing?' chat-message-editing':''}`} data-message-row={message.id} onContextMenu={event=>{if(isEditing||message.unreadable)return;event.preventDefault();setMenu({message,x:event.clientX,y:event.clientY});}}>
+          <div className={`chat-message-row${isEditing?' chat-message-editing':''}`} data-message-row={pending?undefined:message.id} onContextMenu={event=>{if(local||isEditing||message.unreadable)return;event.preventDefault();setMenu({message,x:event.clientX,y:event.clientY});}}>
             {system?<span className="chat-system-avatar" aria-hidden="true"><Icon name="paw" size={22}/></span>:continuation?<span className="chat-continuation-time"><MessageTime sent={message.sentAt}/></span>:<Avatar className="chat-avatar" name={author?.nickname||t('Участник')} image={author?.avatar}/>}
             <div className="member-message-content chat-message-body">
               {!continuation&&<div className="member-message-heading chat-meta"><strong>{system?t('Система'):author?.nickname||t('Участник')}</strong><MessageTime sent={message.sentAt}/></div>}
               {reference&&<button type="button" className="member-reply chat-reply-quote" onClick={()=>{if(reference.source===null)setNotice(t('Исходное сообщение уже недоступно.'));else void jump(message.content.reply!.id);}}><Icon name="reply" size={13}/><strong>{reference.author}</strong><span className="chat-reply-text"><MessageText text={reference.text.slice(0,240)} preview/></span></button>}
               {message.content.poll?<PollCard message={message} state={state} onJump={id=>void jump(id)} onClosed={()=>{if(!message.locked){rows.current=rows.current.map(row=>row.id===message.id?{...row,locked:true}:row);setMessages(rows.current);}}}/>:isEditing?<form className="chat-inline-edit" aria-label={t('Редактировать сообщение')} onSubmit={event=>{event.preventDefault();void mutate(message,editText);}}><MentionTextarea state={state} mentions={editMentions} onValue={(value,mentions)=>{setEditText(value);setEditMentions(mentions);}} ref={editInput} rows={1} value={editText} maxLength={4096} readOnly={mutating} aria-label={t('Сообщение')} onEscape={cancelEdit} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();cancelEdit();}else if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229){event.preventDefault();if(!event.repeat)void mutate(message,editText);}}}/>{removeImage&&<small className="chat-edit-removed">{t('Вложение будет удалено')}</small>}<div className="chat-edit-hint"><span>{t('Esc для')}</span> <button type="button" disabled={mutating} onClick={cancelEdit}>{t('отмены')}</button><span> · {t('Enter чтобы')}</span> <button type="submit" disabled={mutating}>{t('сохранить')}</button></div>{mutationError&&<p role="alert" className="text-error">{mutationError}</p>}</form>:<div className="member-message-text">{message.unreadable?<em>{t('Не удалось расшифровать сообщение.')}</em>:<MessageText text={message.content.text} mentions={message.content.mentions}/>}{!!message.editedAt&&<small className="chat-edited">{t('изменено')}</small>}</div>}
-              {message.content.image&&!(isEditing&&removeImage)&&<EncryptedImage serverId={serverId} channelId={channelId} image={message.content.image} onRemove={isEditing?()=>setRemoveImage(true):undefined} removing={mutating}/>}
+              {local&&outgoing?.preview?<img className="member-chat-image chat-pending-image" src={outgoing.preview} alt={t('Изображение')}/>:message.content.image&&!(isEditing&&removeImage)&&<EncryptedImage serverId={serverId} channelId={channelId} image={message.content.image} onRemove={isEditing?()=>setRemoveImage(true):undefined} removing={mutating}/>}
             </div>
-            {!system&&!message.unreadable&&!isEditing&&<div className="member-message-actions"><button type="button" className="icon-button" title={t('Ответить')} aria-label={t('Ответить')} onClick={()=>beginReply(message)}><Icon name="reply" size={16}/></button>{own&&!message.locked&&<>{!message.content.poll&&<button type="button" className="icon-button" title={t('Редактировать')} aria-label={t('Редактировать')} onClick={()=>beginEdit(message)}><Icon name="edit" size={16}/></button>}<button type="button" className="icon-button" title={t('Удалить сообщение')} aria-label={t('Удалить сообщение')} onClick={event=>requestDelete(message,event.shiftKey)}><Icon name="trash" size={16}/></button></>}</div>}
-          </div><div className="chat-read-end" data-read-id={message.id}/>
+            {!local&&!system&&!message.unreadable&&!isEditing&&<div className="member-message-actions"><button type="button" className="icon-button" title={t('Ответить')} aria-label={t('Ответить')} onClick={()=>beginReply(message)}><Icon name="reply" size={16}/></button>{own&&!message.locked&&<>{!message.content.poll&&<button type="button" className="icon-button" title={t('Редактировать')} aria-label={t('Редактировать')} onClick={()=>beginEdit(message)}><Icon name="edit" size={16}/></button>}<button type="button" className="icon-button" title={t('Удалить сообщение')} aria-label={t('Удалить сообщение')} onClick={event=>requestDelete(message,event.shiftKey)}><Icon name="trash" size={16}/></button></>}</div>}
+          </div>{!local&&<div className="chat-read-end" data-read-id={message.id}/>}
         </article>;
       })}
       {hasNewer&&!follow.current&&<button className="member-load chat-page-loader" disabled={loading} onClick={()=>void navigate('newer')}>{t('Следующие сообщения')}</button>}
