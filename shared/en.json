@@ -838,5 +838,13 @@
   "Опрос недоступен.": "Poll unavailable.",
   "Слишком много активных опросов в этом чате.": "Too many active polls in this chat.",
   "Опубликованный опрос нельзя редактировать.": "Published polls cannot be edited.",
-  "Загрузка…": "Loading…"
+  "Загрузка…": "Loading…",
+  "По приглашению или строке привязки": "With an invitation or device linking code",
+  "ВАШ СЕРВЕР РАБОТАЕТ": "YOUR SERVER IS RUNNING",
+  "Управляйте сервером и приглашайте друзей.": "Manage your server and invite friends.",
+  "Управление и приглашения": "Manage and invite",
+  "Общение продолжается": "Keep the conversation going",
+  "Переключайтесь между чатами и голосовыми каналами на своих серверах.": "Switch between chats and voice channels on your servers.",
+  "Свои всегда рядом": "Your people are always close",
+  "Добавленные серверы остаются на панели слева. Возвращайтесь одним нажатием.": "Your servers stay in the panel on the left. Come back with a click."
 }

@@ -10,7 +10,27 @@ app.whenReady().then(async()=>{
  const field=(selector,value)=>run(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(e instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
  try{
  for(const language of ['ru','en']){
-  const en=language==='en';await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/notifications.html?language='+language+'&wizard=1');
+ const en=language==='en';
+ await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/notifications.html?language='+language);
+ await until("window.ready&&!!document.querySelector('.home-screen')",'home ready');
+ assert.equal(await run("document.querySelector('#home-title').textContent"),en?'The conversation starts here.':'Разговор начинается здесь.');
+ win.webContents.debugger.attach('1.3');
+ for(const motion of ['no-preference','reduce']){
+  await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:motion}]});
+  for(const [width,height] of [[1240,860],[1000,720],[800,600]]){
+   win.setContentSize(width,height);await wait(100);
+   assert.ok(await run("(()=>{const page=document.querySelector('.home-screen');return page.scrollWidth<=page.clientWidth&&[...page.querySelectorAll('.home-action')].every(e=>e.scrollWidth<=e.clientWidth)})()"),'home fits '+language+' '+width);
+   assert.equal(await run("getComputedStyle(document.querySelector('.home-art-wave i')).animationName"),motion==='reduce'?'none':'home-signal');
+  }
+ }
+ win.webContents.debugger.detach();win.setContentSize(1240,860);await wait(100);
+ if(process.env.PAWTALK_HOME_SCREENSHOTS){const fs=require('node:fs');fs.mkdirSync('release/qa',{recursive:true});fs.writeFileSync('release/qa/home-'+language+'.png',(await win.webContents.capturePage()).toPNG());}
+ await run("document.querySelector('.home-action-join').click()");
+ await until("!!document.querySelector('.member-join-modal')",'home opens join dialog');
+ await run("document.querySelector('dialog .modal-heading button').click();document.querySelector('.home-action-create').click()");
+ await until("!!document.querySelector('dialog[open]')",'home opens create dialog');
+ assert.ok((await run("document.querySelector('dialog').textContent")).includes(en?'Create a room':'Создать комнату'));
+ await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/notifications.html?language='+language+'&wizard=1');
   await until("!!document.querySelector('.onboarding-progress')",'wizard ready');
   await field('dialog input[maxlength="32"]','Synthetic tester');
   await run("document.querySelector('dialog input[maxlength=\"32\"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',repeat:true,bubbles:true,cancelable:true}))");
