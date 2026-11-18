@@ -45,6 +45,7 @@ jobs:
       - name: Lint all GitHub Actions workflows
         run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
   server:
+    name: Server + Manager / Linux (${{ matrix.runner }})
     strategy:
       fail-fast: false
       matrix:
@@ -108,6 +109,7 @@ jobs:
           PAWTALK_TEST_IMAGE: ghcr.io/ilyarusskikh/pawtalk-server@sha256:601bd68f577c63a98b3dfec040b01379467576dfc6d16c15f2bf7501ac86b8f0
         run: node scripts/server-smoke.mjs --legacy-rejection
   windows:
+    name: Client + Server + Manager / Windows (${{ matrix.runner }})
     defaults:
       run:
         shell: pwsh
