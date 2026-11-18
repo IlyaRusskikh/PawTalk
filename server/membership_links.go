@@ -384,6 +384,17 @@ func (s *membershipStore) mergeLinkTx(ctx context.Context, tx *sql.Tx, v memberL
 	if err != nil {
 		return err
 	}
+	for _, profile := range append(source, target...) {
+		if profile == v.ChosenProfileID {
+			continue
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO poll_votes(poll_id,profile_id,choices,updated_at) SELECT poll_id,?,choices,updated_at FROM poll_votes WHERE profile_id=? AND poll_id IN(SELECT poll_id FROM polls WHERE closed_at IS NULL) ON CONFLICT(poll_id,profile_id) DO UPDATE SET choices=excluded.choices,updated_at=excluded.updated_at WHERE excluded.updated_at>poll_votes.updated_at`, v.ChosenProfileID, profile); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, "DELETE FROM poll_votes WHERE profile_id=? AND poll_id IN(SELECT poll_id FROM polls WHERE closed_at IS NULL)", profile); err != nil {
+			return err
+		}
+	}
 	if _, err = tx.ExecContext(ctx, "DELETE FROM profile_bindings WHERE target_profile_id IN (?,?)", v.SourceProfileID, v.TargetProfileID); err != nil {
 		return err
 	}
@@ -497,4 +508,30 @@ func (s *membershipStore) linkStatus(ctx context.Context, proof membershipProof,
 		return result, err
 	}
 	return result, tx.Commit()
+}
+
+func (s *membershipStore) cancelLink(ctx context.Context, proof membershipProof, method, uri string, raw []byte, linkID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	id, err := s.proveDeviceTx(ctx, tx, proof, method, uri, raw, "", "", false)
+	if err != nil {
+		return err
+	}
+	link, err := s.loadLinkTx(ctx, tx, linkID)
+	if err != nil {
+		return err
+	}
+	if id.DeviceID != link.SourceDeviceID && id.DeviceID != link.TargetDeviceID {
+		return memberError(403, "FORBIDDEN")
+	}
+	if link.State == "confirmed" {
+		return memberError(409, "LINK_CHANGED")
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE device_link_requests SET state='cancelled',key_envelope=NULL WHERE request_id=?", linkID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

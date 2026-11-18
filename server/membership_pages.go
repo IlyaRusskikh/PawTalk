@@ -46,6 +46,9 @@ func (s *membershipStore) messagePage(ctx context.Context, token, channel string
 	if err = tx.QueryRowContext(ctx, "SELECT COALESCE(MIN(message_id),0),COALESCE(MAX(message_id),0) FROM messages WHERE channel_id=?", channel).Scan(&page.First, &page.Last); err != nil {
 		return page, err
 	}
+	if err = tx.QueryRowContext(ctx, "SELECT message_revision FROM channels WHERE channel_id=?", channel).Scan(&page.Revision); err != nil {
+		return page, err
+	}
 	clause, order := "", "DESC"
 	args := []any{channel}
 	if before > 0 {
@@ -71,23 +74,15 @@ func (s *membershipStore) messagePage(ctx context.Context, token, channel string
 		limit = len(selection.IDs)
 	}
 	args = append(args, limit)
-	rows, err := tx.QueryContext(ctx, `SELECT m.message_id,m.channel_id,m.author_profile_id,m.author_device_id,m.request_id,m.sent_at,m.edited_at,m.crypto_context_id,m.nonce,m.ciphertext,COALESCE((SELECT attachment_id FROM attachments a WHERE a.message_id=m.message_id),'') FROM messages m WHERE m.channel_id=?`+clause+" ORDER BY m.message_id "+order+" LIMIT ?", args...)
+	rows, err := tx.QueryContext(ctx, "SELECT "+memberMessageColumns+` FROM messages m WHERE m.channel_id=?`+clause+" ORDER BY m.message_id "+order+" LIMIT ?", args...)
 	if err != nil {
 		return page, err
 	}
 	for rows.Next() {
-		var v memberMessage
-		var nonce, cipher []byte
-		var attachment string
-		if err = rows.Scan(&v.ID, &v.ChannelID, &v.AuthorProfileID, &v.AuthorDeviceID, &v.RequestID, &v.SentAt, &v.EditedAt, &v.KeyID, &nonce, &cipher, &attachment); err != nil {
+		v, err := scanMemberMessage(rows)
+		if err != nil {
 			rows.Close()
 			return page, err
-		}
-		v.Nonce = b64.EncodeToString(nonce)
-		v.Ciphertext = b64.EncodeToString(cipher)
-		v.AttachmentIDs = []string{}
-		if attachment != "" {
-			v.AttachmentIDs = append(v.AttachmentIDs, attachment)
 		}
 		page.Messages = append(page.Messages, v)
 	}
@@ -101,7 +96,7 @@ func (s *membershipStore) messagePage(ctx context.Context, token, channel string
 		page.HasOlder = page.First < page.Messages[0].ID
 		page.HasNewer = page.Last > page.Messages[len(page.Messages)-1].ID
 	}
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE channel_id=? AND message_id>? AND author_profile_id<>? AND author_profile_id NOT IN(SELECT source_profile_id FROM profile_bindings WHERE target_profile_id=?)`, channel, readAfter, access.EffectiveProfileID, access.EffectiveProfileID).Scan(&page.Unread); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages m WHERE channel_id=? AND message_id>? AND (EXISTS(SELECT 1 FROM system_messages sm WHERE sm.message_id=m.message_id) OR (author_profile_id<>? AND author_profile_id NOT IN(SELECT source_profile_id FROM profile_bindings WHERE target_profile_id=?)))`, channel, readAfter, access.EffectiveProfileID, access.EffectiveProfileID).Scan(&page.Unread); err != nil {
 		return page, err
 	}
 	return page, tx.Commit()

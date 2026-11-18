@@ -71,7 +71,7 @@ function authorized(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Unauthorized IPC');
 }
 function registerIPC() {
-  membershipIPC=require('./membership-ipc.cjs').registerMembershipIPC({ipcMain,authorized,client:membershipClient,links:membershipLinks,clipboard,send,getWindow:()=>win,Notification,getHost:()=>hosting?.status(),stopHost:()=>hosting.stop(),setVoiceEndpoint:(address,pin)=>address?voiceSignal.open(address,pin):voiceSignal.close()});
+  membershipIPC=require('./membership-ipc.cjs').registerMembershipIPC({ipcMain,authorized,client:membershipClient,links:membershipLinks,getIdleSeconds:()=>powerMonitor.getSystemIdleTime(),clipboard,send,getWindow:()=>win,Notification,getHost:()=>hosting?.status(),stopHost:()=>hosting.stop(),setVoiceEndpoint:(address,pin)=>address?voiceSignal.open(address,pin):voiceSignal.close()});
   ipcMain.handle('chat-text-copy', (event, text) => {
     authorized(event);
     if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > 12000) throw new Error('Invalid chat text');

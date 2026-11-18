@@ -22,12 +22,17 @@ import (
 //go:embed membership.sql
 var membershipSchema string
 
+//go:embed membership_features.sql
+var membershipFeaturesSchema string
+
 const membershipSchemaVersion = 2
 
 type membershipStore struct {
-	db       *sql.DB
-	now      func() time.Time
-	maxBytes int64
+	events     chatEvents
+	deliveries messageDeliveries
+	db         *sql.DB
+	now        func() time.Time
+	maxBytes   int64
 }
 
 func randomHex(size int) (string, error) {
@@ -72,6 +77,10 @@ func openMembershipDatabase(path string, now func() time.Time) (*membershipStore
 	db.SetMaxOpenConns(1)
 	s := &membershipStore{db: db, now: now, maxBytes: defaultChatStorage}
 	if err = s.initialize(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err = s.db.Exec(membershipFeaturesSchema); err != nil {
 		db.Close()
 		return nil, err
 	}

@@ -20,36 +20,45 @@ export function BansDialog({state,onClose}:{state:ServerState;onClose():void}) {
   useEffect(()=>{void refresh().catch(error=>setError(error.message));},[state.serverId]);
   return <Modal title={t('Заблокированные участники')} onClose={onClose}>{error&&<p className="text-error" role="alert">{error}</p>}<div className="member-management-list">{!bans.length&&<p className="host-hint">{t('Нет действующих блокировок.')}</p>}{bans.map(ban=><div className="member-management-row" key={ban.id}><div><strong>{ban.subjects.map(id=>state.profiles.find(profile=>profile.id===id)?.nickname||id.slice(0,12)).join(', ')}</strong><small>{ban.expiresAt?t('До {0}',new Date(ban.expiresAt).toLocaleString()):t('Навсегда')}</small><small>{ban.reason}</small><details><summary>{t('Затронутые профили')}</summary>{ban.subjects.map(id=><p className="member-profile-id" key={id}>{id}</p>)}</details></div><button disabled={busy} onClick={()=>{setBusy(true);void membership('ban.revoke',{serverId:state.serverId,banId:ban.id}).then(refresh).catch(error=>setError(error.message)).finally(()=>setBusy(false));}}>{t('Снять блокировку')}</button></div>)}</div></Modal>;
 }
-export function LinkDialog({ state, nickname, initialText = '', onClose, onJoined }: { state?: ServerState; nickname: string; initialText?: string; onClose(): void; onJoined(state: ServerState): void }) {
-  const [side, setSide] = useState<'target'|'source'>(initialText || !state?.devices.some(device=>device.id===state.self.deviceId&&device.primary) ? 'source' : 'target'), [text, setText] = useState(initialText), [id, setID] = useState(''), [chosen, setChosen] = useState('target');
+export function LinkDialog({ state, nickname, initialText = '', initialID='', onID, onClose, onJoined }: { state?: ServerState; nickname: string; initialText?: string; initialID?:string; onID?(id:string):void; onClose(): void; onJoined(state: ServerState): void }) {
+  const [side, setSide] = useState<'target'|'source'>(!initialID&&(initialText || !state?.devices.some(device=>device.id===state.self.deviceId&&device.primary)) ? 'source' : 'target'), [text, setText] = useState(initialText), [id, setID] = useState(initialID), [chosen, setChosen] = useState('target');
   const [status, setStatus] = useState<LinkStatus>(), [error, setError] = useState(''), [busy, setBusy] = useState(false), [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!id) return; let alive = true, pending = false;
     async function poll() { if (pending) return; pending = true; try { const value = await membership<LinkStatus>('link.status', { linkId: id }); if (alive) setStatus(value); } catch (error) { if (alive) setError((error as Error).message); } finally { pending = false; } }
-    void poll(); const timer = setInterval(() => void poll(), 2000); return () => { alive = false; clearInterval(timer); };
-  }, [id]);
+    void poll(); const timer = setInterval(() => void poll(), side==='target'&&state?.eventsLive?30000:2000);const off=window.desktop?.onMembershipServerEvent?.(event=>{if(event.serverId===state?.serverId&&event.type!=='chat')void poll();}); return () => { alive = false; clearInterval(timer);off?.(); };
+  }, [id,state?.eventsLive,side]);
   async function run(action: string, input: Record<string, unknown>) {
     setBusy(true); setError('');
     try {
-      if (action === 'link.start') { const value = await membership<{ id: string; text: string }>(action, input); setID(value.id); setText(value.text); }
-      else if (action === 'link.propose') { const value = await membership<LinkStatus>(action, input); setID(value.id); setStatus(value); }
+      if (action === 'link.start') { const value = await membership<{ id: string; text: string }>(action, input); setID(value.id);onID?.(value.id); setText(value.text); }
+      else if (action === 'link.propose') { const value = await membership<LinkStatus>(action, input); setID(value.id);onID?.(value.id); setStatus(value); }
       else if (action === 'link.finish') onJoined(await membership<ServerState>(action, input));
       else setStatus(await membership<LinkStatus>(action, input));
     } catch (error) { setError((error as Error).message); } finally { setBusy(false); }
   }
+  function close(){
+    if(busy)return;
+    if(!id){onClose();return;}
+    setBusy(true);
+    void membership<LinkStatus>('link.status',{linkId:id}).then(async latest=>{
+      if(!['confirmed','cancelled','expired'].includes(latest.state)&&(side==='source'||['proposed','approved'].includes(latest.state)))await membership('link.cancel',{linkId:id});
+      onClose();
+    }).catch(error=>setError(error.message)).finally(()=>setBusy(false));
+  }
   const targetMain = state?.devices.some(device => device.id === state.self.deviceId && device.primary);
-  return <Modal title={t('Связать устройства')} onClose={onClose}>
+  return <Modal title={t('Связать устройства')} onClose={close}>
     {!id && <div className="form-fields"><label>{t('Действие')}<select value={side} onChange={event => setSide(event.target.value as 'target'|'source')}><option value="target" disabled={!targetMain}>{t('Выдать строку на основном устройстве')}</option><option value="source">{t('Вставить строку с другого устройства')}</option></select></label>
       {side === 'target' ? <p>{t('Скопируйте строку на второе устройство. Оба устройства должны оставаться в сети. Строка действует 10 минут.')}</p> : <><label>{t('Строка привязки')}<textarea rows={4} value={text} onChange={event => setText(event.target.value)}/></label><label>{t('Какой профиль станет основным?')}<select value={chosen} onChange={event => setChosen(event.target.value)}><option value="target">{t('Профиль устройства, выдавшего строку')}</option><option value="source">{t('Профиль этого устройства')}</option></select></label><p className="host-hint">{t('Сохранятся имя, аватар и права выбранного основного профиля.')}</p></>}
     </div>}
-    {id && side === 'target' && <label>{t('Строка привязки')}<textarea rows={4} readOnly value={text} onFocus={event => event.target.select()}/></label>}
+    {id && side === 'target' && !!text && (!status||status.state==='waiting') && <label>{t('Строка привязки')}<textarea rows={4} readOnly value={text} onFocus={event => event.target.select()}/></label>}
     {status?.code && <div className="member-link-code"><span>{t('Сравните код на обоих устройствах')}</span><strong>{status.code}</strong><p>{t('Основной профиль: {0}', profileFor(state || { profiles: [], bindings: [] } as unknown as ServerState, status.chosenProfileId)?.nickname || status.chosenProfileId.slice(0, 12))}</p></div>}
     {status?.code&&<div className="member-link-profiles">{[status.sourceProfileId,status.targetProfileId].filter(Boolean).map((profileId,index)=>{const profile=state&&profileFor(state,profileId),name=profile?.nickname||(index===0?status.sourceNickname:status.targetNickname)||profileId.slice(0,12);return <div className="member-link-profile" key={profileId}><Avatar name={name} image={profile?.avatar}/><span><small>{index===0?t('Привязываемый профиль'):t('Принимающий профиль')}</small><br/><strong>{name}</strong><br/><small title={profileId}>{profileId.slice(0,12)}</small></span></div>;})}</div>}
     {status?.state === 'confirmed' && <p role="status">{t('Устройства связаны.')}</p>}
     {error && <p className="text-error" role="alert">{error}</p>}
     <div className="modal-actions">
       {!id && <button className="primary" disabled={busy || (side === 'target' ? !targetMain : !text.trim())} onClick={() => void run(side === 'target' ? 'link.start' : 'link.propose', side === 'target' ? { serverId: state!.serverId } : { text, nickname, chosen })}>{side === 'target' ? t('Создать строку') : t('Продолжить')}</button>}
-      {id && side === 'target' && <button onClick={() => void membership('copy', { text }).then(() => setCopied(true))}>{copied ? t('Скопировано') : t('Копировать')}</button>}
+      {id && side === 'target' && !!text && (!status||status.state==='waiting') && <button onClick={() => void membership('copy', { text }).then(() => setCopied(true))}>{copied ? t('Скопировано') : t('Копировать')}</button>}
       {id && side === 'target' && status?.state === 'proposed' && <button className="primary" disabled={busy} onClick={() => void run('link.approve', { linkId: id })}>{t('Коды совпадают — подтвердить')}</button>}
       {id && side === 'source' && status?.state === 'approved' && <button className="primary" disabled={busy} onClick={() => void run('link.finish', { linkId: id })}>{t('Коды совпадают — завершить')}</button>}
       {status?.state === 'confirmed' && <button className="primary" onClick={onClose}>{t('Готово')}</button>}

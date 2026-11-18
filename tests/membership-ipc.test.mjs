@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
+import {EventEmitter} from 'node:events';
 const {registerMembershipIPC}=createRequire(import.meta.url)('../electron/membership-ipc.cjs');
 const serverId='a'.repeat(32),channelId='b'.repeat(32),failure=code=>Object.assign(Error(code),{code});
 function fixture(extra={}){
   let handler;const requests=[],endpoints=[],events=[];
   const client={connections:new Map([[serverId,{fingerprint:'c'.repeat(64)}]]),registry:async()=>[{serverId,address:'https://127.0.0.1',name:'Synthetic'}],state:async()=>({serverId}),request:async(...args)=>{requests.push(args);return {};},voice:async()=>({url:'wss://127.0.0.1/rtc',token:'synthetic'}),forget:async id=>client.connections.delete(id)};
-  const service=registerMembershipIPC({...extra,ipcMain:{handle(_name,value){handler=value;}},authorized(event){if(!event.allowed)throw Error('Unauthorized');},client,links:{},clipboard:{writeText(){throw Error('must not reach clipboard');}},send:(...args)=>events.push(args),getWindow:()=>undefined,setVoiceEndpoint:value=>{endpoints.push(value);return value?'ws://127.0.0.1/synthetic':undefined;}});
-  return{client,service,requests,endpoints,events,call:(action,input={})=>handler({allowed:true},action,input),unauthorized:()=>handler({},'copy',{text:'private'})};
+  const service=registerMembershipIPC({...extra,ipcMain:{handle(_name,value){handler=value;}},authorized(event){if(!event.allowed)throw Error('Unauthorized');},client,links:{},clipboard:{writeText(){throw Error('must not reach clipboard');}},send:(...args)=>events.push(args),getWindow:extra.getWindow||(()=>undefined),setVoiceEndpoint:value=>{endpoints.push(value);return value?'ws://127.0.0.1/synthetic':undefined;}});
+  return{client,service,requests,endpoints,events,call:(action,input={})=>handler({allowed:true},action,input),unauthorized:(action='copy',input={text:'private'})=>handler({},action,input)};
 }
 test('membership IPC authorizes before effects and requires a real prepared voice grant',async()=>{
   const f=fixture();try{
@@ -116,4 +117,90 @@ test('a rejected leave does not suppress a subsequent real ban',async()=>{
   const notices=f.events.filter(event=>event[1]?.departure);assert.equal(notices.length,1);assert.deepEqual(notices[0][1].departure,{serverId,name:'Synthetic',kind:'ban',expiresAt});assert.equal(f.client.connections.has(serverId),false);
  }finally{f.service.stop();}
  const kick=fixture();try{await kick.call('servers');kick.client.state=async()=>{throw failure('NOT_A_MEMBER');};await kick.call('connect',{serverId});assert.equal(kick.events.find(event=>event[1]?.departure)[1].departure.kind,'kick');}finally{kick.service.stop();}
+});
+
+test('incoming link attention restores and focuses once, including a hidden main window',async()=>{
+ let handler,restores=0,shows=0,focuses=0;const linkId='d'.repeat(32);let state='proposed';
+ const links={pending:new Map([[linkId,{side:'target',connection:{config:{serverId}}}]]),prune(){},status:async()=>({state})};
+ const service=registerMembershipIPC({ipcMain:{handle(_name,value){handler=value;}},authorized(){},client:{connections:new Map()},links,send(){},getWindow:()=>({isDestroyed:()=>false,isMinimized:()=>true,restore(){restores++;},show(){shows++;},focus(){focuses++;}})});
+ try{const first=await handler({},'link.pending',{});assert.deepEqual(first.value,[{linkId,serverId}]);await handler({},'link.pending',{});assert.deepEqual([restores,shows,focuses],[1,1,1]);state='cancelled';assert.deepEqual((await handler({},'link.pending',{})).value,[]);}finally{service.stop();}
+});
+test('automatic idle threshold uses native system inactivity and exposes no manual setter',async()=>{
+ let idle=299;const f=fixture({getIdleSeconds:()=>idle});try{assert.equal((await f.call('activity')).value.away,false);idle=300;assert.equal((await f.call('activity')).value.away,true);assert.equal((await f.call('activity.set',{away:true})).error.code,'INVALID_ACTION');}finally{f.service.stop();}
+});
+test('memory pressure is a local read-only boolean behind the membership IPC authorizer',async()=>{let low=false;const f=fixture({getMemoryPressure:()=>low});try{assert.deepEqual((await f.call('memory.status')).value,{low:false});low=true;assert.deepEqual((await f.call('memory.status')).value,{low:true});await assert.rejects(f.unauthorized('memory.status'),/Unauthorized/);assert.equal(f.requests.length,0);}finally{f.service.stop();}});
+
+test('desktop notification batches deduplicate IDs and retain mention priority',async()=>{
+ const shown=[];class N{static isSupported(){return true;}constructor(options){shown.push(options);}on(){}show(){}}
+ const f=fixture({Notification:N});try{
+  const base={serverId,channelId,channelName:'General',authorName:'Friend',batchCount:1};
+  const first=f.call('notify',{...base,messageId:10,mention:true,text:'Important mention'});
+  const second=f.call('notify',{...base,messageId:11,text:'Later ordinary text'});
+  await Promise.all([first,second]);assert.equal(shown.length,1);assert.match(shown[0].body,/Important mention/);assert.match(shown[0].body,/2/);
+  assert.equal((await f.call('notify',{...base,messageId:11,text:'Duplicate'})).value,false);assert.equal(shown.length,1);
+ }finally{f.service.stop();}
+});
+test('shutdown cancels pending desktop batches without leaking unresolved IPC',async()=>{
+ const shown=[];class N{static isSupported(){return true;}constructor(options){shown.push(options);}on(){}show(){}}
+ const f=fixture({Notification:N});const pending=f.call('notify',{serverId,channelId,channelName:'General',authorName:'Friend',messageId:1,text:'Pending'});f.service.stop();assert.equal((await pending).value,false);assert.equal(shown.length,0);
+});
+
+function nativeAlerts(extra={}){
+ const shown=[];class N extends EventEmitter{static isSupported(){return true;}constructor(options){super();this.options=options;this.closed=0;}show(){shown.push(this);}close(){this.closed++;this.emit('close');}}
+ const f=fixture({...extra,Notification:N});return{...f,shown,notify:(messageId,options={})=>f.call('notify',{serverId,channelId,channelName:'General',authorName:'Friend',messageId,text:'Message '+messageId,...options}),read:(messageId,channel=channelId)=>f.call('notify.read',{serverId,channelId:channel,messageId})};
+}
+
+test('reading cancels queued and shown alerts, rejects late events and preserves newer unread messages',async()=>{
+ const f=nativeAlerts();try{
+  const pending=f.notify(10);await f.read(10);assert.equal((await pending).value,false);assert.equal(f.shown.length,0);
+  assert.equal((await f.notify(10)).value,false,'late arrival for a read message is ignored');
+  assert.equal((await f.notify(11)).value,true);await f.read(10);assert.equal(f.shown[0].closed,0,'partial read does not close a newer unread message');
+  await f.read(11);assert.equal(f.shown[0].closed,1);assert.equal(f.requests.length,0,'read acknowledgments never call the server');
+ }finally{f.service.stop();}
+});
+
+test('each chat replaces its native toast with stable Windows tag/group; timeout does not lose cleanup',async()=>{
+ const f=nativeAlerts();try{
+  await f.notify(1);await f.notify(2);assert.equal(f.shown[0].closed,1,'old native toast is explicitly closed');assert.equal(f.shown[1].closed,0);
+  const a=f.shown[0].options,b=f.shown[1].options;assert.equal(a.id,b.id);assert.equal(a.groupId,b.groupId);assert.match(a.id,/^[a-f0-9]{16}$/);assert.match(a.groupId,/^[a-f0-9]{16}$/);
+  const other='c'.repeat(32);await f.notify(3,{channelId:other});assert.notEqual(f.shown[2].options.id,b.id);assert.equal(f.shown[2].options.groupId,b.groupId);
+  f.shown[1].emit('close');await f.read(2);assert.equal(f.shown[1].closed,1,'timed-out toast can still be removed from Action Center');assert.equal(f.shown[2].closed,0,'another unread chat is retained');
+ }finally{f.service.stop();}
+ assert.equal(f.shown.at(-1).closed,1,'shutdown closes native alerts too');
+});
+
+test('reading during asynchronous notification preparation cancels the pending IPC and prevents resurrection',async()=>{
+ const f=nativeAlerts();let release,entered;const gate=new Promise(r=>release=r),ready=new Promise(r=>entered=r);
+ f.client.registry=async()=>{entered();await gate;return[{serverId,name:'Synthetic'}];};
+ try{const pending=f.notify(12);await ready;await f.read(12);assert.equal((await pending).value,false);release();await new Promise(setImmediate);assert.equal(f.shown.length,0);}
+ finally{release();f.service.stop();}
+});
+
+test('a native show delayed until after reading is dismissed again',async()=>{
+ const f=nativeAlerts();try{await f.notify(1);await f.read(1);assert.equal(f.shown[0].closed,1);f.shown[0].emit('show');assert.equal(f.shown[0].closed,2,'Windows async preparation cannot resurrect a read toast');}finally{f.service.stop();}
+});
+
+test('focus and shutdown are rechecked after asynchronous notification preparation',async()=>{
+ let focused=false;const f=nativeAlerts({getWindow:()=>({isFocused:()=>focused})});let release,entered;let gate=new Promise(r=>release=r),ready=new Promise(r=>entered=r);
+ f.client.registry=async()=>{entered();await gate;return[{serverId,name:'Synthetic'}];};
+ try{const pending=f.notify(1);await ready;focused=true;release();assert.equal((await pending).value,false);assert.equal(f.shown.length,0);
+  focused=false;gate=new Promise(r=>release=r);ready=new Promise(r=>entered=r);const next=f.notify(2);await ready;f.service.stop();assert.equal((await next).value,false);release();await new Promise(setImmediate);assert.equal(f.shown.length,0);
+ }finally{release();f.service.stop();}
+});
+
+test('server departure closes delivered alerts and cancels pending batches',async()=>{
+ const f=nativeAlerts();try{await f.notify(1);const pending=f.notify(2);await f.service.serverEnded(serverId);assert.equal((await pending).value,false);assert.equal(f.shown[0].closed,1);assert.equal((await f.notify(3)).value,false);}finally{f.service.stop();}
+});
+
+test('read IPC validates identity and cursor before effects and cannot be used by unauthorized senders',async()=>{
+ const f=nativeAlerts();try{
+  await assert.rejects(f.unauthorized('notify.read',{serverId,channelId,messageId:100}),/Unauthorized/);
+  for(const input of [{serverId:'invalid',channelId,messageId:100},{serverId,channelId:'invalid',messageId:100},{serverId,channelId,messageId:-1},{serverId,channelId,messageId:'100'},{serverId,channelId,messageId:Number.MAX_SAFE_INTEGER+1}])assert.equal((await f.call('notify.read',input)).error.code,'INVALID_INPUT');
+  assert.equal((await f.notify(1)).value,true,'invalid/unauthorized read did not advance the cursor');
+  assert.equal((await f.notify(2,{lastMessageId:1})).error.code,'INVALID_INPUT');
+ }finally{f.service.stop();}
+});
+
+test('mention priority retains the complete batch read boundary',async()=>{
+ const f=nativeAlerts();try{await f.notify(10,{lastMessageId:12,mention:true,text:'Mention',batchCount:3});assert.equal((await f.notify(12)).value,false,'whole delivered batch is deduplicated');await f.read(12);assert.equal(f.shown[0].closed,1);assert.equal((await f.notify(13,{mention:true})).value,true,'new mentions after reading still notify');}finally{f.service.stop();}
 });

@@ -9,13 +9,17 @@ import (
 )
 
 type memberMessageInput struct {
-	RequestID     string   `json:"requestId"`
-	KeyID         string   `json:"keyId"`
-	Nonce         string   `json:"nonce"`
-	Ciphertext    string   `json:"ciphertext"`
-	AttachmentIDs []string `json:"attachmentIds"`
+	Poll             *memberPollCreate `json:"poll,omitempty"`
+	RemoveAttachment bool              `json:"removeAttachment,omitempty"`
+	RequestID        string            `json:"requestId"`
+	KeyID            string            `json:"keyId"`
+	Nonce            string            `json:"nonce"`
+	Ciphertext       string            `json:"ciphertext"`
+	AttachmentIDs    []string          `json:"attachmentIds"`
 }
 type memberMessage struct {
+	SystemKind      string   `json:"systemKind,omitempty"`
+	Locked          bool     `json:"locked,omitempty"`
 	ID              int64    `json:"id"`
 	ChannelID       string   `json:"channelId"`
 	AuthorProfileID string   `json:"authorProfileId"`
@@ -29,6 +33,7 @@ type memberMessage struct {
 	AttachmentIDs   []string `json:"attachmentIds"`
 }
 type memberMessagePage struct {
+	Revision int64           `json:"revision"`
 	Messages []memberMessage `json:"messages"`
 	First    int64           `json:"first"`
 	Last     int64           `json:"last"`
@@ -85,6 +90,7 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 		return 0, err
 	}
 	defer tx.Rollback()
+	defer s.dropDeliveries(tx)
 	access, err := s.sessionAccessTx(ctx, tx, token)
 	if err != nil {
 		return 0, err
@@ -101,6 +107,13 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 	}
 	if keyID != input.KeyID {
 		return 0, memberError(409, "KEY_ID_MISMATCH")
+	}
+	var reserved int
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM polls WHERE result_request_id=?", input.RequestID).Scan(&reserved); err != nil {
+		return 0, err
+	}
+	if reserved > 0 {
+		return 0, memberError(409, "REQUEST_CONFLICT")
 	}
 	var id int64
 	var oldChannel string
@@ -129,6 +142,9 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 		if len(attachments) != len(input.AttachmentIDs) || (len(attachments) == 1 && attachments[0] != input.AttachmentIDs[0]) {
 			return 0, memberError(409, "REQUEST_CONFLICT")
 		}
+		if err = s.checkPollRetryTx(ctx, tx, id, input.Poll); err != nil {
+			return 0, err
+		}
 		return id, tx.Commit()
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -141,6 +157,9 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 	if recent >= 5 {
 		return 0, memberError(429, "MESSAGE_RATE_LIMIT")
 	}
+	if err = s.trackDelivery(ctx, tx, channel, 0, false); err != nil {
+		return 0, err
+	}
 	result, err := tx.ExecContext(ctx, "INSERT INTO messages(channel_id,author_profile_id,author_device_id,request_id,sent_at,crypto_context_id,nonce,ciphertext) VALUES(?,?,?,?,?,?,?,?)", channel, access.ProfileID, access.DeviceID, input.RequestID, s.now().UnixMilli(), input.KeyID, nonce, cipher)
 	if err != nil {
 		return 0, err
@@ -148,6 +167,11 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 	id, err = result.LastInsertId()
 	if err != nil {
 		return 0, err
+	}
+	if input.Poll != nil {
+		if err = s.createPollTx(ctx, tx, id, input); err != nil {
+			return 0, err
+		}
 	}
 	for _, attachment := range input.AttachmentIDs {
 		result, err = tx.ExecContext(ctx, "UPDATE attachments SET message_id=? WHERE attachment_id=? AND channel_id=? AND owner_device_id=? AND message_id IS NULL", id, attachment, channel, access.DeviceID)
@@ -165,11 +189,12 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 	if err = s.enforceMemberStorageTx(ctx, tx, id); err != nil {
 		return 0, err
 	}
-	return id, tx.Commit()
+	s.noteDelivery(tx, channel, id)
+	return id, s.commitDelivery(ctx, tx)
 }
 
 func (s *membershipStore) editMessage(ctx context.Context, token string, id int64, input memberMessageInput) error {
-	if id < 1 || len(input.AttachmentIDs) != 0 {
+	if id < 1 || len(input.AttachmentIDs) != 0 || input.Poll != nil {
 		return memberError(400, "INVALID_MESSAGE")
 	}
 	nonce, cipher, err := validateMessageInput(input)
@@ -178,6 +203,13 @@ func (s *membershipStore) editMessage(ctx context.Context, token string, id int6
 	}
 	payload, _ := json.Marshal([]any{id, input})
 	return s.mutate(ctx, token, input.RequestID, "message.edit", "chat.write", payload, func(tx *sql.Tx, access memberAccess) error {
+		var polls int
+		if err := tx.QueryRowContext(ctx, "SELECT (SELECT COUNT(*) FROM polls WHERE message_id=? OR result_message_id=?)+(SELECT COUNT(*) FROM system_messages WHERE message_id=?)", id, id, id).Scan(&polls); err != nil {
+			return err
+		}
+		if polls > 0 {
+			return memberError(409, "POLL_IMMUTABLE")
+		}
 		var original, keyID string
 		err := tx.QueryRowContext(ctx, "SELECT author_profile_id,crypto_context_id FROM messages WHERE message_id=?", id).Scan(&original, &keyID)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -196,8 +228,16 @@ func (s *membershipStore) editMessage(ctx context.Context, token string, id int6
 		if keyID != input.KeyID {
 			return memberError(409, "KEY_ID_MISMATCH")
 		}
+		if err = s.trackDelivery(ctx, tx, "", id, false); err != nil {
+			return err
+		}
 		if _, err = tx.ExecContext(ctx, "UPDATE messages SET nonce=?,ciphertext=?,edited_at=? WHERE message_id=?", nonce, cipher, s.now().UnixMilli(), id); err != nil {
 			return err
+		}
+		if input.RemoveAttachment {
+			if _, err = tx.ExecContext(ctx, "DELETE FROM attachments WHERE message_id=?", id); err != nil {
+				return err
+			}
 		}
 		return s.enforceMemberStorageTx(ctx, tx, id)
 	})
@@ -209,6 +249,13 @@ func (s *membershipStore) deleteMessage(ctx context.Context, token string, id in
 	}
 	payload, _ := json.Marshal(id)
 	return s.mutate(ctx, token, requestID, "message.delete", "chat.write", payload, func(tx *sql.Tx, access memberAccess) error {
+		var locked int
+		if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM system_messages WHERE message_id=?) OR EXISTS(SELECT 1 FROM polls WHERE message_id=? AND (closed_at IS NOT NULL OR closes_at<=?))", id, id, s.now().UnixMilli()).Scan(&locked); err != nil {
+			return err
+		}
+		if locked != 0 {
+			return memberError(409, "POLL_IMMUTABLE")
+		}
 		var original string
 		err := tx.QueryRowContext(ctx, "SELECT author_profile_id FROM messages WHERE message_id=?", id).Scan(&original)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -223,6 +270,9 @@ func (s *membershipStore) deleteMessage(ctx context.Context, token string, id in
 		}
 		if root != access.EffectiveProfileID {
 			return memberError(403, "MESSAGE_NOT_OWNED")
+		}
+		if err = s.trackDelivery(ctx, tx, "", id, true); err != nil {
+			return err
 		}
 		_, err = tx.ExecContext(ctx, "DELETE FROM messages WHERE message_id=?", id)
 		return err
@@ -253,6 +303,9 @@ func (s *membershipStore) enforceMemberStorageTx(ctx context.Context, tx *sql.Tx
 			return memberError(507, "STORAGE_LIMIT")
 		}
 		if err != nil {
+			return err
+		}
+		if err = s.trackDelivery(ctx, tx, "", oldest, true); err != nil {
 			return err
 		}
 		if _, err = tx.ExecContext(ctx, "DELETE FROM messages WHERE message_id=?", oldest); err != nil {

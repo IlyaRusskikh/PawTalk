@@ -131,6 +131,9 @@ func selfhost() error {
 		return fmt.Errorf("open membership store: %w", e)
 	}
 	defer store.db.Close()
+	pollContext, stopPolls := context.WithCancel(context.Background())
+	defer stopPolls()
+	go store.runPollClock(pollContext)
 	if strings.TrimSpace(c.Name) != "" {
 		if _, e = store.db.Exec("UPDATE server_state SET name=? WHERE id=1", strings.TrimSpace(c.Name)); e != nil {
 			return e

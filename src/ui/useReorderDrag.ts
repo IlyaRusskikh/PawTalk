@@ -4,12 +4,12 @@ type Placement = { ids: string[]; tops: number[]; steps: number[]; from: number;
 
 // Use a separate transparent surface: Chromium otherwise captures the sidebar
 // behind rounded buttons as part of its native drag image.
-function dragImage(event: DragEvent<HTMLElement>) {
+export function setTransparentDragImage(event: DragEvent<HTMLElement>) {
   const source = event.currentTarget, box = source.getBoundingClientRect();
   const surface = document.createElement('div'), copy = source.cloneNode(true) as HTMLElement;
   surface.className = 'member-drag-image';
   Object.assign(surface.style, { position: 'fixed', left: '-10000px', top: '0', padding: '6px', background: 'transparent', pointerEvents: 'none' });
-  Object.assign(copy.style, { width: `${box.width}px`, height: `${box.height}px`, margin: '0', transform: 'none', boxShadow: 'none' });
+  Object.assign(copy.style, { width: `${box.width}px`, height: `${box.height}px`, margin: '0', transform: 'none', boxShadow: 'none', backgroundColor: getComputedStyle(source).backgroundColor });
   copy.removeAttribute('id'); copy.removeAttribute('aria-describedby');
   copy.querySelectorAll('.member-unread-badge,.member-channel-count').forEach(node => node.remove());
   surface.append(copy); document.body.append(surface);
@@ -80,7 +80,7 @@ export function useReorderDrag(ids: string[], commit: (ids: string[]) => void) {
     const gap = boxes.length > 1 ? boxes[1].top - boxes[0].bottom : 0;
     const current = { ids: [...ids], tops: boxes.map(box => box.top + box.height / 2 - origin), steps: boxes.map(box => box.height + gap), from, to: from, commit };
     drag.current = current; suppressClick.current = Infinity;
-    event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', id); dragImage(event);
+    event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', id); setTransparentDragImage(event);
     // Let Chromium capture the image before hiding the source in the list.
     requestAnimationFrame(() => { if (drag.current === current) setPlacement({ ...current }); });
   }

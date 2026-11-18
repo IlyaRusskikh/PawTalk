@@ -13,10 +13,10 @@ app.whenReady().then(async () => {
   const count = () => run('window.notifications');
   const baseline=async()=>{await until("window.ready&&!!document.querySelector('.member-server-list button')",'server ready');await run("document.querySelector('.member-server-list button').click()");await until("document.querySelectorAll('.member-message').length===100",'history ready');await delay(200);await run('window.setWindowActive(true)');};
   const bottom = async () => {
-    await run(`[...document.querySelectorAll('.member-load')].find(e=>e.textContent==='К новым сообщениям')?.click()`); await delay(250);
+    await run(`document.querySelector('.chat-jump')?.click()`); await delay(250);
     await run(`(()=>{const list=document.querySelector('.member-history');list.scrollTop=list.scrollHeight;list.dispatchEvent(new Event('scroll'));})()`); await delay(100);
   };
-  const incoming = async (amount = 1, own = false) => { await run(`window.addMessages(${amount},${own})`); await delay(350); };
+  const incoming = async (amount = 1, own = false) => { await run(`window.addMessages(${amount},${own})`); await delay(850); };
   try {
     await win.loadURL(process.env.PAWTALK_UI_TEST_URL + '/tests/notifications.html');
     await baseline();
@@ -30,12 +30,14 @@ app.whenReady().then(async () => {
     assert.deepEqual(await run("(()=>{const n=window.desktopNotifications.at(-1);return {text:n.text,author:n.authorName,channel:n.channelName}})()"),{text:'New message 122',author:'Friend',channel:'General'},'decrypted content reaches notification IPC');
     await incoming(1, true);
     assert.equal(await count(), 1, 'own messages are silent');
+    const unreadToast=await run('window.desktopNotifications.at(-1).lastMessageId');
+    assert.equal(await run('window.notificationReads.some(read=>read.messageId>='+unreadToast+')'),false,'background messages are not acknowledged before reading');
     await run('window.refresh()'); await delay(350);
     assert.equal(await count(), 1, 'same poll result never repeats');
     await run('window.setWindowActive(true); document.querySelector(".member-history").scrollTop=0; document.querySelector(".member-history").dispatchEvent(new Event("scroll"))');
     await delay(150); await incoming();
     assert.equal(await count(), 2, 'scrolled-up chat notifies');
-    await bottom(); await incoming();
+    await bottom();await until('window.notificationReads.some(read=>read.messageId>='+unreadToast+')','reading notifies main to cancel stale desktop alerts');await incoming();
     assert.equal(await count(), 2, 'returning to latest suppresses sound');
     await run('window.setCovered(true)'); await delay(50); await incoming();
     assert.equal(await count(), 3, 'covered chat notifies');
@@ -44,11 +46,12 @@ app.whenReady().then(async () => {
     await run('window.setConnected(false)'); await delay(50); await incoming();
     assert.equal(await count(), 4, 'disconnected room stays silent');
     await run('window.setConnected(true)'); await delay(400);
-    assert.equal(await count(), 4, 'reconnect catch-up is silent');
+    assert.equal(await count(), 5, 'reconnect emits one summary for missed incoming messages');
+    await delay(800);
     await incoming();
-    assert.equal(await count(), 5, 'subsequent live messages notify after reconnect');
+    assert.equal(await count(), 6, 'subsequent live messages notify after reconnect');
 
-    await run('window.setWindowActive(false);window.muteServer(true)');await incoming();assert.equal(await count(),5,'muted server suppresses message audio');
+    await run('window.setWindowActive(false);window.muteServer(true)');await incoming();assert.equal(await count(),6,'muted server suppresses message audio');
     assert.equal(await run("window.playSound('join')"),'room-join.wav','server mute preserves voice entry cue');
     assert.equal(await run("window.playSound('leave')"),'room-leave.wav','server mute preserves voice exit cue');
     await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/notifications.html');await baseline();
@@ -105,11 +108,14 @@ app.whenReady().then(async () => {
     await until("window.desktopNotifications.length>0",'mixed incoming/own burst notification');
     assert.equal(await run('window.desktopNotifications.at(-1).text'),'New message 121','mixed burst previews incoming content');
     assert.equal(await run('window.desktopNotifications.at(-1).authorName'),'Friend');
+    await delay(900);await run('window.messageReads=[];window.addMessages(200)');await until("window.desktopNotifications.at(-1)?.messageId===322",'large unread batch');
+    await run('window.messageReads=[];window.addMessages(1)');await until("window.desktopNotifications.at(-1)?.messageId===323",'next incremental unread batch');
+    const scans=await run('window.messageReads.filter(o=>o.limit===500)');assert.ok(scans.length>0);assert.ok(scans.every(o=>o.after===322),'mention detection reads past the previous cursor instead of rescanning old unread history');
     // Check packaged file:// asset resolution, independent of Vite's dev server.
     await win.loadFile(path.resolve('dist/index.html'));
     const decoded = await run(`(async()=>{const ctx=new OfflineAudioContext(1,1,48000);const results=[];for(const name of ${JSON.stringify(['mute.wav', 'unmute.wav', 'deafen.wav', 'undeafen.wav', 'room-join.wav', 'room-leave.wav', ...Array.from({length:5}, (_,i)=>`message-purr-0${i+1}.wav`)])}){const r=await fetch(new URL('./sounds/'+name,document.baseURI));if(!r.ok)throw Error(name);const b=await ctx.decodeAudioData(await r.arrayBuffer());results.push(b.duration);}return results;})()`);
     assert.equal(decoded.length, 11);
-    console.log('PASS unseen-message conditions, own/history/replay/reconnect suppression, native audio playback, five purr variations, smooth message replacement, burst-safe room cues, mute settings and packaged file:// assets. Synthetic chat transport.');
+    console.log('PASS unseen-message conditions, own/history/replay suppression, reconnect summary and incremental unread scans, native audio playback, five purr variations, smooth message replacement, burst-safe room cues, mute settings and packaged file:// assets. Synthetic chat transport.');
     app.exit(0);
   } catch (error) { console.error(error, errors); app.exit(1); }
 });

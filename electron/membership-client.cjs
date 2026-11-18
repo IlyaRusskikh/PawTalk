@@ -1,3 +1,5 @@
+const {validatePoll}=require('../shared/polls.mjs');
+const {validMentions}=require('../shared/mentions.mjs');
 const { createHash, createPrivateKey, createPublicKey, randomBytes, sign, verify } = require('node:crypto');
 const { serverURL } = require('./address.cjs');
 const { mediaEndpoint } = require('./media-endpoint.cjs');
@@ -13,6 +15,7 @@ function validatedContent(content) {
   if (!content || typeof content !== 'object' || typeof content.text !== 'string') throw failure('INVALID_MESSAGE');
   if (Buffer.byteLength(content.text) > 4096) throw failure('MESSAGE_TOO_LARGE');
   const result = { text: content.text };
+  if(content.mentions!==undefined)result.mentions=validMentions(content.text,content.mentions);
   if (content.reply !== undefined) {
     const reply = content.reply;
     if (!reply || !Number.isSafeInteger(reply.id) || reply.id <= 0 || typeof reply.author !== 'string' || reply.author.length > 64 || typeof reply.text !== 'string' || Buffer.byteLength(reply.text) > 4096) throw failure('INVALID_MESSAGE');
@@ -23,6 +26,11 @@ function validatedContent(content) {
     if (!image || !hexID(image.id, 32) || !['image/png', 'image/jpeg', 'image/webp'].includes(image.mime)) throw failure('INVALID_IMAGE');
     result.image = { id: image.id, mime: image.mime };
   }
+  if(content.poll!==undefined){
+    if(!hexID(content.poll.id,32)||!content.text.trim()||Array.from(content.text).length>300||content.image||content.reply)throw failure('INVALID_POLL');
+    result.poll={id:content.poll.id,...validatePoll(content.poll)};
+    if(content.pollResult!==undefined){if(content.pollResult!==true)throw failure('INVALID_POLL');result.pollResult=true;}
+  }else if(content.pollResult!==undefined)throw failure('INVALID_POLL');
   return result;
 }
 
@@ -270,10 +278,28 @@ class MembershipClient {
       if (this.profileCache.size > 1000) this.profileCache.delete(this.profileCache.keys().next().value);
       return output;
     }));
+    if(result.avatarEnvelope){
+      try{
+        if(typeof result.avatarEnvelope!=='string'||result.avatarEnvelope.length>24000||!hexID(result.avatarAuthor,64))throw failure('INVALID_AVATAR');
+        const packet=JSON.parse(Buffer.from(result.avatarEnvelope,'base64').toString('utf8'));
+        const clear=await cryptoV2.openContent(connection.secret,serverId,'avatar','','server-avatar',result.avatarAuthor,packet);
+        const value=new TextDecoder('utf-8',{fatal:true}).decode(clear);this.validateAvatar(value);result.avatar=value;
+      }catch{/* Unreadable server artwork does not block membership. */}
+    }
     if(connection && result.name !== (connection.displayName ?? connection.config.name)){
       await this.remember({...connection,displayName:result.name});connection.displayName=result.name;
     }
     return result;
+  }
+  validateAvatar(value){
+    if(typeof value!=='string'||value.length>12000||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value))throw failure('INVALID_AVATAR');
+    const image=inspectImage(Buffer.from(value.slice(value.indexOf(',')+1),'base64'));if(!image||image.width!==image.height||image.width>512)throw failure('INVALID_AVATAR');
+  }
+  async serverAvatar(serverId,value,expectedRevision){
+    const connection=this.connections.get(serverId);if(!connection?.config?.capabilities?.includes('server-avatar-v1'))throw failure('UNSUPPORTED_FEATURE');
+    const state=await this.state(serverId);let envelope=null;
+    if(value!==null){this.validateAvatar(value);envelope=await cryptoV2.sealContent(connection.secret,serverId,'avatar','','server-avatar',state.self.effectiveProfileId,new TextEncoder().encode(value));}
+    await this.request(serverId,'/api/v2/server/avatar','PATCH',{envelope,expectedRevision,requestId:requestID()});return this.state(serverId);
   }
   async profile(serverId, nickname, avatar, expectedRevision) {
     const state = await this.state(serverId), owner = state.self.effectiveProfileId;
@@ -306,22 +332,29 @@ class MembershipClient {
     if(options.ids!==undefined){if(!Array.isArray(options.ids)||!options.ids.length||options.ids.length>500||options.ids.some(id=>!Number.isSafeInteger(id)||id<1))throw failure('INVALID_PAGE');query.set('ids',[...new Set(options.ids)].join(','));}
     const page = await this.request(serverId, `/api/v2/channels/${channelId}/messages?${query}`);
     if (!Array.isArray(page.messages) || page.messages.length > 500) throw failure('INVALID_API_RESPONSE');
+    page.messages=await this.decodeMessages(serverId,channelId,page.messages);
+    return page;
+  }
+  async decodeMessages(serverId,channelId,messages){
+    if(!Array.isArray(messages)||messages.length>500)throw failure('INVALID_API_RESPONSE');
     const connection = this.connections.get(serverId);
-    page.messages = await Promise.all(page.messages.map(async message => {
+    return Promise.all(messages.map(async message => {
       if (!Number.isSafeInteger(message.id) || message.id <= 0 || message.channelId !== channelId || !hexID(message.authorProfileId, 64) || !hexID(message.requestId, 32)) throw failure('INVALID_API_RESPONSE');
+      if((message.locked!==undefined&&typeof message.locked!=='boolean')||(message.systemKind!==undefined&&message.systemKind!==''&&message.systemKind!=='poll-result'))throw failure('INVALID_API_RESPONSE');
       try {
         const clear = await cryptoV2.openContent(connection.secret, serverId, 'chat', channelId, message.requestId, message.authorProfileId, { version: 2, keyId: message.keyId, nonce: message.nonce, ciphertext: message.ciphertext });
         const content = validatedContent(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(clear)));
         return { ...message, content };
       } catch { return { ...message, unreadable: true, content: { text: '' } }; }
     }));
-    return page;
   }
   async send(serverId, channelId, content, original, clientRequestId) {
     content = validatedContent(content);
     if (!hexID(channelId, 32) || !content || typeof content.text !== 'string' || Buffer.byteLength(content.text) > 4096) throw failure('INVALID_MESSAGE');
     if (!content.text.trim() && !content.image) throw failure('EMPTY_MESSAGE');
     const connection = this.connections.get(serverId); if (!connection) throw failure('NOT_CONNECTED');
+    if(content.poll&&(!connection.config?.capabilities?.includes('polls-v1')||original||content.pollResult))throw failure('UNSUPPORTED_FEATURE');
+    if(original?.content?.image&&!content.image&&!connection.config?.capabilities?.includes('attachment-removal-v1'))throw failure('UNSUPPORTED_FEATURE');
     if(clientRequestId!==undefined&&!hexID(clientRequestId,32))throw failure('INVALID_MESSAGE');
     const identity = await this.identity(), resourceId = original?.requestId || clientRequestId || requestID(), author = original?.authorProfileId || identity.profileId;
     if (!hexID(resourceId, 32) || !hexID(author, 64) || (original && (!Number.isSafeInteger(original.id) || original.id < 1))) throw failure('INVALID_MESSAGE');
@@ -332,7 +365,12 @@ class MembershipClient {
     if(cached&&(cached.signature!==signature||cached.originalId!==original?.id))throw failure('REQUEST_CONFLICT');
     if(!cached){const packet=await cryptoV2.sealContent(connection.secret,serverId,'chat',channelId,resourceId,author,clear);cached={signature,originalId:original?.id,packet};if(cacheKey){this.pendingMessages.set(cacheKey,cached);if(this.pendingMessages.size>100)this.pendingMessages.delete(this.pendingMessages.keys().next().value);}}
     const packet=cached.packet,path=original?`/api/v2/messages/${original.id}`:`/api/v2/channels/${channelId}/messages`;
-    const result=await this.request(serverId,path,original?'PATCH':'POST',{requestId:original?(clientRequestId||requestID()):resourceId,keyId:packet.keyId,nonce:packet.nonce,ciphertext:packet.ciphertext,attachmentIds:original?[]:content.image?[content.image.id]:[]});
+    if(content.poll&&!cached.poll){
+      if(content.poll.id!==resourceId)throw failure('INVALID_POLL');
+      const resultID=requestID(),resultPacket=await cryptoV2.sealContent(connection.secret,serverId,'chat',channelId,resultID,author,new TextEncoder().encode(JSON.stringify({...content,pollResult:true})));
+      cached.poll={optionCount:content.poll.options.length,duration:content.poll.duration,multiple:content.poll.multiple,anonymous:content.poll.anonymous,intermediate:content.poll.intermediate,result:{requestId:resultID,keyId:resultPacket.keyId,nonce:resultPacket.nonce,ciphertext:resultPacket.ciphertext,attachmentIds:[]}};
+    }
+    const result=await this.request(serverId,path,original?'PATCH':'POST',{requestId:original?(clientRequestId||requestID()):resourceId,keyId:packet.keyId,nonce:packet.nonce,ciphertext:packet.ciphertext,attachmentIds:original?[]:content.image?[content.image.id]:[],...(cached.poll?{poll:cached.poll}:{}),...(original?.content?.image&&!content.image?{removeAttachment:true}:{})});
     if(cacheKey)this.pendingMessages.delete(cacheKey);return result;
   }
 

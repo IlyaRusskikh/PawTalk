@@ -28,8 +28,16 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	mux.HandleFunc("GET /api/config", api.publicConfig)
 	mux.HandleFunc("GET /api/v2/challenge", api.challenge)
 	mux.HandleFunc("POST /api/v2/session", api.session)
+	mux.HandleFunc("GET /api/v2/polls/{id}", api.pollState)
+	mux.HandleFunc("PUT /api/v2/polls/{id}/vote", api.pollVote)
+	mux.HandleFunc("POST /api/v2/polls/{id}/close", api.pollClose)
+	mux.HandleFunc("GET /api/v2/events", api.chatEvents)
+	mux.HandleFunc("GET /api/v2/events/messages", api.chatEvents)
+	mux.HandleFunc("GET /api/v2/events/status", api.eventStatus)
 	mux.HandleFunc("GET /api/v2/state", api.state)
+	mux.HandleFunc("PATCH /api/v2/server/avatar", api.patchServerAvatar)
 	mux.HandleFunc("PATCH /api/v2/server", api.renameServer)
+	mux.HandleFunc("POST /api/v2/activity", api.activity)
 	mux.HandleFunc("POST /api/v2/heartbeat", api.heartbeat)
 	mux.HandleFunc("POST /api/v2/leave", api.leave)
 	mux.HandleFunc("PUT /api/v2/members/{id}/role", api.role)
@@ -46,6 +54,7 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	mux.HandleFunc("POST /api/v2/links/{id}/propose", api.limited(api.proposeLink))
 	mux.HandleFunc("POST /api/v2/links/{id}/approve", api.limited(api.approveLink))
 	mux.HandleFunc("POST /api/v2/links/{id}/confirm", api.limited(api.acceptLink))
+	mux.HandleFunc("POST /api/v2/links/{id}/cancel", api.limited(api.cancelLink))
 	mux.HandleFunc("POST /api/v2/links/{id}/status", api.limited(api.linkStatus))
 	mux.HandleFunc("POST /api/v2/control", api.transferControl)
 	mux.HandleFunc("POST /api/v2/devices/{id}/unlink", api.limited(api.unlinkDevice))
@@ -54,6 +63,7 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	mux.HandleFunc("POST /api/v2/channel-order", api.reorderChannels)
 	mux.HandleFunc("PATCH /api/v2/channels/{id}", api.patchChannel)
 	mux.HandleFunc("DELETE /api/v2/channels/{id}", api.deleteChannel)
+	mux.HandleFunc("GET /api/v2/channels/{id}/events", api.chatEvents)
 	mux.HandleFunc("GET /api/v2/channels/{id}/messages", api.messages)
 	mux.HandleFunc("POST /api/v2/channels/{id}/messages", api.postMessage)
 	mux.HandleFunc("PATCH /api/v2/messages/{id}", api.editMessage)
@@ -71,7 +81,22 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		mux.ServeHTTP(w, r)
+		if r.Method != "GET" && eventMutation(r.URL.Path) {
+			channel := store.mutationChannel(r.URL.Path)
+			response := &eventResponse{ResponseWriter: w}
+			mux.ServeHTTP(response, r)
+			if response.status >= 200 && response.status < 300 {
+				if strings.Contains(r.URL.Path, "/attachments/") {
+					// Quota deletions are published by the upload transaction.
+				} else if channel != "" {
+					// Message/poll transactions publish their own committed envelopes.
+				} else {
+					store.events.publish(memberEvent{Type: "state"})
+				}
+			}
+		} else {
+			mux.ServeHTTP(w, r)
+		}
 	})
 }
 

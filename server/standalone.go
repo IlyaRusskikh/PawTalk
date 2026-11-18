@@ -358,7 +358,10 @@ func standalone(args []string) error {
 		return fmt.Errorf("open membership store: %w", err)
 	}
 	defer store.db.Close()
+	pollContext, stopPolls := context.WithCancel(ctx)
+	defer stopPolls()
 	store.maxBytes = limit
+	go store.runPollClock(pollContext)
 	handler, err := standaloneMembershipHandler(state, store)
 	if err != nil {
 		return err

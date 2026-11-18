@@ -2,7 +2,7 @@
 
 [Русский](README.ru.md) · [Project](../README.md) · [Architecture](../architecture/README.md)
 
-These guides describe **published releases**, not untagged source changes. Download the latest published components by family from the [downloads catalog](https://ilyarusskikh.github.io/PawTalk/downloads/). Client, Server and Manager have independent tags.
+Unless explicitly labelled “development source”, these guides describe **published releases**, not untagged source changes. Download the latest published components by family from the [downloads catalog](https://ilyarusskikh.github.io/PawTalk/downloads/). Client, Server and Manager have independent tags.
 
 ## Windows Client
 

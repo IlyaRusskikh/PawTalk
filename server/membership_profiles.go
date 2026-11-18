@@ -24,17 +24,10 @@ func (s *membershipStore) patchProfile(ctx context.Context, token string, input 
 	var packet memberInvitePackage
 	hasAvatar := len(input.Avatar) > 0 && !bytes.Equal(input.Avatar, []byte("null"))
 	if hasAvatar {
-		decoder := json.NewDecoder(bytes.NewReader(input.Avatar))
-		decoder.DisallowUnknownFields()
-		if decoder.Decode(&packet) != nil || packet.Version != 2 || !validHexID(packet.KeyID, 64) {
-			return memberError(400, "INVALID_AVATAR")
-		}
-		if _, err := decodeFixed(packet.Nonce, 12); err != nil {
-			return memberError(400, "INVALID_AVATAR")
-		}
-		cipher, err := b64.Strict().DecodeString(packet.Ciphertext)
-		if err != nil || len(cipher) < 17 || len(cipher) > 12016 || b64.EncodeToString(cipher) != packet.Ciphertext {
-			return memberError(400, "INVALID_AVATAR")
+		var err error
+		packet, err = validateAvatarEnvelope(input.Avatar)
+		if err != nil {
+			return err
 		}
 	}
 	hash := sha256.Sum256(input.Avatar)

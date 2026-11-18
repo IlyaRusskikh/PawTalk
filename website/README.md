@@ -22,10 +22,26 @@ Keep RU/EN presentation aligned with README and the published API 2 guides; tech
 
 ## Screenshots
 
-`assets/pawtalk.svg` is copied from the project's existing `assets/pawtalk.svg`.
-PNG screenshots are historical 0.7.x UI references; never use them as evidence of current published API 2 visual layout. Refresh from current release before claiming up-to-date UI.
-The capture uses an isolated profile, synthetic microphones and a temporary E2EE
-room populated with demo participants and messages. The invitation dialog is
-closed before capture. Audio settings show fake Chromium audio devices.
+The PNGs show the prepared Client 0.13.0 source interface, not proof of a published
+release. Download versions still come from the live release catalog. The project
+icon comes from the existing assets/pawtalk.svg.
 
-The screenshots were captured from a legacy 0.7.x preview and must not be presented as current API 2 UI. The old capture script is no longer part of the documented build workflow. A maintainer should run a **published Client binary** in a clean, synthetic profile and manually replace both English/Russian screenshots. Inspect every image for secrets, personal data and layout before publication.
+After building the shared Server and Client UI, run:
+
+```sh
+npm run server:prepare
+npm run build
+node scripts/capture-website.mjs
+```
+
+The capture runs the actual Electron main/preload/renderer against a temporary
+loopback Go Server and LiveKit with pinned TLS and E2EE. It creates isolated
+profiles, synthetic microphones, three demo members, messages and a poll. Native
+notifications are disabled only in this capture process. It does not use installed
+Client/Manager profiles or copy invitations to the clipboard.
+
+Both locales contain eight 1240 × 860 PNGs: home, create-room, room-chat,
+avatar-crop, audio-settings, language-settings, sound-settings and poll-create.
+English files have the -en suffix. Inspect every image for secrets, personal data
+and layout before publication. Captures demonstrate UI and synthetic integration,
+not real audio hardware or external-network acceptance.

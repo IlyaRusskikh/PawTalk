@@ -21,13 +21,16 @@ const serverRecords=[{serverId:sid,name:state.name,address:'https://127.0.0.1:18
 let online=true;const listeners=new Set<()=>void>();let activeListener=(_active:boolean)=>{};
 const refresh=()=>listeners.forEach(listener=>listener());
 const noop=()=>()=>{};
-test.desktopNotifications=[];
+test.desktopNotifications=[];test.messageReads=[];test.notificationReads=[];
 test.desktop={
  membership:async(action:string,input:any={})=>{
   if(action==='copy'){test.copied=input.text;return{value:true};}
   if(action==='control.create')return{value:'synthetic-control-offer'};
   if(action==='control.accept')return{value:'synthetic-control-response'};
   if(action==='control.finish'){test.finishCalls=(test.finishCalls||0)+1;state.devices.forEach((device:any)=>{device.primary=device.id!=='c'.repeat(64);});test.renderDevices();await new Promise(resolve=>setTimeout(resolve,80));return{value:state};}
+  if(action==='activity')return{value:{away:!!test.idle}};
+  if(action==='link.pending')return{value:test.incomingLink?[{linkId:'link-fixture',serverId:sid}]:[]};
+  if(action==='link.cancel'){test.linkCancelled=true;test.incomingLink=false;return{value:true};}
   if(action==='link.start')return{value:{id:'link-fixture',text:'synthetic-link'}};
   if(action==='link.status')return{value:{id:'link-fixture',state:'proposed',code:'1234567890',sourceProfileId:'e'.repeat(64),targetProfileId:me,chosenProfileId:me,sourceNickname:'Fresh profile',targetNickname:'Me',expiresAt:Date.now()+600000}};
   if(action==='servers')return{value:serverRecords.map(record=>({...record,status:online?'online':'offline'}))};
@@ -40,8 +43,9 @@ test.desktop={
    state.channels=[...state.channels.filter(channel=>channel.kind!==input.kind),...items];refresh();return{value:true};
   }
   if(action==='notify'){test.desktopNotifications.push(input);return{value:true};}
+  if(action==='notify.read'){test.notificationReads.push(input);return{value:true};}
   if(action==='messages'){
-   const options=input.options||{},limit=options.limit||100;
+   const options=input.options||{},limit=options.limit||100;test.messageReads.push(structuredClone(options));
    if(test.messageDelay&&options.limit!==1)await new Promise(resolve=>setTimeout(resolve,test.messageDelay));
    let eligible=records.filter(record=>(!options.before||record.id<options.before)&&(!options.after||record.id>options.after));
    if(options.ids)eligible=eligible.filter(record=>options.ids.includes(record.id));
@@ -59,6 +63,8 @@ test.desktop={
 test.setWindowActive=(active:boolean)=>activeListener(active);
 test.addMessages=async(count=1,own=false)=>{for(let i=0;i<count;i++){const id=(records.at(-1)?.id||0)+1;records.push({id,channelId:cid,authorProfileId:own?me:friend,requestId:id.toString(16).padStart(32,'0'),sentAt:Date.now(),content:{text:'New message '+id}});}channel.lastMessageId=records.at(-1).id;channel.messageRevision++;state.revision++;refresh();};
 test.refresh=refresh;
+test.addMention=()=>{const id=(records.at(-1)?.id||0)+1;records.push({id,channelId:cid,authorProfileId:friend,requestId:id.toString(16).padStart(32,'0'),sentAt:Date.now(),content:{text:'Hello @Me',mentions:[{profileId:me,start:6,end:9}]}});channel.lastMessageId=id;channel.messageRevision++;refresh();};
+
 test.setupReorder=()=>{
  test.reorderMode=true;state.self.role='admin';
  state.channels.push(...(['voice','text'] as const).flatMap(kind=>Array.from({length:3},(_,i)=>({id:kind+i,kind,name:kind+' '+i,protected:false,revision:1,messageRevision:1,lastMessageId:0}))));

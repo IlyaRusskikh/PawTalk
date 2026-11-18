@@ -6,7 +6,7 @@ import { ConnectionStatus } from './ConnectionStatus';
 import { Avatar } from './Avatar';
 import { AudioStatusIcons } from './ui/AudioStatusIcons';
 
-const cardWidth = 160;
+const cardWidth = 143;
 const cardHeight = 130;
 const cardGap = 8;
 

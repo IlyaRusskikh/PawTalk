@@ -13,7 +13,7 @@ async function withImageSlot<T>(callback: () => Promise<T>) {
   try { return await callback(); }
   finally { const next = waiting.shift(); if (next) next(); else active--; }
 }
-export function ChatImage({ image: inputImage, load }: { image: Image; load(): Promise<Blob> }) {
+export function ChatImage({ image: inputImage, load, onRemove, removing = false }: { image: Image; load(): Promise<Blob>; onRemove?(): void; removing?: boolean }) {
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>();
   const image = { ...inputImage, ...dimensions };
   const element = useRef<HTMLDivElement>(null);
@@ -103,6 +103,7 @@ export function ChatImage({ image: inputImage, load }: { image: Image; load(): P
     {url ? <button type="button" className="chat-image-open" aria-label={t("Открыть изображение {0}", image.name)} onContextMenu={showMenu} onClick={() => setOpen(true)}><img src={url} width={image.width} height={image.height} alt={image.name} decoding="async"/></button>
       : failed ? <button type="button" className="image-retry" onClick={() => setAttempt(value => value + 1)}><Icon name="image"/>{t("Не удалось загрузить. Повторить")}</button>
       : <span className="image-placeholder"><Icon name="image"/>{visible ? t("Загружаем изображение…") : t("Изображение")}</span>}
+    {onRemove && <button type="button" className="chat-image-remove" title={t('Удалить вложение')} aria-label={t('Удалить вложение')} disabled={removing} onClick={onRemove}><Icon name="trash" size={18}/></button>}
     {actionStatus && !open && <span className="image-action-toast" role="status">{actionStatus}</span>}
     {open && url && <Modal title={image.name || t("Изображение")} className="image-viewer" onClose={() => setOpen(false)}>
       <div className="image-stage" ref={stage} data-zoomed={zoom > 1 || undefined} onContextMenu={showMenu} onDoubleClick={() => changeZoom(zoom > 1 ? 1 : 2)} onPointerDown={event => {
