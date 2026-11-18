@@ -30,12 +30,14 @@ app.whenReady().then(async () => {
     assert.deepEqual(await run("(()=>{const n=window.desktopNotifications.at(-1);return {text:n.text,author:n.authorName,channel:n.channelName}})()"),{text:'New message 122',author:'Friend',channel:'General'},'decrypted content reaches notification IPC');
     await incoming(1, true);
     assert.equal(await count(), 1, 'own messages are silent');
+    const unreadToast=await run('window.desktopNotifications.at(-1).lastMessageId');
+    assert.equal(await run('window.notificationReads.some(read=>read.messageId>='+unreadToast+')'),false,'background messages are not acknowledged before reading');
     await run('window.refresh()'); await delay(350);
     assert.equal(await count(), 1, 'same poll result never repeats');
     await run('window.setWindowActive(true); document.querySelector(".member-history").scrollTop=0; document.querySelector(".member-history").dispatchEvent(new Event("scroll"))');
     await delay(150); await incoming();
     assert.equal(await count(), 2, 'scrolled-up chat notifies');
-    await bottom(); await incoming();
+    await bottom();await until('window.notificationReads.some(read=>read.messageId>='+unreadToast+')','reading notifies main to cancel stale desktop alerts');await incoming();
     assert.equal(await count(), 2, 'returning to latest suppresses sound');
     await run('window.setCovered(true)'); await delay(50); await incoming();
     assert.equal(await count(), 3, 'covered chat notifies');

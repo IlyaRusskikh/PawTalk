@@ -1,4 +1,4 @@
-const { randomBytes } = require('node:crypto');
+const { randomBytes, createHash } = require('node:crypto');
 const { t } = require('../shared/i18n.cjs');
 const { messagePreview } = require('../shared/chat-format.mjs');
 const randomID = () => randomBytes(16).toString('hex');
@@ -8,7 +8,12 @@ function string(value, max = 14000) { if (typeof value !== 'string' || value.len
 function id(value, size = 32) { if (typeof value !== 'string' || !new RegExp(`^[0-9a-f]{${size}}$`).test(value)) fail('INVALID_INPUT'); return value; }
 
 function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, getIdleSeconds = () => 0, getHost, stopHost, setVoiceEndpoint = () => {} }) {
-  const linkAlerts=new Set(),notified=new Map(),notificationBatches=new Map();
+  const linkAlerts=new Set(),notified=new Map(),notificationBatches=new Map(),notificationReads=new Map(),shownNotifications=new Map();
+  const notificationID=key=>createHash('sha256').update(key).digest('hex').slice(0,16);
+  function closeNotification(key){const shown=shownNotifications.get(key);shownNotifications.delete(key);try{shown?.notification.close?.();}catch{}}
+  function cancelNotificationBatch(key){const batch=notificationBatches.get(key);if(!batch)return;batch.cancelled=true;clearTimeout(batch.timer);batch.resolve(false);notificationBatches.delete(key);}
+  function clearNotifications(serverId){for(const key of notificationBatches.keys())if(!serverId||key.startsWith(serverId+':'))cancelNotificationBatch(key);for(const key of shownNotifications.keys())if(!serverId||key.startsWith(serverId+':'))closeNotification(key);}
+  const alreadyRead=(key,batch)=>{const read=notificationReads.get(key)||0;return read>0&&(!batch.last||read>=batch.last||batch.previewId>0&&read>=batch.previewId);};
   const snapshots=new Map(),versions=new Map(),activities=new Map(),linkChecks=new Map();
   const live=new (require('./membership-live.cjs').MembershipLive)(client,(kind,event)=>{
     if(kind==='membership-server-event'){
@@ -26,7 +31,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     departed.add(serverId);
     const departure={serverId,name:record.name,kind:error.code==='BANNED'?'ban':'kick'};
     if(error.code==='BANNED'&&(error.details?.expiresAt===null||Number.isSafeInteger(error.details?.expiresAt)))departure.expiresAt=error.details.expiresAt;
-    live.remove(serverId);snapshots.delete(serverId);await client.forget(serverId);
+    clearNotifications(serverId);live.remove(serverId);snapshots.delete(serverId);await client.forget(serverId);
     if(activeVoice?.serverId===serverId||preparedVoice?.serverId===serverId){await voiceLeave();send('membership-voice-lost',{serverId});}
     send('membership-changed',{serverId,departure});
   }
@@ -130,7 +135,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     async leave(input) {
       const serverId=id(input.serverId),host=getHost?.();
       // stopHost emits serverEnded synchronously; pending requests may finish later.
-      intentionalDepartures.add(serverId);live.remove(serverId);snapshots.delete(serverId);
+      intentionalDepartures.add(serverId);clearNotifications(serverId);live.remove(serverId);snapshots.delete(serverId);
       try {
         if(activeVoice?.serverId===serverId||preparedVoice?.serverId===serverId)await voiceLeave();
         if(host?.running&&host.serverId===serverId){if(!stopHost)fail('HOST_UNAVAILABLE');await stopHost();await client.forget(serverId);}
@@ -187,11 +192,21 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     async 'control.create'(input) { return links.transferCreate(id(input.serverId), id(input.deviceId, 64)); },
     async 'control.accept'(input) { return links.transferAccept(id(input.serverId), string(input.text, 4096)); },
     async 'control.finish'(input) { const value=await links.transferFinish(id(input.serverId), string(input.text, 4096)); send('membership-changed', {}); return value; },
+    async 'notify.read'(input){
+      const serverId=id(input.serverId),channelId=id(input.channelId),read=input.messageId;if(!Number.isSafeInteger(read)||read<0)fail('INVALID_INPUT');
+      const key=serverId+':'+channelId;notificationReads.set(key,Math.max(notificationReads.get(key)||0,read));if(notificationReads.size>2048)notificationReads.delete(notificationReads.keys().next().value);
+      const batch=notificationBatches.get(key);if(batch&&alreadyRead(key,batch))cancelNotificationBatch(key);
+      const shown=shownNotifications.get(key);if(shown&&alreadyRead(key,shown))closeNotification(key);
+      return true;
+    },
     async notify(input) {
       const serverId = id(input.serverId), channelId=id(input.channelId); if (!client.connections.has(serverId) || (!input.mention&&(getWindow()?.isFocused())) || !Notification?.isSupported()) return false;
       if(input.mention!==undefined&&typeof input.mention!=='boolean')fail('INVALID_INPUT');
       const notificationKey=serverId+':'+channelId;
-      if(input.messageId!==undefined){if(!Number.isSafeInteger(input.messageId)||input.messageId<1)fail('INVALID_INPUT');if((notified.get(notificationKey)||0)>=input.messageId)return false;}
+      if(input.messageId!==undefined){if(!Number.isSafeInteger(input.messageId)||input.messageId<1)fail('INVALID_INPUT');}
+      if(input.lastMessageId!==undefined&&(!Number.isSafeInteger(input.lastMessageId)||input.lastMessageId<(input.messageId||1)))fail('INVALID_INPUT');
+      const last=input.lastMessageId||input.messageId||0;
+      if(last&&((notified.get(notificationKey)||0)>=last||(notificationReads.get(notificationKey)||0)>=last))return false;
       const channelName=string(input.channelName,128).replace(/[\u0000-\u001f\u007f-\u009f]/g,' ').trim();
       const author=string(input.authorName||t('Участник'),128).replace(/[\u0000-\u001f\u007f-\u009f]/g,' ').trim();
       if(input.hasImage!==undefined&&typeof input.hasImage!=='boolean')fail('INVALID_INPUT');
@@ -201,21 +216,31 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       if(!content)return false;
       const preview=Array.from(content).slice(0,240).join('')+(Array.from(content).length>240?'…':'');
       const existing=notificationBatches.get(notificationKey);
-      if(existing&&input.messageId!==undefined&&existing.last>=input.messageId)return false;
+      if(existing&&last&&existing.last>=last)return false;
       const alertMention=!!input.mention||!!existing?.mention,alertAuthor=existing?.mention&&!input.mention?existing.author:author,alertPreview=existing?.mention&&!input.mention?existing.preview:preview;
       const first=existing?.first||Date.now(),count=(existing?.count||0)+(input.batchCount||1);
-      if(existing){clearTimeout(existing.timer);existing.resolve(false);}
-      if(!existing&&notificationBatches.size>=128){const [key,old]=notificationBatches.entries().next().value;clearTimeout(old.timer);old.resolve(false);notificationBatches.delete(key);}
+      const previewId=existing?.mention&&!input.mention?existing.previewId:input.messageId||last;
+      if(existing)cancelNotificationBatch(notificationKey);
+      if(!existing&&notificationBatches.size>=128)cancelNotificationBatch(notificationBatches.keys().next().value);
       return new Promise(resolve=>{
-        const batch={first,count,mention:alertMention,author:alertAuthor,preview:alertPreview,last:input.messageId||0,resolve,timer:undefined};
-        batch.timer=setTimeout(()=>{notificationBatches.delete(notificationKey);void(async()=>{
-          if(stopped||!client.connections.has(serverId)||(!alertMention&&getWindow()?.isFocused()))return false;
-          if(input.messageId!==undefined&&(notified.get(notificationKey)||0)>=input.messageId)return false;
+        const batch={first,count,mention:alertMention,author:alertAuthor,preview:alertPreview,previewId,last,cancelled:false,resolve,timer:undefined};
+        const eligible=()=>!stopped&&!batch.cancelled&&notificationBatches.get(notificationKey)===batch&&Date.now()-first<30000&&client.connections.has(serverId)&&!intentionalDepartures.has(serverId)&&!alreadyRead(notificationKey,batch)&&(!last||(notified.get(notificationKey)||0)<last)&&!(!alertMention&&getWindow()?.isFocused());
+        batch.timer=setTimeout(()=>{void(async()=>{
+          if(!eligible())return false;
           const record=(await client.registry()).find(record=>record.serverId===serverId);
-          if(input.messageId!==undefined){notified.set(notificationKey,input.messageId);if(notified.size>2048)notified.delete(notified.keys().next().value);}
-          const notification=new Notification({silent:true,title:`${record?.name||'PawTalk'} · #${channelName}`,body:(count>1?t('Новых сообщений: {0}',count)+' · ':'')+`${alertAuthor}: ${alertPreview}`});
+          // Reading, focus or leaving can change while registry I/O is pending.
+          if(!eligible())return false;
+          if(last){notified.set(notificationKey,last);if(notified.size>2048)notified.delete(notified.keys().next().value);}
+          const notification=new Notification({id:notificationID(notificationKey),groupId:notificationID(serverId),silent:true,title:`${record?.name||'PawTalk'} · #${channelName}`,body:(count>1?t('Новых сообщений: {0}',count)+' · ':'')+`${alertAuthor}: ${alertPreview}`});
+          closeNotification(notificationKey);if(shownNotifications.size>=128)closeNotification(shownNotifications.keys().next().value);
+          shownNotifications.set(notificationKey,{notification,last,previewId});
+          // Windows prepares toasts asynchronously after show() returns. A read
+          // can arrive before the shell displays it, so dismiss that late show too.
+          notification.on('show',()=>{if(stopped||shownNotifications.get(notificationKey)?.notification!==notification||alreadyRead(notificationKey,{last,previewId})||!client.connections.has(serverId)||intentionalDepartures.has(serverId)||!alertMention&&getWindow()?.isFocused()){if(shownNotifications.get(notificationKey)?.notification===notification)shownNotifications.delete(notificationKey);try{notification.close?.();}catch{}}});
+          // Keep the object after native timeout: it can still be in Action Center.
+          notification.on('failed',()=>{if(shownNotifications.get(notificationKey)?.notification===notification)shownNotifications.delete(notificationKey);});
           notification.on('click',()=>{const win=getWindow();if(win&&!win.isDestroyed()){win.show();win.focus();send('membership-open-channel',{serverId,channelId});}});notification.show();return true;
-        })().then(resolve,()=>resolve(false));},Math.max(0,Math.min(250,first+1000-Date.now())));
+        })().then(resolve,()=>resolve(false)).finally(()=>{if(notificationBatches.get(notificationKey)===batch)notificationBatches.delete(notificationKey);});},Math.max(0,Math.min(250,first+1000-Date.now())));
         notificationBatches.set(notificationKey,batch);
       });
     },
@@ -231,7 +256,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       return { error: { code } };
     }
   });
-  return { start() { void background(); }, stop() { stopped = true;for(const batch of notificationBatches.values()){clearTimeout(batch.timer);batch.resolve(false);}notificationBatches.clear();live.stop(); clearTimeout(timer); void voiceLeave(); }, suspend() { void voiceLeave(); },
-    async serverEnded(serverId) { live.remove(serverId);snapshots.delete(serverId);intentionalDepartures.add(serverId);knownRecords.delete(serverId);if(activeVoice?.serverId===serverId||preparedVoice?.serverId===serverId){await voiceLeave();send('membership-voice-lost',{serverId});} await client.forget(serverId);statuses.delete(serverId);send('membership-changed',{serverId}); },statuses };
+  return { start() { void background(); }, stop() { stopped = true;clearNotifications();live.stop(); clearTimeout(timer); void voiceLeave(); }, suspend() { void voiceLeave(); },
+    async serverEnded(serverId) { clearNotifications(serverId);live.remove(serverId);snapshots.delete(serverId);intentionalDepartures.add(serverId);knownRecords.delete(serverId);if(activeVoice?.serverId===serverId||preparedVoice?.serverId===serverId){await voiceLeave();send('membership-voice-lost',{serverId});} await client.forget(serverId);statuses.delete(serverId);send('membership-changed',{serverId}); },statuses };
 }
 module.exports = { registerMembershipIPC };

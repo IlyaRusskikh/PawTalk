@@ -64,3 +64,11 @@ One local A/B run on 2026-11-18 (content-ready p95, milliseconds):
 | 1000 | 836 | 327 | 0 |
 
 Both modes use the same current shared core, synthetic members and local TCP. These single-batch values exclude TLS, client decryption and voice; they do not establish production capacity or sustained throughput.
+
+## Desktop notification lifecycle (2026-11-18)
+
+Public [Discord notification settings](https://support.discord.com/hc/en-us/articles/215253258-Notifications-Settings-101) describe notification preferences, not its internal queue cancellation algorithm; exact implementation parity is not claimed. PawTalk uses local read state to cancel stale alerts. The authorized, bounded notify.read IPC carries server/channel identifiers and a monotonic message cursor; it makes no Server HTTP request. Actual viewport reads and persisted cursors feed it, without treating window focus as reading unrelated chats.
+
+Main retains one native alert per chat, replaces it using stable 16-character tag/group hashes, and closes it on reading, departure or shutdown. Native timeout does not release the retained reference because the toast can remain in Action Center. Pending batches and native alerts are bounded at 128; deduplication/read cursors at 2048. Read state, focus, membership and cancellation are rechecked after registry I/O and on the asynchronous native show event. The complete incoming batch boundary remains separate from the mention selected for its preview. Existing mute/mention rules and silent native notifications remain.
+
+[Electron close()](https://www.electronjs.org/docs/latest/api/notification#notificationclose) supports dismissing a Windows toast and removing its Action Center entry. Unit fixtures cover cancellation/races and renderer integration covers real viewport acknowledgments. The opt-in Windows check `node scripts/server-chat-ui-smoke.mjs tests/native-notifications.cjs` creates two synthetic silent toasts and inspects only their tag/group through WinRT Action Center history, proving replacement and removal in the local Windows session. It requires desktop notifications and an installed PawTalk AppUserModelID; it does not clear other notifications or synchronize read cursors between devices.

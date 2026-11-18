@@ -21,7 +21,7 @@ const serverRecords=[{serverId:sid,name:state.name,address:'https://127.0.0.1:18
 let online=true;const listeners=new Set<()=>void>();let activeListener=(_active:boolean)=>{};
 const refresh=()=>listeners.forEach(listener=>listener());
 const noop=()=>()=>{};
-test.desktopNotifications=[];test.messageReads=[];
+test.desktopNotifications=[];test.messageReads=[];test.notificationReads=[];
 test.desktop={
  membership:async(action:string,input:any={})=>{
   if(action==='copy'){test.copied=input.text;return{value:true};}
@@ -43,6 +43,7 @@ test.desktop={
    state.channels=[...state.channels.filter(channel=>channel.kind!==input.kind),...items];refresh();return{value:true};
   }
   if(action==='notify'){test.desktopNotifications.push(input);return{value:true};}
+  if(action==='notify.read'){test.notificationReads.push(input);return{value:true};}
   if(action==='messages'){
    const options=input.options||{},limit=options.limit||100;test.messageReads.push(structuredClone(options));
    if(test.messageDelay&&options.limit!==1)await new Promise(resolve=>setTimeout(resolve,test.messageDelay));
