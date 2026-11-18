@@ -40,6 +40,7 @@ app.whenReady().then(async()=>{
  await run("document.querySelector('.poll-settings label:last-child input').click()");
  await run("document.querySelector('.poll-dialog form').requestSubmit()");
  await until("document.querySelectorAll('.poll-answer').length===2&&!document.querySelector('.poll-dialog')",'poll published');
+ await until("!!document.querySelector('.poll-answer:not(:disabled)')",'poll state loaded, voting available');
  assert.equal(await run("!!document.querySelector('.poll-count')"),false,'hidden interim counts');
  await run("document.querySelector('.poll-answer').click()");await until("document.querySelector('.poll-answer')?.getAttribute('aria-pressed')==='true'",'vote selected');
  await run("document.querySelector('.poll-answer').click()");await until("document.querySelector('.poll-answer')?.getAttribute('aria-pressed')==='false'",'vote withdrawn');

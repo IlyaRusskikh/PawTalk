@@ -53,7 +53,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const current=useRef({state,channel,focused,onRead,onViewport,reply});current.current={state,channel,focused,onRead,onViewport,reply};
   const read=useRef(Number(localStorage.getItem(cursorKey(serverId,channelId)))||0),entryRead=useRef(read.current),[hasSent,setHasSent]=useState(false);
   const sendTimes=useRef<number[]>([]);
-  const uploaded=useRef<{file:File;image:{id:string;mime:string}}|undefined>(undefined),pendingSend=useRef<{signature:string;id:string}|undefined>(undefined),arrival=useRef<{id:number;x:number;y:number}|undefined>(undefined),highlightTimer=useRef<ReturnType<typeof setTimeout>>(undefined);
+  const uploaded=useRef<{file:File;image:{id:string;mime:string}}|undefined>(undefined),pendingSend=useRef<{signature:string;id:string}|undefined>(undefined),arrival=useRef<{x:number;y:number}|undefined>(undefined),highlightTimer=useRef<ReturnType<typeof setTimeout>>(undefined);
   const deletedMessages=useRef(new Set<number>()),fullSync=useRef(false),eventRevision=useRef(0),eventLast=useRef(0),loadedRevision=useRef(-1),quotesRef=useRef(new Map<number,Message|null>());
   const knownLast=Math.max(bounds.last,channel.lastMessageId),reportedLast=deletedMessages.current.has(knownLast)?messages.at(-1)?.id||0:knownLast;
   const hasOlder=!!messages.length&&messages[0].id>bounds.first,hasNewer=!!messages.length&&messages.at(-1)!.id<reportedLast;
@@ -173,7 +173,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     else if(position?.unread){const divider=list.querySelector<HTMLElement>('.chat-divider');if(divider)list.scrollTop+=divider.getBoundingClientRect().top-list.getBoundingClientRect().top;follow.current=!hasNewer&&list.scrollHeight-list.scrollTop-list.clientHeight<12;setAway(!follow.current);}
     else if(position?.anchor)restoreAnchor(position.anchor);
     else if(position?.target){const row=list.querySelector<HTMLElement>(`[data-message-row="${position.target}"]`);if(row){list.scrollTop+=row.getBoundingClientRect().top-list.getBoundingClientRect().top-list.clientHeight/2+row.offsetHeight/2;highlight(row);follow.current=!hasNewer&&list.scrollHeight-list.scrollTop-list.clientHeight<12;setAway(!follow.current);}else setNotice(t('Исходное сообщение уже недоступно.'));}
-    const sent=arrival.current;if(sent){const row=list.querySelector<HTMLElement>(`[data-message-row="${sent.id}"] .member-message-text`);if(row){arrival.current=undefined;if(!matchMedia('(prefers-reduced-motion: reduce)').matches){const r=row.getBoundingClientRect();row.animate([{transform:`translate(${sent.x-r.left}px,${sent.y-r.top}px)`,opacity:.5},{transform:'none',opacity:1}],{duration:220,easing:'ease-out'});}}}
+    const sent=arrival.current;if(sent){const row=list.querySelector<HTMLElement>(`.chat-message-pending .member-message-text`);if(row){arrival.current=undefined;if(!matchMedia('(prefers-reduced-motion: reduce)').matches){const r=row.getBoundingClientRect();row.animate([{transform:`translate(${sent.x-r.left}px,${sent.y-r.top}px)`,opacity:.5},{transform:'none',opacity:1}],{duration:220,easing:'ease-out'});}}}
     if(!hasNewer&&list.scrollHeight-list.scrollTop-list.clientHeight<12){follow.current=true;setAway(false);}
     lastScroll.current=list.scrollTop;remember();current.current.onViewport?.(follow.current);
   },[messages,hasNewer,outgoing]);
@@ -212,6 +212,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     sendingRef.current=true;setSending(true);setSendError('');const generation=epoch.current,origin=composer.current?.getBoundingClientRect();
     const latestReply=reply&&quote(reply.id,{id:reply.id,author:profileFor(state,reply.authorProfileId)?.nickname||t('Участник'),text:reply.content.text});
     const content:Message['content']={text:value,mentions:mentions.map(m=>({...m,start:m.start-(text.length-text.trimStart().length),end:m.end-(text.length-text.trimStart().length)})),...(reply?{reply:{id:reply.id,author:latestReply?.source?latestReply.author:profileFor(state,reply.authorProfileId)?.nickname||t('Участник'),text:latestReply?.source?latestReply.source.content.text:reply.content.text}}:{})};
+    if(origin)arrival.current={x:origin.left+14,y:origin.top+12};
     showOutgoing({message:{id:-1,channelId,authorProfileId:state.self.profileId,requestId:crypto.randomUUID().replaceAll('-',''),sentAt:Date.now(),content},preview:file?URL.createObjectURL(file):undefined,confirmed:false});follow.current=true;setAway(false);pendingPosition.current={bottom:true};
     try{
       let image=file&&uploaded.current?.file===file?uploaded.current.image:undefined;
@@ -223,7 +224,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
       let result:{id:number};
       try{result=await membership<{id:number}>('send',{serverId,channelId,content:body,requestId:pendingSend.current.id});}
       catch(error){if(!outgoingRef.current?.confirmed)throw error;result={id:outgoingRef.current.message.id};}
-      if(generation!==epoch.current)return;showOutgoing({...outgoingRef.current!,message:{...outgoingRef.current!.message,id:result.id},confirmed:true});pendingSend.current=undefined;uploaded.current=undefined;sendTimes.current.push(Date.now());setHasSent(true);setMentions([]);setText('');setReply(undefined);setFile(undefined);follow.current=true;setAway(false);if(result?.id){markRead(result.id);if(origin)arrival.current={id:result.id,x:origin.left+14,y:origin.top+12};}await load('latest');if(generation===epoch.current&&rows.current.some(m=>m.requestId===outgoingRef.current?.message.requestId)){outgoingRef.current=undefined;setOutgoing(undefined);}
+      if(generation!==epoch.current)return;showOutgoing({...outgoingRef.current!,message:{...outgoingRef.current!.message,id:result.id},confirmed:true});pendingSend.current=undefined;uploaded.current=undefined;sendTimes.current.push(Date.now());setHasSent(true);setMentions([]);setText('');setReply(undefined);setFile(undefined);follow.current=true;setAway(false);if(result?.id){markRead(result.id);}await load('latest');if(generation===epoch.current&&rows.current.some(m=>m.requestId===outgoingRef.current?.message.requestId)){outgoingRef.current=undefined;setOutgoing(undefined);}
     }catch(error){if(generation===epoch.current){outgoingRef.current=undefined;setOutgoing(undefined);setSendError((error as Error).message);}}
     finally{sendingRef.current=false;if(generation===epoch.current){setSending(false);focusInput();}}
   }
