@@ -189,7 +189,16 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     if(off)void membership('chat.watch',{serverId,channelId,subscriptionId}).catch(()=>{});
     return()=>{cancelled=true;off?.();events?.();if(off)void membership('chat.unwatch',{subscriptionId}).catch(()=>{});};
   },[key]);
-  useEffect(()=>{if(ready)void load('sync');},[channel.messageRevision,ready]);
+  const liveDelivery=state.eventsLive&&state.capabilities?.includes('message-events-v1');
+  useEffect(()=>{
+    if(!ready)return;
+    if(liveDelivery&&!fullSync.current&&channel.messageRevision>loadedRevision.current){
+      // A state response can advertise a revision before its live envelope arrives.
+      const timer=setTimeout(()=>void load('sync'),200);
+      return()=>clearTimeout(timer);
+    }
+    void load('sync');
+  },[key,channel.messageRevision,liveDelivery,ready]);
   useEffect(()=>{if(!ready||loading||failure)return;const list=pane.current;if(!list)return;const observer=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){if(entry.target===olderEdge.current&&hasOlder&&(!follow.current||list.scrollHeight<=list.clientHeight+4))void navigate('older');if(entry.target===newerEdge.current&&hasNewer&&!follow.current)void navigate('newer');}},{root:list,rootMargin:'120px 0px'});if(olderEdge.current)observer.observe(olderEdge.current);if(newerEdge.current)observer.observe(newerEdge.current);return()=>observer.disconnect();},[ready,loading,failure,messages,hasOlder,hasNewer]);
   useEffect(()=>{
     if(!ready)return;let cancelled=false,pending=false;

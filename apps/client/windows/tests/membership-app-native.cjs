@@ -10,9 +10,14 @@ const NativeWebSocket=global.WebSocket,chatSockets=[],memberReads=[];
 const {MembershipClient}=require('../electron/membership-client.cjs'),fetchJSON=MembershipClient.prototype.fetchJSON;
 let observedClient;MembershipClient.prototype.fetchJSON=function(base,path,input){observedClient??=this;if(this===observedClient)memberReads.push(path);return fetchJSON.call(this,base,path,input);};
 global.WebSocket=class extends NativeWebSocket{constructor(...args){super(...args);chatSockets.push(this);}};
-let testWindow;
+let testWindow, snapshotInvalidations=0;
 app.on('browser-window-created', (_event, window) => {
   if (testWindow) return; testWindow = window;
+  const send=window.webContents.send;
+  window.webContents.send=function(channel,event,...args){
+    if ((channel==='membership-server-event'&&event.type!=='chat')||channel==='membership-live-status') snapshotInvalidations++;
+    return send.call(this,channel,event,...args);
+  };
   window.webContents.on('console-message', event => { if (event.level === 'error') console.error('renderer:', event.message); });
   window.webContents.once('did-finish-load', () => { void test(window).then(() => app.exit(0)).catch(error => { console.error(error.stack); app.exit(1); }); });
 });
@@ -83,10 +88,19 @@ async function test(window) {
   const liveStart=Date.now();await run(`window.desktop.membership('send',{serverId:${JSON.stringify(fixture.serverId)},channelId:${JSON.stringify(liveChannel)},content:{text:'Synthetic WebSocket arrival'}})`);
   await until("window.__chatEvents.length>0&&document.querySelector('.member-history').innerText.includes('Synthetic WebSocket arrival')",'WebSocket delivers new message');assert.ok(Date.now()-liveStart<2500,'active chat delivery avoids the 3.5 second polling interval');
   console.log('PASS active chat WebSocket arrival: '+(Date.now()-liveStart)+' ms');
-  await new Promise(resolve=>setTimeout(resolve,350));
-  const beforeCachedReads=memberReads.filter(path=>path==='/api/v2/state').length;
-  for(let i=0;i<10;i++)await run(`window.desktop.membership('connect',{serverId:${JSON.stringify(fixture.serverId)}})`);
-  assert.equal(memberReads.filter(path=>path==='/api/v2/state').length,beforeCachedReads,'healthy server stream reuses snapshots instead of repeated state HTTP reads');
+  const connect=`window.desktop.membership('connect',{serverId:${JSON.stringify(fixture.serverId)}})`;
+  let measuredCache=false;
+  for(let attempt=0;attempt<5&&!measuredCache;attempt++){
+    // A server state event can invalidate the snapshot independently of these reads.
+    const invalidations=snapshotInvalidations;
+    if(!(await run(connect)).value?.eventsLive||snapshotInvalidations!==invalidations)continue;
+    const beforeCachedReads=memberReads.length;
+    const healthy=await run(`(async()=>{for(let i=0;i<10;i++)if(!(await ${connect}).value?.eventsLive)return false;return true;})()`);
+    if(!healthy||snapshotInvalidations!==invalidations)continue;
+    assert.deepEqual(memberReads.slice(beforeCachedReads).filter(path=>path==='/api/v2/state'),[],'healthy server stream reuses snapshots instead of repeated state HTTP reads');
+    measuredCache=true;
+  }
+  assert.ok(measuredCache,'expected ten local refreshes during an uninterrupted live snapshot');
   console.log('PASS ten local refreshes issue zero server state requests');
   assert.ok(chatSockets.length>0);chatSockets.at(-1).close();await run('window.__chatEvents=[]');
   await run(`window.desktop.membership('send',{serverId:${JSON.stringify(fixture.serverId)},channelId:${JSON.stringify(liveChannel)},content:{text:'Synthetic WebSocket reconnect catchup'}})`);
@@ -157,10 +171,10 @@ async function test(window) {
   assert.equal((await guest.registry())[0].name,'Synthetic renamed server','other device caches shared name');
   await assert.rejects(guest.request(fixture.serverId,'/api/v2/server','PATCH',{name:'Forbidden rename',expectedName:'Synthetic renamed server',requestId:'9'.repeat(32)}),{code:'FORBIDDEN'});
   await until("document.querySelector('.member-server-list button').getAttribute('aria-label').startsWith('Synthetic renamed server')",'server rail uses shared name');
-  await new Promise(resolve=>setTimeout(resolve,350));
+  await until("document.querySelector('.member-history')?.getAttribute('aria-busy')==='false'",'history ready before peer delivery');
   const beforePeer=memberReads.length,peerSent=await guest.send(fixture.serverId,liveChannel,{text:'Peer live envelope'});
   await until("document.querySelector('.member-history').innerText.includes('Peer live envelope')",'peer contents delivered');
-  assert.equal(memberReads.slice(beforePeer).filter(p=>p.includes('/messages?')).length,0,'peer delivery does not make receiver history requests');
+  assert.deepEqual(memberReads.slice(beforePeer).filter(p=>p.includes('/messages?')),[],'peer delivery does not make receiver history requests');
   let peerOriginal=(await guest.messages(fixture.serverId,liveChannel,{ids:[peerSent.id],limit:1})).messages[0];const beforePeerEdit=memberReads.length;
   await guest.send(fixture.serverId,liveChannel,{text:'Peer live edited'},peerOriginal);
   await until("document.querySelector('.member-history').innerText.includes('Peer live edited')&&!document.querySelector('.member-history').innerText.includes('Peer live envelope')",'peer edit delivered');

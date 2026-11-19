@@ -1,5 +1,6 @@
 import {AvatarEditor} from '../src/AvatarEditor';
 import {useState} from 'react';
+import {flushSync} from 'react-dom';
 import {createRoot} from 'react-dom/client';
 import {ServerChat} from '../src/ServerChat';
 import {changeLanguage,t} from '../src/i18n';
@@ -88,14 +89,21 @@ test.pushLive=(kind:string,id?:number,duplicate=false)=>{
  const channel=state.channels[0],previous=channel.messageRevision;state.eventsLive=true;
  const add=()=>{const next=Math.max(test.liveCounter||0,...records.map(m=>m.id))+1;test.liveCounter=next;const row:Message={id:next,channelId:cid,authorProfileId:friend,requestId:next.toString(16).padStart(32,'0'),sentAt:Date.now(),content:{text:'Pushed '+next}};records.push(row);channel.messageRevision++;return row;};
  let updates:Message[]=[],deleted:any[]=[],delayed:any;
- if(kind==='new')updates=[add()];
+ if(kind==='new'||kind==='state-first')updates=[add()];
  if(kind==='reply'){const row=add();row.content.reply={id:id!,author:'Old name',text:'Stale snapshot'};updates=[row];}
  if(kind==='edit'){const row=records.find(m=>m.id===id)!;row.content={text:'Live edited '+id};row.editedAt=Date.now();updates=[row];channel.messageRevision++;}
  if(kind==='delete'){const row=records.find(m=>m.id===id)!;deleted=[{id:row.id,authorProfileId:row.authorProfileId}];records=records.filter(m=>m.id!==id);channel.messageRevision++;}
  if(kind==='gap'){add();updates=[add()];}
  if(kind==='reorder'){const first=add();delayed={serverId:sid,channelId:cid,type:'chat',delivery:true,previous,revision:channel.messageRevision,first:records[0].id,last:first.id,messages:structuredClone([first]),deleted:[]};updates=[add()];}
  channel.lastMessageId=records.at(-1)?.id||0;
- const event={serverId:sid,channelId:cid,type:'chat',delivery:true,previous:kind==='gap'||kind==='reorder'?previous+1:previous,revision:channel.messageRevision,first:records[0]?.id||0,last:channel.lastMessageId,messages:structuredClone(updates),deleted};test.lastLive=event;for(const fn of liveListeners)fn(event);if(delayed)setTimeout(()=>{for(const fn of liveListeners)fn(delayed);},30);refresh();return updates[0]?.id;
+ const event={serverId:sid,channelId:cid,type:'chat',delivery:true,previous:kind==='gap'||kind==='reorder'?previous+1:previous,revision:channel.messageRevision,first:records[0]?.id||0,last:channel.lastMessageId,messages:structuredClone(updates),deleted};test.lastLive=event;
+ if(kind==='state-first'){
+  state.capabilities=[...(state.capabilities||[]),'message-events-v1'];
+  flushSync(refresh);
+  queueMicrotask(()=>{for(const fn of liveListeners)fn(event);});
+  return updates[0]?.id;
+ }
+ for(const fn of liveListeners)fn(event);if(delayed)setTimeout(()=>{for(const fn of liveListeners)fn(delayed);},30);refresh();return updates[0]?.id;
 };
 function App(){const[avatar,setAvatar]=useState<File>();openAvatar=setAvatar;const[,render]=useState(0);refresh=()=>render(n=>n+1);const channel=state.channels.find(c=>c.id===selected)!;return <><ServerChat key={selected} state={{...state}} channel={{...channel}} focused onRead={id=>test.read.push(id)} onError={error=>{test.error=error;}}/>{avatar&&<AvatarEditor file={avatar} onClose={()=>setAvatar(undefined)} onSave={()=>true}/>}</>;}
 createRoot(document.getElementById('root')!).render(<App/>);
