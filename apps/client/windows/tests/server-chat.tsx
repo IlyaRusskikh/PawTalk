@@ -68,6 +68,7 @@ test.desktop={onMembershipServerEvent:(listener:(event:any)=>void)=>{liveListene
  }
  if(action==='messages'){test.liveReads.push(structuredClone(input.options||{}));
   const o=input.options||{},all=records.filter(m=>m.channelId===input.channelId),limit=o.limit||100;let eligible=all.filter(m=>(!o.before||m.id<o.before)&&(!o.after||m.id>o.after));
+  if(test.holdOlderPage&&o.before&&limit>1){test.holdOlderPage=false;await new Promise<void>(resolve=>{test.releaseOlderPage=resolve;});}
   if(o.ids)eligible=eligible.filter(m=>o.ids.includes(m.id));
   if(o.around){const at=eligible.findIndex(m=>m.id>=o.around);eligible=eligible.slice(Math.max(0,at-Math.floor(limit/2)));}
   const page=o.ids||o.after||o.around?eligible.slice(0,limit):eligible.slice(-limit);
