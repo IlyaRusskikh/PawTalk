@@ -1,0 +1,33 @@
+# Сайт PawTalk
+
+[English](README.md) · [Документация](../../docs/README.ru.md)
+
+Статический лендинг на русском и английском. Страница [загрузок](https://ilyarusskikh.github.io/PawTalk/downloads/) показывает опубликованные выпуски Client, Server, Manager через динамический каталог GitHub Releases. Не создавайте вручную ссылки на будущие версии или общий /releases/latest.
+
+Деплой выполняется через Pages после фактической публикации или явного запуска с main; без публикации не следует показывать выдуманный релиз. Проверка сайта: `node tooling/ci/check-website.mjs`; для каталога — генерация `node tooling/release/release-catalog.mjs` и `node tooling/ci/check-website.mjs --catalog`.
+
+## Скриншоты
+
+PNG показывают интерфейс подготовленного исходного кода Client 0.14.0, а не факт
+публикации выпуска. Версии для скачивания по-прежнему берутся из живого каталога.
+Иконка проекта взята из существующего assets/pawtalk.svg.
+
+После сборки общего Server и интерфейса Client выполните:
+
+```sh
+npm run server:prepare
+npm run build
+node apps/website/scripts/capture-website.mjs
+```
+
+Съёмка запускает настоящий Electron main/preload/renderer с временным локальным
+Go Server и LiveKit, закреплённым TLS и E2EE. Создаются изолированные профили,
+синтетические микрофоны, три демонстрационных участника, сообщения и опрос.
+Нативные уведомления отключены только в процессе съёмки. Профили установленного
+Client/Manager не используются; приглашения в буфер обмена не копируются.
+
+Для каждого языка сохранены одиннадцать PNG 1240 × 860: home, create-room, room-chat,
+avatar-crop, audio-settings, language-settings, sound-settings, poll-create, media-chat, media-viewer и attachment-drafts.
+Английские файлы имеют суффикс -en. Перед публикацией просмотрите каждый снимок:
+секреты, личные данные и вёрстка. Съёмка подтверждает интерфейс и синтетическую
+интеграцию, но не работу реальных микрофонов или внешних сетей.

@@ -47,7 +47,7 @@ jobs:
       - id: plan
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-candidate.mjs plan
+        run: node tooling/release/release-candidate.mjs plan
   infrastructure:
     needs: plan
     runs-on: ubuntu-latest
@@ -57,14 +57,14 @@ jobs:
         with:
           node-version: 24.22.1
       - run: npm ci --ignore-scripts
-      - run: node scripts/check-release-notes.mjs
-      - run: node scripts/check-agents.mjs
-      - run: node scripts/check-website.mjs
+      - run: node tooling/ci/check-release-notes.mjs
+      - run: node tooling/ci/check-agents.mjs
+      - run: node tooling/ci/check-website.mjs
       - run: >-
-          node --test tests/agent-infrastructure.test.mjs tests/release-catalog.test.mjs tests/ci-scope.test.mjs
-          tests/release-routing.test.mjs tests/release-metadata.test.mjs tests/release-candidate.test.mjs tests/release-notes.test.mjs tests/candidate-origin.test.mjs
+          node --test tests/infrastructure/agent-infrastructure.test.mjs tests/release/release-catalog.test.mjs tests/infrastructure/ci-scope.test.mjs
+          tests/release/release-routing.test.mjs tests/release/release-metadata.test.mjs tests/release/release-candidate.test.mjs tests/release/release-notes.test.mjs tests/release/candidate-origin.test.mjs
       - name: Verify prepared OCI digest through isolated local registry
-        run: node scripts/release-image-smoke.mjs
+        run: node tooling/ci/release-image-smoke.mjs
       - name: Lint all GitHub Actions workflows
         run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
   verify:
@@ -96,7 +96,7 @@ jobs:
         env:
           PAWTALK_UPDATE_PRIVATE_KEY: ${{ secrets.PAWTALK_UPDATE_PRIVATE_KEY }}
           PAWTALK_PRERELEASE: ${{ needs.plan.outputs.client_channel == 'preview' && 'true' || 'false' }}
-        run: node scripts/sign-update.mjs release/client
+        run: node tooling/release/sign-update.mjs release/client
       - name: Check complete prepared archives
         env:
           VERSION: ${{ needs.plan.outputs.client_version }}
@@ -107,7 +107,7 @@ jobs:
           unzip -Z1 "release/client/PawTalk.Licenses.$VERSION.zip" | grep '^licenses/'
       - id: seal
         name: Verify signatures, completeness and seal source-bound receipt
-        run: node scripts/release-candidate.mjs seal
+        run: node tooling/release/release-candidate.mjs seal
       - uses: actions/upload-artifact@v6
         with:
           name: pawtalk-client-prepared
@@ -149,7 +149,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: server/standalone.Dockerfile
+          file: apps/server/deploy/standalone.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: false
           outputs: type=oci,dest=release/server/server-image.tar
@@ -165,7 +165,7 @@ jobs:
           path: release/client-core
       - name: Compare separately built Client and permanent Server cores
         if: contains(fromJSON(needs.plan.outputs.components), 'client')
-        run: node scripts/release-candidate.mjs compare-core
+        run: node tooling/release/release-candidate.mjs compare-core
       - name: Sign prepared Server digest and Windows package
         env:
           PAWTALK_SERVER_PRIVATE_KEY: ${{ secrets.PAWTALK_SERVER_PRIVATE_KEY }}
@@ -174,7 +174,7 @@ jobs:
           skopeo inspect --raw oci-archive:release/server/server-image.tar > /tmp/server-index.json
           digest=$(sha256sum /tmp/server-index.json | cut -d ' ' -f 1)
           export PAWTALK_IMAGE_DIGEST="sha256:$digest"
-          node scripts/release-metadata.mjs
+          node tooling/release/release-metadata.mjs
       - name: Check complete prepared archives
         env:
           VERSION: ${{ needs.plan.outputs.server_version }}
@@ -183,7 +183,7 @@ jobs:
           skopeo copy --all --preserve-digests oci-archive:release/server/server-image.tar "oci:$RUNNER_TEMP/verified-server:checked"
       - id: seal
         name: Verify signatures, completeness and seal source-bound receipt
-        run: node scripts/release-candidate.mjs seal
+        run: node tooling/release/release-candidate.mjs seal
       - uses: actions/upload-artifact@v6
         with:
           name: pawtalk-server-prepared
@@ -218,14 +218,14 @@ jobs:
         env:
           PAWTALK_MANAGER_PRIVATE_KEY: ${{ secrets.PAWTALK_MANAGER_PRIVATE_KEY }}
           PAWTALK_PRERELEASE: ${{ needs.plan.outputs.manager_channel == 'preview' && 'true' || 'false' }}
-        run: node scripts/release-metadata.mjs
+        run: node tooling/release/release-metadata.mjs
       - name: Check complete prepared archives
         env:
           VERSION: ${{ needs.plan.outputs.manager_version }}
         run: tar -tzf "release/manager/PawTalk.Manager.$VERSION.tar.gz"
       - id: seal
         name: Verify signatures, completeness and seal source-bound receipt
-        run: node scripts/release-candidate.mjs seal
+        run: node tooling/release/release-candidate.mjs seal
       - uses: actions/upload-artifact@v6
         with:
           name: pawtalk-manager-prepared
@@ -280,7 +280,7 @@ jobs:
           path: candidate/manager
         if: contains(fromJSON(needs.plan.outputs.components), 'manager')
       - name: Validate and save original candidate contracts for later promotion
-        run: node scripts/release-candidate.mjs snapshot
+        run: node tooling/release/release-candidate.mjs snapshot
       - uses: actions/upload-artifact@v6
         with:
           name: pawtalk-candidate-index
@@ -335,7 +335,7 @@ jobs:
       - name: Create only checked immutable tags
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-candidate.mjs tag
+        run: node tooling/release/release-candidate.mjs tag
   report:
     if: always()
     needs:
@@ -392,7 +392,7 @@ jobs:
       - name: Publish only prepared artifacts; never rebuild
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-candidate.mjs publish
+        run: node tooling/release/release-candidate.mjs publish
   publish-server:
     if: >-
       always() && needs.preflight.result == 'success' && needs.tag.result == 'success' && contains(fromJSON(needs.plan.outputs.components),
@@ -425,7 +425,7 @@ jobs:
       - name: Publish only prepared artifacts; never rebuild
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-candidate.mjs publish
+        run: node tooling/release/release-candidate.mjs publish
   publish-manager:
     if: >-
       always() && needs.preflight.result == 'success' && needs.tag.result == 'success' && contains(fromJSON(needs.plan.outputs.components),
@@ -456,4 +456,4 @@ jobs:
       - name: Publish only prepared artifacts; never rebuild
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-candidate.mjs publish
+        run: node tooling/release/release-candidate.mjs publish

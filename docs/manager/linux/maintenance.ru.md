@@ -38,7 +38,7 @@ sudo pawtalkctl backup restore "$PAWTALK_BACKUP_NAME"
 sudo pawtalkctl doctor
 ~~~
 
-На чистом поддерживаемом VPS порядок особый: перенесите полную backup-директорию в `/var/backups/pawtalk/` с приватными правами root, подготовьте доверенный checkout и Docker/Compose, **не устанавливайте новый Server предварительно**, затем из checkout выполните `sudo python3 -B -I manager/pawtalkctl backup restore "$PAWTALK_BACKUP_NAME" --trust manager/trust.json`. Нужны прежний IP/порт и доступный сохранённый GHCR digest. Миграции API 1 нет. Серверный backup не содержит клиентский E2EE root.
+На чистом поддерживаемом VPS порядок особый: перенесите полную backup-директорию в `/var/backups/pawtalk/` с приватными правами root, подготовьте доверенный checkout и Docker/Compose, **не устанавливайте новый Server предварительно**, затем из checkout выполните `sudo python3 -B -I apps/manager/linux/pawtalkctl backup restore "$PAWTALK_BACKUP_NAME" --trust apps/manager/linux/trust.json`. Нужны прежний IP/порт и доступный сохранённый GHCR digest. Миграции API 1 нет. Серверный backup не содержит клиентский E2EE root.
 
 ## Остановка и удаление с сохранением данных
 

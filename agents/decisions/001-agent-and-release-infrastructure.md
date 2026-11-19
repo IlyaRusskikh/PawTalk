@@ -16,7 +16,7 @@ copy preserves the prepared digest; signing keys remain in trusted preparation
 jobs. Publication and tag permission are distinct.
 
 GitHub Releases is the sole source of public versions. Generate untracked
-website/releases.json from all API pages, strict component SemVer, uploaded nonempty
+apps/website/releases.json from all API pages, strict component SemVer, uploaded nonempty
 mandatory assets and canonical GitHub URLs. Per component expose latest (including
 preview), stable and preview. Latest includes previews to match the project's
 current public-preview distribution; stable never silently selects preview.

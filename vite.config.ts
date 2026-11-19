@@ -1,3 +1,2 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-export default defineConfig({ base: './', plugins: [react()], server: { host: '127.0.0.1', strictPort: true, port: 5173, watch: { ignored: ['**/release/**'] } } });
+// Shared entry point for renderer development and Electron UI fixtures.
+export { default } from './apps/client/windows/vite.config.ts';

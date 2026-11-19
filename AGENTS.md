@@ -6,6 +6,10 @@ Mandatory entry point for every agent. Read [agents/README.md](agents/README.md)
 then only the relevant rules/skills. Use the [component map](agents/architecture/components.md)
 before broad search; verify descriptive docs against code.
 
+- Keep context focused. Use Codebase Memory MCP first for unfamiliar symbols and
+  relationships when available, then read only the relevant source. Use targeted
+  text search for literals, configuration, and index gaps. Avoid repeating a
+  successful search with a broad scan or dumping whole files and logs.
 - Work in branches from current main; never commit directly to main. Follow
   [Git/development rules](agents/rules/development.md). Working-branch pushes are
   allowed within the task after final checks. Merge, tag and publication each need

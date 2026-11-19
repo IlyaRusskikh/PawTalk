@@ -43,11 +43,18 @@ export function messageMarkdown(text) {
       while (end < lines.length && !lines[end].startsWith('```')) body.push(lines[end++]);
       if (end < lines.length) { nodes.push({ type: 'pre', text: body.join('\n') }); i = end; continue; }
     }
-    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { nodes.push({type:'rule'}); continue; }
+    if (line.includes('|') && i+1<lines.length && lines[i+1].trim().replace(/^\||\|$/g,'').split('|').every(cell=>/^\s*:?-{3,}:?\s*$/.test(cell))) {
+      const cells = row => row.trim().replace(/^\||\|$/g,'').split('|').map(cell=>({type:'cell',children:inlineMarkdown(cell.trim())}));
+      const rows=[{type:'header',children:cells(line)}];i++;
+      while(i+1<lines.length && lines[i+1].includes('|'))rows.push({type:'row',children:cells(lines[++i])});
+      nodes.push({type:'table',children:rows});continue;
+    }
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
     const quote = line.match(/^>\s?(.*)$/);
-    const list = line.match(/^(?:[-*]|\d+\.)\s+(.+)$/);
-    nodes.push({ type: heading ? 'heading' : quote ? 'quote' : list ? 'item' : 'line', level: heading?.[1].length,
-      children: inlineMarkdown(heading?.[2] ?? quote?.[1] ?? list?.[1] ?? line) });
+    const list = line.match(/^([-*]|\d+\.)\s+(.+)$/);
+    nodes.push({ type: heading ? 'heading' : quote ? 'quote' : list ? 'item' : 'line', level: heading?.[1].length, marker: list?.[1],
+      children: inlineMarkdown(heading?.[2] ?? quote?.[1] ?? list?.[2] ?? line) });
   }
   return nodes;
 }

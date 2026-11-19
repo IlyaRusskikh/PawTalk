@@ -1,8 +1,8 @@
 # Architecture invariants
 
-- Client and permanent Windows Server build the same server/ core and LiveKit
-  through scripts/server-core.mjs with the same toolchain/flags; receipt hashes
-  and scripts/check-server-core.mjs verify byte equality. selfhost and serve
+- Client and permanent Windows Server build the same apps/server/ core and LiveKit
+  through tooling/build/server-core.mjs with the same toolchain/flags; receipt hashes
+  and tooling/build/check-server-core.mjs verify byte equality. selfhost and serve
   differ in lifetime/storage. Server release alone does not patch installed Client.
 - API protocol 2 and capabilities, not release numbers, determine compatibility.
   Missing/legacy/unknown protocol is rejected before identity or admission proofs.

@@ -15,6 +15,7 @@
 - [client-v0.12.0](client-v0.12.0.ru.md) — неопубликованный неудачный кандидат
 - [client-v0.12.1](client-v0.12.1.ru.md)
 - [client-v0.13.0](client-v0.13.0.ru.md) — исходник выпуска
+- [client-v0.14.0](client-v0.14.0.ru.md) — источник выпуска
 
 ## Server
 
@@ -23,6 +24,7 @@
 - [server-v0.11.0](server-v0.11.0.ru.md) — неопубликованный неудачный кандидат
 - [server-v0.11.1](server-v0.11.1.ru.md)
 - [server-v0.12.0](server-v0.12.0.ru.md) — исходник выпуска
+- [server-v0.13.0](server-v0.13.0.ru.md) — источник выпуска
 
 ## Manager
 

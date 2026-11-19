@@ -14,4 +14,4 @@ PawTalk uses layered checks; they are **not interchangeable**.
 
 The published API 2 preview has synthetic and CI coverage, but **real hardware, remote TCP/UDP, audio latency/quality and game PTT acceptance must be reported as separate evidence**. A check passing for `main` does not retroactively change a published tag.
 
-When updating documents, compare claims with published release descriptions and tests; preserve limitations and distinguish targets from validated platforms. Run `node scripts/check-release-notes.mjs` and relevant checks after changing release content, plus `node scripts/check-website.mjs` for website changes. See [testing rules](../agents/testing/README.md) and [CI](../.github/workflows/check.yml).
+When updating documents, compare claims with published release descriptions and tests; preserve limitations and distinguish targets from validated platforms. Run `node tooling/ci/check-release-notes.mjs` and relevant checks after changing release content, plus `node tooling/ci/check-website.mjs` for website changes. See [testing rules](../agents/testing/README.md) and [CI](../.github/workflows/check.yml).

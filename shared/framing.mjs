@@ -1,4 +1,4 @@
-// The same framing is implemented and cross-checked in server/membership_protocol.go.
+// The same framing is implemented and cross-checked in apps/server/membership_protocol.go.
 export function signatureFrame(...fields) {
   if (fields.some(value => typeof value !== 'string')) throw TypeError('Signature fields must be strings');
   const encoded = fields.map(value => new TextEncoder().encode(value));

@@ -6,7 +6,7 @@ These contracts describe development source, not already published binaries.
 
 ## Storage and compatibility
 
-API/data schema stays 2. After validating the existing API 2 identity/schema, both hosting modes execute the additive, idempotent membership_features.sql DDL. Original tables, identifiers and key contexts remain unchanged. Separate tables hold session activity, server avatar, polls and ballots. Optional capabilities gate new writes; old API 2 peers retain ordinary chat. Manager remains host-only. API 1 is still rejected, with no migration.
+API/data schema stays 2. After validating the existing API 2 identity/schema, both hosting modes execute the additive, idempotent membership_features.sql DDL. Identifiers and key contexts remain unchanged; media support expands the attachment size constraint as described below. Separate tables hold session activity, server avatar, polls and ballots. Optional capabilities gate new writes; old API 2 peers retain ordinary chat. Manager remains host-only. API 1 is still rejected, with no migration.
 
 ## Presence, avatars and links
 
@@ -16,7 +16,7 @@ Link contexts/private exchange keys remain in the main process after the code di
 
 ## Mentions and notifications
 
-Mentions are encrypted UTF-16 ranges bound to selected profile IDs. Edits shift untouched ranges and drop changed labels. The roster currently covers all channels because channel access is server-wide. Unread history is scanned in bounded pages, including after reconnect. Mention pins are separate from ordinary unread counts; mention alerts bypass server/channel mutes, but not deafen, configured sound suppression or OS restrictions. Read cursors and mute deadlines are device-local. No absolute OS delivery guarantee is claimed.
+Mentions are encrypted UTF-16 ranges bound to selected profile IDs. Edits shift untouched ranges and drop changed labels. The roster currently covers all channels because channel access is server-wide. Unread history is scanned in bounded pages, including after reconnect. Mention pins are separate from ordinary unread counts; mention alerts bypass apps/server/channel mutes, but not deafen, configured sound suppression or OS restrictions. Read cursors and mute deadlines are device-local. No absolute OS delivery guarantee is claimed.
 
 ## Retained chat history
 
@@ -33,3 +33,12 @@ The result renderer links to the original poll; multiple-answer percentages use 
 ## Event delivery
 
 server-events-v1 adds one authenticated server-wide subscription and a small sequence checkpoint. It serves active chat, notifications, polls, roster/profile changes and admitted-device link attention. chat-events-v1 remains for older peers; unsupported/disconnected peers poll. The selected chat appends new rows and reuses quote/predecessor caches; edits/deletes and resync reload affected data. message-events-v1 additionally carries committed encrypted envelopes and deletion metadata at /api/v2/events/messages. Channel revisions detect duplicates and gaps; bounded queues fall back to HTTP on resync. Envelopes are captured once inside the writing transaction and serialized once for subscribers. No plaintext or root key reaches Server. Server access, E2EE and request/replay contracts remain unchanged. See [connection audit](connection-audit.en.md) for endpoints, resource bounds, retained heartbeats and verification limits.
+
+## Media and checklists
+
+media-files-v1 raises encrypted attachment plaintext to 50 MiB (ciphertext plus 16 bytes). JSON transport is bounded at 70 MiB and attachment requests have a 120-second Client timeout. Startup transactionally expands the legacy attachment table constraint, copies encrypted bytes unchanged, and recreates indexes and ownership triggers; API/data version remains 2. Image uploads retain 2 MiB and signature inspection. Documents use application/octet-stream and download links, never HTML rendering or transcoding. Filenames and MIME metadata remain inside encrypted message content.
+
+checklists-v1 adds checklists keyed to messages with cascade deletion. Title/item text stays encrypted; Server sees opaque item IDs, check states and the everyone/author policy. Only the resolved author may edit message content; chat.write members may check known item IDs when policy permits. Mutation receipts protect retries. Editing preserves checks for retained IDs and removes obsolete IDs. checklist-events-v1 carries check snapshots inside committed chat envelopes. A check advances the channel revision without rewriting encrypted content. Clients reject stale snapshots; state reads recover on reconnect/resync. Older Servers and disconnected streams retain polling. Manager APIs are unchanged.
+
+
+`media-gallery-v1` permits up to twenty unique attachment IDs per message (ten files and up to ten poster images). New encrypted content carries `files` or a single legacy `file` with an optional `poster` reference and duration; original single-image/file messages remain readable. Send retries compare the complete attachment-ID set, independent of order. Binding remains atomic, with existing ownership/channel/device checks, quotas and cascade deletion. Pending uploads are bounded to twenty per device and expire after thirty minutes, allowing sequential multi-video uploads. Posters use the existing bounded image upload/encryption path; plaintext frames and filenames never enter Server metadata. No numeric API/data migration or Manager contract changes are needed. Older Clients cannot display the new gallery field and must update to view multi-file messages.

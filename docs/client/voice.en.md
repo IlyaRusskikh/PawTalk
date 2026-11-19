@@ -11,3 +11,5 @@ Open **Settings → Audio and devices → Voice** to select an input and output 
 **In a channel:** mute disables your microphone; deafen stops playback. You can adjust each other participant's volume separately. Joining a server is not joining voice. A linked-device group has at most one voice session.
 
 A passing automated/audio simulation does not establish real microphone, device, gaming or network performance. [Troubleshooting](troubleshooting.en.md).
+
+Per-participant listening volume and local mute are stored on this Client by Server and profile ID. They survive a complete Client restart and a new voice connection; nicknames and temporary voice identities are not used as storage keys. Linked devices use their effective profile.

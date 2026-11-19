@@ -16,4 +16,4 @@
 
 Реализация содержит обнаружение протокола/версии; challenge устройств и подписанные доказательства; двухфазные приглашения; членство/роли/модерацию; CRUD/порядок каналов; сообщения, редактирование и вложения; связь устройств; voice grants и присутствие. Ошибки различают несовместимый протокол, отказ прав, истёкшую ссылку и ошибки соединения. HTTP health не равен успешному голосу.
 
-**Источники истины:** [Go протокол](../server/membership_protocol.go), [HTTP](../server/membership_http.go), [auth](../server/membership_auth.go), [приглашения](../server/membership_invites.go), [SQL](../server/membership.sql), [контрактные тесты](../server/membership_protocol_test.go). Не дублируйте неполный список endpoint в пользовательских инструкциях.
+**Источники истины:** [Go протокол](../apps/server/membership_protocol.go), [HTTP](../apps/server/membership_http.go), [auth](../apps/server/membership_auth.go), [приглашения](../apps/server/membership_invites.go), [SQL](../apps/server/membership.sql), [контрактные тесты](../apps/server/membership_protocol_test.go). Не дублируйте неполный список endpoint в пользовательских инструкциях.

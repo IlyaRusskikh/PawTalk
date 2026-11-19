@@ -11,3 +11,5 @@
 The installer is currently not Authenticode-signed, so Windows may display an unknown-publisher warning. Verify the source and hash before deciding whether to proceed.
 
 **Updating:** use the Client update interface or install the new published Client over the existing installation. Client, Server and Manager have **independent** releases. Upgrading the Client does not upgrade a permanent Server. [Compatibility](../server/compatibility.en.md).
+
+On Windows, the installed shortcut, running Client and taskbar relaunch use the same application identity. Startup-in-tray does not change this identity. If a pin created by an older Client still shows a duplicate icon after updating, unpin it once, start the updated installed Client and pin its running icon again.

@@ -6,7 +6,7 @@ metadata:
 ---
 
 1. Read [test routing](../../../agents/testing/README.md) and the changed diff.
-2. Run `node scripts/test-plan.mjs --diff origin/main`; inspect cross-component
+2. Run `node tooling/ci/test-plan.mjs --diff origin/main`; inspect cross-component
    effects against the [map](../../../agents/architecture/components.md).
 3. Reuse successful checks only if their covered state/environment has not changed.
    During implementation use targeted checks; before push run affected baselines

@@ -10,11 +10,11 @@ This branch replaces the user/technical documentation **from scratch**, moves al
 git fetch origin
 git switch docs/complete-refresh-2026-11-16
 git status --short
-node scripts/check-docs.mjs
-node scripts/check-release-notes.mjs
-node --test tests/documentation.test.mjs tests/release-notes.test.mjs tests/agent-infrastructure.test.mjs
-node scripts/check-agents.mjs
-node scripts/check-website.mjs
+node tooling/ci/check-docs.mjs
+node tooling/ci/check-release-notes.mjs
+node --test tests/infrastructure/documentation.test.mjs tests/release/release-notes.test.mjs tests/infrastructure/agent-infrastructure.test.mjs
+node tooling/ci/check-agents.mjs
+node tooling/ci/check-website.mjs
 npm run check:public
 ~~~
 

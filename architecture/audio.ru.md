@@ -2,7 +2,7 @@
 
 [English](audio.en.md) · [Индекс](README.ru.md)
 
-Client захватывает звук в Windows, выбирает устройства ввода и управляет активацией голосом/Push-to-Talk. Локальный тракт включает обработку WebRTC (эхоподавление и автоусиление) и встроенное нейросетевое шумоподавление RNNoise; исходники находятся в [`src/audio.ts`](../src/audio.ts) и [`src/gate-worklet.ts`](../src/gate-worklet.ts).
+Client захватывает звук в Windows, выбирает устройства ввода и управляет активацией голосом/Push-to-Talk. Локальный тракт включает обработку WebRTC (эхоподавление и автоусиление) и встроенное нейросетевое шумоподавление RNNoise; исходники находятся в [`apps/client/windows/src/audio.ts`](../apps/client/windows/src/audio.ts) и [`apps/client/windows/src/gate-worklet.ts`](../apps/client/windows/src/gate-worklet.ts).
 
 Client использует LiveKit SDK для медиапотока. Go Server выдаёт voice grants после проверки членства; LiveKit обеспечивает медиатранспорт, а содержимое защищено сквозным шифрованием голоса на производном ключе сервера/канала. E2EE не скрывает **время трафика и метаданные членства**.
 

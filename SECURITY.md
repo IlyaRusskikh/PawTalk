@@ -18,7 +18,7 @@ guaranteed**. API compatibility with an older server does not imply security
 support. Updating Client or Manager does not replace an installed permanent
 Server; update Server separately.
 
-In the development tree, Client and Server use one shared [server/](server/) core.
+In the development tree, Client and Server use one shared [apps/server/](apps/server) core.
 Auth, chat and API fixes apply to both hosting modes; current builds maintain no
 separate core copy or backport patch. Temporary rooms receive fixes through Client
 releases; permanent rooms through Server releases. Updating one component does not

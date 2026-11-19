@@ -1,5 +1,5 @@
 PawTalk Go dependency notices
-Versions from server/go.mod.
+Versions from apps/server/go.mod.
 
 ========================================================================
 modernc.org/sqlite@v1.61.1
@@ -1548,13 +1548,13 @@ William Pitcock
 Portions of this software are derived from third-party works licensed
 under terms compatible with the above MIT license:
 
-The TRE regular expression implementation (src/regex/reg* and
-src/regex/tre*) is Copyright © 2001-2008 Ville Laurikari and licensed
+The TRE regular expression implementation (apps/client/windows/src/regex/reg* and
+apps/client/windows/src/regex/tre*) is Copyright © 2001-2008 Ville Laurikari and licensed
 under a 2-clause BSD license (license text in the source files). The
 included version has been heavily modified by Rich Felker in 2012, in
 the interests of size, simplicity, and namespace cleanliness.
 
-Much of the math library code (src/math/* and src/complex/*) is
+Much of the math library code (apps/client/windows/src/math/* and apps/client/windows/src/complex/*) is
 Copyright © 1993,2004 Sun Microsystems or
 Copyright © 2003-2011 David Schultz or
 Copyright © 2003-2009 Steven G. Kargl or
@@ -1564,22 +1564,22 @@ Copyright © 2017-2018 Arm Limited
 and labelled as such in comments in the individual source files. All
 have been licensed under extremely permissive terms.
 
-The ARM memcpy code (src/string/arm/memcpy.S) is Copyright © 2008
+The ARM memcpy code (apps/client/windows/src/string/arm/memcpy.S) is Copyright © 2008
 The Android Open Source Project and is licensed under a two-clause BSD
 license. It was taken from Bionic libc, used on Android.
 
-The AArch64 memcpy and memset code (src/string/aarch64/*) are
+The AArch64 memcpy and memset code (apps/client/windows/src/string/aarch64/*) are
 Copyright © 1999-2019, Arm Limited.
 
-The implementation of DES for crypt (src/crypt/crypt_des.c) is
+The implementation of DES for crypt (apps/client/windows/src/crypt/crypt_des.c) is
 Copyright © 1994 David Burren. It is licensed under a BSD license.
 
-The implementation of blowfish crypt (src/crypt/crypt_blowfish.c) was
+The implementation of blowfish crypt (apps/client/windows/src/crypt/crypt_blowfish.c) was
 originally written by Solar Designer and placed into the public
 domain. The code also comes with a fallback permissive license for use
 in jurisdictions that may not recognize the public domain.
 
-The smoothsort implementation (src/stdlib/qsort.c) is Copyright © 2011
+The smoothsort implementation (apps/client/windows/src/stdlib/qsort.c) is Copyright © 2011
 Valentin Ochs and is licensed under an MIT-style license.
 
 The x86_64 port was written by Nicholas J. Kain and is licensed under
@@ -2151,13 +2151,13 @@ William Pitcock
 Portions of this software are derived from third-party works licensed
 under terms compatible with the above MIT license:
 
-The TRE regular expression implementation (src/regex/reg* and
-src/regex/tre*) is Copyright © 2001-2008 Ville Laurikari and licensed
+The TRE regular expression implementation (apps/client/windows/src/regex/reg* and
+apps/client/windows/src/regex/tre*) is Copyright © 2001-2008 Ville Laurikari and licensed
 under a 2-clause BSD license (license text in the source files). The
 included version has been heavily modified by Rich Felker in 2012, in
 the interests of size, simplicity, and namespace cleanliness.
 
-Much of the math library code (src/math/* and src/complex/*) is
+Much of the math library code (apps/client/windows/src/math/* and apps/client/windows/src/complex/*) is
 Copyright © 1993,2004 Sun Microsystems or
 Copyright © 2003-2011 David Schultz or
 Copyright © 2003-2009 Steven G. Kargl or
@@ -2167,22 +2167,22 @@ Copyright © 2017-2018 Arm Limited
 and labelled as such in comments in the individual source files. All
 have been licensed under extremely permissive terms.
 
-The ARM memcpy code (src/string/arm/memcpy.S) is Copyright © 2008
+The ARM memcpy code (apps/client/windows/src/string/arm/memcpy.S) is Copyright © 2008
 The Android Open Source Project and is licensed under a two-clause BSD
 license. It was taken from Bionic libc, used on Android.
 
-The AArch64 memcpy and memset code (src/string/aarch64/*) are
+The AArch64 memcpy and memset code (apps/client/windows/src/string/aarch64/*) are
 Copyright © 1999-2019, Arm Limited.
 
-The implementation of DES for crypt (src/crypt/crypt_des.c) is
+The implementation of DES for crypt (apps/client/windows/src/crypt/crypt_des.c) is
 Copyright © 1994 David Burren. It is licensed under a BSD license.
 
-The implementation of blowfish crypt (src/crypt/crypt_blowfish.c) was
+The implementation of blowfish crypt (apps/client/windows/src/crypt/crypt_blowfish.c) was
 originally written by Solar Designer and placed into the public
 domain. The code also comes with a fallback permissive license for use
 in jurisdictions that may not recognize the public domain.
 
-The smoothsort implementation (src/stdlib/qsort.c) is Copyright © 2011
+The smoothsort implementation (apps/client/windows/src/stdlib/qsort.c) is Copyright © 2011
 Valentin Ochs and is licensed under an MIT-style license.
 
 The x86_64 port was written by Nicholas J. Kain and is licensed under

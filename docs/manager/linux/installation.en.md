@@ -34,18 +34,18 @@ read -r -p 'Reviewed full 40-character SHA: ' PAWTALK_BOOTSTRAP_SHA
 [[ "$PAWTALK_BOOTSTRAP_SHA" =~ ^[0-9a-f]{40}$ ]] &&
   git checkout --detach "$PAWTALK_BOOTSTRAP_SHA" &&
   test "$(git rev-parse HEAD)" = "$PAWTALK_BOOTSTRAP_SHA"
-sha256sum manager/trust.json
-python3 -B -I manager/pawtalkctl --self-test
+sha256sum apps/manager/linux/trust.json
+python3 -B -I apps/manager/linux/pawtalkctl --self-test
 ~~~
 
-Review the checkout and `manager/trust.json` against your trusted source; do not substitute random trust roots. A failed check must stop installation.
+Review the checkout and `apps/manager/linux/trust.json` against your trusted source; do not substitute random trust roots. A failed check must stop installation.
 
 ## 3. Install Manager and Server
 
 If Docker is already installed, check `sudo docker info --format '{{.OSType}}'` and `sudo docker compose version --short` (Linux, Compose major 2+). If Docker is absent, the supported installer can bootstrap it from the **official** apt repository:
 
 ~~~bash
-sudo python3 -B -I manager/pawtalkctl --lang en install --bootstrap-docker
+sudo python3 -B -I apps/manager/linux/pawtalkctl --lang en install --bootstrap-docker
 sudo pawtalkctl --lang en status
 sudo pawtalkctl doctor
 ~~~
