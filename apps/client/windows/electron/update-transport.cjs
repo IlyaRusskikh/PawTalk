@@ -2,7 +2,7 @@ const REPOSITORY = 'IlyaRusskikh/PawTalk';
 function endpoint(source, pathname) {
   return source ? source.base + '/api/updates/' + pathname : pathname.startsWith('releases?')
     ? `https://api.github.com/repos/${REPOSITORY}/${pathname}`
-    : `https://github.com/${REPOSITORY}/releases/download/${pathname.slice('apps/client/windows/assets/'.length)}`;
+    : `https://github.com/${REPOSITORY}/releases/download/${pathname.slice('assets/'.length)}`;
 }
 async function readBounded(response, max) {
   if (!response.ok || !response.body) { await response.body?.cancel(); throw Error('Update HTTP ' + response.status); }

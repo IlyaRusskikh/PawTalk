@@ -33,7 +33,7 @@ async function downloadFastest({ fetchFor, rooms, source: initialSource = null, 
     const started = performance.now(); let header;
     try {
       header = setTimeout(() => candidate.abort.abort(Error('Update source timed out')), Math.min(headerMs, idleMs));
-      const request = Promise.resolve(fetchFor(source)(endpoint(source, `apps/client/windows/assets/${tag}/${manifest.name}`), {
+      const request = Promise.resolve(fetchFor(source)(endpoint(source, `assets/${tag}/${manifest.name}`), {
         redirect: source ? 'error' : 'follow', signal,
       }));
       request.then(response => { if (signal.aborted) response.body?.cancel().catch(() => {}); }, () => {});
