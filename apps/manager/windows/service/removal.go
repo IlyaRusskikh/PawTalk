@@ -4,13 +4,46 @@ package main
 
 import (
 	"errors"
-	"golang.org/x/sys/windows"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/svc"
 )
+
+func installerCommand(args []string) (int, bool) {
+	if len(args) != 2 {
+		return 0, false
+	}
+	target := args[1]
+	var err error
+	switch args[0] {
+	case "--server-stopped":
+		state, queryErr := trayState(target)
+		if queryErr == nil && state == svc.Stopped {
+			return 0, true
+		}
+		return 1, true
+	case "--prepare-install":
+		err = prepareInstall(target)
+	case "--uninstall-services":
+		err = uninstallServices(target)
+	case "--close-tray":
+		err = closeTray(target)
+	case "--close-tray-for-upgrade":
+		err = closeTrayMode(target, true)
+	case "--retire-legacy":
+		err = retireLegacyInstall(target)
+	case "--remove-desktop":
+		err = removeDesktop(target)
+	default:
+		return 0, false
+	}
+	return installerExitCode(err), true
+}
 
 func noLinks(path string) error {
 	for current := path; ; current = filepath.Dir(current) {
@@ -103,6 +136,34 @@ func validateInstallRemoval(path string) error {
 		return errors.New("installation ownership marker missing")
 	}
 	return noLinks(absolute)
+}
+
+func removeDesktop(path string) error {
+	if err := validateInstallRemoval(path); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(filepath.Join(base(), "desktop")); err != nil {
+		return err
+	}
+	files := []string{
+		filepath.Join(base(), "desktop-version.json"),
+		filepath.Join(base(), "pawtalk-server-tray.exe"),
+		filepath.Join(base(), "server.ico"),
+		filepath.Join(base(), "runtime", "pythonw.exe"),
+	}
+	for _, pattern := range []string{"status-" + strings.Repeat("[0-9a-f]", 16) + ".json", ".desktop-status-*"} {
+		matches, err := filepath.Glob(filepath.Join(base(), pattern))
+		if err != nil {
+			return err
+		}
+		files = append(files, matches...)
+	}
+	for _, file := range files {
+		if err := os.Remove(file); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 func prepareInstall(path string) error {

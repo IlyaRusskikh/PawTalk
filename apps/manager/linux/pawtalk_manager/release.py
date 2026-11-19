@@ -178,9 +178,12 @@ def verify(raw, component, keys, now=None):
             raise ValueError("Invalid manager bundle")
         if any(type(m.get(k)) is not int or m[k] != 1 for k in ['launcherProtocol','configSchema']):
             raise ValueError("Unsupported launcher/config contract")
-        if 'windowsInstaller' in m:
-            a = m['windowsInstaller']
-            if not isinstance(a,dict) or a.get('name') != 'PawTalk.Server.Manager.Setup.'+m['version']+'.exe' or not re.fullmatch(r'[a-f0-9]{64}',str(a.get('sha256',''))) or type(a.get('size')) is not int or not 0<a['size']<=256*1024*1024:
+        for field, prefix in (('windowsInstaller', 'PawTalk.Server.Manager.Setup.'),
+                              ('windowsTuiInstaller', 'PawTalk.Server.Manager.TUI.Setup.')):
+            if field not in m:
+                continue
+            a = m[field]
+            if not isinstance(a,dict) or a.get('name') != prefix+m['version']+'.exe' or not re.fullmatch(r'[a-f0-9]{64}',str(a.get('sha256',''))) or type(a.get('size')) is not int or not 0<a['size']<=256*1024*1024:
                 raise ValueError('Invalid Windows Manager installer')
     m['_signed'] = raw.decode('utf-8') if isinstance(raw,bytes) else raw
     return m

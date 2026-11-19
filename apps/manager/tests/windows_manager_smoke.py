@@ -182,9 +182,16 @@ try:
                                       env={**os.environ,'PAWTALK_SCM_NO_DEBUG_TEST_ROOT':str(root)},capture_output=True,timeout=90)
             assert restricted.returncode==0,'Actual SCM stop failed with SeDebugPrivilege disabled'
             assert control('status-server',root).returncode!=0
-            assert control('start-server',root).returncode==0
+            entry=[str(stage/'pawtalkctl.exe'),'--root',str(root),'--lang','en']
+            noninteractive=subprocess.run([*entry,'tui'],stdin=subprocess.DEVNULL,capture_output=True,timeout=30)
+            assert noninteractive.returncode!=0 and b'Use an interactive terminal' in noninteractive.stderr
+            subprocess.run([*entry,'start'],check=True,timeout=60)
             runtime.healthy(before,c.config(),before['identity'])
-            print('PASS actual LocalService SCM stop without debug privilege; explicit restart restores service')
+            subprocess.run([*entry,'stop','--yes'],check=True,timeout=60)
+            assert control('status-server',root).returncode!=0
+            subprocess.run([*entry,'start'],check=True,timeout=60)
+            runtime.healthy(before,c.config(),before['identity'])
+            print('PASS actual LocalService SCM stop without debug privilege; console start/stop and TUI terminal guard')
         invitation=runtime.command(before,c.config(),'info')
         assert runtime.initialized(before,c.config()) is False
         shared=runtime.invitation(before,c.config())
@@ -418,11 +425,26 @@ try:
             version=(stage/'bootstrap/manager/VERSION').read_text().strip()
             setup=build_stage.parent/f'PawTalk.Server.Manager.Setup.{version}.exe'
             arguments=[str(setup),'/S',f'/ROOT={install_root}']
+            tui_stage=build_stage.with_name('windows-tui')
+            tui_setup=build_stage.parent/f'PawTalk.Server.Manager.TUI.Setup.{version}.exe'
+            tui_arguments=[str(tui_setup),'/S',f'/ROOT={install_root}']
+            installed=program/'pawtalkctl.exe'
+            def assert_tui_layout():
+                assert installed.read_bytes()==(tui_stage/'pawtalkctl.exe').read_bytes()
+                assert json.loads((program/'tui-version.json').read_text())['version']==version
+                for relative in ('desktop','desktop-version.json','pawtalk-server-tray.exe','server.ico','runtime/pythonw.exe'):
+                    assert not (program/relative).exists(),f'TUI installation retained {relative}'
+                assert not list(program.glob('status-*.json')),'TUI installation retained desktop status files'
+                assert not menu.exists(),'TUI installation retained desktop shortcuts'
             try:
+                fresh_tui=subprocess.run(tui_arguments,capture_output=True,timeout=240)
+                assert fresh_tui.returncode==0,'Fresh silent TUI installer failed'
+                assert_tui_layout()
+                assert_manager_only_layout(install_root)
                 result=subprocess.run(arguments,capture_output=True,timeout=240)
                 if result.returncode:raise RuntimeError('Actual EXE installation failed')
-                installed=program/'pawtalkctl.exe'
                 assert installed.is_file() and (program/'Uninstall.exe').is_file()
+                assert (program/'desktop-version.json').is_file() and not (program/'tui-version.json').exists()
                 assert hashlib.sha256(installed.read_bytes()).digest()==hashlib.sha256((stage/'pawtalkctl.exe').read_bytes()).digest()
                 # protectRoot pre-creates the empty Server directory with its
                 # final ACLs even though Manager has not downloaded Server.
@@ -484,6 +506,11 @@ try:
                 restored_invitation=json.loads(again_invitation.stdout)
                 assert restored_invitation['url'].split('#')[0]==saved_invitation['url'].split('#')[0],'Reinstall changed TLS identity'
                 assert restored_invitation['url']!=saved_invitation['url'],'Initial admission links must be unique'
+                converted=subprocess.run(tui_arguments,capture_output=True,timeout=240)
+                assert converted.returncode==0,'Silent TUI installer failed'
+                assert_tui_layout()
+                assert (install_root/'etc/pawtalk/config.env').read_bytes()==saved_config
+                assert desktop('snapshot',{})['setupRequired'] is False
                 purged=subprocess.run([str(program/'Uninstall.exe'),'/S','/DELETE-DATA'],capture_output=True,timeout=120)
                 assert purged.returncode==0,'Full uninstall failed'
                 for attempt in range(100):
@@ -492,13 +519,15 @@ try:
                 else:raise RuntimeError('Full uninstall left program files or room data')
                 assert not exists_key(registration) and not exists_key(uninstall_key)
                 print('PASS actual EXE ProgramData install, initial-admin admission, preserved-config reinstall, legacy-path service migration, keep-data and full uninstalls')
+                print('PASS fresh silent TUI install and edition changes with no GUI payload in TUI and preserved room configuration')
             finally:
                 installer_error=sys.exception()
                 try:
                     # Only this fresh, exact product directory may be removed; never
                     # recursively delete a pre-existing installation or unrelated path.
                     if program.exists() and (program/'pawtalkctl.exe').is_file():
-                        matching=hashlib.sha256((program/'pawtalkctl.exe').read_bytes()).digest()==hashlib.sha256((stage/'pawtalkctl.exe').read_bytes()).digest()
+                        runtime_hosts=[stage/'pawtalkctl.exe',build_stage.with_name('windows-tui')/'pawtalkctl.exe']
+                        matching=any(host.is_file() and host.read_bytes()==(program/'pawtalkctl.exe').read_bytes() for host in runtime_hosts)
                         if matching and program.parent.resolve()==Path(os.environ['ProgramData']).resolve() and program.name=='PawTalk Server Manager':
                             for action in ['stop-server','stop-manager','uninstall-manager','uninstall-server']:
                                 real_host(action,install_root)

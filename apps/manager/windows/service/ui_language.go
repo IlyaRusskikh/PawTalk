@@ -3,11 +3,28 @@
 package main
 
 import (
+	"path/filepath"
+
 	"golang.org/x/sys/windows/registry"
 )
 
+const managerRegistration = `Software\PawTalk\ServerManager`
+
+func registeredDataRoot(fallback string) string {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, managerRegistration, registry.QUERY_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return fallback
+	}
+	defer key.Close()
+	root, _, err := key.GetStringValue("DataRoot")
+	if err == nil && filepath.IsAbs(root) {
+		return root
+	}
+	return fallback
+}
+
 func serverUILanguage(fallback string) string {
-	key, err := registry.OpenKey(registry.LOCAL_MACHINE, `Software\PawTalk\ServerManager`, registry.QUERY_VALUE|registry.WOW64_64KEY)
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, managerRegistration, registry.QUERY_VALUE|registry.WOW64_64KEY)
 	if err != nil {
 		return fallback
 	}

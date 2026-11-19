@@ -9,7 +9,7 @@
 | Go API, auth, invitations, moderation, voice grants | [`apps/server/membership_*.go`](../apps/server), [`apps/server/main.go`](../apps/server/main.go) |
 | Permanent storage contract | [`apps/server/membership.sql`](../apps/server/membership.sql) |
 | Windows Manager UI and service controller | [`apps/manager/windows/desktop/`](../apps/manager/windows/desktop), [`apps/manager/windows/service/`](../apps/manager/windows/service) |
-| Linux Manager CLI, transactions and verification | [`apps/manager/linux/pawtalk_manager/`](../apps/manager/linux/pawtalk_manager), [`apps/manager/linux/pawtalkctl`](../apps/manager/linux/pawtalkctl) |
+| Shared Manager CLI, terminal UI, transactions and verification | [`apps/manager/linux/pawtalk_manager/`](../apps/manager/linux/pawtalk_manager), [`apps/manager/linux/pawtalkctl`](../apps/manager/linux/pawtalkctl) |
 | Managed Linux deployment | [`apps/manager/linux/deploy/compose.server.yaml`](../apps/manager/linux/deploy/compose.server.yaml), Manager systemd units |
 | Builds, release manifests and CI | [`tooling/`](../tooling), [`.github/workflows/`](../.github/workflows) |
 | Integration, security and release tests | [`tests/`](../tests), [Go tests](../apps/server) |

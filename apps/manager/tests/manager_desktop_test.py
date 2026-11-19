@@ -52,6 +52,25 @@ class ManagerDesktopTests(unittest.TestCase):
             with self.assertRaises(ValueError):native.queue_manager_installer(self.c,self.manifest(b'expected'))
             schedule.assert_not_called()
 
+    def test_terminal_edition_requires_its_own_signed_installer(self):
+        host = self.c.directory/'pawtalkctl.exe'
+        save(host.with_name('tui-version.json'), {'version': '0.3.0'})
+        data = b'synthetic signed TUI installer'
+        name = 'PawTalk.Server.Manager.TUI.Setup.0.9.0.exe'
+        raw = self.crypto.signed('manager', windowsTuiInstaller=dict(
+            name=name, size=len(data), sha256=hashlib.sha256(data).hexdigest()))
+        with patch.dict(os.environ, PAWTALK_MANAGER_HOST=str(host)), patch.object(bundles,'WINDOWS',True), patch.object(cli,'WINDOWS',True), patch.object(cli,'publish_desktop_status'), patch.object(native,'fetch',return_value=data) as fetch, patch.object(native,'schedule_manager_installer') as schedule:
+            desktop = cli.release.verify(self.manifest(data)['_signed'], 'manager', self.crypto.keys)
+            self.assertEqual(cli.desktop_updates(self.c,self.crypto.keys,install=True,found=desktop)['status'],'current')
+            with self.assertRaisesRegex(ValueError, 'installed Windows edition'):
+                bundles.activate(self.c,desktop,self.crypto.keys)
+            fetch.assert_not_called()
+            schedule.assert_not_called()
+            terminal = cli.release.verify(raw, 'manager', self.crypto.keys)
+            self.assertEqual(cli.desktop_updates(self.c,self.crypto.keys,install=True,found=terminal)['status'],'installing')
+            self.assertTrue(fetch.call_args.args[0].endswith('/'+name))
+            self.assertEqual(schedule.call_args.args[1].name,name)
+
     def test_installer_task_is_system_on_demand_without_a_second_clock_trigger(self):
         installer=self.c.directory/'updates'/'synthetic installer.exe'
         installer.parent.mkdir(parents=True,exist_ok=True)

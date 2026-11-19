@@ -47,9 +47,14 @@ test('real component artifact builder signs exact digests/bundle bytes with sepa
     await mkdir(path.join(directory,'release/manager'),{recursive:true});
     const installerBytes=Buffer.from('synthetic Manager installer');
     await writeFile(path.join(directory,'release/manager',`PawTalk.Server.Manager.Setup.${managerVersion}.exe`),installerBytes);
+    const tuiInstallerName=`PawTalk.Server.Manager.TUI.Setup.${managerVersion}.exe`;
+    const tuiInstallerBytes=Buffer.from('synthetic Manager TUI installer');
+    await writeFile(path.join(directory,'release/manager',tuiInstallerName),tuiInstallerBytes);
     await run();
     const manifest = await check('manager');
     assert.equal(manifest.windowsInstaller.sha256,createHash('sha256').update(installerBytes).digest('hex'));
+    assert.deepEqual(manifest.windowsTuiInstaller,{name:tuiInstallerName,
+      sha256:createHash('sha256').update(tuiInstallerBytes).digest('hex'),size:tuiInstallerBytes.length});
     const bundle = await readFile(path.join(directory,'release/manager',manifest.bundle));
     assert.equal(manifest.size,bundle.length); assert.equal(manifest.sha256,createHash('sha256').update(bundle).digest('hex'));
     const listing = (await exec('tar',['-tzf',path.join(directory,'release/manager',manifest.bundle)],{windowsHide:true})).stdout;

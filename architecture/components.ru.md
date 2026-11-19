@@ -9,7 +9,7 @@
 | Go API, авторизация, приглашения, модерация, voice grants | [`apps/server/membership_*.go`](../apps/server), [`apps/server/main.go`](../apps/server/main.go) |
 | Контракт постоянного хранилища | [`apps/server/membership.sql`](../apps/server/membership.sql) |
 | Windows Manager UI и контроллер службы | [`apps/manager/windows/desktop/`](../apps/manager/windows/desktop), [`apps/manager/windows/service/`](../apps/manager/windows/service) |
-| Linux Manager CLI, транзакции и проверка | [`apps/manager/linux/pawtalk_manager/`](../apps/manager/linux/pawtalk_manager), [`apps/manager/linux/pawtalkctl`](../apps/manager/linux/pawtalkctl) |
+| Общие CLI и TUI Manager, транзакции и проверка | [`apps/manager/linux/pawtalk_manager/`](../apps/manager/linux/pawtalk_manager), [`apps/manager/linux/pawtalkctl`](../apps/manager/linux/pawtalkctl) |
 | Управляемое Linux-развёртывание | [`apps/manager/linux/deploy/compose.server.yaml`](../apps/manager/linux/deploy/compose.server.yaml), units systemd |
 | Сборки, release manifest и CI | [`tooling/`](../tooling), [`.github/workflows/`](../.github/workflows) |
 | Интеграционные, security и release-тесты | [`tests/`](../tests), [Go tests](../apps/server) |

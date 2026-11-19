@@ -32,7 +32,7 @@ export function tagGuard({ready, sha, main, artifacts}) {
 export function assetNames(component, version) {
   if (component === 'client') return [`PawTalk.Setup.${version}.exe`, `PawTalk.Licenses.${version}.zip`, 'SHA256SUMS.txt', 'update-manifest.json'];
   if (component === 'server') return [`PawTalk.Server.${version}.windows-x64.zip`, 'server-manifest.json', 'server-image.tar'];
-  if (component === 'manager') return [`PawTalk.Server.Manager.Setup.${version}.exe`, `PawTalk.Manager.${version}.tar.gz`, 'manager-manifest.json'];
+  if (component === 'manager') return [`PawTalk.Server.Manager.Setup.${version}.exe`, `PawTalk.Server.Manager.TUI.Setup.${version}.exe`, `PawTalk.Manager.${version}.tar.gz`, 'manager-manifest.json'];
   throw Error('Unknown component');
 }
 export async function checkCoreReceipt(receipt) {
@@ -76,20 +76,21 @@ async function signatures(p, directory) {
   const client = p.component === 'client';
   if (client ? payload.prerelease !== (p.channel === 'preview') : payload.channel !== p.channel || payload.repository !== p.repository || payload.apiProtocol !== 2 || payload.dataSchema !== 2) throw Error('Signed release contract mismatch');
   if (payload.expiresAt <= (client ? Date.now() : Date.now()/1000)) throw Error('Expired manifest');
-  const check = async entry => {
-    if (!assetNames(p.component,p.version).includes(entry.name)) throw Error('Unexpected signed asset');
+  const check = async (entry, expected) => {
+    if (entry?.name !== expected || !assetNames(p.component,p.version).includes(expected)) throw Error('Unexpected signed asset');
     const actual = await fileDigest(path.join(directory,entry.name));
     if (actual.sha256 !== entry.sha256 || actual.size !== entry.size) throw Error('Signed asset mismatch');
   };
   if (client) {
-    await check(payload);
+    await check(payload,`PawTalk.Setup.${p.version}.exe`);
     const sums = (await readFile(path.join(directory,'SHA256SUMS.txt'),'utf8')).trim();
     if (sums !== `${payload.sha256}  ${payload.name}`) throw Error('Client checksum mismatch');
   } else if (p.component === 'manager') {
-    await check(payload.windowsInstaller);
-    await check({name:payload.bundle,sha256:payload.sha256,size:payload.size});
+    await check(payload.windowsInstaller,`PawTalk.Server.Manager.Setup.${p.version}.exe`);
+    await check(payload.windowsTuiInstaller,`PawTalk.Server.Manager.TUI.Setup.${p.version}.exe`);
+    await check({name:payload.bundle,sha256:payload.sha256,size:payload.size},`PawTalk.Manager.${p.version}.tar.gz`);
   } else {
-    await check(payload.windows);
+    await check(payload.windows,`PawTalk.Server.${p.version}.windows-x64.zip`);
     if (payload.image !== 'ghcr.io/ilyarusskikh/pawtalk-server') throw Error('Unexpected image');
     const raw = execFileSync('skopeo',['inspect','--raw',`oci-archive:${path.join(directory,'server-image.tar')}`]);
     if (payload.digest !== 'sha256:'+hash(raw)) throw Error('OCI digest mismatch');

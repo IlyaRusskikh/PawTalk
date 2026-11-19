@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -204,6 +205,62 @@ func desktopStatus(root string) map[string]any {
 
 func desktopControlPipe(root string) string {
 	return `\\.\pipe\PawTalk.Manager.UI.` + strings.TrimPrefix(serverTrayClass(root), "PawTalk.Server.Tray.")
+}
+
+func terminalEvent(root, kind string) string {
+	return `Global\PawTalk.Manager.Terminal.` + kind + "." + strings.TrimPrefix(serverTrayClass(root), "PawTalk.Server.Tray.")
+}
+
+func createTerminalEvents(root string) (request, done windows.Handle, err error) {
+	sd, err := windows.SecurityDescriptorFromString("D:P(A;;GA;;;SY)(A;;GA;;;BA)")
+	if err != nil {
+		return 0, 0, err
+	}
+	attributes := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sd}
+	done, err = windows.CreateEvent(&attributes, 1, 0, wide(terminalEvent(root, "Done")))
+	if err == nil {
+		request, err = windows.CreateEvent(&attributes, 1, 0, wide(terminalEvent(root, "Close")))
+	}
+	if err != nil {
+		if done != 0 {
+			windows.CloseHandle(done)
+		}
+		if request != 0 {
+			windows.CloseHandle(request)
+		}
+		return 0, 0, fmt.Errorf("unable to open the Manager terminal session: %w", err)
+	}
+	return request, done, nil
+}
+
+func closeTerminal(root string) error {
+	request, err := windows.OpenEvent(windows.EVENT_MODIFY_STATE, false, wide(terminalEvent(root, "Close")))
+	if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(request)
+	done, err := windows.OpenEvent(windows.SYNCHRONIZE, false, wide(terminalEvent(root, "Done")))
+	if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) {
+		return nil // The console host finished between opening the two events.
+	}
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(done)
+	if err := windows.SetEvent(request); err != nil {
+		return err
+	}
+	result, err := windows.WaitForSingleObject(done, 210000)
+	if err != nil {
+		return err
+	}
+	if result != windows.WAIT_OBJECT_0 {
+		return errors.New("Manager terminal did not finish before maintenance")
+	}
+	return nil
 }
 
 func closeDesktop(root string, restart bool) error {

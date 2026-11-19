@@ -37,10 +37,7 @@ class Runtime:
             raise ValueError('Unsafe managed project/volume')
 
     def compose(self, state, config, *args):
-        self.names(state)
-        image = state['image']
-        if not image.startswith(IMAGE+'@') or not DIGEST.fullmatch(image[len(IMAGE)+1:]):
-            raise ValueError('Runtime requires a pinned PawTalk Server digest')
+        image = self.pinned_image(state)
         # Config travels only through the child environment; never execute/source it.
         import os
         env = {'PATH':os.environ.get('PATH','/usr/bin:/bin'), 'HOME':os.environ.get('HOME','/root'),
@@ -50,6 +47,13 @@ class Runtime:
         if p.returncode:
             raise RuntimeError('Compose command failed: '+args[0]+'; run pawtalkctl doctor')
         return p.stdout
+
+    def pinned_image(self,state):
+        self.names(state)
+        image = state['image']
+        if not image.startswith(IMAGE+'@') or not DIGEST.fullmatch(image[len(IMAGE)+1:]):
+            raise ValueError('Runtime requires a pinned PawTalk Server digest')
+        return image
 
     def container(self,state,config):
         ids = self.compose(state,config,'ps','-a','-q','server').decode().split()
@@ -110,16 +114,50 @@ class Runtime:
         self.container(state,config)
         self.compose(state,config,'stop','-t','20','server')
 
-    def identity(self,state,config):
-        info = self.container(state,config)
-        raw = run(['docker','exec',info['Id'],'/pawtalk','serve','info']).decode().strip()
+    def identity_parts(self,command):
+        from .admission import inspect_status
+        raw = command('info').decode().strip()
         if not re.fullmatch(r'pawtalk://[^/\s]+/[a-f0-9]{64}',raw):
             raise ValueError('Invalid room identity')
-        from .admission import inspect_status
-        status = inspect_status(lambda *args: self.command(state,config,*args))
+        status = inspect_status(command)
         if status is None:
             raise ValueError('Server does not support API 2 host status')
-        return hashlib.sha256(('pawtalk-host-v2\n'+raw+'\n'+status['serverId']).encode()).hexdigest()
+        return raw,status['serverId']
+
+    def identity_digest(self,address,server_id):
+        return hashlib.sha256(('pawtalk-host-v2\n'+address+'\n'+server_id).encode()).hexdigest()
+
+    def identity(self,state,config):
+        return self.identity_digest(*self.identity_parts(lambda action: self.command(state,config,action)))
+
+    def reconfigure_network(self,state,old,new):
+        from .preflight import check_ports
+
+        if old['PAWTALK_PORT'] != new['PAWTALK_PORT']:
+            check_ports(int(new['PAWTALK_PORT']))
+        self.check_volume(state)
+        image = self.pinned_image(state)
+
+        def offline(config,action):
+            return run(['docker','run','--rm','--network','none','--read-only','--user','65532:65532',
+                        '--cap-drop','ALL','--security-opt','no-new-privileges:true',
+                        '--mount','type=volume,source='+state['volume']+',target=/data',
+                        '--env','PAWTALK_PUBLIC_IP='+config['PAWTALK_PUBLIC_IP'],
+                        '--env','PAWTALK_PORT='+config['PAWTALK_PORT'],
+                        '--entrypoint','/pawtalk',image,'serve',action])
+
+        previous,server_id = self.identity_parts(lambda action: offline(old,action))
+        if self.identity_digest(previous,server_id) != state['identity']:
+            raise ValueError('Existing TLS/invitation identity changed')
+        rebind = old['PAWTALK_PUBLIC_IP'] != new['PAWTALK_PUBLIC_IP']
+        if rebind:
+            offline(new,'rebind')
+        address,current_id = self.identity_parts(lambda action: offline(new,action))
+        endpoint,fingerprint = address.rsplit('/',1)
+        if (endpoint != f'pawtalk://{new["PAWTALK_PUBLIC_IP"]}:{int(new["PAWTALK_PORT"])}'
+                or current_id != server_id or (fingerprint == previous.rsplit('/',1)[1]) == rebind):
+            raise ValueError('Unexpected TLS or room identity after network change')
+        return self.identity_digest(address,server_id)
 
     def healthy(self,state,config,expected=None,timeout=90):
         deadline = time.monotonic()+timeout

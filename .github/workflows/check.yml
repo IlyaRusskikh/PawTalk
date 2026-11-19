@@ -86,14 +86,16 @@ jobs:
         run: node apps/server/scripts/docker-smoke.mjs --containers-only
       - name: Host tools and signed release contracts
         if: steps.scope.outputs.host == 'true'
-        run: sudo python3 -m unittest discover -s apps/manager/tests -p '*_test.py'
+        run: |
+          infocmp xterm-256color >/dev/null
+          sudo python3 -m unittest discover -s apps/manager/tests -p '*_test.py'
       - name: Verify actual systemd units and oneshot execution
         if: steps.scope.outputs.host == 'true'
         run: |
           sudo install -D -m 0755 apps/manager/linux/launcher /opt/pawtalk-manager/launcher
           systemd-analyze verify apps/manager/linux/deploy/pawtalk-update.service apps/manager/linux/deploy/pawtalk-update.timer apps/manager/linux/deploy/pawtalk-health.service apps/manager/linux/deploy/pawtalk-health.timer
           sudo systemd-run --wait --collect --unit="pawtalk-ci-selftest-${GITHUB_RUN_ID}" /usr/bin/python3 "$GITHUB_WORKSPACE/apps/manager/linux/pawtalkctl" --self-test
-      - name: Real Compose install, backup, upgrade, restore and crash recovery
+      - name: Real Compose install, TUI, backup, upgrade, restore and crash recovery
         if: steps.scope.outputs.host == 'true'
         run: sudo python3 apps/manager/tests/compose_integration.py
         timeout-minutes: 25
@@ -214,6 +216,16 @@ jobs:
       - name: Build Windows Manager installer
         if: steps.scope.outputs.manager == 'true'
         run: node apps/manager/windows/scripts/build-manager-windows.mjs
+      - name: Build Windows Manager TUI installer
+        if: steps.scope.outputs.manager == 'true'
+        run: node apps/manager/windows/scripts/build-manager-windows.mjs --tui-only
+      - name: Verify standalone Manager TUI bootstrap
+        if: steps.scope.outputs.manager == 'true'
+        run: |
+          $result = & ./release/manager/windows-tui/pawtalkctl.exe --self-test
+          if ($LASTEXITCODE -ne 0 -or $result -cne 'PawTalk manager protocol 1 OK') {
+            throw 'Standalone Manager controller self-test failed'
+          }
       - name: Verify Manager desktop UI and native tray
         if: steps.scope.outputs.manager == 'true'
         run: node apps/manager/windows/scripts/manager-desktop-smoke.mjs
@@ -251,7 +263,9 @@ jobs:
         with:
           name: pawtalk-manager-windows
           if-no-files-found: error
-          path: release/manager/PawTalk.Server.Manager.Setup.*.exe
+          path: |
+            release/manager/PawTalk.Server.Manager.Setup.*.exe
+            release/manager/PawTalk.Server.Manager.TUI.Setup.*.exe
       - run: npm run smoke
         if: steps.scope.outputs.client == 'true'
       - run: npm run test:connection-ui

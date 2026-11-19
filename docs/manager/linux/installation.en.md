@@ -21,7 +21,7 @@ df -h / /var
 sudo ss -lntup
 ~~~
 
-Open only TCP `PORT`, TCP `PORT+1` and UDP `PORT+2` in your firewall/provider router (usually 18443, 18444, 18445); **never** expose internal TCP `PORT+3` (usually 18446). Choose the IPv4 and base port carefully: **Linux Manager does not support changing them for an installed Server**.
+Open TCP `PORT`, TCP `PORT+1` and UDP `PORT+2` in your firewall/provider router (usually 18443, 18444, 18445). Keep internal TCP `PORT+3` private (usually 18446). See [network settings after installation](management.en.md) for the impact of changing the address or base port.
 
 ## 2. Obtain a trusted bootstrap checkout
 
@@ -41,6 +41,11 @@ python3 -B -I apps/manager/linux/pawtalkctl --self-test
 Review the checkout and `apps/manager/linux/trust.json` against your trusted source; do not substitute random trust roots. A failed check must stop installation.
 
 ## 3. Install Manager and Server
+
+From the verified checkout, `sudo python3 -B -I apps/manager/linux/pawtalkctl tui`
+opens the terminal interface. Choose **Overview → Set up the first server** to use the
+interactive installation wizard and select a published release or its signed
+manifest on disk.
 
 If Docker is already installed, check `sudo docker info --format '{{.OSType}}'` and `sudo docker compose version --short` (Linux, Compose major 2+). If Docker is absent, the supported installer can bootstrap it from the **official** apt repository:
 

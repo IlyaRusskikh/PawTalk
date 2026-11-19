@@ -49,9 +49,12 @@ if (plan.server) {
   }
   const bytes = await readFile(path.join(output,bundle));
   Object.assign(payload,{bundle,sha256:createHash('sha256').update(bytes).digest('hex'),size:bytes.length,launcherProtocol:1,configSchema:1});
-  const name=`PawTalk.Server.Manager.Setup.${plan.version}.exe`;
-  const installer=await readFile(path.join(output,name));
-  Object.assign(payload,{windowsInstaller:{name,sha256:createHash('sha256').update(installer).digest('hex'),size:installer.length}});
+  for (const [field, prefix] of [['windowsInstaller', 'PawTalk.Server.Manager.Setup.'],
+                                ['windowsTuiInstaller', 'PawTalk.Server.Manager.TUI.Setup.']]) {
+    const name = prefix + plan.version + '.exe';
+    const installer = await readFile(path.join(output,name));
+    payload[field] = {name,sha256:createHash('sha256').update(installer).digest('hex'),size:installer.length};
+  }
 }
 const bytes = Buffer.from(JSON.stringify(payload));
 await writeFile(path.join(output,`${component}-manifest.json`),JSON.stringify({keyId,payload:bytes.toString('base64'),signature:sign(null,bytes,key).toString('base64')})+'\n');

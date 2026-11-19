@@ -12,3 +12,25 @@
 Do not confuse Manager with the **Server**: Manager controls Server lifecycle and settings, while Server handles actual user membership, voice and chat. A Manager reinstall preserves an existing Server and its running/stopped state; it does not reset Server data.
 
 Manager and Server need a compatible published API/data schema 2 combination. See [compatibility](../../server/compatibility.en.md).
+
+## TUI-only installation on Windows 11 and Windows Server Core
+
+On the Manager release page, choose the asset named
+`PawTalk.Server.Manager.TUI.Setup.<version>.exe` when available. It includes the
+console host and its private Python runtime. Installing it over the graphical
+edition removes the desktop app, tray and their shortcuts while preserving Server
+data and configuration. Automatic Manager updates follow the installed edition.
+
+Run the verified installer in silent mode from an Administrator PowerShell session.
+Replace the filename with the one you downloaded.
+
+```powershell
+$setup = (Resolve-Path '.\PawTalk.Server.Manager.TUI.Setup.<version>.exe').Path
+$install = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+if ($install.ExitCode -ne 0) { throw "Manager installation failed ($($install.ExitCode))" }
+& "$env:ProgramData\PawTalk Server Manager\pawtalkctl.exe" tui
+```
+
+Open **Overview → Set up the first server** to install a published Server or to
+select a local Windows Server ZIP. To use Russian, run `pawtalkctl.exe --lang ru tui`.
+See [terminal controls](management.en.md).
