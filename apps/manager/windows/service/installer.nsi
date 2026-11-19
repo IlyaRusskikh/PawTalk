@@ -25,11 +25,11 @@ OutFile "${OUTPUT}"
 InstallDir "$APPDATA\PawTalk Server Manager"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
-!define MUI_ICON "..\..\assets\server.ico"
-!define MUI_UNICON "..\..\assets\server.ico"
+!define MUI_ICON "${STAGE}\server.ico"
+!define MUI_UNICON "${STAGE}\server.ico"
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "..\..\LICENSE"
+!insertmacro MUI_PAGE_LICENSE "${STAGE}\LICENSE"
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\pawtalk-server-tray.exe"
 !define MUI_FINISHPAGE_RUN_FUNCTION LaunchTray

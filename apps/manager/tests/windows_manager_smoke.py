@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 fixtures,stage = map(Path,sys.argv[1:3])
+repository = Path(__file__).resolve().parents[3]
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from windows_smoke_support import assert_manager_only_layout, remove_owned_tree
 sys.path.insert(0,str(stage/'bootstrap/manager'))
@@ -111,7 +112,7 @@ def run_client(mode,address=None):
     input_file.write_text(json.dumps(dict(mode=mode,address=address or runtime.command(c.state(),c.config(),'info').decode().strip())),encoding='utf-8')
     env={**os.environ,'PAWTALK_APP_TEST_DIR':str(client_directory),'PAWTALK_APP_TEST_INPUT':str(input_file),'PAWTALK_APP_TEST_OUTPUT':str(client_result)}
     env.pop('ELECTRON_RUN_AS_NODE',None)
-    result=subprocess.run([os.environ['PAWTALK_ELECTRON'],str(Path(__file__).with_name('manager-membership-client.cjs'))],env=env,capture_output=True,timeout=45,creationflags=subprocess.CREATE_NO_WINDOW)
+    result=subprocess.run([os.environ['PAWTALK_ELECTRON'],str(repository/'apps/manager/windows/tests/manager-membership-client.cjs')],env=env,capture_output=True,timeout=45,creationflags=subprocess.CREATE_NO_WINDOW)
     if result.returncode:
         report=(result.stdout+result.stderr).decode(errors='replace')
         if address:report=report.replace(address,'[invitation redacted]')
@@ -169,7 +170,7 @@ try:
             slow=b"\nfrom pawtalk_manager import cli\nif 'desktop' in sys.argv:\n import time\n def slow(*args,**kwargs):\n  time.sleep(4)\n  return None\n cli.discover_desktop=slow\n"
             try:
                 launcher.write_bytes(original.replace(b'from pawtalk_manager.cli import main',slow+b'\nfrom pawtalk_manager.cli import main'))
-                broker=subprocess.run(['node',str(Path(__file__).with_name('manager-broker.cjs')),str(stage),str(root)],capture_output=True,timeout=150)
+                broker=subprocess.run(['node',str(repository/'apps/manager/windows/tests/manager-broker.cjs'),str(stage),str(root)],capture_output=True,timeout=150)
                 assert broker.returncode==0,broker.stderr.decode(errors='replace')
                 print(broker.stdout.decode().strip())
             finally:launcher.write_bytes(original)
@@ -219,7 +220,7 @@ try:
         print(audio.stdout.decode(errors='replace').strip())
         app_input=fixtures/'membership-app.json';app_input.write_text(json.dumps(dict(address=shared['url'],serverId=member['serverId'])),encoding='utf-8')
         env={**os.environ,'PAWTALK_APP_TEST_DIR':str(client_directory),'PAWTALK_APP_TEST_INPUT':str(app_input)};env.pop('ELECTRON_RUN_AS_NODE',None)
-        app_check=subprocess.run([os.environ['PAWTALK_ELECTRON'],str(Path(__file__).with_name('membership-app-native.cjs')),'--smoke'],env=env,capture_output=True,timeout=100,creationflags=subprocess.CREATE_NO_WINDOW)
+        app_check=subprocess.run([os.environ['PAWTALK_ELECTRON'],str(repository/'apps/client/windows/tests/membership-app-native.cjs'),'--smoke'],env=env,capture_output=True,timeout=100,creationflags=subprocess.CREATE_NO_WINDOW)
         if app_check.returncode:raise RuntimeError('Native Manager -> Client UI failed: '+(app_check.stdout+app_check.stderr).decode(errors='replace').replace(shared['url'],'[invitation redacted]'))
         print('PASS real Manager Server -> Client main/preload/renderer, retained OS credentials, encrypted chat/images, channels and LiveKit E2EE')
         c.install(config,{},directory/'manager/compose.server.yaml','')

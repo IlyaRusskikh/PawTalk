@@ -6,6 +6,7 @@ import {createRequire} from 'node:module';
 import {createServer} from 'vite';
 import path from 'node:path';
 import os from 'node:os';
+import { managerSourceFiles } from '../../../../tooling/build/manager-layout.mjs';
 const root=path.resolve(import.meta.dirname,'../../../..');
 if(process.platform!=='win32')throw Error('Windows smoke requires Windows');
 const directory=await mkdtemp(path.join(os.tmpdir(),'pawtalk-windows-manager-'));
@@ -30,12 +31,11 @@ try{
  }
  for(const v of ['0.1.0','0.1.1']){
   const content=path.join(directory,'bundle-'+v);await mkdir(content);
-  await cp(path.join(stage,'bootstrap/manager'),path.join(content,'manager'),{recursive:true});
-  await writeFile(path.join(content,'apps/manager/VERSION'),v);
-  await writeFile(path.join(content,'apps/manager/linux/trust.json'),JSON.stringify(keys));
-  for(const file of ['LICENSE','THIRD_PARTY_NOTICES.md'])await cp(path.join(root,file),path.join(content,file));
+  await cp(path.join(stage,'bootstrap'),content,{recursive:true});
+  await writeFile(path.join(content,'manager/VERSION'),v);
+  await writeFile(path.join(content,'manager/trust.json'),JSON.stringify(keys));
   const bundle=`PawTalk.Manager.${v}.tar.gz`;
-  const files=['apps/manager/VERSION','apps/manager/linux/trust.json','apps/manager/linux/deploy/compose.server.yaml','apps/manager/linux/launcher','apps/manager/linux/pawtalkctl','apps/manager/linux/deploy/pawtalk-update.service','apps/manager/linux/deploy/pawtalk-update.timer','apps/manager/linux/deploy/pawtalk-health.service','apps/manager/linux/deploy/pawtalk-health.timer','LICENSE','THIRD_PARTY_NOTICES.md',...['__init__','release','config','runtime','controller','preflight','bundles','cli','platforms','native','admission'].map(n=>`apps/manager/linux/pawtalk_manager/${n}.py`)];
+  const files=Object.keys(managerSourceFiles);
   execFileSync('tar.exe',['-czf',path.join(directory,bundle),'-C',content,...files],{windowsHide:true});
   const bytes=await readFile(path.join(directory,bundle));
   await manifest('manager',v,{bundle,size:bytes.length,sha256:hash(bytes),launcherProtocol:1,configSchema:1});
