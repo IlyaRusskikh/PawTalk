@@ -125,8 +125,7 @@ app.whenReady().then(async () => {
     await screenshot('update-security-en');
     await click('Later');
     await win.reload();
-    await until(`!!document.querySelector('.member-home-navigation')`);
-    assert.equal(await run(`document.querySelector('h1').textContent`), 'PawTalk');
+    await until(`document.querySelector('#home-title')?.textContent === 'The conversation starts here.'`);
     await run(`window.updateTest.unsafeCheck()`);
     await until(`!!document.querySelector('.update-modal [role=alert]')`);
     assert.equal(await run(`document.querySelector('.update-actions .primary').disabled`), true);

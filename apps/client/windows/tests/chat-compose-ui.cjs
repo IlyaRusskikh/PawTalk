@@ -75,9 +75,13 @@ app.whenReady().then(async()=>{
  await until("!!document.querySelector('.chat-checklist input')&&document.querySelector('.chat-checklist input').disabled===false");
  await run("document.querySelector('.chat-checklist input').click()");
  await until("document.querySelector('.chat-checklist input').checked");
+ await until("!document.querySelector('.chat-checklist input').disabled");
+ const readsBeforeLive=await run("window.checklistReads");
  await run("window.enableChecklistWS()");
- await run("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
- await run("window.checklistReadBaseline=window.checklistReads;window.checklistTestId=window.sendRequests.find(r=>r.content.checklist).requestId;window.checklistTestMessage=Number(document.querySelector('.chat-checklist').closest('[data-message-row]').dataset.messageRow)");
+ // Switching to live events reloads the initial snapshot before processing updates.
+ await until(`window.checklistReads>${readsBeforeLive}&&!document.querySelector('.chat-checklist input').disabled`);
+ const checklistReadBaseline=await run("window.checklistReads");
+ await run("window.checklistTestMessage=Number(document.querySelector('.chat-checklist').closest('[data-message-row]').dataset.messageRow)");
  const pushed=Date.now();await run("window.pushChecklist(window.checklistTestMessage,{},100)");
  await until("document.querySelector('.chat-checklist input').checked===false");
  assert.ok(Date.now()-pushed<500,'checklist arrives immediately over WS');
@@ -85,7 +89,7 @@ app.whenReady().then(async()=>{
  await until("document.querySelector('.chat-checklist input').checked");
  await run("window.pushChecklist(window.checklistTestMessage,{},99)");
  assert.equal(await run("document.querySelector('.chat-checklist input').checked"),true,'stale WS snapshot cannot undo a newer check');
- assert.equal(await run("window.checklistReads"),await run("window.checklistReadBaseline"),'WS checks do not fetch checklist state');
+ assert.equal(await run("window.checklistReads"),checklistReadBaseline,'WS checks do not fetch checklist state');
  assert.ok(await run("(()=>{const input=document.querySelector('.checklist-item input').getBoundingClientRect(),text=document.querySelector('.checklist-item > span').getBoundingClientRect();return Math.abs(input.top+input.height/2-text.top-text.height/2)<2})()"),'checklist marker and text share a row');
  assert.equal(await run("getComputedStyle(document.querySelector('.checklist-item > span')).textDecorationLine"),'line-through');
  await run("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
