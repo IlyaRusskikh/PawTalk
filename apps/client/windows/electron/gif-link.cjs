@@ -1,6 +1,7 @@
 const https=require('node:https');
 const dns=require('node:dns/promises');
 const {BlockList,isIP}=require('node:net');
+const {isGifProviderPage}=require('./gif-provider.mjs');
 const blocked4=new BlockList(),blocked6=new BlockList();
 for(const [address,prefix] of [['0.0.0.0',8],['10.0.0.0',8],['100.64.0.0',10],['127.0.0.0',8],['169.254.0.0',16],['172.16.0.0',12],['192.0.0.0',24],['192.168.0.0',16],['198.18.0.0',15],['224.0.0.0',4],['240.0.0.0',4]])blocked4.addSubnet(address,prefix,'ipv4');
 for(const [address,prefix] of [['::',96],['::ffff:0:0',96],['fc00::',7],['fe80::',10],['ff00::',8],['2001:db8::',32]])blocked6.addSubnet(address,prefix,'ipv6');
@@ -41,9 +42,8 @@ async function resolveGif(value,{request=readRemote}={}){
   const read=async input=>{let url=safeURL(input);for(let i=0;i<4;i++){const result=await request(url.href,signal);if(result.redirect){url=safeURL(new URL(result.redirect,url).href);continue;}return {url:url.href,...result};}throw Error('Too many redirects');};
   const result=await read(value);
   if(gifBytes(result.bytes))return {url:result.url};
-  const source=safeURL(value),provider=/^(?:www\.)?(?:tenor\.com|giphy\.com|klipy\.com)$/.test(source.hostname);
   // Search links preview the first actual animation in provider result order.
-  if(!provider||!/^\/(?:view|gifs|search)\//.test(source.pathname)||result.type!=='text/html')return null;
+  if(result.type!=='text/html'||!isGifProviderPage(safeURL(value)))return null;
   const html=result.bytes.toString('utf8'),candidates=[];
   for(const tag of html.matchAll(/<meta\b[^>]*>/gi)){
    if(!/\b(?:property|name)\s*=\s*["'](?:og:image(?::url)?|twitter:image(?::src)?|og:video(?::url)?)["']/i.test(tag[0]))continue;

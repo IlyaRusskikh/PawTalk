@@ -25,6 +25,18 @@ test('GIF probes reject credentials, non-HTTPS, private addresses and unsafe red
  assert.equal(await resolveGif('https://example.test/gif',{request:async()=>({redirect:'http://example.test/image.gif'})}),null);
 });
 
+test('localized Tenor share links resolve the animation from the original page',async()=>{
+ const source='https://tenor.com/ru/view/deal-with-it-dog-gif-9823664';
+ const media='https://media1.tenor.com/m/6xcfcXMMccUAAAAC/deal-with.gif';
+ const request=async url=>url===media
+  ?{type:'image/gif',bytes:gif}
+  :{type:'text/html',bytes:Buffer.from(`<meta property="og:image" content="${media}">`)};
+ assert.deepEqual(await resolveGif(source,{request}),{url:media});
+ assert.deepEqual(await resolveGif('https://www.tenor.com/pt-BR/search/dog-gifs',{request}),{url:media});
+ assert.equal(await resolveGif('https://tenor.com.example.test/ru/view/deal-with-it-dog-gif-9823664',{request}),null);
+ assert.equal(await resolveGif('https://giphy.com/ru/view/dog',{request}),null);
+});
+
 test('Klipy single-GIF pages resolve verified GIF and looping video formats',async()=>{
  const request=async url=>url==='https://klipy.com/gifs/rat-eat-pog'?{type:'text/html',bytes:Buffer.from('<meta property="og:video" content="https://static.klipy.com/ii/example/rat.webm">')}:{type:'video/webm',bytes:Buffer.from([0x1a,0x45,0xdf,0xa3,0,0,0,0,0,0,0,0])};
  assert.deepEqual(await resolveGif('https://klipy.com/gifs/rat-eat-pog',{request}),{url:'https://static.klipy.com/ii/example/rat.webm',mime:'video/webm'});

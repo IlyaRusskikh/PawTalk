@@ -2,6 +2,7 @@ import {membership} from './membership';
 import {useEffect,useRef,useState} from 'react';
 import type {Mention} from '../../../../shared/mentions.mjs';
 import { messageMarkdown, type MarkdownNode } from '../../../../shared/chat-format.mjs';
+import { isGifProviderPage } from '../electron/gif-provider.mjs';
 import { t } from './i18n';
 
 function render(nodes: MarkdownNode[], preview: boolean, labels: string[]): React.ReactNode {
@@ -53,4 +54,15 @@ function GifLink({url,source=url,mime}:{url:string;source?:string;mime?:string})
  return type?.startsWith('video/')?<video className="member-chat-image chat-link-gif" src={src} autoPlay loop muted playsInline aria-label={t('GIF')} onError={()=>void fallback()}/>:<img className="member-chat-image chat-link-gif" src={src} referrerPolicy="no-referrer" alt={t('GIF')} onError={()=>void fallback()}/>;
 }
 function DeferredGif({source}:{source:string}){const [media,setMedia]=useState<{url:string;mime?:string}|null>(null);useEffect(()=>{let cancelled=false;const timer=setTimeout(()=>{void membership<{url:string;mime?:string}|null>('gif.resolve',{url:source}).then(result=>{if(!cancelled&&result?.url)setMedia(result);}).catch(()=>{});},150);return()=>{cancelled=true;clearTimeout(timer);};},[source]);return media?<GifLink url={media.url} source={source} mime={media.mime}/>:<a href={source} target="_blank" rel="noopener noreferrer">{source}</a>;}
-export function MessageText({ text, preview = false, mentions=[],gif }: { text: string; preview?: boolean; mentions?:Mention[];gif?:{url:string;source:string;mime?:string} }) { let gifURL:string|undefined=gif?.source===text?gif.url:undefined;try{const url=new URL(text.trim());if(!gifURL&&url.protocol==='https:'&&!url.username&&!url.password&&/\.gif$/i.test(url.pathname))gifURL=url.href;}catch{}if(!gifURL&&!preview){try{const url=new URL(text.trim());if(url.protocol==='https:'&&!url.username&&!url.password&&/^(?:www\.)?(?:tenor\.com|giphy\.com|klipy\.com)$/.test(url.hostname)&&/^\/(?:view|gifs|search)\//.test(url.pathname))return <DeferredGif key={url.href} source={url.href}/>;}catch{}}if(gifURL&&!preview)return <GifLink key={gifURL} url={gifURL} source={text} mime={gif?.mime}/>;return <>{render(messageMarkdown(text), preview,mentions.map(m=>text.slice(m.start,m.end)))}</>; }
+export function MessageText({ text, preview = false, mentions=[],gif }: { text: string; preview?: boolean; mentions?:Mention[];gif?:{url:string;source:string;mime?:string} }) {
+ let gifURL=gif?.source===text?gif.url:undefined;
+ if(!preview&&!gifURL){
+  try{
+   const url=new URL(text.trim());
+   if(url.protocol==='https:'&&!url.username&&!url.password&&/\.gif$/i.test(url.pathname))gifURL=url.href;
+   else if(isGifProviderPage(url))return <DeferredGif key={url.href} source={url.href}/>;
+  }catch{}
+ }
+ if(gifURL&&!preview)return <GifLink key={gifURL} url={gifURL} source={text} mime={gif?.mime}/>;
+ return <>{render(messageMarkdown(text),preview,mentions.map(m=>text.slice(m.start,m.end)))}</>;
+}
