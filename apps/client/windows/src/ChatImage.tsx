@@ -16,6 +16,7 @@ async function withImageSlot<T>(callback: () => Promise<T>) {
 export function ChatImage({ image: inputImage, load, onRemove, removing = false,credits }: { image: Image; load(): Promise<Blob>; onRemove?(): void; removing?: boolean;credits?:{author?:string;avatar?:string;date?:number} }) {
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>();
   const image = { ...inputImage, ...dimensions };
+  const previewScale = Math.min(1, 420 / image.width, 320 / image.height);
   const element = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [url, setURL] = useState<string>();
@@ -99,7 +100,7 @@ export function ChatImage({ image: inputImage, load, onRemove, removing = false,
     }).catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; blob.current = undefined; if (objectURL) URL.revokeObjectURL(objectURL); setURL(undefined); setMenu(undefined); };
   }, [image.id, visible || open, attempt, load]);
-  return <div ref={element} className="chat-image" style={{ aspectRatio: `${image.width} / ${image.height}`, width: Math.min(420, image.width) }}>
+  return <div ref={element} className="chat-image" style={{ aspectRatio: `${image.width} / ${image.height}`, width: image.width * previewScale }}>
     {url ? <button type="button" className="chat-image-open" aria-label={t("Открыть изображение {0}", image.name)} onContextMenu={showMenu} onClick={() => setOpen(true)}><img src={url} width={image.width} height={image.height} alt={image.name} decoding="async"/></button>
       : failed ? <button type="button" className="image-retry" onClick={() => setAttempt(value => value + 1)}><Icon name="image"/>{t("Не удалось загрузить. Повторить")}</button>
       : <span className="image-placeholder"><Icon name="image"/>{visible ? t("Загружаем изображение…") : t("Изображение")}</span>}

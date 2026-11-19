@@ -50,7 +50,7 @@ test.desktop={onMembershipServerEvent:(listener:(event:any)=>void)=>{liveListene
  if(action==='upload.file'){test.mediaBytes=input.bytes;const id=(++attachmentSequence).toString(16).padStart(32,'0');attachmentBytes.set(id,input);return{value:{id,mime:input.mime}};}
  if(action==='file')return{value:attachmentBytes.get(input.attachmentId)?.bytes||test.mediaBytes};
  if(action==='image'&&attachmentBytes.has(input.attachmentId)){const record=attachmentBytes.get(input.attachmentId)!;return{value:'data:'+record.mime+';base64,'+btoa(String.fromCharCode(...record.bytes))};}
- if(action==='image'){const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#888';ctx.fillRect(0,0,320,180);return{value:canvas.toDataURL('image/png')};}
+ if(action==='image'){const canvas=document.createElement('canvas'),portrait=input.attachmentId==='9'.repeat(32);canvas.width=portrait?800:320;canvas.height=portrait?1200:180;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#888';ctx.fillRect(0,0,canvas.width,canvas.height);return{value:canvas.toDataURL('image/png')};}
  if(action==='memory.status')return{value:{low:!!test.lowMemory}};
  if(action==='upload'){if(test.holdUpload)await new Promise<void>(resolve=>{releaseUpload=resolve;});const id=(++attachmentSequence).toString(16).padStart(32,'0');attachmentBytes.set(id,input);return{value:{id,mime:input.mime}};}
  if(action==='poll.create'){
