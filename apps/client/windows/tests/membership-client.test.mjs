@@ -48,7 +48,7 @@ function fixture({ failKeySave = false, failPin = false, wrongBinding = false, w
     }
     if (path.endsWith('/session')) return wire.applied?reply({error:{code:'NOT_A_MEMBER'}},403):reply({ sessionToken: 'f'.repeat(43) });
     if(path==='/api/v2/leave'){if(wire.leaveError)return reply({error:{code:wire.leaveError}},409);wire.applied=true;if(wire.dropResponse)throw Object.assign(Error('lost response'),{code:'ECONNRESET'});return reply({ok:true});}
-    if (path.endsWith('/state')) {const identity=await client.identity();return reply({ serverId: sid, keyId, name:wire.name||'Test server',revision:1,controlRevision:1,self:{profileId:identity.profileId,deviceId:identity.deviceId,effectiveProfileId:identity.profileId,role:'admin',permissions:[]}, channels: [], members: malformedState?null:[], profiles: [],devices:[],voice:[],bindings:[] });}
+    if (path.endsWith('/state')) {const identity=await client.identity();return reply({ serverId: sid, keyId, capabilities:wire.capabilities, name:wire.name||'Test server',revision:1,controlRevision:1,self:{profileId:identity.profileId,deviceId:identity.deviceId,effectiveProfileId:identity.profileId,role:'admin',permissions:[]}, channels: [], members: malformedState?null:[], profiles: [],devices:[],voice:[],bindings:[] });}
     throw Error('Unexpected request ' + path);
   };
   const client = new MembershipClient({ credentials, fetcher, verify: async () => { if (failPin) throw Error('pin mismatch'); return pin; }, trust: async () => {}, allowLoopback: true });
@@ -158,3 +158,12 @@ test('authenticated server errors preserve bounded ban details for local present
  const client=new MembershipClient({credentials:{},fetcher:async()=>new Response(JSON.stringify({error:{code:'BANNED',details:{expiresAt:1234567890000,membershipState:'kicked',untrusted:'ignored'}}}),{status:403})});
  await assert.rejects(client.fetchJSON('https://example.test','/api/v2/state'),error=>error.code==='BANNED'&&error.details.expiresAt===1234567890000&&!('untrusted' in error.details));
 });
+
+ test('server restart refreshes feature gates from authenticated state',async()=>{
+ const f=fixture();await f.client.join(address,'Test','Device');
+ const connection=f.client.connections.get(sid);assert.ok(!connection.config.capabilities?.includes('checklists-v1'));
+ f.wire.capabilities=['checklists-v1','media-files-v1'];await f.client.state(sid);
+ assert.deepEqual(connection.config.capabilities,f.wire.capabilities);
+ f.wire.capabilities=[];await f.client.state(sid);assert.deepEqual(connection.config.capabilities,[]);
+ f.wire.capabilities=[123];await assert.rejects(f.client.state(sid),{code:'INVALID_API_RESPONSE'});
+ });

@@ -172,7 +172,7 @@ func (a *membershipAPI) deleteMessage(w http.ResponseWriter, r *http.Request) {
 }
 func (a *membershipAPI) putAttachment(w http.ResponseWriter, r *http.Request) {
 	var input memberInvitePackage
-	if _, err := decodeMemberJSON(w, r, 3*1024*1024, &input); err != nil {
+	if _, err := decodeMemberJSON(w, r, 70*1024*1024, &input); err != nil {
 		memberFail(w, err)
 		return
 	}

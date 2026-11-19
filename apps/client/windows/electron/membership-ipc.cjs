@@ -7,7 +7,7 @@ function fail(code) { throw Object.assign(Error(code), { code, local: true }); }
 function string(value, max = 14000) { if (typeof value !== 'string' || value.length > max) fail('INVALID_INPUT'); return value; }
 function id(value, size = 32) { if (typeof value !== 'string' || !new RegExp(`^[0-9a-f]{${size}}$`).test(value)) fail('INVALID_INPUT'); return value; }
 
-function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, getIdleSeconds = () => 0, getMemoryPressure=()=>{const os=require('node:os');return os.freemem()<Math.max(256*1024*1024,os.totalmem()*.05);}, getHost, stopHost, setVoiceEndpoint = () => {} }) {
+function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, getIdleSeconds = () => 0, getMemoryPressure=()=>{const os=require('node:os');return os.freemem()<Math.max(256*1024*1024,os.totalmem()*.05);}, getHost, stopHost, notificationAppearance=async()=>({}), setVoiceEndpoint = () => {} }) {
   const linkAlerts=new Set(),notified=new Map(),notificationBatches=new Map(),notificationReads=new Map(),shownNotifications=new Map();
   const notificationID=key=>createHash('sha256').update(key).digest('hex').slice(0,16);
   function closeNotification(key){const shown=shownNotifications.get(key);shownNotifications.delete(key);try{shown?.notification.close?.();}catch{}}
@@ -120,6 +120,12 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       if (!(input.bytes instanceof Uint8Array) || input.bytes.length > 2 * 1024 * 1024) fail('INVALID_IMAGE');
       return client.uploadImage(id(input.serverId), id(input.channelId), input.bytes, string(input.mime, 32));
     },
+    async 'gif.resolve'(input){return require('./gif-link.cjs').resolveGifCached(string(input.url,2048));},
+    async 'gif.load'(input){return require('./gif-link.cjs').loadGifMediaCached(string(input.url,2048));},
+    async 'checklist.state'(input){if(!Number.isSafeInteger(input.messageId)||input.messageId<1)fail('INVALID_INPUT');return client.request(id(input.serverId),'/api/v2/messages/'+input.messageId+'/checklist');},
+    async 'checklist.check'(input){if(!Number.isSafeInteger(input.messageId)||input.messageId<1||typeof input.checked!=='boolean')fail('INVALID_INPUT');return client.request(id(input.serverId),'/api/v2/messages/'+input.messageId+'/checklist','PUT',{item:id(input.item),checked:input.checked,requestId:id(input.requestId)});},
+    async 'upload.file'(input){if(!(input.bytes instanceof Uint8Array)||input.bytes.length>50*1024*1024)fail('INVALID_INPUT');return client.uploadFile(id(input.serverId),id(input.channelId),input.bytes,string(input.mime,32));},
+    async 'file'(input){return client.file(id(input.serverId),id(input.channelId),id(input.attachmentId));},
     async image(input) { return client.image(id(input.serverId), id(input.channelId), id(input.attachmentId), string(input.mime, 32)); },
     async profile(input) { return client.profile(id(input.serverId), string(input.nickname, 64), input.avatar, input.expectedRevision); },
     async invite(input) {
@@ -210,6 +216,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       if(last&&((notified.get(notificationKey)||0)>=last||(notificationReads.get(notificationKey)||0)>=last))return false;
       const channelName=string(input.channelName,128).replace(/[\u0000-\u001f\u007f-\u009f]/g,' ').trim();
       const author=string(input.authorName||t('Участник'),128).replace(/[\u0000-\u001f\u007f-\u009f]/g,' ').trim();
+      const avatar=input.authorAvatar===undefined?undefined:string(input.authorAvatar,12000);
       if(input.hasImage!==undefined&&typeof input.hasImage!=='boolean')fail('INVALID_INPUT');
       const text=messagePreview(string(input.text||'',4096),t('Спойлер'));
       if(input.batchCount!==undefined&&(!Number.isSafeInteger(input.batchCount)||input.batchCount<1||input.batchCount>1000000))fail('INVALID_INPUT');
@@ -219,20 +226,24 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       const existing=notificationBatches.get(notificationKey);
       if(existing&&last&&existing.last>=last)return false;
       const alertMention=!!input.mention||!!existing?.mention,alertAuthor=existing?.mention&&!input.mention?existing.author:author,alertPreview=existing?.mention&&!input.mention?existing.preview:preview;
+      const alertAvatar=existing?.mention&&!input.mention?existing.avatar:avatar;
       const first=existing?.first||Date.now(),count=(existing?.count||0)+(input.batchCount||1);
       const previewId=existing?.mention&&!input.mention?existing.previewId:input.messageId||last;
       if(existing)cancelNotificationBatch(notificationKey);
       if(!existing&&notificationBatches.size>=128)cancelNotificationBatch(notificationBatches.keys().next().value);
       return new Promise(resolve=>{
-        const batch={first,count,mention:alertMention,author:alertAuthor,preview:alertPreview,previewId,last,cancelled:false,resolve,timer:undefined};
+        const batch={first,count,mention:alertMention,author:alertAuthor,avatar:alertAvatar,preview:alertPreview,previewId,last,cancelled:false,resolve,timer:undefined};
         const eligible=()=>!stopped&&!batch.cancelled&&notificationBatches.get(notificationKey)===batch&&Date.now()-first<30000&&client.connections.has(serverId)&&!intentionalDepartures.has(serverId)&&!alreadyRead(notificationKey,batch)&&(!last||(notified.get(notificationKey)||0)<last)&&!(!alertMention&&getWindow()?.isFocused());
         batch.timer=setTimeout(()=>{void(async()=>{
           if(!eligible())return false;
           const record=(await client.registry()).find(record=>record.serverId===serverId);
           // Reading, focus or leaving can change while registry I/O is pending.
           if(!eligible())return false;
+          const title=`${record?.name||'PawTalk'} · #${channelName}`,body=(count>1?t('Новых сообщений: {0}',count)+' · ':'')+`${alertAuthor}: ${alertPreview}`;
+          const appearance=await notificationAppearance({avatar:alertAvatar,title,body}).catch(()=>({}));
+          if(!eligible())return false;
           if(last){notified.set(notificationKey,last);if(notified.size>2048)notified.delete(notified.keys().next().value);}
-          const notification=new Notification({id:notificationID(notificationKey),groupId:notificationID(serverId),silent:true,title:`${record?.name||'PawTalk'} · #${channelName}`,body:(count>1?t('Новых сообщений: {0}',count)+' · ':'')+`${alertAuthor}: ${alertPreview}`});
+          const notification=new Notification({id:notificationID(notificationKey),groupId:notificationID(serverId),silent:true,title,body,...appearance});
           closeNotification(notificationKey);if(shownNotifications.size>=128)closeNotification(shownNotifications.keys().next().value);
           shownNotifications.set(notificationKey,{notification,last,previewId});
           // Windows prepares toasts asynchronously after show() returns. A read

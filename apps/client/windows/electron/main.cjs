@@ -1,5 +1,7 @@
 const { t } = require('../../../../shared/i18n.cjs');
 const { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage, powerMonitor, globalShortcut, net, safeStorage, clipboard, dialog, shell, Notification } = require('electron');
+const { appId, windowIdentity } = require('./app-identity.cjs');
+if (process.platform === 'win32') app.setAppUserModelId(appId);
 const { MembershipClient } = require('./membership-client.cjs');
 const { MembershipLinks } = require('./membership-links.cjs');
 const memberFetch=require('./membership-transport.cjs').membershipTransport(session,(...args)=>net.fetch(...args));
@@ -71,7 +73,7 @@ function authorized(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Unauthorized IPC');
 }
 function registerIPC() {
-  membershipIPC=require('./membership-ipc.cjs').registerMembershipIPC({ipcMain,authorized,client:membershipClient,links:membershipLinks,getIdleSeconds:()=>powerMonitor.getSystemIdleTime(),clipboard,send,getWindow:()=>win,Notification,getHost:()=>hosting?.status(),stopHost:()=>hosting.stop(),setVoiceEndpoint:(address,pin)=>address?voiceSignal.open(address,pin):voiceSignal.close()});
+  membershipIPC=require('./membership-ipc.cjs').registerMembershipIPC({ipcMain,authorized,client:membershipClient,links:membershipLinks,getIdleSeconds:()=>powerMonitor.getSystemIdleTime(),clipboard,send,getWindow:()=>win,Notification,notificationAppearance:require('./notification-appearance.cjs').notificationAppearance({directory:path.join(app.getPath('userData'),'notification-avatars'),nativeImage}),getHost:()=>hosting?.status(),stopHost:()=>hosting.stop(),setVoiceEndpoint:(address,pin)=>address?voiceSignal.open(address,pin):voiceSignal.close()});
   ipcMain.handle('chat-text-copy', (event, text) => {
     authorized(event);
     if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > 12000) throw new Error('Invalid chat text');
@@ -255,13 +257,14 @@ else {
     membershipClient=new MembershipClient({credentials,fetcher:memberFetch,verify:address=>serverCertificate(address),trust:address=>trustInvitation(address),allowLoopback:!app.isPackaged});
     membershipLinks=new MembershipLinks(membershipClient);
     session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
-      callback(contents === win?.webContents && permission === 'media' && details.mediaTypes?.every(type => type === 'audio'));
+      callback(contents === win?.webContents && (permission === 'fullscreen' || permission === 'media' && details.mediaTypes?.every(type => type === 'audio')));
     });
-    session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) => contents === win?.webContents && permission === 'media' && details.mediaType === 'audio');
+    session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) => contents === win?.webContents && (permission === 'fullscreen' || permission === 'media' && details.mediaType === 'audio'));
     win = new BrowserWindow({ show: !process.argv.includes('--smoke') && !(process.argv.includes('--start-in-tray') && !pendingInvitation), width: 1240, height: 820, minWidth: 940, minHeight: 650, backgroundColor: '#191b22', title: 'PawTalk', icon: path.join(__dirname, '../assets/pawtalk.ico'),
       webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false, offscreen: process.argv.includes('--offscreen-smoke') },
     });
     win.removeMenu();
+    if (process.platform === 'win32' && app.isPackaged) win.setAppDetails(windowIdentity(app.getPath('exe')));
     for (const event of ['show', 'hide', 'minimize', 'restore', 'focus', 'blur']) win.on(event, () => send('window-active-changed', win.isVisible() && !win.isMinimized() && win.isFocused()));
     win.webContents.setWindowOpenHandler(externalLinkHandler(url => shell.openExternal(url)));
     win.webContents.on('will-navigate', event => event.preventDefault());

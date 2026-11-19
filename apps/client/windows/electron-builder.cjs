@@ -70,7 +70,6 @@ const config={
   },
   "extraMetadata": {
     "name": "pawtalk",
-    "version": "0.13.0",
     "main": "apps/client/windows/electron/main.cjs"
   }
 };

@@ -204,3 +204,19 @@ test('read IPC validates identity and cursor before effects and cannot be used b
 test('mention priority retains the complete batch read boundary',async()=>{
  const f=nativeAlerts();try{await f.notify(10,{lastMessageId:12,mention:true,text:'Mention',batchCount:3});assert.equal((await f.notify(12)).value,false,'whole delivered batch is deduplicated');await f.read(12);assert.equal(f.shown[0].closed,1);assert.equal((await f.notify(13,{mention:true})).value,true,'new mentions after reading still notify');}finally{f.service.stop();}
 });
+
+
+test('sender avatar follows mention priority and reads cancel asynchronous avatar preparation',async()=>{
+ const shown=[],avatars=[];class N{static isSupported(){return true;}constructor(options){shown.push(options);}on(){}show(){}}
+ let release,entered;const gate=new Promise(resolve=>release=resolve),start=new Promise(resolve=>entered=resolve);
+ const f=fixture({Notification:N,notificationAppearance:async input=>{avatars.push(input.avatar);entered();await gate;return{toastXml:'synthetic'};}});
+ const base={serverId,channelId,channelName:'General',authorName:'Friend',text:'Mention'};
+ try{
+  const first=f.call('notify',{...base,messageId:10,mention:true,authorAvatar:'mention avatar'});
+  const second=f.call('notify',{...base,messageId:11,authorAvatar:'ordinary avatar'});
+  await start;await f.call('notify.read',{serverId,channelId,messageId:11});release();
+  assert.equal((await first).value,false);assert.equal((await second).value,false);assert.deepEqual(avatars,['mention avatar']);assert.equal(shown.length,0);
+  assert.equal((await f.call('notify',{...base,messageId:12,authorAvatar:'new avatar'})).value,true);
+  assert.equal(shown.length,1);assert.equal(shown[0].toastXml,'synthetic');
+ }finally{release();f.service.stop();}
+});

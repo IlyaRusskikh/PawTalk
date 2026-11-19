@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { inspectImage, type ChatImage as Image } from './chatImages';
-import { Modal } from './Modal';
+import {VideoViewer} from './VideoViewer';
 import { Icon } from './Controls';
 import { t } from './i18n';
 
@@ -13,7 +13,7 @@ async function withImageSlot<T>(callback: () => Promise<T>) {
   try { return await callback(); }
   finally { const next = waiting.shift(); if (next) next(); else active--; }
 }
-export function ChatImage({ image: inputImage, load, onRemove, removing = false }: { image: Image; load(): Promise<Blob>; onRemove?(): void; removing?: boolean }) {
+export function ChatImage({ image: inputImage, load, onRemove, removing = false,credits }: { image: Image; load(): Promise<Blob>; onRemove?(): void; removing?: boolean;credits?:{author?:string;avatar?:string;date?:number} }) {
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>();
   const image = { ...inputImage, ...dimensions };
   const element = useRef<HTMLDivElement>(null);
@@ -105,7 +105,7 @@ export function ChatImage({ image: inputImage, load, onRemove, removing = false 
       : <span className="image-placeholder"><Icon name="image"/>{visible ? t("Загружаем изображение…") : t("Изображение")}</span>}
     {onRemove && <button type="button" className="chat-image-remove" title={t('Удалить вложение')} aria-label={t('Удалить вложение')} disabled={removing} onClick={onRemove}><Icon name="trash" size={18}/></button>}
     {actionStatus && !open && <span className="image-action-toast" role="status">{actionStatus}</span>}
-    {open && url && <Modal title={image.name || t("Изображение")} className="image-viewer" onClose={() => setOpen(false)}>
+    {open && url && <VideoViewer items={[{id:image.id,name:image.name,image:true,load:async()=>url}]} {...credits} onClose={() => setOpen(false)} photoContent={<>
       <div className="image-stage" ref={stage} data-zoomed={zoom > 1 || undefined} onContextMenu={showMenu} onDoubleClick={() => changeZoom(zoom > 1 ? 1 : 2)} onPointerDown={event => {
         if (event.button !== 0 || zoom <= 1) return;
         event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { x: event.clientX, y: event.clientY, left: offset.x, top: offset.y };
@@ -121,7 +121,7 @@ export function ChatImage({ image: inputImage, load, onRemove, removing = false 
         <button type="button" className="icon-button" aria-label={t("Копировать изображение")} disabled={working} onClick={() => void imageAction('copy')}><Icon name="copy"/></button>
         <span className="image-action-status" role="status">{actionStatus}</span>
       </div>
-    </Modal>}
+    </>}/> }
     {menu && createPortal(<div ref={menuElement} className="chat-image-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={event => event.stopPropagation()}>
       <button type="button" role="menuitem" autoFocus disabled={working} onClick={() => void imageAction('save')}><Icon name="download" size={17}/>{t("Сохранить изображение")}</button>
       <button type="button" role="menuitem" disabled={working} onClick={() => void imageAction('copy')}><Icon name="copy" size={17}/>{t("Копировать изображение")}</button>

@@ -28,6 +28,13 @@ async function test(window) {
   async function until(code, label) { for (let count = 0; count < 160; count++) { if (await run(code)) return; await wait(100); } throw Error(label + ': ' + await run('document.body.innerText.slice(-2200)')); }
   const set = (selector, value) => run(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('missing input');Object.getOwnPropertyDescriptor(e instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   await until("!!document.querySelector('.home-screen')", 'home');
+  window.hide();
+  const secondEnv={...process.env};delete secondEnv.ELECTRON_RUN_AS_NODE;
+  const second=require('node:child_process').spawn(process.execPath,[path.join(__dirname,'second-instance-native.cjs'),'--smoke'],{env:secondEnv,windowsHide:true,stdio:'ignore'});
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{second.kill();reject(Error('second instance did not exit'));},10000);second.once('error',error=>{clearTimeout(timer);reject(error);});second.once('exit',code=>{clearTimeout(timer);if(code===0)resolve();else reject(Error('second instance exit '+code));});});
+  assert.equal(window.isVisible(),true,'manual relaunch restores the existing hidden window');
+  assert.equal(require('electron').BrowserWindow.getAllWindows().length,1,'manual relaunch does not create another window');window.hide();
+  console.log('PASS actual second Electron process exits and restores the original hidden Client window');
   if(await run("!!document.querySelector('.onboarding-progress')")){
     assert.equal(await run("getComputedStyle(document.querySelector('dialog .form-fields')).gap"),'20px');
     await set('dialog input[maxlength="32"]','QA first run');
@@ -118,6 +125,8 @@ async function test(window) {
   await run("document.querySelector('.member-composer').requestSubmit()");
   await until("!!document.querySelector('.chat-image-open')",'encrypted image lazy load');
   await run("document.querySelector('.chat-image-open').click()");await until("!!document.querySelector('dialog.image-viewer')",'image viewer');
+  assert.ok(await run("(()=>{const toolbar=document.querySelector('.image-toolbar').getBoundingClientRect(),viewer=document.querySelector('.photo-viewer').getBoundingClientRect();return viewer.bottom-toolbar.bottom<20})()"),'photo tools share a single compact bottom row');
+  assert.ok(await run("(()=>{const b=document.querySelector('.image-toolbar button[aria-label=\"Сохранить изображение\"]'),r=b.getBoundingClientRect();return b.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))})()"),'photo toolbar is not covered by the fullscreen footer');
   const savedImage=path.join(process.env.PAWTALK_APP_TEST_DIR,'synthetic-saved.png');dialog.showSaveDialog=async()=>({canceled:false,filePath:savedImage});
   await run("document.querySelector('.image-toolbar [aria-label=\"Сохранить изображение\"]').click()");
   await until("document.querySelector('.image-action-status')?.innerText.includes('сохранено')",'native image save');
@@ -166,6 +175,38 @@ async function test(window) {
   await until("document.querySelector('.member-history').innerText.includes('Large live body')",'large encrypted envelope delivered');
   assert.equal(memberReads.slice(beforeLarge).filter(p=>p.includes('/messages?')).length,0,'large payload crosses the pinned WS bridge without HTTP');
   console.log('PASS peer create/edit/delete, concurrent burst and large encrypted payload: zero receiver history HTTP');
+  await new Promise(resolve=>setTimeout(resolve,1100)); // The preceding burst deliberately fills the message rate window.
+  const checklistItem='c'.repeat(32),checklistMessage=await guest.send(fixture.serverId,liveChannel,{text:'WS checklist QA',checklist:{everyone:true,items:[{id:checklistItem,text:'Peer checked item'}]}});
+  await until("!!document.querySelector('.chat-checklist input')&&!document.querySelector('.chat-checklist input').disabled",'peer checklist initial snapshot');
+  const beforeCheck=memberReads.length,checkedAt=Date.now();
+  await guest.request(fixture.serverId,'/api/v2/messages/'+checklistMessage.id+'/checklist','PUT',{item:checklistItem,checked:true,requestId:'d'.repeat(32)});
+  await until("document.querySelector('.chat-checklist input').checked",'peer checklist pushed over WS');
+  assert.equal(memberReads.slice(beforeCheck).filter(p=>p.includes('/checklist')||p.includes('/messages?')).length,0,'checklist push needs zero state/history HTTP requests');
+  console.log('PASS peer checklist WebSocket update: '+(Date.now()-checkedAt)+' ms, zero receiver HTTP');
+  await guest.request(fixture.serverId,'/api/v2/messages/'+checklistMessage.id,'DELETE',{requestId:'e'.repeat(32)});
+  await until("!document.querySelector('.chat-checklist')",'checklist deletion delivered');
+  const posterURI=await run("(()=>{const c=document.createElement('canvas');c.width=32;c.height=18;const ctx=c.getContext('2d');ctx.fillStyle='green';ctx.fillRect(0,0,32,18);return c.toDataURL('image/png')})()");
+  const posterBytes=Buffer.from(posterURI.split(',')[1],'base64'),videoBytes=Uint8Array.from([0x1a,0x45,0xdf,0xa3,1,2,3,4]),gallery=[];
+  for(let i=0;i<2;i++){
+    const video=await guest.uploadFile(fixture.serverId,liveChannel,videoBytes,'video/webm'),poster=await guest.uploadImage(fixture.serverId,liveChannel,posterBytes,'image/png');
+    gallery.push({...video,poster,name:'Synthetic gallery '+i+'.webm',size:videoBytes.length});
+  }
+  const beforeGallery=memberReads.length;
+  const galleryMessage=await guest.send(fixture.serverId,liveChannel,{text:'Encrypted gallery QA',files:gallery});
+  await until("document.querySelectorAll('.chat-video-card .video-poster img').length===2&&[...document.querySelectorAll('.chat-video-card .video-poster img')].every(i=>i.naturalWidth===32)",'peer decrypts both saved video posters');
+  assert.equal(memberReads.slice(beforeGallery).filter(p=>p.includes('/messages?')).length,0,'gallery arrives via WS without fetching chat history');
+  assert.deepEqual(new Uint8Array(await guest.file(fixture.serverId,liveChannel,gallery[0].id)),videoBytes,'original video bytes survive encryption and upload');
+  await run("document.querySelector('.chat-video-open').click()");
+  await until("!!document.querySelector('.video-viewer')",'main-process video viewer');
+  await run("document.querySelector('.video-viewer-footer > button:last-child').click()");
+  await until("document.fullscreenElement?.classList.contains('video-viewer')",'main-process permission allows custom viewer fullscreen');
+  assert.equal(window.isFullScreen(),true,'actual app window enters native fullscreen');
+  await run("document.exitFullscreen()");
+  await run("document.querySelector('.video-viewer-header button').click()");
+  await until("!document.querySelector('.video-dialog')",'viewer closes after native fullscreen');
+  console.log('PASS encrypted gallery over actual TLS/WS: two saved posters decoded by receiver, original video bytes preserved');
+  await guest.request(fixture.serverId,'/api/v2/messages/'+galleryMessage.id,'DELETE',{requestId:'a'.repeat(32)});
+  await until("!document.querySelector('.chat-video-card')",'gallery deletion delivered');
   const readGeneral=(await guest.state(fixture.serverId)).channels.find(c=>c.id===liveChannel).lastMessageId;
   await run(`localStorage.setItem(${JSON.stringify('pawtalk.v2.read.'+fixture.serverId+'.'+liveChannel)},${JSON.stringify(String(readGeneral))})`);
   await new Promise(resolve=>setTimeout(resolve,1100));

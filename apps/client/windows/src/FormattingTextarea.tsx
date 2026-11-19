@@ -1,7 +1,13 @@
+import {Icon} from './Controls';
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ComponentPropsWithRef } from 'react';
 import { createPortal } from 'react-dom';
 import { t } from './i18n';
 
+const mdFormats = [
+ {label:'Заголовок 1',mark:'#',glyph:'H1'}, {label:'Заголовок 2',mark:'##',glyph:'H2'}, {label:'Заголовок 3',mark:'###',glyph:'H3'},
+ {label:'Маркированный список',mark:'-',glyph:'•'}, {label:'Нумерованный список',mark:'1.',glyph:'1.'},
+ {label:'Горизонтальная линия',mark:'---',glyph:'―'}, {label:'Блок кода',mark:'block',glyph:'{}'},
+];
 const formats = [
   { label: 'Жирный', mark: '**', glyph: <b>B</b> },
   { label: 'Курсив', mark: '*', glyph: <i>I</i> },
@@ -37,6 +43,7 @@ export function FormattingTextarea({ ref, onEscape, ...props }: ComponentPropsWi
   const toolbar = useRef<HTMLDivElement>(null);
   const restore = useRef<{ start: number; end: number } | undefined>(undefined);
   const selecting = useRef<number | undefined>(undefined);
+  const [md,setMd]=useState(false),[section,setSection]=useState('');
   const [position, setPosition] = useState<{ x: number; y: number }>();
   useImperativeHandle(ref, () => input.current!, []);
 
@@ -110,7 +117,7 @@ export function FormattingTextarea({ ref, onEscape, ...props }: ComponentPropsWi
     const fieldTop = input.current?.getBoundingClientRect().top ?? position.y;
     const above = Math.min(position.y, fieldTop) - rect.height - 8;
     bar.style.top = `${above >= 8 ? above : Math.min(window.innerHeight - rect.height - 8, (input.current?.getBoundingClientRect().bottom ?? position.y) + 8)}px`;
-  }, [position]);
+  }, [position, md, section]);
 
   function apply(mark: string) {
     const field = input.current;
@@ -119,7 +126,13 @@ export function FormattingTextarea({ ref, onEscape, ...props }: ComponentPropsWi
     if (start === end) return;
     const text = field.value;
     let replacement: string, selectedStart: number, selectedEnd: number;
-    if (mark === '>') {
+    if (mdFormats.some(format=>format.mark===mark)) {
+      start = start === 0 ? 0 : text.lastIndexOf('\n', start - 1) + 1;
+      const selected=text.slice(start,end);
+      const body=mark==='---'?selected+'\n\n---':mark==='block'?'```\n'+selected+'\n```':selected.split('\n').map((line,i)=>(mark==='1.'?(i+1)+'.':mark)+' '+line).join('\n');
+      replacement=(start>0&&text[start-1]!=='\n'?'\n':'')+body+(end<text.length&&text[end]!=='\n'?'\n':'');
+      selectedStart=start;selectedEnd=start+replacement.length;
+    } else if (mark === '>') {
       start = start === 0 ? 0 : text.lastIndexOf('\n', start - 1) + 1;
       const selected = text.slice(start, end);
       const quoted = selected.split('\n').every(line => line.startsWith('> '));
@@ -143,7 +156,14 @@ export function FormattingTextarea({ ref, onEscape, ...props }: ComponentPropsWi
     if (!document.execCommand('insertText', false, replacement)) restore.current = undefined;
   }
 
-  return <><textarea {...props} ref={input}/>{position && createPortal(<div ref={toolbar} className="chat-format-toolbar" role="toolbar" aria-label={t('Форматирование текста')} onPointerDown={event => event.preventDefault()}>
+  function choose(mark:string){apply(mark);setMd(false);setSection('');}
+  return <><textarea {...props} ref={input}/>{position && createPortal(<div ref={toolbar} className="chat-format-toolbar" data-submenu-side={position.x<300?'right':'left'} data-menu-below={position.y<300} role="toolbar" aria-label={t('Форматирование текста')} onPointerDown={event => {if(!(event.target instanceof HTMLInputElement))event.preventDefault();}}>
     {formats.map(format => <button key={format.mark} type="button" aria-label={t(format.label)} title={t(format.label)} onClick={() => apply(format.mark)}>{format.glyph}</button>)}
+    <div className="chat-md-control" onMouseEnter={()=>setMd(true)} onMouseLeave={()=>{setMd(false);setSection('');}}><button type="button" aria-pressed={md} aria-haspopup="menu" aria-expanded={md} title={t('MD форматирование')} onFocus={()=>setMd(true)} onClick={()=>setMd(true)}>MD</button>{md&&<div className="chat-md-menu" role="menu" aria-label={t('MD форматирование')}>
+      <div className="chat-md-group" onMouseEnter={()=>setSection('headings')}><button type="button" role="menuitem" title={t('Заголовки')} aria-label={t('Заголовки')} aria-haspopup="menu" aria-expanded={section==='headings'} onFocus={()=>setSection('headings')}><Icon name="heading" size={20}/></button>{section==='headings'&&<div className="chat-md-submenu" role="menu">{mdFormats.slice(0,3).map((f,i)=><button type="button" role="menuitem" key={f.mark} title={t(f.label)} aria-label={t(f.label)} onClick={()=>choose(f.mark)}><Icon name={('heading'+(i+1))} size={22}/></button>)}</div>}</div>
+      <div className="chat-md-group" onMouseEnter={()=>setSection('lists')}><button type="button" role="menuitem" title={t('Списки')} aria-label={t('Списки')} aria-haspopup="menu" aria-expanded={section==='lists'} onFocus={()=>setSection('lists')}><Icon name="list" size={20}/></button>{section==='lists'&&<div className="chat-md-submenu" role="menu">{mdFormats.slice(3,5).map((f,i)=><button type="button" role="menuitem" key={f.mark} title={t(f.label)} aria-label={t(f.label)} onClick={()=>choose(f.mark)}><Icon name={i?'list-numbered':'list'} size={20}/></button>)}</div>}</div>
+      <button type="button" role="menuitem" title={t('Горизонтальная линия')} aria-label={t('Горизонтальная линия')} onMouseEnter={()=>setSection('')} onClick={()=>choose('---')}><Icon name="rule" size={20}/></button>
+      <button type="button" role="menuitem" title={t('Блок кода')} aria-label={t('Блок кода')} onMouseEnter={()=>setSection('')} onClick={()=>choose('block')}><Icon name="code-block" size={20}/></button>
+    </div>}</div>
   </div>, input.current?.closest('dialog') ?? document.body)}</>;
 }

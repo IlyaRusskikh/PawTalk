@@ -71,7 +71,7 @@ try {
     assert.ok(sound.seconds > .3 && sound.seconds < 4);
   }
   const until=async(expression,label)=>{for(let i=0;i<300;i++){if(await evaluate(expression))return;await new Promise(resolve=>setTimeout(resolve,100));}throw Error(label);};
-  await until("!!document.querySelector('.member-welcome')",'packaged home');
+  await until("!!document.querySelector('.home-screen')",'packaged home');
   await evaluate("document.querySelector('.onboarding-actions .quiet')?.click()");
   await until("!document.querySelector('.onboarding-modal')",'setup dismissed');
   assert.equal(await evaluate('window.desktop.pendingInvitation()'),invite);

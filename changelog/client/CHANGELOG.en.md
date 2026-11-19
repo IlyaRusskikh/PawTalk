@@ -4,6 +4,10 @@
 
 Client releases and early combined Voicecord/PawTalk tags.
 
+## Release source: client-v0.14.0
+
+[Release details](../../releases/client-v0.14.0.en.md)
+
 ## Release source: client-v0.13.0
 
 Changes are described in the bilingual release source; public availability is determined by GitHub Releases.

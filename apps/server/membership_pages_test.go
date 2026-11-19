@@ -86,7 +86,7 @@ func TestMembershipAttachmentOwnershipPaginationAndCascade(t *testing.T) {
 	if _, _, err = s.attachment(ctx, other.Token, channel, attachment); err == nil {
 		t.Fatal("deleted message retained readable image")
 	}
-	for index := 0; index < 3; index++ {
+	for index := 0; index < 20; index++ {
 		if err = s.putAttachment(ctx, owner.Token, channel, fmt.Sprintf("%032x", index+300), packet); err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +94,7 @@ func TestMembershipAttachmentOwnershipPaginationAndCascade(t *testing.T) {
 	if err = s.putAttachment(ctx, owner.Token, channel, strings.Repeat("f", 32), packet); err == nil {
 		t.Fatal("pending upload limit bypassed")
 	}
-	clock = clock.Add(601 * time.Second)
+	clock = clock.Add(1801 * time.Second)
 	if err = s.putAttachment(ctx, owner.Token, channel, strings.Repeat("f", 32), packet); err != nil {
 		t.Fatal("expired uploads blocked quota", err)
 	}

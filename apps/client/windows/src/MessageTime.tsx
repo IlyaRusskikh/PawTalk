@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { t, useLanguage } from './i18n';
 
-export function MessageTime({ sent }: { sent: number }) {
+export function MessageTime({ sent, compact = false }: { sent: number; compact?: boolean }) {
   const language = useLanguage();
   const locale = language === 'en' ? 'en-US' : 'ru-RU';
   const id = useId();
@@ -23,7 +23,7 @@ export function MessageTime({ sent }: { sent: number }) {
     onMouseEnter={event => open(event.currentTarget)} onMouseLeave={() => setPosition(undefined)}
     onFocus={event => open(event.currentTarget)} onBlur={() => setPosition(undefined)}
     onKeyDown={event => { if (event.key === 'Escape') setPosition(undefined); }}>
-    {label}
+    {compact ? time : label}
     {position && createPortal(<span id={id} className={`chat-date-tip${position.below ? ' below' : ''}`} style={{ left: position.left, top: position.top }} role="tooltip">
       {new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(sent)}<br/>{time}
     </span>, document.body)}

@@ -128,3 +128,26 @@ dialog.poll-dialog[open]{width:min(500px,calc(100vw - 32px));max-height:calc(100
 .chat-message-pending .member-message-text,.chat-message-pending .member-message-text *,.chat-message-pending .member-reply{color:var(--muted)}
 .chat-message-pending .chat-pending-image{filter:grayscale(1);opacity:.6}
 .chat-history-edge{height:1px;pointer-events:none}.chat-history-loading{position:absolute;top:8px;left:50%;transform:translateX(-50%);padding:5px 10px;border-radius:var(--ui-radius);background:var(--surface);color:var(--muted);font-size:11px;pointer-events:none;z-index:3}
+
+.chat-continuation-time { opacity:0; }
+.chat-message-row:hover .chat-continuation-time,.chat-message-row:focus-within .chat-continuation-time { opacity:1; }
+.member-history.chat-stream { scrollbar-color:transparent transparent; }
+.member-history.chat-stream::-webkit-scrollbar-thumb { background:transparent; }
+.member-history.chat-stream.is-scrolling { scrollbar-color:var(--muted) transparent; }
+.member-history.chat-stream.is-scrolling::-webkit-scrollbar-thumb { background:var(--muted); }
+.chat-markdown-item[data-marker] { padding-left:28px; }
+.chat-markdown-item[data-marker]::before { content:attr(data-marker); margin-left:-28px; display:inline-block; min-width:20px; }
+.chat-markdown-table-wrap { display:block; max-width:100%; overflow-x:auto; }
+.chat-markdown-table-wrap table { border-collapse:collapse; white-space:normal; margin:8px 0; }
+.chat-markdown-table-wrap td { border:1px solid var(--line); padding:5px 10px; }
+.chat-markdown-table-wrap tr:first-child { font-weight:bold; background:var(--raised); }
+.member-composer.chat-composer .chat-input-shell { position:relative; }
+.chat-preview-toggle { position:absolute; right:8px; bottom:8px; z-index:2; }
+.member-composer.chat-composer .chat-input-shell textarea { padding-right:44px; }
+.chat-compose-preview { padding:12px 44px 12px 14px; border-bottom:1px solid var(--line); max-height:280px; overflow:auto; }
+
+.chat-file { display:grid; gap:8px; margin-top:8px; } .chat-file video { max-width:min(100%,480px); max-height:360px; }
+
+.chat-checklist { display:grid; gap:10px; padding:12px; border:1px solid var(--line); border-radius:var(--ui-radius); max-width:480px; } .chat-checklist label,.checklist-editor-row { display:flex; align-items:center; gap:10px; } .checklist-editor-row input { flex:1; min-width:0; }
+
+.chat-gif-preview { padding:0; background:transparent; justify-self:start; } .chat-gif-full { display:block; max-width:100%; max-height:70vh; margin:auto; object-fit:contain; }

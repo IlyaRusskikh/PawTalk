@@ -20,13 +20,20 @@ import (
 
 // Legacy routes carry metadata; the opt-in route also carries committed encrypted
 // message deltas. Plaintext and root keys remain exclusively in clients.
+type memberChecklistUpdate struct {
+	MessageID int64           `json:"messageId"`
+	Revision  int64           `json:"revision"`
+	Checked   map[string]bool `json:"checked"`
+}
+
 type memberEvent struct {
-	PollIDs        []string        `json:"pollIds,omitempty"`
-	Delivery       bool            `json:"delivery,omitempty"`
-	Previous       int64           `json:"previous"`
-	First          int64           `json:"first"`
-	Messages       []memberMessage `json:"messages"`
-	Deleted        []memberDeleted `json:"deleted,omitempty"`
+	Checklists     []memberChecklistUpdate `json:"checklists,omitempty"`
+	PollIDs        []string                `json:"pollIds,omitempty"`
+	Delivery       bool                    `json:"delivery,omitempty"`
+	Previous       int64                   `json:"previous"`
+	First          int64                   `json:"first"`
+	Messages       []memberMessage         `json:"messages"`
+	Deleted        []memberDeleted         `json:"deleted,omitempty"`
 	wire           []byte
 	metadata       []byte
 	metadataRescan []byte
@@ -88,6 +95,7 @@ func (e *chatEvents) publish(event memberEvent) {
 	meta.Delivery = false
 	meta.Previous = 0
 	meta.Messages = nil
+	meta.Checklists = nil
 	meta.Deleted = nil
 	event.metadata, _ = json.Marshal(meta)
 	meta.Rescan = true

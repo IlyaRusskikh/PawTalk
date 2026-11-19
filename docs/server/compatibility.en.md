@@ -29,3 +29,9 @@ the new Server. This source combination does not change the published catalog.
 The source retains API/data schema 2 and adds optional activity-v1, attachment-removal-v1, link-cancel-v1, server-avatar-v1, polls-v1, system-poll-results-v1, chat-events-v1, server-events-v1 and message-events-v1. Upgrade Server first. Without capabilities, basic chat/voice remain available; avatar/poll creation is hidden and unsupported attachment removal/link cancellation asks for a Server update. Older Clients ignore extra state fields and display a poll as question text without voting controls. Notification mutes and the jump button are local Client features. Active chats use an authenticated WebSocket when chat-events-v1 is advertised; older Servers keep polling. Manager API and release contracts are unchanged.
 
 Existing API 2 databases gain additive tables without rewriting identities or legacy tables; this is not API 1 migration. See [implementation contracts](../../architecture/chat-features.en.md).
+
+media-files-v1 enables encrypted attachments up to 50 MB; older API 2 Servers retain 2 MB. checklists-v1 gates checklist creation/editing/checking. Older Clients render checklist titles and ignore the additional encrypted fields; file-only messages have no media viewer there. Upgrade Server before Client to enable all features. Manager contracts are unchanged.
+
+The optional checklist-events-v1 capability pushes versioned check snapshots through the existing message WebSocket. Client polling remains a fallback on older Servers.
+
+`media-gallery-v1`: up to ten encrypted file entries and their saved video posters, with at most twenty unique attachment IDs per message. New Clients gate gallery sends on this capability; older single-file messages remain supported. Older Clients need an update to display galleries. No API/data version or Manager migration is required.

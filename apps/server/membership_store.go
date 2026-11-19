@@ -80,6 +80,10 @@ func openMembershipDatabase(path string, now func() time.Time) (*membershipStore
 		db.Close()
 		return nil, err
 	}
+	if err = s.expandAttachmentStorage(); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if _, err = s.db.Exec(membershipFeaturesSchema); err != nil {
 		db.Close()
 		return nil, err
@@ -169,4 +173,34 @@ func prepareMembershipPath(path string) error {
 		return err
 	}
 	return file.Close()
+}
+
+// Rebuild only the bounded attachment table, retaining bytes and ownership triggers.
+func (s *membershipStore) expandAttachmentStorage() error {
+	var ddl string
+	if err := s.db.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments'").Scan(&ddl); err != nil {
+		return err
+	}
+	if !strings.Contains(ddl, "2097168") {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	expanded := strings.Replace(ddl, "2097168", "52428816", 1)
+	expanded = strings.Replace(expanded, "CREATE TABLE attachments", "CREATE TABLE attachments_expanded", 1)
+	if _, err = tx.Exec(expanded); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("INSERT INTO attachments_expanded SELECT * FROM attachments; DROP TABLE attachments; ALTER TABLE attachments_expanded RENAME TO attachments;"); err != nil {
+		return err
+	}
+	start := strings.Index(membershipSchema, "CREATE INDEX pending_attachments")
+	end := strings.Index(membershipSchema[start:], "CREATE TABLE invites") + start
+	if _, err = tx.Exec(membershipSchema[start:end]); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

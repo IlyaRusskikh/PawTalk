@@ -41,6 +41,7 @@ class MembershipLive {
      }catch(error){socket.close(1002);return;}
      if(event.pollIds!==undefined&&(!Array.isArray(event.pollIds)||event.pollIds.length>32||event.pollIds.some(p=>!id(p))))throw Error('Invalid poll update');
 
+     if(event.checklists!==undefined){if(!Array.isArray(event.checklists)||event.checklists.length>32)throw Error('Invalid checklist update');for(const item of event.checklists){if(!item||!Number.isSafeInteger(item.messageId)||item.messageId<1||!Number.isSafeInteger(item.revision)||item.revision<0||!item.checked||typeof item.checked!=='object'||Array.isArray(item.checked)||Object.keys(item.checked).length>100||Object.entries(item.checked).some(([key,value])=>!id(key)||typeof value!=='boolean'))throw Error('Invalid checklist update');}}
      if(event.delivery){
       if(!payloads||!Number.isSafeInteger(event.previous)||event.previous<0||event.previous>=event.revision||!Number.isSafeInteger(event.first)||event.first<0||!Array.isArray(event.messages)||event.messages.length>32||!Array.isArray(event.deleted||[])||(event.deleted||[]).length>32)throw Error('Invalid delivery');
       for(const d of event.deleted||[])if(!Number.isSafeInteger(d.id)||d.id<1||! /^[a-f0-9]{64}$/.test(d.authorProfileId)||!['',undefined,'poll-result'].includes(d.systemKind))throw Error('Invalid removal');

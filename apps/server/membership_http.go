@@ -66,6 +66,8 @@ func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
 	mux.HandleFunc("GET /api/v2/channels/{id}/events", api.chatEvents)
 	mux.HandleFunc("GET /api/v2/channels/{id}/messages", api.messages)
 	mux.HandleFunc("POST /api/v2/channels/{id}/messages", api.postMessage)
+	mux.HandleFunc("GET /api/v2/messages/{id}/checklist", api.checklist)
+	mux.HandleFunc("PUT /api/v2/messages/{id}/checklist", api.checklist)
 	mux.HandleFunc("PATCH /api/v2/messages/{id}", api.editMessage)
 	mux.HandleFunc("DELETE /api/v2/messages/{id}", api.deleteMessage)
 	mux.HandleFunc("POST /api/v2/channels/{id}/attachments/{attachment}", api.putAttachment)

@@ -139,6 +139,16 @@ func (s *membershipStore) commitDelivery(ctx context.Context, tx *sql.Tx) error 
 				return err
 			}
 			event.Messages = append(event.Messages, v)
+			var raw string
+			if err := tx.QueryRowContext(ctx, "SELECT checked FROM checklists WHERE message_id=?", id).Scan(&raw); err == nil {
+				checked := map[string]bool{}
+				if err = json.Unmarshal([]byte(raw), &checked); err != nil {
+					return err
+				}
+				event.Checklists = append(event.Checklists, memberChecklistUpdate{MessageID: id, Revision: event.Revision, Checked: checked})
+			} else if err != sql.ErrNoRows {
+				return err
+			}
 		}
 		sort.Slice(event.Messages, func(i, j int) bool { return event.Messages[i].ID < event.Messages[j].ID })
 		event.Rescan = len(event.Deleted) > 0

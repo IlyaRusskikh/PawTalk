@@ -232,7 +232,7 @@ CREATE TABLE attachments (
     owner_device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE RESTRICT,
     crypto_context_id TEXT NOT NULL CHECK(length(crypto_context_id)=64),
     nonce BLOB NOT NULL CHECK(length(nonce)=12),
-    ciphertext BLOB NOT NULL CHECK(length(ciphertext) BETWEEN 17 AND 2097168),
+    ciphertext BLOB NOT NULL CHECK(length(ciphertext) BETWEEN 17 AND 52428816),
     created_at INTEGER NOT NULL
 ) STRICT;
 CREATE INDEX pending_attachments ON attachments(owner_device_id,created_at) WHERE message_id IS NULL;

@@ -4,6 +4,10 @@
 
 Server-specific tags and early combined Voicecord/PawTalk history. Early tags do not imply an independently published Server installer.
 
+## Release source: server-v0.13.0
+
+[Release details](../../releases/server-v0.13.0.en.md)
+
 ## Release source: server-v0.12.0
 
 Changes are described in the bilingual release source; public availability is determined by GitHub Releases.

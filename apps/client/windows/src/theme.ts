@@ -47,6 +47,8 @@ export function applyTheme(theme: Theme) {
   for (const [variable, key] of [['--accent', 'accent'], ['--app-bg', 'background'], ['--surface', 'surface'], ['--panel', 'surface'], ['--sidebar-bg', 'sidebar'], ['--chat-bg', 'chat'], ['--text', 'text'], ['--muted', 'muted'], ['--line', 'border'], ['--success', 'success'], ['--warning', 'warning'], ['--danger', 'danger'], ['--on-accent', 'onAccent'], ['--shadow', 'shadow']] as const) style.setProperty(variable, theme[key]);
   const light = luminance(theme.background) > .35;
   style.setProperty('--shade', theme.text);
+  style.setProperty('--media-control-ink', '#ffffff');
+  style.setProperty('--media-backdrop', '#000000');
   style.setProperty('--ui-radius', theme.radius + 'px');
   style.setProperty('--ui-font-size', theme.fontSize + 'px');
   style.setProperty('--message-spacing', theme.messageSpacing + 'px');

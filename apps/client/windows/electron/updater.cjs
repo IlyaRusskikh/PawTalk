@@ -6,7 +6,8 @@ const { labels, helperLaunch, waitForHelper } = require('./update-progress.cjs')
 
 const REPOSITORY = 'IlyaRusskikh/PawTalk';
 const { verifyManifest, UpdateSecurityError } = require('./update-manifest.cjs');
-const { metadata, download } = require('./update-transport.cjs');
+const { metadata } = require('./update-transport.cjs');
+const { downloadFastest } = require('./update-race.cjs');
 const MAX_SIZE = 1024 * 1024 * 1024;
 const { parseTag } = require('../../../../shared/release.cjs');
 function version(value) {
@@ -136,19 +137,9 @@ class Updater {
       catch { throw new UpdateSecurityError(this.release.metadataSource); }
       this.set({ status: 'downloading', version: next, prerelease, progress: 0 });
       await fs.mkdir(this.directory, { recursive: true });
-      let downloaded = false;
-      for await (const source of this.sources()) {
-        try {
-          this.set({ status: 'downloading', version: next, prerelease, progress: 0, source: source?.name || 'GitHub' });
-          await download({ fetcher: this.fetchFor(source), source, manifest, tag: this.release.tag, partial, policy: this.downloadPolicy,
-            onProgress: progress => this.set({ status: 'downloading', version: next, prerelease, progress, source: source?.name || 'GitHub' }) });
-          downloaded = true; break;
-        } catch (error) {
-          await fs.rm(partial, { force: true });
-          if (error.code === 'UPDATE_SECURITY' || ['ENOSPC', 'EACCES', 'EPERM'].includes(error.code)) throw error;
-        }
-      }
-      if (!downloaded) throw Error('No update source available');
+      await downloadFastest({ fetchFor: source => this.fetchFor(source), rooms: this.rooms().slice(0, 50),
+        manifest, tag: this.release.tag, partial, policy: this.downloadPolicy,
+        onProgress: (progress, source) => this.set({ status: 'downloading', version: next, prerelease, progress, source }) });
       await fs.rename(partial, installer);
       const helper = path.join(this.directory, 'install-update.ps1');
       await fs.copyFile(this.script, helper);

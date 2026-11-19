@@ -21,7 +21,8 @@ This is a difference in product approach, **not** a claim that one application i
 
 - Make a temporary server or join a permanent one; joining does not turn on your microphone or enter voice automatically.
 - Create voice and text channels, invite members, use administrator/moderator permissions.
-- Send formatted messages and images, reply to messages, link devices within a server.
+- Send formatted messages, photos, videos, documents and voice messages; organize interactive checklists, reply to messages and link devices within a server.
+- Preview attachments before sending, browse media galleries and use Markdown tools; see [chat features and server requirements](docs/client/chat.en.md).
 - Adjust microphone, output, Push-to-Talk, RNNoise noise reduction and notification sounds.
 - Use mandatory E2EE for voice, messages and attachments; see [security boundaries](architecture/security.en.md).
 
@@ -39,7 +40,7 @@ The published API 2 family is incompatible with API 1; there is **no automatic m
 
 PawTalk uses [AGPL-3.0-only](LICENSE); see [third-party notices](THIRD_PARTY_NOTICES.md). [Report issues](https://github.com/IlyaRusskikh/PawTalk/issues/new/choose) without invitations, secrets or private network reports. [Security disclosure](SECURITY.md).
 
-Development source also includes channel notification mutes, identity-bound mentions, automatic away status, administrator-managed server avatars, encrypted polls and shared WebSocket updates with polling fallback. These require compatible Client/Server builds; published installers are unchanged. See [development chat guide](docs/client/chat.en.md#development-source-additions).
+Development source also includes media/document attachments, voice messages, editable interactive checklists, Markdown tools and message preview, alongside channel notification mutes, identity-bound mentions, automatic away status, administrator-managed server avatars, encrypted polls and shared WebSocket updates with polling fallback. These require compatible Client/Server builds; published installers are unchanged. See [development chat guide](docs/client/chat.en.md#development-source-additions).
 
 For an isolated Server from current Windows source, use **npm run review:server**, then **npm run review** for Client. [Server review setup](architecture/development.en.md#native-server-review-on-windows).
 

@@ -32,3 +32,8 @@ CREATE TABLE IF NOT EXISTS system_messages (
  kind TEXT NOT NULL CHECK(kind='poll-result')
 ) STRICT;
 INSERT OR IGNORE INTO system_messages(message_id,kind) SELECT result_message_id,'poll-result' FROM polls WHERE result_message_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS checklists (
+ message_id INTEGER PRIMARY KEY REFERENCES messages(message_id) ON DELETE CASCADE,
+ item_ids TEXT NOT NULL, checked TEXT NOT NULL DEFAULT '{}', everyone INTEGER NOT NULL CHECK(everyone IN (0,1))
+) STRICT;

@@ -11,11 +11,17 @@ await changeLanguage(new URLSearchParams(location.search).get('lang')==='en'?'en
 localStorage.clear();localStorage.setItem('pawtalk.chat.window','25');
 localStorage.setItem('pawtalk.v2.read.'+sid+'.'+cid,new URLSearchParams(location.search).get('unread')==='1'?'100':'180');
 let records:Message[]=Array.from({length:180},(_,i)=>({id:i+1,channelId:cid,authorProfileId:i===149?me:friend,requestId:(i+1).toString(16).padStart(32,'0'),sentAt:1700000000000+i*1000,content:{text:'Synthetic message '+(i+1)+': '+'wrapped content '.repeat(14)}}));
+if(new URLSearchParams(location.search).has('fallbackgif'))for(const index of [177,178])records[index].content.text='https://gif.example.test/fails.gif';
+if(new URLSearchParams(location.search).has('legacygif'))for(const index of [177,178])records[index].content.text='https://tenor.com/search/meow-gifs';
 records[19].content.text='Original **current**';records[179].content.reply={id:20,author:'Old name',text:'Stale snapshot'};
 const liveListeners=new Set<(event:any)=>void>();test.liveReads=[];
 const state:ServerState={serverId:sid,name:'Synthetic chat server',revision:1,controlRevision:1,self:{profileId:me,effectiveProfileId:me,deviceId:'c'.repeat(64),role:'member',permissions:[]},profiles:[{id:me,nickname:'Me',revision:1},{id:friend,nickname:'Friend',revision:1}],channels:[{id:cid,name:'General',kind:'text',protected:true,position:0,revision:1,messageRevision:1,lastMessageId:180},{id:other,name:'Other',kind:'text',protected:false,position:1,revision:1,messageRevision:1,lastMessageId:0}],members:[],devices:[],voice:[],bindings:[]};
 const features=new URLSearchParams(location.search).has('features');
 if(features){state.capabilities=['polls-v1'];state.members=[{profileId:me,online:true,role:'member'},{profileId:friend,online:true,role:'member'}];}
+if(new URLSearchParams(location.search).has('compose'))state.capabilities=['checklists-v1','media-files-v1','media-gallery-v1'];
+const checklistStates=new Map<number,Record<string,boolean>>();const checklistVersions=new Map<number,number>();test.checklistReads=0;
+ test.enableChecklistWS=()=>{state.eventsLive=true;state.capabilities=[...(state.capabilities||[]),'checklist-events-v1'];refresh();};
+ test.pushChecklist=(messageId:number,checked:Record<string,boolean>,revision:number)=>{checklistStates.set(messageId,checked);checklistVersions.set(messageId,revision);for(const fn of liveListeners)fn({serverId:sid,type:'chat',channelId:cid,checklists:[{messageId,revision,checked}]});};
 const pollStates=new Map<string,any>();
 let refresh=()=>{},selected=cid,release:undefined|(()=>void);
 test.addImage=()=>{const id=Math.max(...records.map(m=>m.id))+1;records.push({id,channelId:cid,authorProfileId:me,requestId:id.toString(16).padStart(32,'0'),sentAt:Date.now(),content:{text:'Editable photo',image:{id:'9'.repeat(32),mime:'image/png'}}});state.channels[0].lastMessageId=id;state.channels[0].messageRevision++;refresh();return id;};
@@ -23,6 +29,7 @@ test.renameFriend=()=>{state.profiles.find(p=>p.id===friend)!.nickname='Илья
 test.sendRequests=[];test.read=[];test.failNext=false;test.hold=false;test.release=()=>release?.();
 test.setBatch=(size:number)=>{localStorage.setItem('pawtalk.chat.window',String(size));refresh();};
 test.extendHistory=(last:number)=>{for(let id=records.at(-1)!.id+1;id<=last;id++)records.push({id,channelId:cid,authorProfileId:friend,requestId:id.toString(16).padStart(32,'0'),sentAt:1700000000000+id*1000,content:{text:'Extended history '+id}});state.channels[0].lastMessageId=last;state.channels[0].messageRevision++;refresh();};
+const attachmentBytes=new Map<string,{bytes:Uint8Array;mime:string}>();let attachmentSequence=32;
 let releaseUpload:undefined|(()=>void);test.releaseUpload=()=>releaseUpload?.();
 test.attachImage=()=>{const input=document.querySelector<HTMLInputElement>('.chat-compose input[type=file]')!,data=new DataTransfer(),bytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aEAAAAABJRU5ErkJggg=='),c=>c.charCodeAt(0));data.items.add(new File([bytes],'pending.png',{type:'image/png'}));input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));};
 test.confirmPending=()=>{const input=test.sendRequests.at(-1),channel=state.channels.find(c=>c.id===input.channelId)!,previous=channel.messageRevision,id=Math.max(...records.map(m=>m.id))+1,row:Message={id,channelId:input.channelId,authorProfileId:me,requestId:input.requestId,sentAt:Date.now(),content:structuredClone(input.content)};records.push(row);channel.lastMessageId=id;channel.messageRevision++;state.eventsLive=true;for(const fn of liveListeners)fn({serverId:sid,channelId:input.channelId,type:'chat',delivery:true,previous,revision:channel.messageRevision,first:records[0].id,last:id,messages:[structuredClone(row)],deleted:[]});refresh();return id;};
@@ -30,16 +37,24 @@ test.update=(id:number,text:string)=>{const message=records.find(m=>m.id===id)!;
 test.reply=(id:number,target:number)=>{records.find(m=>m.id===id)!.content.reply={id:target,author:'Old name',text:'Stale snapshot'};state.channels[0].messageRevision++;refresh();};
 test.remove=(id:number)=>{records=records.filter(m=>m.id!==id);state.channels[0].messageRevision++;refresh();};
 test.select=(id:string)=>{selected=id==='other'?other:cid;refresh();};test.cid=cid;
+test.gifLoads=0;
 test.desktop={onMembershipServerEvent:(listener:(event:any)=>void)=>{liveListeners.add(listener);return()=>liveListeners.delete(listener);},membership:async(action:string,input:any={})=>{
  await new Promise(resolve=>setTimeout(resolve,15));
+ if(action==='gif.load'){test.gifLoads++;return{value:{mime:'image/gif',base64:'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'}};}
+ if(action==='gif.resolve')return{value:(input.url==='https://gif.example.test/no-extension'||input.url==='https://klipy.com/gifs/rat-eat-pog'||input.url==='https://tenor.com/search/meow-gifs')?{url:'https://gif.example.test/animated.gif'}:null};
+ if(action==='upload.file'){test.mediaBytes=input.bytes;const id=(++attachmentSequence).toString(16).padStart(32,'0');attachmentBytes.set(id,input);return{value:{id,mime:input.mime}};}
+ if(action==='file')return{value:attachmentBytes.get(input.attachmentId)?.bytes||test.mediaBytes};
+ if(action==='image'&&attachmentBytes.has(input.attachmentId)){const record=attachmentBytes.get(input.attachmentId)!;return{value:'data:'+record.mime+';base64,'+btoa(String.fromCharCode(...record.bytes))};}
  if(action==='image'){const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#888';ctx.fillRect(0,0,320,180);return{value:canvas.toDataURL('image/png')};}
  if(action==='memory.status')return{value:{low:!!test.lowMemory}};
- if(action==='upload'){if(test.holdUpload)await new Promise<void>(resolve=>{releaseUpload=resolve;});return{value:{id:'9'.repeat(32),mime:input.mime}};}
+ if(action==='upload'){if(test.holdUpload)await new Promise<void>(resolve=>{releaseUpload=resolve;});const id=(++attachmentSequence).toString(16).padStart(32,'0');attachmentBytes.set(id,input);return{value:{id,mime:input.mime}};}
  if(action==='poll.create'){
   const id=Math.max(...records.map(m=>m.id))+1,poll={id:input.requestId,...input.definition};
   records.push({id,channelId:input.channelId,authorProfileId:me,requestId:input.requestId,sentAt:Date.now(),content:{text:input.question,poll}});
   pollStates.set(poll.id,{id:poll.id,messageId:id,closesAt:Date.now()+poll.duration*1000,closedAt:null,multiple:poll.multiple,anonymous:poll.anonymous,intermediate:poll.intermediate,counts:[0,0],total:0,own:[]});state.channels[0].lastMessageId=id;state.channels[0].messageRevision++;refresh();return{value:{id}};
  }
+ if(action==='checklist.state'){test.checklistReads++;return{value:{checked:checklistStates.get(input.messageId)||{},revision:checklistVersions.get(input.messageId)||1}};}
+ if(action==='checklist.check'){const checked={...(checklistStates.get(input.messageId)||{}),[input.item]:input.checked},revision=(checklistVersions.get(input.messageId)||1)+1;test.pushChecklist(input.messageId,checked,revision);return{value:{checked,revision}};}
  if(action==='poll.state'){test.pollReads=(test.pollReads||0)+1;const value=pollStates.get(input.pollId);return{value:{...structuredClone(value),counts:value.intermediate||value.closedAt?value.counts:[]}};}
  if(action==='poll.vote'){const value=pollStates.get(input.pollId);value.own=input.choices;value.total=input.choices.length?1:0;value.counts=[0,1].map(i=>input.choices.includes(i)?1:0);return{value:true};}
  if(action==='poll.close'){

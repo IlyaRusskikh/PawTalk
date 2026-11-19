@@ -9,13 +9,14 @@ import (
 )
 
 type memberMessageInput struct {
-	Poll             *memberPollCreate `json:"poll,omitempty"`
-	RemoveAttachment bool              `json:"removeAttachment,omitempty"`
-	RequestID        string            `json:"requestId"`
-	KeyID            string            `json:"keyId"`
-	Nonce            string            `json:"nonce"`
-	Ciphertext       string            `json:"ciphertext"`
-	AttachmentIDs    []string          `json:"attachmentIds"`
+	Checklist        *memberChecklistDefinition `json:"checklist,omitempty"`
+	Poll             *memberPollCreate          `json:"poll,omitempty"`
+	RemoveAttachment bool                       `json:"removeAttachment,omitempty"`
+	RequestID        string                     `json:"requestId"`
+	KeyID            string                     `json:"keyId"`
+	Nonce            string                     `json:"nonce"`
+	Ciphertext       string                     `json:"ciphertext"`
+	AttachmentIDs    []string                   `json:"attachmentIds"`
 }
 type memberMessage struct {
 	SystemKind      string   `json:"systemKind,omitempty"`
@@ -43,7 +44,7 @@ type memberMessagePage struct {
 }
 
 func validateMessageInput(input memberMessageInput) ([]byte, []byte, error) {
-	if !validHexID(input.RequestID, 32) || !validHexID(input.KeyID, 64) || len(input.AttachmentIDs) > 1 {
+	if !validHexID(input.RequestID, 32) || !validHexID(input.KeyID, 64) || len(input.AttachmentIDs) > 20 {
 		return nil, nil, memberError(400, "INVALID_MESSAGE")
 	}
 	nonce, err := decodeFixed(input.Nonce, 12)
@@ -54,10 +55,12 @@ func validateMessageInput(input memberMessageInput) ([]byte, []byte, error) {
 	if err != nil || len(cipher) < 17 || len(cipher) > 12304 || b64.EncodeToString(cipher) != input.Ciphertext {
 		return nil, nil, memberError(400, "INVALID_MESSAGE")
 	}
+	seenAttachments := make(map[string]bool)
 	for _, id := range input.AttachmentIDs {
-		if !validHexID(id, 32) {
+		if !validHexID(id, 32) || seenAttachments[id] {
 			return nil, nil, memberError(400, "INVALID_ATTACHMENT")
 		}
+		seenAttachments[id] = true
 	}
 	return nonce, cipher, nil
 }
@@ -139,8 +142,17 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 		if err = closeMemberRows(rows); err != nil {
 			return 0, err
 		}
-		if len(attachments) != len(input.AttachmentIDs) || (len(attachments) == 1 && attachments[0] != input.AttachmentIDs[0]) {
+		requestedAttachments := make(map[string]bool)
+		for _, attachment := range input.AttachmentIDs {
+			requestedAttachments[attachment] = true
+		}
+		if len(attachments) != len(input.AttachmentIDs) {
 			return 0, memberError(409, "REQUEST_CONFLICT")
+		}
+		for _, attachment := range attachments {
+			if !requestedAttachments[attachment] {
+				return 0, memberError(409, "REQUEST_CONFLICT")
+			}
 		}
 		if err = s.checkPollRetryTx(ctx, tx, id, input.Poll); err != nil {
 			return 0, err
@@ -187,6 +199,9 @@ func (s *membershipStore) postMessage(ctx context.Context, token, channel string
 		}
 	}
 	if err = s.enforceMemberStorageTx(ctx, tx, id); err != nil {
+		return 0, err
+	}
+	if err = setChecklistTx(ctx, tx, id, input.Checklist); err != nil {
 		return 0, err
 	}
 	s.noteDelivery(tx, channel, id)
@@ -238,6 +253,9 @@ func (s *membershipStore) editMessage(ctx context.Context, token string, id int6
 			if _, err = tx.ExecContext(ctx, "DELETE FROM attachments WHERE message_id=?", id); err != nil {
 				return err
 			}
+		}
+		if err = setChecklistTx(ctx, tx, id, input.Checklist); err != nil {
+			return err
 		}
 		return s.enforceMemberStorageTx(ctx, tx, id)
 	})

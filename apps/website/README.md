@@ -22,7 +22,7 @@ Keep RU/EN presentation aligned with README and the published API 2 guides; tech
 
 ## Screenshots
 
-The PNGs show the prepared Client 0.13.0 source interface, not proof of a published
+The PNGs show the prepared Client 0.14.0 source interface, not proof of a published
 release. Download versions still come from the live release catalog. The project
 icon comes from the existing assets/pawtalk.svg.
 
@@ -40,8 +40,8 @@ profiles, synthetic microphones, three demo members, messages and a poll. Native
 notifications are disabled only in this capture process. It does not use installed
 Client/Manager profiles or copy invitations to the clipboard.
 
-Both locales contain eight 1240 × 860 PNGs: home, create-room, room-chat,
-avatar-crop, audio-settings, language-settings, sound-settings and poll-create.
+Both locales contain eleven 1240 × 860 PNGs: home, create-room, room-chat,
+avatar-crop, audio-settings, language-settings, sound-settings, poll-create, media-chat, media-viewer and attachment-drafts.
 English files have the -en suffix. Inspect every image for secrets, personal data
 and layout before publication. Captures demonstrate UI and synthetic integration,
 not real audio hardware or external-network acceptance.

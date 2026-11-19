@@ -11,6 +11,15 @@ const hexID = (value, size) => typeof value === 'string' && new RegExp(`^[a-f0-9
 const hash = value => createHash('sha256').update(value).digest('hex');
 const requestID = () => randomBytes(16).toString('hex');
 function failure(code) { return Object.assign(Error(code), { code }); }
+function validatedAttachment(f,images=false){
+ const image=images&&['image/png','image/jpeg','image/webp'].includes(f?.mime);
+ if(!f||!hexID(f.id,32)||typeof f.name!=='string'||!f.name.length||f.name.length>255||(!image&&!['image/gif','video/mp4','video/webm','audio/webm','audio/ogg','application/octet-stream'].includes(f.mime))||!Number.isSafeInteger(f.size)||f.size<1||f.size>(image?2:50)*1024*1024)throw failure('INVALID_ATTACHMENT');
+ const result={id:f.id,name:f.name,mime:f.mime,size:f.size};
+ if(f.poster!==undefined){if(!f.mime.startsWith('video/')||!f.poster||!hexID(f.poster.id,32)||!['image/png','image/jpeg','image/webp'].includes(f.poster.mime))throw failure('INVALID_ATTACHMENT');result.poster={id:f.poster.id,mime:f.poster.mime};}
+ if(f.duration!==undefined){if(!f.mime.startsWith('video/')||!Number.isFinite(f.duration)||f.duration<0||f.duration>7*86400)throw failure('INVALID_ATTACHMENT');result.duration=f.duration;}
+ if(f.voice!==undefined){const v=f.voice;if(!f.mime.startsWith('audio/')||!v||!Number.isFinite(v.duration)||v.duration<=0||v.duration>14400||!Array.isArray(v.waveform)||v.waveform.length>128||v.waveform.some(n=>!Number.isFinite(n)||n<0||n>1))throw failure('INVALID_ATTACHMENT');result.voice={duration:v.duration,waveform:v.waveform};}
+ return result;
+}
 function validatedContent(content) {
   if (!content || typeof content !== 'object' || typeof content.text !== 'string') throw failure('INVALID_MESSAGE');
   if (Buffer.byteLength(content.text) > 4096) throw failure('MESSAGE_TOO_LARGE');
@@ -25,7 +34,22 @@ function validatedContent(content) {
     const image = content.image;
     if (!image || !hexID(image.id, 32) || !['image/png', 'image/jpeg', 'image/webp'].includes(image.mime)) throw failure('INVALID_IMAGE');
     result.image = { id: image.id, mime: image.mime };
+    if(image.name!==undefined){if(typeof image.name!=='string'||!image.name.length||image.name.length>255)throw failure('INVALID_IMAGE');result.image.name=image.name;}
   }
+  if(content.gif!==undefined){const g=content.gif;const safe=value=>{try{const u=new URL(value);return typeof value==='string'&&value.length<=2048&&u.protocol==='https:'&&!u.username&&!u.password&&(!u.port||u.port==='443');}catch{return false;}};if(!g||content.text!==g.source||!safe(g.source)||!safe(g.url)||content.file||content.image||content.poll)throw failure('INVALID_MESSAGE');if(g.mime!==undefined&&!['image/gif','video/mp4','video/webm'].includes(g.mime))throw failure('INVALID_MESSAGE');result.gif={source:g.source,url:g.url,...(g.mime?{mime:g.mime}:{})};}
+  if(content.checklist!==undefined){
+    const c=content.checklist;
+    if(!c||typeof c.everyone!=='boolean'||!Array.isArray(c.items)||!c.items.length||c.items.length>100||content.poll||content.image||content.file)throw failure('INVALID_CHECKLIST');
+    const seen=new Set();for(const item of c.items){if(!item||!hexID(item.id,32)||seen.has(item.id)||typeof item.text!=='string'||!item.text.trim()||item.text.length>300)throw failure('INVALID_CHECKLIST');seen.add(item.id);}
+    result.checklist={everyone:c.everyone,items:c.items.map(({id,text})=>({id,text}))};
+  }
+  if(content.file!==undefined){if(content.image)throw failure('INVALID_ATTACHMENT');result.file=validatedAttachment(content.file);}
+  if(content.files!==undefined){
+    if(content.file||content.image||content.gif||content.poll||content.checklist||!Array.isArray(content.files)||!content.files.length||content.files.length>10)throw failure('INVALID_ATTACHMENT');
+    result.files=content.files.map(file=>validatedAttachment(file,true));
+  }
+  const attachmentIDs=[...(result.image?[result.image.id]:[]),...[...(result.file?[result.file]:[]),...(result.files||[])].flatMap(f=>[f.id,...(f.poster?[f.poster.id]:[])])];
+  if(new Set(attachmentIDs).size!==attachmentIDs.length)throw failure('INVALID_ATTACHMENT');
   if(content.poll!==undefined){
     if(!hexID(content.poll.id,32)||!content.text.trim()||Array.from(content.text).length>300||content.image||content.reply)throw failure('INVALID_POLL');
     result.poll={id:content.poll.id,...validatePoll(content.poll)};
@@ -63,7 +87,7 @@ class MembershipClient {
   async fetchJSON(base, path, { method = 'GET', body, headers = {}, fingerprint } = {}) {
     if (!path.startsWith('/api/') || path.includes('#') || path.includes('\\')) throw failure('INVALID_API_PATH');
     const response = await this.fetcher(base + path, {
-      method, redirect: 'error', signal: AbortSignal.timeout(10000), pawtalkTLSFingerprint: fingerprint,
+      method, redirect: 'error', signal: AbortSignal.timeout(path.includes('/attachments/') ? 120000 : 10000), pawtalkTLSFingerprint: fingerprint,
       headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers }, body,
     });
     const reader = response.body?.getReader(); const chunks = []; let size = 0;
@@ -71,7 +95,7 @@ class MembershipClient {
       for (;;) {
         const next = await reader.read(); if (next.done) break;
         size += next.value.byteLength;
-        if (size > 16 * 1024 * 1024) { await reader.cancel(); throw failure('RESPONSE_TOO_LARGE'); }
+        if (size > (path.includes('/attachments/') ? 70 : 16) * 1024 * 1024) { await reader.cancel(); throw failure('RESPONSE_TOO_LARGE'); }
         chunks.push(next.value);
       }
     }
@@ -257,6 +281,7 @@ class MembershipClient {
       result.bindings.some(value=>!object(value)||!hexID(value.source,64)||!hexID(value.target,64))||
       result.voice.some(value=>!object(value)||!hexID(value.profileId,64)||!hexID(value.deviceId,64)||!hexID(value.channelId,32)||!hexID(value.identity,32)))throw failure('INVALID_API_RESPONSE');
     if (result.serverId !== serverId || result.keyId !== await cryptoV2.rootKeyID(connection.secret)) throw failure('SERVER_KEY_CHANGED');
+    if(result.capabilities!==undefined){if(!Array.isArray(result.capabilities)||result.capabilities.length>128||result.capabilities.some(c=>typeof c!=='string'||c.length>64))throw failure('INVALID_API_RESPONSE');connection.config={...connection.config,capabilities:[...result.capabilities]};}
     if (!Array.isArray(result.profiles) || result.profiles.length > 10000 || !Array.isArray(result.channels) || result.channels.length > 1000) throw failure('INVALID_API_RESPONSE');
     result.profiles = await Promise.all(result.profiles.map(async profile => {
       if (!object(profile)||!hexID(profile.id, 64) || typeof profile.nickname !== 'string' || profile.nickname.length > 128 || !Number.isSafeInteger(profile.revision)) throw failure('INVALID_API_RESPONSE');
@@ -351,8 +376,10 @@ class MembershipClient {
   async send(serverId, channelId, content, original, clientRequestId) {
     content = validatedContent(content);
     if (!hexID(channelId, 32) || !content || typeof content.text !== 'string' || Buffer.byteLength(content.text) > 4096) throw failure('INVALID_MESSAGE');
-    if (!content.text.trim() && !content.image) throw failure('EMPTY_MESSAGE');
+    if (!content.text.trim() && !content.image && !content.file && !content.files?.length) throw failure('EMPTY_MESSAGE');
     const connection = this.connections.get(serverId); if (!connection) throw failure('NOT_CONNECTED');
+    if((content.files||content.file?.poster)&&!connection.config?.capabilities?.includes('media-gallery-v1'))throw failure('UNSUPPORTED_FEATURE');
+    if(content.checklist&&!connection.config?.capabilities?.includes('checklists-v1'))throw failure('UNSUPPORTED_FEATURE');
     if(content.poll&&(!connection.config?.capabilities?.includes('polls-v1')||original||content.pollResult))throw failure('UNSUPPORTED_FEATURE');
     if(original?.content?.image&&!content.image&&!connection.config?.capabilities?.includes('attachment-removal-v1'))throw failure('UNSUPPORTED_FEATURE');
     if(clientRequestId!==undefined&&!hexID(clientRequestId,32))throw failure('INVALID_MESSAGE');
@@ -370,10 +397,25 @@ class MembershipClient {
       const resultID=requestID(),resultPacket=await cryptoV2.sealContent(connection.secret,serverId,'chat',channelId,resultID,author,new TextEncoder().encode(JSON.stringify({...content,pollResult:true})));
       cached.poll={optionCount:content.poll.options.length,duration:content.poll.duration,multiple:content.poll.multiple,anonymous:content.poll.anonymous,intermediate:content.poll.intermediate,result:{requestId:resultID,keyId:resultPacket.keyId,nonce:resultPacket.nonce,ciphertext:resultPacket.ciphertext,attachmentIds:[]}};
     }
-    const result=await this.request(serverId,path,original?'PATCH':'POST',{requestId:original?(clientRequestId||requestID()):resourceId,keyId:packet.keyId,nonce:packet.nonce,ciphertext:packet.ciphertext,attachmentIds:original?[]:content.image?[content.image.id]:[],...(cached.poll?{poll:cached.poll}:{}),...(original?.content?.image&&!content.image?{removeAttachment:true}:{})});
+    const result=await this.request(serverId,path,original?'PATCH':'POST',{requestId:original?(clientRequestId||requestID()):resourceId,keyId:packet.keyId,nonce:packet.nonce,ciphertext:packet.ciphertext,attachmentIds:original?[]:content.image?[content.image.id]:[...(content.file?[content.file]:[]),...(content.files||[])].flatMap(f=>[f.id,...(f.poster?[f.poster.id]:[])]),...(cached.poll?{poll:cached.poll}:{}),...(content.checklist?{checklist:{everyone:content.checklist.everyone,items:content.checklist.items.map(item=>item.id)}}:{}),...(original?.content?.image&&!content.image?{removeAttachment:true}:{})});
     if(cacheKey)this.pendingMessages.delete(cacheKey);return result;
   }
 
+  async uploadFile(serverId,channelId,data,mime){
+    if(data?.length>2*1024*1024&&!this.connections.get(serverId)?.config?.capabilities?.includes('media-files-v1'))throw failure('UNSUPPORTED_FEATURE');
+    if(!hexID(channelId,32)||!['image/gif','video/mp4','video/webm','audio/webm','audio/ogg','application/octet-stream'].includes(mime)||!(data instanceof Uint8Array)||!data.length||data.length>50*1024*1024)throw failure('INVALID_ATTACHMENT');
+    const connection=this.connections.get(serverId);if(!connection)throw failure('NOT_CONNECTED');
+    const identity=await this.identity(),attachmentId=requestID();
+    const packet=await cryptoV2.sealContent(connection.secret,serverId,'attachment',channelId,attachmentId,identity.profileId,data);
+    await this.request(serverId,`/api/v2/channels/${channelId}/attachments/${attachmentId}`,'POST',packet);
+    return {id:attachmentId,mime};
+  }
+  async file(serverId,channelId,attachmentId){
+    if(!hexID(channelId,32)||!hexID(attachmentId,32))throw failure('INVALID_ATTACHMENT');
+    const response=await this.request(serverId,`/api/v2/channels/${channelId}/attachments/${attachmentId}`);
+    const connection=this.connections.get(serverId);if(!connection)throw failure('NOT_CONNECTED');
+    return cryptoV2.openContent(connection.secret,serverId,'attachment',channelId,attachmentId,response.authorProfileId,response.packet);
+  }
   async uploadImage(serverId, channelId, data, mime) {
     if (!hexID(channelId, 32) || !['image/png', 'image/jpeg', 'image/webp'].includes(mime) || !(data instanceof Uint8Array) || !data.length || data.length > 2 * 1024 * 1024) throw failure('INVALID_IMAGE');
     if(inspectImage(data)?.mime!==mime)throw failure('INVALID_IMAGE');

@@ -2,6 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { inlineMarkdown, messageMarkdown, messagePreview } from '../../../../shared/chat-format.mjs';
 
+test('numbered markers survive independently of bullets; tables and rules stay HTML-free',()=>{
+  assert.deepEqual(messageMarkdown('1. first\n2. second\n- third').map(node=>node.marker),['1.','2.','-']);
+  const nodes=messageMarkdown('###### Heading\n---\n| Name | Value |\n| --- | --- |\n| **bold** | <script> |');
+  assert.deepEqual(nodes.map(node=>node.type),['heading','rule','table']);
+  assert.equal(nodes[0].level,6);
+  assert.deepEqual(nodes[2].children[1].children[1].children,['<script>']);
+});
+
 test('notification previews remove formatting, preserve literals and hide spoilers',()=>{
   assert.equal(messagePreview('**bold** __under__ *italic* ~~gone~~ [label](https://example.test)'),'bold under italic gone label');
   assert.equal(messagePreview('\\*literal\\* `**code**`'),'*literal* **code**');

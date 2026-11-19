@@ -16,7 +16,7 @@ func (s *membershipStore) putAttachment(ctx context.Context, token, channel, id 
 		return memberError(400, "INVALID_ATTACHMENT")
 	}
 	cipher, err := b64.Strict().DecodeString(packet.Ciphertext)
-	if err != nil || len(cipher) < 17 || len(cipher) > 2097168 || b64.EncodeToString(cipher) != packet.Ciphertext {
+	if err != nil || len(cipher) < 17 || len(cipher) > 52428816 || b64.EncodeToString(cipher) != packet.Ciphertext {
 		return memberError(413, "ATTACHMENT_TOO_LARGE")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -54,14 +54,14 @@ func (s *membershipStore) putAttachment(ctx context.Context, token, channel, id 
 	if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, "DELETE FROM attachments WHERE message_id IS NULL AND created_at<=?", s.now().UnixMilli()-600000); err != nil {
+	if _, err = tx.ExecContext(ctx, "DELETE FROM attachments WHERE message_id IS NULL AND created_at<=?", s.now().UnixMilli()-1800000); err != nil {
 		return err
 	}
 	var pending int
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM attachments WHERE owner_device_id=? AND message_id IS NULL", access.DeviceID).Scan(&pending); err != nil {
 		return err
 	}
-	if pending >= 3 {
+	if pending >= 20 {
 		return memberError(429, "ATTACHMENT_LIMIT")
 	}
 	if _, err = tx.ExecContext(ctx, "INSERT INTO attachments(attachment_id,channel_id,owner_device_id,crypto_context_id,nonce,ciphertext,created_at) VALUES(?,?,?,?,?,?,?)", id, channel, access.DeviceID, packet.KeyID, nonce, cipher, s.now().UnixMilli()); err != nil {
