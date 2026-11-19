@@ -24,6 +24,12 @@ app.disableHardwareAcceleration();app.whenReady().then(async()=>{
    assert.equal(await run("window.liveReads.filter(o=>!o.before).length"),0,'the explicit jump uses the cached latest block');
    console.log('PASS history cache '+lang+': automatic paging, batch settings, retained rows, cached return/reply jumps, exit cleanup'+(lang==='ru'?', synthetic memory pressure':''));
   }
+  for(const [fixture,first] of [['own',129],['all',1]]){
+   await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/server-chat.html?features=1&unread='+fixture);
+   await until(`(()=>{const divider=document.querySelector('.chat-divider');return divider?.nextElementSibling?.dataset.messageRow==='${first}'&&Math.abs(divider.getBoundingClientRect().top-document.querySelector('.member-history').getBoundingClientRect().top)<4;})()`,'unread boundary '+fixture);
+   assert.equal(await run("!!document.querySelector('[data-message-row=\"180\"]')"),false,'later history remains paginated');
+  }
+  console.log('PASS unread boundary with a deleted cursor, saved scroll position, own sends and a chat with no cursor');
   await open();await run('window.setBatch(500);window.extendHistory(1200)');await until("document.querySelectorAll('[data-message-row]').length===500",'500-message latest batch');await older(1000);await run("window.liveReads=[];window.update(300,'Updated retained history')");await until("document.querySelector('[data-message-row=\"300\"]')?.textContent.includes('Updated retained history')",'large cache refresh applies edits');assert.ok(await run('window.liveReads.filter(o=>o.ids).length>=3'),'cache recovery refreshes multiple bounded selections');assert.ok(await run('window.liveReads.filter(o=>o.ids).every(o=>o.ids.length<=500)'));assert.equal(await run("document.querySelectorAll('[data-message-row]').length"),1000,'recovery retains a cache larger than the request limit');
   console.log('PASS large history recovery: 1000 retained messages, edits and HTTP selections bounded to 500 IDs');
   win.destroy();app.exit(0);
