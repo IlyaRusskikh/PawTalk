@@ -311,9 +311,21 @@ jobs:
             release/SHA256SUMS.txt
             release/PawTalk.Licenses.*.zip
       - name: Keep verified Client core receipt for cross-scope comparison
-        if: inputs.candidate && steps.scope.outputs.client == 'true' && matrix.runner == 'windows-2025'
+        if: (inputs.candidate || github.event_name == 'pull_request') && steps.scope.outputs.client == 'true' && matrix.runner == 'windows-2025'
         uses: actions/upload-artifact@v6
         with:
           name: pawtalk-client-core
           if-no-files-found: error
           path: resources/server/bundled-server.json
+      - name: Record the verified PR checkout
+        if: github.event_name == 'pull_request' && matrix.runner == 'windows-2025'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node tooling/release/pr-candidate.mjs record
+      - name: Upload verified PR checkout evidence
+        if: github.event_name == 'pull_request' && matrix.runner == 'windows-2025'
+        uses: actions/upload-artifact@v6
+        with:
+          name: pawtalk-pr-build
+          if-no-files-found: error
+          path: release/pr-build/source.json

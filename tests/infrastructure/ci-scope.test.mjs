@@ -95,7 +95,12 @@ test('prepared publisher artifact names and extraction paths match independent u
     const upload = check.jobs.windows.steps.find(step => step.with?.name === `pawtalk-${component}-windows`);
     const preparation = release.jobs[`prepare-${component}`];
     const download = preparation.steps.find(step => step.uses?.startsWith('actions/download-artifact@'));
-    assert.equal(download.with.name, upload.with.name);
+    if (component === 'server') {
+      const expression = download.with.name.match(/^\$\{\{ (.*) \}\}$/)[1];
+      const name = reused => Function('needs', `return (${expression});`)({'reuse-pr':{outputs:{reused}}});
+      assert.equal(name(''), upload.with.name);
+      assert.equal(name('true'), release.jobs['reuse-pr'].steps.find(step=>step.id==='server').with.name);
+    } else assert.equal(download.with.name, upload.with.name);
     assert.equal(download.with.path, `release/${component}`);
     assert.ok(upload.with.path.startsWith(`release/${component}/`));
     assert.ok(!upload.with.path.includes('\n'));

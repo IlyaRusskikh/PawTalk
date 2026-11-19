@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { repository, components, requiredAssets, selectReleases, fetchReleases, generateCatalog } from '../../tooling/release/release-catalog.mjs';
@@ -81,6 +82,21 @@ test('generation replaces complete catalog only after successful API/selection; 
     await writeFile(file, 'old');
     await generateCatalog(directory, good);
     assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), selectReleases(baseline()));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('Pages generator CLI writes the catalog to the deployed website directory', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-pages-cli-'));
+  try {
+    for (const file of ['tooling/release/release-catalog.mjs', 'shared/release.cjs']) {
+      const target = path.join(directory, file);
+      await mkdir(path.dirname(target), { recursive: true });
+      await cp(new URL(`../../${file}`, import.meta.url), target);
+    }
+    const preload = `globalThis.fetch=async()=>Response.json(${JSON.stringify(baseline())});`;
+    execFileSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`, 'tooling/release/release-catalog.mjs'], { cwd: directory });
+    const catalog = JSON.parse(await readFile(path.join(directory, 'apps', 'website', 'releases.json'), 'utf8'));
+    assert.deepEqual(catalog, selectReleases(baseline()));
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

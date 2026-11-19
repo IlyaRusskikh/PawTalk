@@ -1,6 +1,6 @@
 // Public download discovery only; updater signature/trust contracts stay independent.
 import { mkdir, writeFile, rename } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 export const repository = 'IlyaRusskikh/PawTalk';
@@ -70,6 +70,7 @@ export async function generateCatalog(directory, options) {
   return catalog;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await generateCatalog(path.resolve(process.argv[2] ?? 'website'));
+  const directory = process.argv[2] ?? fileURLToPath(new URL('../../apps/website/', import.meta.url));
+  await generateCatalog(path.resolve(directory));
   console.log('Prepared complete public release catalog; no Git changes or publication.');
 }

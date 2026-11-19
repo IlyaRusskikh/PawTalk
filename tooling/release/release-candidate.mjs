@@ -35,6 +35,17 @@ export function assetNames(component, version) {
   if (component === 'manager') return [`PawTalk.Server.Manager.Setup.${version}.exe`, `PawTalk.Manager.${version}.tar.gz`, 'manager-manifest.json'];
   throw Error('Unknown component');
 }
+export async function checkCoreReceipt(receipt) {
+  const { serverDefinition } = await import('../build/server-core.mjs');
+  for (const [key,value] of Object.entries(await serverDefinition())) if (receipt[key] !== value) throw Error('Shared core source mismatch');
+  if (![receipt.apiSha256, receipt.livekitSha256].every(value => /^[a-f0-9]{64}$/.test(value ?? ''))) throw Error('Invalid shared core hashes');
+}
+export function compareWindowsCores(receipt, zip) {
+  for (const [name,expected] of [['pawtalk-server.exe',receipt.apiSha256],['livekit-server.exe',receipt.livekitSha256]]) {
+    const bytes = execFileSync('unzip',['-p',zip,name],{maxBuffer:128*1024*1024});
+    if (hash(bytes) !== expected) throw Error('Separately built Client/Server cores differ: '+name);
+  }
+}
 async function fileDigest(file) {
   const info = await lstat(file);
   if (!info.isFile() || !info.size) throw Error('Missing/empty/unsafe artifact: '+file);
@@ -87,7 +98,7 @@ async function signatures(p, directory) {
   }
   return payload;
 }
-async function api(endpoint, method = 'GET', body) {
+export async function api(endpoint, method = 'GET', body) {
   const response = await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/${endpoint}`, {method, signal:AbortSignal.timeout(60000), headers:{Authorization:`Bearer ${process.env.GH_TOKEN}`,Accept:'application/vnd.github+json','Content-Type':'application/json'}, body:body && JSON.stringify(body)});
   if (response.status === 404 && method === 'GET') return null;
   if (!response.ok) throw Error(`GitHub ${method} ${endpoint}: ${response.status}`);
@@ -186,15 +197,11 @@ async function main() {
   const plans = existing?.plans ?? await Promise.all(components.map(c=>plan(c)));
   if (command === 'compare-core') {
     const receipt = await json(path.join(root,'release/client-core/bundled-server.json'));
-    const { serverDefinition } = await import('../build/server-core.mjs');
-    for (const [key,value] of Object.entries(await serverDefinition())) if (receipt[key] !== value) throw Error('Shared core source mismatch');
+    await checkCoreReceipt(receipt);
     const server = plans.find(p=>p.component === 'server');
     if (!server) throw Error('Server candidate required for core equality');
     const zip = path.join(root,'release/server',`PawTalk.Server.${server.version}.windows-x64.zip`);
-    for (const [name,expected] of [['pawtalk-server.exe',receipt.apiSha256],['livekit-server.exe',receipt.livekitSha256]]) {
-      const bytes = execFileSync('unzip',['-p',zip,name],{maxBuffer:128*1024*1024});
-      if (hash(bytes) !== expected) throw Error('Separately built Client/Server cores differ: '+name);
-    }
+    compareWindowsCores(receipt, zip);
     console.log('PASS separately built Client/Server Go and LiveKit byte equality');
     return;
   }

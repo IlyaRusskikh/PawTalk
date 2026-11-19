@@ -46,7 +46,8 @@ test('publication gates follow verification and prepared artifacts', async () =>
   assert.equal(release.jobs.tag.environment, 'release-tag');
   for (const component of ['client', 'server', 'manager']) {
     const preparation = release.jobs['prepare-'+component];
-    assert.deepEqual(preparation.needs, ['plan', 'verify', 'infrastructure']);
+    assert.deepEqual(preparation.needs, component === 'manager'
+      ? ['plan', 'verified', 'infrastructure'] : ['plan', 'reuse-pr', 'verified', 'infrastructure']);
     assert.equal(preparation.permissions?.contents ?? release.permissions.contents, 'read');
     const job = release.jobs['publish-'+component];
     assert.equal(job.environment, 'release-publish');

@@ -11,6 +11,10 @@ name: Release Candidate Preflight
         description: After preflight request separate tag and publication approvals
         type: boolean
         default: false
+      pr_run_id:
+        description: Optional successful PR check run to reuse for Client or Server
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -67,8 +71,63 @@ jobs:
         run: node tooling/ci/release-image-smoke.mjs
       - name: Lint all GitHub Actions workflows
         run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
-  verify:
+  reuse-pr:
     needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      reused: ${{ steps.confirm.outputs.reused }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.22.1
+      - id: import
+        name: Check PR provenance and import verified Windows packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_RUN_ID: ${{ inputs.pr_run_id }}
+        run: node tooling/release/pr-candidate.mjs import
+      - id: client
+        if: steps.import.outputs.ready == 'true' && contains(fromJSON(needs.plan.outputs.components), 'client')
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: pawtalk-reused-client-windows
+          path: release/pr-reuse/client/*
+          if-no-files-found: error
+      - id: core
+        if: steps.import.outputs.ready == 'true' && contains(fromJSON(needs.plan.outputs.components), 'client')
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: pawtalk-reused-client-core
+          path: release/pr-reuse/client-core/bundled-server.json
+          if-no-files-found: error
+      - id: server
+        if: steps.import.outputs.ready == 'true' && contains(fromJSON(needs.plan.outputs.components), 'server')
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: pawtalk-reused-server-windows
+          path: release/pr-reuse/server/*
+          if-no-files-found: error
+      - id: confirm
+        name: Confirm verified PR artifacts
+        if: >-
+          steps.import.outputs.ready == 'true' &&
+          (!contains(fromJSON(needs.plan.outputs.components), 'client') || (steps.client.outcome == 'success' && steps.core.outcome == 'success')) &&
+          (!contains(fromJSON(needs.plan.outputs.components), 'server') || steps.server.outcome == 'success')
+        run: echo 'reused=true' >> "$GITHUB_OUTPUT"
+  verify:
+    needs: [plan, reuse-pr]
+    if: needs['reuse-pr'].outputs.reused != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -78,6 +137,15 @@ jobs:
       component: ${{ matrix.component }}
       skip-infrastructure: true
       candidate: true
+  verified:
+    needs: [reuse-pr, verify]
+    if: >-
+      !cancelled() && needs['reuse-pr'].result == 'success' &&
+      ((needs['reuse-pr'].outputs.reused == 'true' && needs.verify.result == 'skipped') ||
+       (needs['reuse-pr'].outputs.reused != 'true' && needs.verify.result == 'success'))
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Release verification complete'
   prepare-client:
     runs-on: ubuntu-latest
     steps:
@@ -90,7 +158,7 @@ jobs:
           node-version: 24.22.1
       - uses: actions/download-artifact@v7
         with:
-          name: pawtalk-windows
+          name: ${{ needs['reuse-pr'].outputs.reused == 'true' && 'pawtalk-reused-client-windows' || 'pawtalk-windows' }}
           path: release/client
       - name: Sign exact verified Client installer
         env:
@@ -117,7 +185,8 @@ jobs:
     if: contains(fromJSON(needs.plan.outputs.components), 'client')
     needs:
       - plan
-      - verify
+      - reuse-pr
+      - verified
       - infrastructure
     env:
       COMPONENTS: client
@@ -127,7 +196,8 @@ jobs:
     if: contains(fromJSON(needs.plan.outputs.components), 'server')
     needs:
       - plan
-      - verify
+      - reuse-pr
+      - verified
       - infrastructure
     runs-on: ubuntu-latest
     steps:
@@ -140,7 +210,7 @@ jobs:
           node-version: 24.22.1
       - uses: actions/download-artifact@v7
         with:
-          name: pawtalk-server-windows
+          name: ${{ needs['reuse-pr'].outputs.reused == 'true' && 'pawtalk-reused-server-windows' || 'pawtalk-server-windows' }}
           path: release/server
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
@@ -161,7 +231,7 @@ jobs:
       - uses: actions/download-artifact@v7
         if: contains(fromJSON(needs.plan.outputs.components), 'client')
         with:
-          name: pawtalk-client-core
+          name: ${{ needs['reuse-pr'].outputs.reused == 'true' && 'pawtalk-reused-client-core' || 'pawtalk-client-core' }}
           path: release/client-core
       - name: Compare separately built Client and permanent Server cores
         if: contains(fromJSON(needs.plan.outputs.components), 'client')
@@ -199,7 +269,7 @@ jobs:
     if: contains(fromJSON(needs.plan.outputs.components), 'manager')
     needs:
       - plan
-      - verify
+      - verified
       - infrastructure
     runs-on: ubuntu-latest
     steps:
@@ -239,11 +309,11 @@ jobs:
       digest: ${{ steps.seal.outputs.digest }}
   preflight:
     if: >-
-      always() && needs.plan.result == 'success' && needs.verify.result == 'success' && needs.infrastructure.result == 'success' &&
+      always() && needs.plan.result == 'success' && needs.verified.result == 'success' && needs.infrastructure.result == 'success' &&
       !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     needs:
       - plan
-      - verify
+      - verified
       - infrastructure
       - prepare-client
       - prepare-server
@@ -340,7 +410,9 @@ jobs:
     if: always()
     needs:
       - plan
+      - reuse-pr
       - verify
+      - verified
       - infrastructure
       - prepare-client
       - prepare-server

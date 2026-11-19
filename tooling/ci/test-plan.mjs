@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 
 export function testPlan(paths) {
   const suites = new Set(['infrastructure']);
-  const scripts = new Set(['check-docs', 'check-release-notes', 'check-agents', 'check-public', 'check-website', 'release-catalog', 'release-image-smoke', 'release-candidate', 'candidate-origin', 'release-contract', 'release-metadata', 'website-smoke', 'test-plan']);
+  const scripts = new Set(['check-docs', 'check-release-notes', 'check-agents', 'check-public', 'check-website', 'release-catalog', 'release-image-smoke', 'release-candidate', 'candidate-origin', 'pr-candidate', 'release-contract', 'release-metadata', 'website-smoke', 'test-plan']);
   const tests = new Set(['documentation', 'release-notes', 'agent-infrastructure', 'release-catalog', 'ci-scope', 'release-routing', 'release-metadata', 'release-candidate', 'candidate-origin']);
   for (const raw of paths) {
     const file = raw.replaceAll('\\', '/');

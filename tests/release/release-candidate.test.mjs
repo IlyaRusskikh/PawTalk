@@ -23,7 +23,13 @@ async function promoteFixture(directory, env, index) {
   const add=(name,conclusion='success')=>jobs.push({id:jobs.length+1,name,status:'completed',conclusion,head_sha:sha,run_id:123,run_attempt:1,started_at:'2026-01-01T00:00:00Z',completed_at:'2026-01-01T01:00:00Z'});
   for(const name of ['plan','infrastructure','preflight','report','prepare-client'])add(name);
   for(const name of ['tag','prepare-server','prepare-manager','publish-client','publish-server','publish-manager'])add(name,'skipped');
-  for(const name of ['infrastructure','server (ubuntu-24.04)','server (ubuntu-24.04-arm)','windows (windows-2022)','windows (windows-2025)'])add('verify (client) / '+name,name==='infrastructure'?'skipped':'success');
+  for (const name of [
+    'infrastructure',
+    'Server + Manager / Linux (ubuntu-24.04)',
+    'Server + Manager / Linux (ubuntu-24.04-arm)',
+    'Client + Server + Manager / Windows (windows-2022)',
+    'Client + Server + Manager / Windows (windows-2025)',
+  ]) add('verify (client) / '+name,name==='infrastructure'?'skipped':'success');
   const {assetNames}=await import('../../tooling/release/release-candidate.mjs');
   const archives=[['pawtalk-candidate-index','release/candidate-index',['candidate.json']],['pawtalk-client-prepared','release/client',[...assetNames('client','1.2.3'),'receipt.json']]];
   const artifacts=[];
@@ -195,15 +201,35 @@ test('actual workflow enforces preflight before tags and separate publication ap
   }
   assert.equal(check.on.workflow_call.secrets,undefined);
   assert.doesNotMatch(JSON.stringify(check),/PRIVATE_KEY|sign-update/);
-  assert.match(w.jobs.preflight.if,/needs.verify.result == 'success'/);
+  assert.match(w.jobs.preflight.if,/needs.verified.result == 'success'/);
   assert.match(w.jobs.preflight.if,/needs.infrastructure.result == 'success'/);
   assert.match(w.jobs.preflight.if,/failure/);
   assert.equal(w.jobs.tag.environment,'release-tag');
   assert.ok(w.jobs.tag.needs.includes('preflight'));
   assert.match(w.jobs.tag.if,/inputs.promote/);
-  const evaluate = (expression, needs, github = {ref:'refs/heads/main'}) => Function('needs','github','inputs','always','contains',
+  const evaluate = (expression, needs, github = {ref:'refs/heads/main'}) => Function('needs','github','inputs','always','cancelled','contains',
     `return Boolean(${expression.replaceAll('needs.*.result','Object.values(needs).map(job=>job.result)')});`)(
-    needs,github,{promote:true},()=>true,(values,value)=>values.includes(value));
+    needs,github,{promote:true},()=>true,()=>false,(values,value)=>values.includes(value));
+  const reuse = w.jobs['reuse-pr'];
+  assert.deepEqual(reuse.permissions,{actions:'read',contents:'read','pull-requests':'read'});
+  assert.doesNotMatch(JSON.stringify(reuse),/secrets|PRIVATE_KEY|contents.*write/);
+  const confirm = reuse.steps.find(step=>step.id==='confirm');
+  assert.equal(confirm.name,'Confirm verified PR artifacts');
+  const confirmed = (ready, outcomes, components) => Function('steps','needs','contains','fromJSON',`return ${confirm.if};`)(
+    {import:{outputs:{ready}}, ...Object.fromEntries(Object.entries(outcomes).map(([id,outcome])=>[id,{outcome}]))},
+    {plan:{outputs:{components:JSON.stringify(components)}}}, (array,value)=>array.includes(value), JSON.parse);
+  const uploads = {client:'success',core:'success',server:'success'};
+  assert.equal(confirmed('true',uploads,['client','server']),true);
+  assert.equal(confirmed('',uploads,['client','server']),false);
+  for (const id of Object.keys(uploads)) assert.equal(confirmed('true',{...uploads,[id]:'failure'},['client','server']),false);
+  assert.equal(confirmed('true',{server:'success'},['server']),true);
+  for (const reused of ['true','']) for (const result of ['success','skipped','failure','cancelled']) {
+    const needs={'reuse-pr':{result:'success',outputs:{reused}},verify:{result}};
+    assert.equal(evaluate(w.jobs.verify.if,needs),reused!=='true');
+    assert.equal(evaluate(w.jobs.verified.if,needs),result===(reused==='true'?'skipped':'success'));
+    needs['reuse-pr'].result='failure';
+    assert.equal(evaluate(w.jobs.verified.if,needs),false);
+  }
   const success=Object.fromEntries(w.jobs.preflight.needs.map(name=>[name,{result:'success'}]));
   assert.equal(evaluate(w.jobs.preflight.if,success),true);
   for (const stage of w.jobs.preflight.needs) for (const result of ['failure','cancelled']) {
@@ -215,7 +241,7 @@ test('actual workflow enforces preflight before tags and separate publication ap
   assert.equal(w.jobs.tag.permissions.packages,undefined);
   for (const c of ['client','server','manager']) {
     const prepare=w.jobs['prepare-'+c], publish=w.jobs['publish-'+c];
-    assert.ok(prepare.needs.includes('verify'));
+    assert.ok(prepare.needs.includes('verified'));
     assert.match(prepare.if,new RegExp(`'${c}'`));
     assert.equal(publish.environment,'release-publish');
     assert.ok(publish.needs.includes('tag'));
