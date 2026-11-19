@@ -45,7 +45,26 @@ app.whenReady().then(async()=>{
  assert.equal(await run("window.testGains.at(-1).gain.value"),2);
  assert.equal(await run("getComputedStyle(document.querySelector('.voice-volume-popover input')).writingMode"),'vertical-lr');
  await fs.writeFile(path.join(os.tmpdir(),'pawtalk-voice-player-'+lang+'.png'),(await win.capturePage()).toPNG());
- console.log('PASS voice '+lang+': actual MediaRecorder + synthetic microphone, live amplitude, inline stop/preview/send, speed cycle and listener volume');
+
+ await until("document.querySelector('.chat-attach')?.disabled===false");
+ await run("document.querySelector('.chat-attach').click()");
+ await until("document.querySelectorAll('.chat-attachment-menu button').length>=2");
+ await run("document.querySelectorAll('.chat-attachment-menu button')[1].click()");
+ await until("document.querySelector('.voice-stop')?.disabled===false");
+ assert.equal(await run("document.querySelector('.voice-send').disabled"),false,'send is enabled during recording');
+ await wait(350);
+ await run("window.failNext=true;const send=document.querySelector('.voice-send');send.click();send.click()");
+ await until("window.sendRequests.length===2&&document.querySelector('.voice-send')?.disabled===false");
+ const voiceRequest=await run("window.sendRequests.at(-1)");
+ assert.ok(voiceRequest.content.file.size>0);
+ assert.ok(voiceRequest.content.file.voice.duration>0);
+ assert.equal(voiceRequest.content.file.voice.waveform.length,64);
+ await run("document.querySelector('.voice-composer .voice-play').click()");
+ await until("document.querySelector('.voice-composer audio')?.paused===false");
+ await run("document.querySelector('.voice-send').click()");
+ await until("!document.querySelector('.voice-composer')&&document.querySelectorAll('.chat-voice').length===2");
+ assert.deepEqual(await run("window.sendRequests.slice(2)"),[voiceRequest],'retry sends the same recording and request ID once');
+ console.log('PASS voice '+lang+': actual MediaRecorder + synthetic microphone, live amplitude, stop/preview/send, direct send with retry, speed cycle and listener volume');
  }
  clearTimeout(timer);app.exit(0);
  }catch(e){console.error(e);clearTimeout(timer);app.exit(1);}
