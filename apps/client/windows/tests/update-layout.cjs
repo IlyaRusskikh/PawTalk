@@ -19,7 +19,7 @@ app.whenReady().then(async () => {
   };
   const geometry = () => run(`(() => {
     const rect = selector => { const r = document.querySelector(selector).getBoundingClientRect(); return [r.x,r.y,r.width,r.height]; };
-    return { home: rect('.member-welcome'), main: rect('main'), settings: rect('.member-rail-settings'),
+    return { home: rect('.home-screen'), main: rect('main'), settings: rect('.member-rail-settings'),
       overflow: ['html','body','main','.member-main'].map(s => { const e = document.querySelector(s); return [e.scrollWidth > e.clientWidth,e.scrollHeight > e.clientHeight]; }) };
   })()`);
   try {
@@ -38,7 +38,7 @@ app.whenReady().then(async () => {
           await win.loadFile(path.resolve('apps/client/windows/dist/index.html'));
           await run(`localStorage.setItem('pawtalk.language',${JSON.stringify(language)})`);
           await win.loadFile(path.resolve('apps/client/windows/dist/index.html'));
-          await until(`document.documentElement.lang === '${language}' && !!document.querySelector('.member-welcome')`);
+          await until(`document.documentElement.lang === '${language}' && !!document.querySelector('.home-screen')`);
           const before = await geometry();
           await run('window.offerTestUpdate()');
           await until(`!!document.querySelector('.update-modal[open]')`);

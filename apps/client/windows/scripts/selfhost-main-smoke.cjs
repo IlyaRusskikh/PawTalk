@@ -18,7 +18,7 @@ async function test(window){
  const until=async(code,label)=>{for(let i=0;i<600;i++){if(await run(code))return;await wait(100);}throw Error(label+': '+await run('document.body.innerText.slice(-1500)'));};
  const occupied=net.createServer();let port,host;
  try{
-  await until("!!document.querySelector('.member-welcome')",'home');
+  await until("!!document.querySelector('.home-screen')",'home');
   await run("document.querySelector('.onboarding-actions .quiet')?.click()");
   await until("!document.querySelector('dialog')",'finish setup');
   window.webContents.debugger.attach('1.3');await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:reduced?'reduce':'no-preference'}]});
