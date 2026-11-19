@@ -10,7 +10,7 @@ import time
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from .config import atomic, save
+from .config import atomic, save, source_file
 from .platforms import host, admin, protect, secure
 from .release import REPO, fetch
 
@@ -478,7 +478,7 @@ def setup_server(controller,request,source):
         if pending.get('config',{}).get('PAWTALK_PUBLIC_IP',config['PAWTALK_PUBLIC_IP'])!=config['PAWTALK_PUBLIC_IP'] and (controller.runtime.data(state)/'state.json').exists():
             controller.runtime.command(state,config,'rebind')
         write_config(controller.etc/'config.env',config)
-        atomic(controller.template,(Path(source)/'compose.server.yaml').read_bytes())
+        atomic(controller.template,source_file(source,'compose.server.yaml').read_bytes())
         save(controller.state_file,state)
         controller.runtime.start(state,config)
         state['identity']=controller.runtime.healthy(state,config)

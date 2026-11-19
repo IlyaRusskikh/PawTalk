@@ -153,7 +153,7 @@ class ManagerDesktopTests(unittest.TestCase):
             else:linked.unlink()
 
     def test_installer_has_no_access_data_page_or_invitation_command(self):
-        script=(Path(__file__).resolve().parents[3]/'manager/windows/installer.nsi').read_text(encoding='utf-8')
+        script=(Path(__file__).resolve().parents[3]/'apps/manager/windows/service/installer.nsi').read_text(encoding='utf-8')
         self.assertNotIn('InvitationCreate',script)
         self.assertNotIn('invitation --url',script)
 

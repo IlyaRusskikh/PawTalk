@@ -65,6 +65,19 @@ class ManagerSetupTests(unittest.TestCase):
         self.assertEqual(snapshot['values']['PAWTALK_LANGUAGE'],'en')
         self.assertEqual(snapshot['values']['PAWTALK_SERVER_AUTO_UPDATE'],'false')
         self.assertEqual(snapshot['values']['PAWTALK_MANAGER_AUTO_UPDATE'],'false')
+    def test_flat_installed_bundle_source_keeps_first_run_compatible(self):
+        template=(self.source/'deploy/compose.server.yaml').read_bytes()
+        flat=Path(self.temp.name)/'flat-manager'
+        flat.mkdir()
+        (flat/'compose.server.yaml').write_bytes(template)
+        (flat/'trust.json').write_bytes((self.source/'trust.json').read_bytes())
+        self.source=flat
+        self.install()
+        package=self.package()
+        native.setup_server(self.c,self.request(package),self.source)
+        self.assertEqual(self.c.template.read_bytes(),template)
+        self.assertTrue(self.room.running)
+
     def test_reinstall_preserves_trust_config_identity_and_stopped_state(self):
         self.install();package=self.package();native.setup_server(self.c,self.request(package),self.source)
         old=self.c.state();config=self.c.config();trust=(self.c.etc/'trust.json').read_bytes()
