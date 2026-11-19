@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import path from 'node:path';
-const assets = path.resolve('dist/assets');
+import { fileURLToPath } from 'node:url';
+const assets = fileURLToPath(new URL('../dist/assets/', import.meta.url));
 test('compiled worklet emits zeros for mute and released PTT, even with loud input', async () => {
   const name = (await fs.readdir(assets)).find(name => name.startsWith('gate-worklet-') && name.endsWith('.js'));
   assert.ok(name, 'run npm run build before npm test');
