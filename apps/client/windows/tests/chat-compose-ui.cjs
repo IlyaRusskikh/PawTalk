@@ -8,6 +8,11 @@ app.whenReady().then(async()=>{
  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const until=async(code)=>{for(let i=0;i<120;i++){if(await run(code))return;await wait(50);}throw Error(code);};
  const set=text=>run(`(()=>{const e=document.querySelector('.member-composer textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,${JSON.stringify(text)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+ const previewCenterOffset=()=>run(`(()=>{
+  const shell=document.querySelector('.chat-input-shell').getBoundingClientRect();
+  const button=document.querySelector('.chat-preview-toggle').getBoundingClientRect();
+  return Math.abs((button.top+button.height/2)-(shell.top+shell.height/2));
+ })()`);
  const timer=setTimeout(()=>app.exit(1),60000);
  try{
  for(const lang of ['ru','en']){
@@ -17,6 +22,7 @@ app.whenReady().then(async()=>{
  await run("window.composerHeight=document.querySelector('.chat-input-shell').getBoundingClientRect().height");
  await run("document.querySelector('.chat-preview-toggle').click()");
  await until("!!document.querySelector('.chat-compose-preview table')");
+ assert.ok(await previewCenterOffset()<1,'preview toggle is centered in a multiline composer');
  assert.ok(await run("Math.abs(document.querySelector('.chat-input-shell').getBoundingClientRect().height-window.composerHeight)<1"),'preview preserves composer height');
  assert.equal(await run("document.querySelector('.chat-preview-toggle').getAttribute('aria-pressed')"),'true');
  assert.deepEqual(await run("[...document.querySelectorAll('.chat-compose-preview [data-marker]')].map(e=>e.dataset.marker)"),['1.','2.']);
@@ -32,6 +38,7 @@ app.whenReady().then(async()=>{
  const inputGlyphTop=glyphTop((await win.capturePage(crop)).toBitmap());
  await run("document.querySelector('.chat-preview-toggle').click()");
  await until("!!document.querySelector('.chat-compose-preview .chat-markdown-line')");
+ assert.ok(await previewCenterOffset()<1,'preview toggle is centered in a single-line composer');
  await run("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
  const previewGlyphTop=glyphTop((await win.capturePage(crop)).toBitmap());
  assert.ok(Number.isFinite(inputGlyphTop)&&Number.isFinite(previewGlyphTop)&&Math.abs(inputGlyphTop-previewGlyphTop)<=1,`single-line glyph baseline: input ${inputGlyphTop}, preview ${previewGlyphTop}`);
