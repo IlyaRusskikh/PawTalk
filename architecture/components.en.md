@@ -11,7 +11,7 @@
 | Windows Manager UI and service controller | [`apps/manager/windows/desktop/`](../apps/manager/windows/desktop), [`apps/manager/windows/service/`](../apps/manager/windows/service) |
 | Linux Manager CLI, transactions and verification | [`apps/manager/linux/pawtalk_manager/`](../apps/manager/linux/pawtalk_manager), [`apps/manager/linux/pawtalkctl`](../apps/manager/linux/pawtalkctl) |
 | Managed Linux deployment | [`apps/manager/linux/deploy/compose.server.yaml`](../apps/manager/linux/deploy/compose.server.yaml), Manager systemd units |
-| Builds, release manifests and CI | [`scripts/`](../scripts), [`.github/workflows/`](../.github/workflows) |
+| Builds, release manifests and CI | [`tooling/`](../tooling), [`.github/workflows/`](../.github/workflows) |
 | Integration, security and release tests | [`tests/`](../tests), [Go tests](../apps/server) |
 
 The Windows Client packages the shared Go/LiveKit core for temporary rooms; a standalone Server release packages the core for permanent hosts. Keep these build inputs aligned; historical binaries are immutable.

@@ -1,6 +1,8 @@
 // Paired-language and local Markdown-link guard for public documentation.
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { realpathSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { isCanonicalNotesFile } from './check-release-notes.mjs';
 
@@ -8,6 +10,21 @@ const root = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const markdown = [];
 const roots = ['docs', 'architecture', 'changelog', 'releases'];
 const errors = [];
+// Ignore leftover build/runtime directories that a clean checkout never contains.
+// Source archives/standalone fixtures without Git retain filesystem validation.
+let sourceTargets;
+try {
+  const top = execFileSync('git',['rev-parse','--show-toplevel'],{cwd:root,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();
+  const canonical=value=>{const resolved=realpathSync.native(value);return process.platform==='win32'?resolved.toLowerCase():resolved;};
+  if(canonical(top)===canonical(root)){
+    sourceTargets=new Set();
+    const paths=execFileSync('git',['ls-files','-z','--cached','--others','--exclude-standard'],{cwd:root,encoding:'utf8',maxBuffer:16*1024*1024});
+    for(const file of paths.split('\0').filter(Boolean)){
+      let entry=file;while(entry&&entry!=='.'){sourceTargets.add(entry);entry=path.posix.dirname(entry);}
+    }
+  }
+} catch { /* A source archive has no Git index. */ }
+
 async function walk(relative) {
   const dir = path.join(root, relative);
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -60,7 +77,11 @@ for (const filename of markdown) {
       errors.push(filename + ': relative link escapes repository ' + link);
       continue;
     }
-    try { await stat(target); }
+    try {
+      const relative=path.relative(root,target).split(path.sep).join('/');
+      if(sourceTargets&&!sourceTargets.has(relative))throw Error('not a source target');
+      await stat(target);
+    }
     catch { errors.push(filename + ': broken relative link ' + link); }
   }
 }

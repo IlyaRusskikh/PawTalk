@@ -48,6 +48,19 @@ test('prerelease locale views stay separate from publication sources in both CLI
     const broken = run('check-docs');
     assert.equal(broken.status, 1);
     assert.match(broken.stderr, /broken relative link missing\.md/);
+    await writeFile(path.join(directory, `releases/${tag}.en.md`), view);
+    const init=spawnSync('git',['init','--quiet'],{cwd:directory,encoding:'utf8'});assert.equal(init.status,0,init.stderr);
+    await writeFile(path.join(directory,'.gitignore'),'old-scripts/\n');
+    const stage=spawnSync('git',['add','--all'],{cwd:directory,encoding:'utf8'});assert.equal(stage.status,0,stage.stderr);
+    await mkdir(path.join(directory,'old-scripts'));
+    await writeFile(path.join(directory,'old-scripts','runtime.log'),'local runtime output');
+    await writeFile(path.join(directory,'README.md'),'# Fixture\n\n'+'Documentation fixture. '.repeat(8)+'\n[Old tools](old-scripts)\n');
+    assert.equal(spawnSync('git',['check-ignore','--quiet','old-scripts/runtime.log'],{cwd:directory}).status,0,'fixture contains ignored runtime data');
+    const ignored=run('check-docs');assert.equal(ignored.status,1);assert.match(ignored.stderr,/broken relative link old-scripts/);
+    await mkdir(path.join(directory,'new-tools'));await writeFile(path.join(directory,'new-tools','capture.mjs'),'// new untracked source');
+    await writeFile(path.join(directory,'README.md'),'# Fixture\n\n'+'Documentation fixture. '.repeat(8)+'\n[New tools](new-tools)\n');
+    const untracked=run('check-docs');assert.equal(untracked.status,0,untracked.stdout+untracked.stderr);
+
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -11,7 +11,7 @@
 | Windows Manager UI и контроллер службы | [`apps/manager/windows/desktop/`](../apps/manager/windows/desktop), [`apps/manager/windows/service/`](../apps/manager/windows/service) |
 | Linux Manager CLI, транзакции и проверка | [`apps/manager/linux/pawtalk_manager/`](../apps/manager/linux/pawtalk_manager), [`apps/manager/linux/pawtalkctl`](../apps/manager/linux/pawtalkctl) |
 | Управляемое Linux-развёртывание | [`apps/manager/linux/deploy/compose.server.yaml`](../apps/manager/linux/deploy/compose.server.yaml), units systemd |
-| Сборки, release manifest и CI | [`scripts/`](../scripts), [`.github/workflows/`](../.github/workflows) |
+| Сборки, release manifest и CI | [`tooling/`](../tooling), [`.github/workflows/`](../.github/workflows) |
 | Интеграционные, security и release-тесты | [`tests/`](../tests), [Go tests](../apps/server) |
 
 Windows Client поставляет общее ядро Go/LiveKit для временных комнат, Server release — то же ядро для постоянных серверов. Сборочные входы должны совпадать; исторические бинарники неизменяемы.
