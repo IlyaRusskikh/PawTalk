@@ -10,10 +10,12 @@ before broad search; verify descriptive docs against code.
   relationships when available, then read only the relevant source. Use targeted
   text search for literals, configuration, and index gaps. Avoid repeating a
   successful search with a broad scan or dumping whole files and logs.
-- Work in branches from current main; never commit directly to main. Follow
-  [Git/development rules](agents/rules/development.md). Working-branch pushes are
-  allowed within the task after final checks. Merge, tag and publication each need
-  separate explicit owner permission. Default merge is squash, then delete branch.
+- Work in branches from current main; never commit directly to main. Start new
+  branches as `rename-me-before-pr` and rename them to match the final diff before
+  opening a PR. Follow [Git/development rules](agents/rules/development.md).
+  Working-branch pushes are allowed within the task after final checks. Merge,
+  tag and publication each need separate explicit owner permission. Default
+  merge is squash, then delete branch.
 - Preserve AGPL-3.0-only, third-party notices, architecture and independent
   Client/Server/Manager contracts. No secrets, live invitations, personal data,
   CONTINUE.md, generated files, downloaded tools or build output in Git. No new production
