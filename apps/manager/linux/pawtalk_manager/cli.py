@@ -1,19 +1,23 @@
 """Shared host CLI. Windows checks Manager availability independently of auto-install."""
 import argparse
 import contextlib
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import textwrap
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from . import bundles, preflight, release
 from .config import DEFAULTS, atomic, lock, read_config, write_config, save, validate, source_file
 from .controller import Controller
 from .runtime import run
-from .platforms import WINDOWS, admin, default_root, host, protect
+from .platforms import WINDOWS, TerminalMaintenance, WindowsConsole, admin, default_root, host, protect
 
 MESSAGES = {
  'confirm':('Продолжить? [y/N]: ','Continue? [y/N]: '),
@@ -21,6 +25,7 @@ MESSAGES = {
  'port':('Основной порт','Base port'),
  'chat':('Лимит истории, МиБ (0 = без ограничения)','History limit, MiB (0 = unlimited)'),
  'auto':('Включить автоматическое обновление сервера? (да/нет)','Enable automatic server updates? (yes/no)'),
+ 'auto_manager':('Включить автоматическое обновление Manager? (да/нет)','Enable automatic Manager updates? (yes/no)'),
  'invitation_unavailable':('Сервер уже настроен. Приглашения создают администраторы и модераторы в клиенте.','This server is already initialized. Administrators and moderators create invitations in the client.'),
  'updates':('Сквозное шифрование обязательно; ключ создаст клиент первого администратора. Обновление сервера прерывает звонок. Автообновление включает сервер и средство его обслуживания.','End-to-end encryption is mandatory; the first administrator client creates the key. Server updates interrupt calls. Automatic updates include the server and its maintenance tool.'),
  'docker':('Установить Docker из официального apt-репозитория?','Install Docker from its official apt repository?'),
@@ -40,6 +45,86 @@ MESSAGES = {
  'invalid_ip':('Введите корректный IPv4-адрес.','Enter a valid IPv4 address.'),
  'invalid_port':('Введите порт от 1024 до 65532.','Enter a port from 1024 to 65532.'),
  'invalid_chat':('Введите целое число от 0 до 1048576 МиБ.','Enter an integer from 0 to 1048576 MiB.'),
+ 'stop':('Остановить сервер? Текущие звонки прервутся.','Stop the server? Active calls will disconnect.'),
+ 'tui_backup_confirm':('Для создания копии работающий сервер временно остановится. Текущие звонки прервутся.','Creating a backup temporarily stops a running server and disconnects active calls.'),
+ 'tui_terminal':('Откройте интерактивный терминал. Для SSH выделите TTY (ssh -t).','Use an interactive terminal. For SSH, allocate a TTY (ssh -t).'),
+ 'tui_status':('Сервер {server} · Manager {manager} · {status}','Server {server} · Manager {manager} · {status}'),
+ 'tui_uninstalled':('Сервер не установлен.','Server is not installed.'),
+ 'tui_stopped':('Остановлен','Stopped'),
+ 'tui_refresh':('Обновить состояние','Refresh status'),
+ 'tui_logs':('Последние записи журнала','Recent logs'),
+ 'tui_doctor':('Проверить состояние','Check health'),
+ 'tui_start':('Запустить сервер','Start server'),
+ 'tui_stop':('Остановить сервер','Stop server'),
+ 'tui_server_update':('Проверить обновление сервера','Check for Server update'),
+ 'tui_manager_update':('Проверить обновление Manager','Check for Manager update'),
+ 'tui_backup':('Создать резервную копию','Create backup'),
+ 'tui_restore':('Восстановить из резервной копии','Restore from backup'),
+ 'tui_restore_confirm':('Восстановить {name}? Сервер вернётся к состоянию копии. Изменения после её создания исчезнут из активного сервера, текущие звонки прервутся.',
+                         'Restore {name}? The server will return to the state in the backup. Later changes will disappear from the active server and active calls will disconnect.'),
+ 'tui_no_backups':('Резервных копий нет.','No backups available.'),
+ 'tui_section_keys':('↑↓ / PgUp PgDn Выбрать   Enter Открыть   Esc Назад','↑↓ / PgUp PgDn Select   Enter Open   Esc Back'),
+ 'tui_exit':('Выход','Exit'),
+ 'tui_choose':('Номер действия: ','Action number: '),
+ 'tui_invalid':('Выберите номер из меню.','Choose a number from the menu.'),
+ 'tui_return':('Enter — вернуться в меню','Enter to return to the menu'),
+ 'tui_empty':('Нет записей.','No entries.'),
+ 'tui_cancelled':('Отменено.','Cancelled.'),
+ 'tui_keys':('↑↓ Выбрать   Enter Открыть   Esc Выход','↑↓ Select   Enter Open   Esc Exit'),
+ 'tui_mouse':(' · Щелчок мышью',' · Mouse click'),
+ 'tui_scroll':('↑↓ / PgUp PgDn Прокрутка','↑↓ / PgUp PgDn Scroll'),
+ 'tui_back':('Назад','Back'),
+ 'tui_cancel':('Отмена','Cancel'),
+ 'tui_accept':('Подтвердить','Confirm'),
+ 'tui_resize':('Увеличьте высоту терминала','Increase the terminal height'),
+ 'tui_network':('Сеть','Network'),
+ 'tui_security':('Безопасность и история','Security and history'),
+ 'tui_encryption':('Сквозное шифрование обязательно. Ключи хранятся у клиентов.','End-to-end encryption is mandatory. Clients hold the encryption keys.'),
+ 'tui_overview':('Обзор','Overview'),
+ 'tui_updates':('Обновления','Updates'),
+ 'tui_backups':('Резервные копии','Backups'),
+ 'tui_diagnostics':('Диагностика','Diagnostics'),
+ 'tui_network_info':('Адрес и порты','Address and ports'),
+ 'tui_network_edit':('Изменить IP и порт','Edit IP and port'),
+ 'tui_encryption_title':('Сквозное шифрование','End-to-end encryption'),
+ 'tui_history':('Изменить лимит истории','Edit history limit'),
+ 'tui_install_server':('Установить обновление Server','Install Server update'),
+ 'tui_install_manager':('Установить обновление Manager','Install Manager update'),
+ 'tui_install_manifest':('Установить Server из подписанного манифеста','Install Server from a signed manifest'),
+ 'tui_install_zip':('Установить Server из ZIP','Install Server from ZIP'),
+ 'tui_auto_server':('Автообновление Server','Automatic Server updates'),
+ 'tui_auto_manager':('Автообновление Manager','Automatic Manager updates'),
+ 'tui_enabled':('Включить','Enable'),
+ 'tui_disabled':('Выключить','Disable'),
+ 'tui_on':('Включено','Enabled'),
+ 'tui_off':('Выключено','Disabled'),
+ 'tui_language':('Язык','Language'),
+ 'tui_initial_admin':('Приглашение первого администратора','First administrator invitation'),
+ 'tui_invitation_copy':('Скопируйте строку в PawTalk Client. Не передавайте её другим людям.','Copy the line into PawTalk Client. Keep it private.'),
+ 'tui_delete_backup':('Удалить резервную копию','Delete backup'),
+ 'tui_delete_confirm':('Удалить копию {name}? Она станет недоступна для восстановления.','Delete backup {name}? It will no longer be available for restore.'),
+ 'tui_setup':('Установить первый сервер','Set up the first server'),
+ 'tui_setup_confirm':('Начать установку с указанным адресом и настройками?','Install Server with the entered address and settings?'),
+ 'tui_published':('Опубликованный Server','Published Server'),
+ 'tui_local_manifest':('Подписанный манифест на диске','Signed manifest on disk'),
+ 'tui_local_zip':('ZIP-пакет Server на диске','Server ZIP package on disk'),
+ 'tui_zip_path':('Путь к ZIP-пакету Server','Path to the Server ZIP package'),
+ 'tui_zip_signed':('Подпись пакета проверена.','Package signature verified.'),
+ 'tui_zip_local':('У пакета нет подписи издателя. Подтверждайте только пакет из доверенного источника. Автообновление Server будет отключено.',
+                  'The package has no publisher signature. Confirm only a package from a trusted source. Automatic Server updates will be disabled.'),
+ 'tui_manager_queued':('Установщик Manager запущен. После установки откройте TUI снова.','The Manager installer has been started. Reopen the TUI after it finishes.'),
+ 'tui_maintenance':('TUI закрыт для обслуживания Manager.','The TUI closed for Manager maintenance.'),
+ 'tui_admin_windows':('Откройте терминал от имени администратора.','Open the terminal as Administrator.'),
+ 'tui_manifest_path':('Путь к подписанному JSON-манифесту Server','Path to the signed Server JSON manifest'),
+ 'tui_manifest_missing':('Файл манифеста не найден.','Manifest file not found.'),
+ 'tui_port_hint':('Откройте TCP {base}, TCP {tcp} и UDP {udp} для клиентов. Внутренний TCP {internal} оставьте закрытым.','Allow client access to TCP {base}, TCP {tcp} and UDP {udp}. Keep internal TCP {internal} private.'),
+ 'tui_network_confirm':('Изменение адреса или порта прервёт текущие звонки. Старые приглашения и сохранённые адреса могут перестать работать. При смене IP сервер выпустит новый TLS-сертификат.',
+                         'Changing the address or port disconnects active calls. Existing invitations and saved addresses may stop working. Changing the IP replaces the TLS certificate.'),
+ 'tui_history_confirm':('Изменение лимита прервёт текущие звонки. Уменьшение лимита может удалить старые сообщения.','Changing the limit disconnects active calls. Reducing it can remove older messages.'),
+ 'tui_server_update_confirm':('При установке Server прервутся текущие звонки.','Installing Server will disconnect active calls.'),
+ 'tui_stop_exit':('Остановить сервер и выйти','Stop Server and exit'),
+ 'tui_available':('Доступна версия {version}','Version {version} is available'),
+ 'tui_current':('Обновлений нет','Up to date'),
 }
 
 
@@ -77,16 +162,18 @@ def confirm(message,yes,lang):
         raise ValueError('Cancelled')
 
 
-def wizard(lang,initial=None):
+def wizard(lang,initial=None,independent_updates=False):
     values = dict(DEFAULTS,**(initial or {}))
     values['PAWTALK_LANGUAGE'] = lang
     candidates = [] if initial else preflight.public_candidates()
     fields = [('ip','PAWTALK_PUBLIC_IP'),('port','PAWTALK_PORT'),('chat','PAWTALK_CHAT_MAX_MB'),('auto','PAWTALK_SERVER_AUTO_UPDATE')]
+    if independent_updates:
+        fields.append(('auto_manager','PAWTALK_MANAGER_AUTO_UPDATE'))
     values['PAWTALK_PUBLIC_IP'] = values.get('PAWTALK_PUBLIC_IP',candidates[0] if candidates else '')
-    print(text('updates',lang))
+    print(text('tui_encryption' if independent_updates else 'updates',lang))
     for key,field in fields:
-        default = 'true' if not initial and key == 'auto' else values[field]
-        boolean = key == 'auto'
+        boolean = key in ('auto','auto_manager')
+        default = 'true' if not initial and boolean else values[field]
         shown_default = (('да' if default == 'true' else 'нет') if lang == 'ru' else ('yes' if default == 'true' else 'no')) if boolean else default
         while True:
             response = input(text(key,lang)+(f' [{shown_default}]' if shown_default else '')+': ')
@@ -104,15 +191,17 @@ def wizard(lang,initial=None):
                     print(text('invalid_'+key,lang))
                     continue
             values[field] = response
-            if key == 'auto':
+            if key == 'auto' and not independent_updates:
                 values['PAWTALK_MANAGER_AUTO_UPDATE'] = response
             break
     return validate(values)
 
 
 def manifest(file,component,keys):
-    found = release.verify(Path(file).read_bytes(),component,keys) if file else release.discover(component,keys)
-    return found
+    if not file:
+        return release.discover(component,keys)
+    with Path(file).open('rb') as stream:
+        return release.verify(stream.read(16385),component,keys)
 
 
 def doctor(controller,lang):
@@ -124,6 +213,10 @@ def doctor(controller,lang):
         return result
     state,config = controller.state(),controller.config()
     result.update(serverVersion=state['version'],managerVersion=state['managerVersion'],image=state['image'])
+    result['address'] = f'{config["PAWTALK_PUBLIC_IP"]}:{config["PAWTALK_PORT"]}'
+    if WINDOWS:
+        from .native import installed_desktop_version
+        result['managerVersion'] = installed_desktop_version()
     for name in ['last-operation.json','last-error.json','health.json']:
         if (controller.directory/name).exists():
             result[name] = json.loads((controller.directory/name).read_text())
@@ -145,6 +238,646 @@ def doctor(controller,lang):
     return result
 
 
+TUI_SECTIONS = (
+    ('tui_overview',(
+        ('tui_refresh',()),('tui_start',('start',)),('tui_stop',('stop','--yes')),
+        ('tui_initial_admin',None),('tui_setup',None),('tui_language',None),('tui_stop_exit',None),
+    )),
+    ('tui_network',(('tui_network_info',None),('tui_network_edit',None))),
+    ('tui_security',(('tui_encryption_title',None),('tui_history',None))),
+    ('tui_updates',(
+        ('tui_server_update',('update','check','--details')),('tui_install_server',None),
+        ('tui_install_manifest',None),('tui_auto_server',None),
+        ('tui_manager_update',('manager','check','--details')),('tui_install_manager',None),('tui_auto_manager',None),
+    )),
+    ('tui_backups',(('tui_backup',('backup','create')),('tui_restore',None),('tui_delete_backup',None))),
+    ('tui_diagnostics',(('tui_doctor',('doctor',)),('tui_logs',('logs',)))),
+)
+TUI_CONFIRMATIONS = {'tui_stop':'stop','tui_backup':'tui_backup_confirm'}
+
+
+def terminal_output(value):
+    # Logs and subprocess errors are data, including any embedded VT escapes.
+    return re.sub(r'[\x00-\x08\x0b-\x1f\x7f-\x9f]', '', value.replace('\r\n','\n')).strip()
+
+
+def backup_entries(directory):
+    entries = []
+    for path in directory.glob('backup-*'):
+        metadata = path/'metadata.json'
+        if not re.fullmatch(r'backup-[a-f0-9]{12}',path.name) or path.is_symlink() or metadata.is_symlink() or not metadata.is_file():
+            continue
+        try:
+            meta = json.loads(metadata.read_text())
+            created = meta['createdAt']
+            if meta['schema'] == 1 and type(created) is int and 0 <= created <= 253402300799:
+                entries.append(dict(name=path.name,created=created))
+        except (OSError,ValueError,KeyError,TypeError):
+            continue
+    return sorted(entries,key=lambda entry:(entry['created'],entry['name']),reverse=True)
+
+
+def tui_backups(lang,execute):
+    code,output = execute('backup','list','--json')
+    if code:
+        return [],terminal_output(output) or text('error',lang)
+    entries = json.loads(output)
+    return entries,text('tui_no_backups',lang) if not entries else ''
+
+
+def tui_backup_label(entry):
+    date = time.strftime('%Y-%m-%d %H:%M UTC',time.gmtime(entry['created']))
+    return f'{date}  {entry["name"]}'
+
+
+def tui_numbered_choice(lang,items,exit_label):
+    for number,label in enumerate(items,1):
+        print(f'  {number}. {label}')
+    print(f'  0. {exit_label}')
+    choices = {str(index+1):index for index in range(len(items))}
+    while (choice := input(text('tui_choose',lang)).strip()) not in choices and choice != '0':
+        print(text('tui_invalid',lang))
+    return choices.get(choice)
+
+
+def tui_prompt(label,default=None):
+    suffix = f' [{default}]' if default is not None else ''
+    value = input(f'{label}{suffix}: ').replace('\x1b[200~','').replace('\x1b[201~','').strip()
+    return None if value == '\x1b' else (value or default)
+
+
+def tui_result(lang,code,output,command=()):
+    if not code and command in (('update','check','--details'),('manager','check','--details')):
+        checked = json.loads(output)
+        return text('tui_available',lang).format(version=checked['version']) if checked['available'] else text('tui_current',lang)
+    return terminal_output(output) or text('error' if code else 'tui_empty',lang)
+
+
+def tui_settings(lang,execute,ui,heading):
+    code,output = execute('settings')
+    if code:
+        ui.show(heading,tui_result(lang,code,output))
+        return None
+    return json.loads(output)['values']
+
+
+def tui_configure(ui,heading,changes):
+    return ui.run(heading,('configure',*(f'{key}={value}' for key,value in changes.items()),'--yes'))
+
+
+def tui_manifest_path(lang,ui,heading):
+    value = ui.prompt(text('tui_manifest_path',lang))
+    if value is None:
+        return None
+    path = Path(value).expanduser().resolve()
+    if not path.is_file():
+        ui.show(heading,text('tui_manifest_missing',lang))
+        return None
+    return str(path)
+
+
+def tui_install_update(lang,execute,ui,heading,component,file=None):
+    options = ('--manifest',file) if file else ()
+    code,output = execute(component,'check','--details',*options)
+    if code:
+        ui.show(heading,tui_result(lang,code,output))
+        return
+    update = json.loads(output)
+    if not update['available']:
+        ui.show(heading,text('tui_current',lang))
+        return
+    details = text('tui_available',lang).format(version=update['version'])
+    if file:
+        details += '\n'+update['digest']
+    if component == 'update':
+        details += '\n\n'+text('tui_server_update_confirm',lang)
+    if ui.approve(heading,details):
+        # Use the exact checked manifest even if a newer release appears before confirmation.
+        with tempfile.TemporaryDirectory(prefix='pawtalk-tui-') as work:
+            checked = Path(work)/'manifest.json'
+            atomic(checked,update['manifest'].encode())
+            command = (component,'now','--manifest',str(checked))
+            if WINDOWS and component == 'manager':
+                code,output = execute(*command)
+                if code == 0:
+                    ui.plain(lambda: print(text('tui_manager_queued',lang),flush=True))
+                    return 'exit'
+                ui.show(heading,tui_result(lang,code,output))
+            else:
+                ui.run(heading,command)
+
+
+def tui_windows_package(lang,execute,ui,heading,replacing=False):
+    value = ui.prompt(text('tui_zip_path',lang))
+    if value is None:
+        return None
+    raw = value.strip('"') # Paste as path in Explorer includes surrounding quotes.
+    path = str(Path(raw).expanduser().resolve())
+    code,output = execute('terminal-package','inspect',path)
+    if code:
+        ui.show(heading,tui_result(lang,code,output))
+        return None
+    package = json.loads(output)
+    trust = text('tui_zip_signed' if package['verified'] else 'tui_zip_local',lang)
+    details = f'Server {package["version"]}\n\nSHA-256: {package["sha256"]}\n\n{trust}'
+    if replacing:
+        details += '\n\n'+text('tui_server_update_confirm',lang)
+    return package['id'] if ui.approve(heading,details) else None
+
+
+def tui_update_action(key,lang,execute,ui,heading):
+    if key in ('tui_install_server','tui_install_manifest'):
+        if WINDOWS and key == 'tui_install_manifest':
+            package = tui_windows_package(lang,execute,ui,heading,replacing=True)
+            if package:
+                ui.run(heading,('terminal-package','install',package))
+            return None
+        file = tui_manifest_path(lang,ui,heading) if key == 'tui_install_manifest' else None
+        if key == 'tui_install_server' or file:
+            tui_install_update(lang,execute,ui,heading,'update',file)
+    elif key == 'tui_install_manager':
+        return tui_install_update(lang,execute,ui,heading,'manager')
+    else:
+        values = tui_settings(lang,execute,ui,heading)
+        if values is None:
+            return
+        field = 'PAWTALK_SERVER_AUTO_UPDATE' if key == 'tui_auto_server' else 'PAWTALK_MANAGER_AUTO_UPDATE'
+        status = text('tui_on' if values[field] == 'true' else 'tui_off',lang)
+        choice = ui.choose(heading,[text('tui_enabled',lang),text('tui_disabled',lang)],status=status)
+        if choice is not None:
+            tui_configure(ui,heading,{field:('true','false')[choice]})
+
+
+def tui_network_inputs(lang,old_ip,old_port):
+    ip = tui_prompt(text('ip',lang),old_ip)
+    port = tui_prompt(text('port',lang),old_port) if ip is not None else None
+    return (ip,port) if port is not None else None
+
+
+def tui_label(key,lang):
+    return text('tui_install_zip' if WINDOWS and key == 'tui_install_manifest' else key,lang)
+
+
+def tui_extra(key,lang,execute,ui):
+    heading = tui_label(key,lang)
+    if key == 'tui_language':
+        choice = ui.choose(heading,['Русский','English'])
+        if choice is not None:
+            language = ('ru','en')[choice]
+            code,output = execute('status')
+            if code:
+                ui.show(heading,tui_result(lang,code,output))
+            elif not json.loads(output)['installed']:
+                execute('tui-language',language)
+                return language
+            elif tui_configure(ui,heading,{'PAWTALK_LANGUAGE':language}) == 0:
+                return language
+    elif key == 'tui_encryption_title':
+        ui.show(heading,text('tui_encryption',lang))
+    elif key in ('tui_network_info','tui_network_edit','tui_history'):
+        values = tui_settings(lang,execute,ui,heading)
+        if values is None:
+            return None
+        if key == 'tui_history':
+            old_limit = values['PAWTALK_CHAT_MAX_MB']
+            limit = ui.prompt(text('chat',lang),old_limit)
+            if limit is not None and limit != old_limit and ui.approve(heading,text('tui_history_confirm',lang)):
+                tui_configure(ui,heading,{'PAWTALK_CHAT_MAX_MB':limit})
+        else:
+            old_ip,old_port = (values[field] for field in ('PAWTALK_PUBLIC_IP','PAWTALK_PORT'))
+            if key == 'tui_network_info':
+                port = int(old_port)
+                ui.show(heading,f'{old_ip}:{old_port}\n\n'+text('tui_port_hint',lang).format(base=port,tcp=port+1,udp=port+2,internal=port+3))
+            else:
+                address = ui.plain(lambda: tui_network_inputs(lang,old_ip,old_port))
+                if address is not None and address != (old_ip,old_port) and ui.approve(heading,text('tui_network_confirm',lang)):
+                    ip,port = address
+                    tui_configure(ui,heading,{'PAWTALK_PUBLIC_IP':ip,'PAWTALK_PORT':port})
+    elif key in ('tui_install_server','tui_install_manager','tui_install_manifest','tui_auto_server','tui_auto_manager'):
+        return tui_update_action(key,lang,execute,ui,heading)
+    elif key in ('tui_restore','tui_delete_backup'):
+        entries,problem = tui_backups(lang,execute)
+        if not entries:
+            ui.show(heading,problem)
+            return None
+        choice = ui.choose(heading,[tui_backup_label(entry) for entry in entries])
+        if choice is not None:
+            name = entries[choice]['name']
+            action,message = ('restore','tui_restore_confirm') if key == 'tui_restore' else ('delete','tui_delete_confirm')
+            if ui.approve(heading,text(message,lang).format(name=name)):
+                ui.run(heading,('backup',action,name,'--yes'))
+    elif key == 'tui_initial_admin':
+        code,output = execute('initial-admin','--url')
+        if code:
+            ui.show(heading,tui_result(lang,code,output))
+        else:
+            ui.plain(lambda: print(text('tui_invitation_copy',lang)+'\n\n'+terminal_output(output)),True)
+    elif key == 'tui_setup':
+        code,output = execute('status')
+        if code or json.loads(output)['installed']:
+            ui.show(heading,tui_result(lang,code,output) if code else text('existing',lang))
+            return None
+        choice = ui.choose(heading,[text('tui_published',lang),text('tui_local_zip' if WINDOWS else 'tui_local_manifest',lang)])
+        if choice is not None:
+            if WINDOWS:
+                package = tui_windows_package(lang,execute,ui,heading) if choice else None
+                if choice and package is None:
+                    return None
+                old = tui_settings(lang,execute,ui,heading)
+                if old is None:
+                    return None
+                values = ui.plain(lambda: wizard(lang,old,independent_updates=True))
+                if values is not None and ui.approve(heading,text('tui_setup_confirm',lang)):
+                    payload = dict(source='local' if choice else 'published',id=package,expected=old,
+                                   values={key:values[key] for key in SETTINGS_FIELDS})
+                    ui.run(heading,('terminal-setup',payload))
+                return None
+            file = tui_manifest_path(lang,ui,heading) if choice else None
+            if not choice or file:
+                options = ('--server-manifest',file) if file else ()
+                ui.plain(lambda: execute('install','--new',*options),True)
+    elif key == 'tui_stop_exit' and ui.approve(heading,text('stop',lang)):
+        if ui.run(heading,('stop','--yes')) == 0:
+            return 'exit'
+    return None
+
+
+def tui_status(lang,execute):
+    code,output = execute('status')
+    if code:
+        return terminal_output(output) or text('unknown',lang)
+    status = json.loads(output)
+    if not status['installed']:
+        return text('tui_uninstalled',lang)
+    health = status['health'] if status.get('running',True) else text('tui_stopped',lang)
+    summary = text('tui_status',lang).format(server=status['serverVersion'],manager=status['managerVersion'],status=health)
+    if status.get('address'):
+        summary += ' · '+status['address']
+    return terminal_output(summary)
+
+
+def tui_navigation(execute,ui):
+    section = None
+    root_selection = action_selection = 0
+    while True:
+        lang = ui.lang
+        status = tui_status(lang,execute)
+        if section is None:
+            labels = [text(key,lang) for key,_ in TUI_SECTIONS]
+            choice = ui.choose('PawTalk Manager',labels,status=status,selected=root_selection,root=True)
+            if choice is None:
+                return 0
+            root_selection = choice
+            section = TUI_SECTIONS[choice]
+            action_selection = 0
+            continue
+        section_key,actions = section
+        labels = [tui_label(key,lang) for key,_ in actions]
+        choice = ui.choose(text(section_key,lang),labels,status=status,selected=action_selection)
+        if choice is None:
+            section = None
+            continue
+        action_selection = choice
+        key,command = actions[choice]
+        if command is None:
+            next_view = tui_extra(key,lang,execute,ui)
+            if next_view == 'exit':
+                return 0
+            ui.lang = next_view or lang
+        elif command:
+            heading = text(key,lang)
+            confirmation = TUI_CONFIRMATIONS.get(key)
+            if not confirmation or ui.approve(heading,text(confirmation,lang)):
+                ui.run(heading,command)
+
+
+def tui(lang,execute):
+    def show(heading,message):
+        print(f'\n{heading}\n\n{message}')
+        input(f'\n{text("tui_return",ui.lang)} ')
+
+    def approve(heading,message):
+        print(f'\n{heading}')
+        try:
+            confirm(message,False,ui.lang)
+        except ValueError:
+            print(text('tui_cancelled',ui.lang))
+            return False
+        return True
+
+    def run_action(heading,command):
+        print(f'\n{heading}…',flush=True)
+        code,output = execute(*command)
+        show(heading,tui_result(ui.lang,code,output,command))
+        return code
+
+    def plain(operation,pause=False):
+        result = operation()
+        if pause:
+            input(f'\n{text("tui_return",ui.lang)} ')
+        return result
+
+    def choose(heading,items,*,status='',selected=0,root=False):
+        print(f'\n{heading}')
+        if status:
+            print(status)
+        return tui_numbered_choice(ui.lang,items,text('tui_exit' if root else 'tui_back',ui.lang))
+
+    ui = SimpleNamespace(lang=lang,choose=choose,show=show,approve=approve,prompt=tui_prompt,run=run_action,plain=plain)
+    try:
+        return tui_navigation(execute,ui)
+    except EOFError:
+        return 0
+    except KeyboardInterrupt:
+        print()
+        return 130
+
+
+def tui_line(screen,row,value,style='normal'):
+    height,width = screen.dimensions()
+    if 0 <= row < height and width > 2:
+        screen.draw(row,1,value[:width-2],style)
+
+
+class CursesConsole:
+    def __init__(self,screen,curses):
+        self.screen,self.curses = screen,curses
+        with contextlib.suppress(curses.error):
+            curses.curs_set(0)
+        self.mouse = bool(curses.mousemask(curses.BUTTON1_PRESSED)[0])
+        self.dimensions = screen.getmaxyx
+        self.clear = screen.erase
+        self.refresh = screen.refresh
+
+    def draw(self,row,column,value,style):
+        curses = self.curses
+        attr = {'normal':0,'bold':curses.A_BOLD,'dim':curses.A_DIM,'selected':curses.A_REVERSE}
+        # Wide log characters may reach the terminal edge before the slice ends.
+        with contextlib.suppress(curses.error):
+            self.screen.addstr(row,column,value,attr[style])
+
+    def read(self):
+        curses = self.curses
+        key = self.screen.getch()
+        if key == curses.KEY_MOUSE:
+            with contextlib.suppress(curses.error):
+                _,x,y,_,state = curses.getmouse()
+                if state & curses.BUTTON1_PRESSED:
+                    return 'click',x,y
+        names = {-1:'back',9:'tab',10:'enter',13:'enter',27:'back',ord('q'):'back',
+                 curses.KEY_ENTER:'enter',curses.KEY_UP:'up',curses.KEY_DOWN:'down',
+                 curses.KEY_PPAGE:'page_up',curses.KEY_NPAGE:'page_down'}
+        return names.get(key),-1,-1
+
+    @contextlib.contextmanager
+    def suspend(self):
+        self.curses.def_prog_mode()
+        self.curses.endwin()
+        try:
+            yield
+        finally:
+            self.curses.reset_prog_mode()
+            self.screen.clearok(True)
+
+
+def tui_panel(screen,lang,heading,body,buttons=()):
+    selected = offset = 0
+    wrap_width = None
+    while True:
+        height,width = screen.dimensions()
+        button_row = max(2,height-len(buttons))
+        page = max(0,button_row-3)
+        if width != wrap_width:
+            wrap_width = width
+            wrap = textwrap.TextWrapper(width=max(1,width-2),replace_whitespace=False,drop_whitespace=False)
+            lines = [part for line in body.split('\n') for part in (wrap.wrap(line) or [''])]
+        limit = max(0,len(lines)-page)
+        offset = min(offset,limit)
+        screen.clear()
+        tui_line(screen,0,heading,'bold')
+        for row,line in enumerate(lines[offset:offset+page],2):
+            tui_line(screen,row,line)
+        if limit and page:
+            tui_line(screen,button_row-1,f'{text("tui_scroll",lang)}  {offset+1}–{min(offset+page,len(lines))}/{len(lines)}')
+        if page:
+            for index,button in enumerate(buttons):
+                tui_line(screen,button_row+index,button,'selected' if index == selected else 'normal')
+        elif buttons:
+            tui_line(screen,height-1,text('tui_resize',lang))
+        screen.refresh()
+        if not buttons:
+            return False
+        key,x,y = screen.read()
+        if key == 'back':
+            return False
+        if not page:
+            continue
+        if 0 <= y-button_row < len(buttons) and 1 <= x <= len(buttons[y-button_row]):
+            return y-button_row == len(buttons)-1
+        if key == 'enter':
+            return selected == len(buttons)-1
+        if len(buttons) > 1 and key in ('tab','up','down'):
+            selected = (selected+1) % len(buttons)
+        else:
+            step = {'up':-1,'down':1,'page_up':-max(1,page),'page_down':max(1,page)}
+            offset = max(0,min(limit,offset+step.get(key,0)))
+
+
+def tui_select(screen,lang,heading,status,items,hint,selected=0):
+    first = 0
+    while True:
+        height,_ = screen.dimensions()
+        visible = max(0,height-5)
+        if visible:
+            first = max(0,min(first,len(items)-visible))
+            first = min(selected,max(first,selected-visible+1))
+        screen.clear()
+        tui_line(screen,0,heading,'bold')
+        tui_line(screen,2,status)
+        for index,label in enumerate(items[first:first+visible],first):
+            caption = ('› ' if index == selected else '  ')+label
+            tui_line(screen,4+index-first,caption,'selected' if index == selected else 'normal')
+        tui_line(screen,height-1,hint if visible else text('tui_resize',lang),'dim')
+        screen.refresh()
+        key,x,y = screen.read()
+        if key == 'back':
+            return None
+        if key in ('up','down'):
+            selected = (selected+(-1 if key == 'up' else 1)) % len(items)
+            continue
+        if key in ('page_up','page_down'):
+            selected = max(0,min(len(items)-1,selected+(-visible if key == 'page_up' else visible)))
+            continue
+        clicked = first+y-4
+        if 4 <= y < 4+visible and clicked < len(items) and 1 <= x <= 2+len(items[clicked]):
+            return clicked
+        if visible and key == 'enter':
+            return selected
+
+
+def tui_screen(screen,lang,execute):
+    def choose(heading,items,*,status='',selected=0,root=False):
+        exit_label = text('tui_exit' if root else 'tui_back',ui.lang)
+        hint = text('tui_keys' if root else 'tui_section_keys',ui.lang)
+        if screen.mouse:
+            hint += text('tui_mouse',ui.lang)
+        choice = tui_select(screen,ui.lang,heading,status,[*items,exit_label],hint,selected)
+        return None if choice == len(items) else choice
+
+    def show(heading,message):
+        tui_panel(screen,ui.lang,heading,message,(text('tui_back',ui.lang),))
+
+    def approve(heading,message):
+        return tui_panel(screen,ui.lang,heading,message,(text('tui_cancel',ui.lang),text('tui_accept',ui.lang)))
+
+    def run_action(heading,command):
+        tui_panel(screen,ui.lang,heading+'…','')
+        code,output = execute(*command)
+        show(heading,tui_result(ui.lang,code,output,command))
+        return code
+
+    def plain(operation,pause=False):
+        with screen.suspend():
+            try:
+                print(flush=True)
+                result = operation()
+                if pause:
+                    input(f'\n{text("tui_return",ui.lang)} ')
+                return result
+            except EOFError:
+                return None
+            finally:
+                print(flush=True)
+
+    def prompt(label,default=None):
+        return plain(lambda: tui_prompt(label,default))
+
+    ui = SimpleNamespace(lang=lang,choose=choose,show=show,approve=approve,prompt=prompt,run=run_action,plain=plain)
+    return tui_navigation(execute,ui)
+
+
+def fullscreen_tui(lang,execute):
+    if WINDOWS:
+        try:
+            screen = WindowsConsole()
+            with screen.active():
+                return tui_screen(screen,lang,execute)
+        except TerminalMaintenance:
+            print(text('tui_maintenance',lang),flush=True)
+            return 0
+        except OSError:
+            return tui(lang,execute)
+        except KeyboardInterrupt:
+            return 130
+    try:
+        import curses
+    except ImportError:
+        return tui(lang,execute)
+    try:
+        curses.setupterm(fd=sys.stdout.fileno())
+        if curses.tigetstr('cup'):
+            curses.set_escdelay(150)
+            return curses.wrapper(lambda screen: tui_screen(CursesConsole(screen,curses),lang,execute))
+    except curses.error:
+        pass
+    except KeyboardInterrupt:
+        return 130
+    return tui(lang,execute)
+
+
+def tui_main(args,lang,controller):
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        raise ValueError(text('tui_terminal',lang))
+    if args.lang is None:
+        if WINDOWS:
+            from .native import manager_values
+            lang = manager_values(controller,lang)['PAWTALK_LANGUAGE']
+        elif controller.state_file.exists():
+            lang = controller.config()['PAWTALK_LANGUAGE']
+    options = ['--root',str(controller.root),'--lang',lang]
+    if args.no_systemd:
+        options.append('--no-systemd')
+
+    def execute(*command):
+        if command[0] == 'tui-language':
+            options[3] = command[1]
+            return 0,''
+        if WINDOWS and command[0] in ('settings','configure','terminal-package','terminal-setup','backup'):
+            result = windows_tui_operation(controller,options[3],command)
+            if result is not None:
+                code,output = result
+                if code == 0 and command[0] == 'configure':
+                    for value in command[1:]:
+                        if value.startswith('PAWTALK_LANGUAGE='):
+                            options[3] = value.partition('=')[2]
+                return code,output
+        script = Path(__file__).resolve().parent.parent/'pawtalkctl'
+        entry = [sys.executable,'-B','-X','utf8','-I',str(script),*options,*command]
+        if command[0] == 'install':
+            return subprocess.run(entry).returncode,''
+        if command[:2] == ('backup','restore'):
+            # Fresh-host restore may hand off to another verified Manager via exec.
+            result = subprocess.run(entry,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,encoding='utf-8',errors='replace')
+            return result.returncode,result.stdout
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            code = main([*options,*command])
+        if code == 0 and command[0] == 'configure':
+            for value in command[1:]:
+                if value.startswith('PAWTALK_LANGUAGE='):
+                    options[3] = value.partition('=')[2]
+        return code,output.getvalue()
+
+    return fullscreen_tui(lang,execute)
+
+
+def windows_tui_operation(controller,lang,command):
+    from .native import manager_values
+    import zipfile
+
+    action = command[0]
+    if action == 'backup' and (command[1] != 'restore' or not controller.state_file.exists()):
+        return None
+    try:
+        if action == 'settings':
+            return 0,json.dumps(dict(values=manager_values(controller,lang)))
+        with lock(controller.directory/'operation.lock',timeout=10):
+            pending = (controller.directory/'setup.json').exists()
+            if not pending:
+                controller.recover()
+            if action == 'terminal-setup':
+                desktop_execute(controller,'setup-server',command[1])
+                return 0,text('installed',lang)
+            if command[:2] == ('terminal-package','inspect'):
+                return 0,json.dumps(desktop_execute(controller,'inspect-server-package',dict(path=command[2])))
+            if not controller.state_file.exists() or pending:
+                raise ValueError('No installed room')
+            if action == 'configure':
+                old = controller.config()
+                changes = dict(value.split('=',1) for value in command[1:] if value != '--yes')
+                if not changes.keys() <= SETTINGS_FIELDS:
+                    raise ValueError('Invalid settings fields')
+                values = {key:changes.get(key,old[key]) for key in SETTINGS_FIELDS}
+                apply_settings(controller,dict(expected=old,values=values))
+                publish_desktop_status(controller)
+            elif action == 'terminal-package':
+                desktop_execute(controller,'install-server-package',dict(id=command[2]))
+            else:
+                name = command[2]
+                meta,_ = controller.snapshot(name)
+                state = meta['state']
+                if state.get('localPackage'):
+                    if state['localPackage'] != state['windows']['sha256']:
+                        raise ValueError('Backup local Server artifact differs from the package receipt')
+                else:
+                    keys = json.loads((controller.etc/'trust.json').read_text())
+                    release.verify_snapshot(meta,keys)
+                desktop_execute(controller,'backup-restore',dict(name=name))
+            return 0,text('changed',lang)
+    except (OSError,ValueError,RuntimeError,KeyError,subprocess.SubprocessError,zipfile.BadZipFile) as error:
+        return 1,text('error',lang)+' '+str(error)
+
+
 def arguments(argv):
     p = argparse.ArgumentParser(description='PawTalk VPS CLI / Управление VPS')
     p.add_argument('--root',default=default_root())
@@ -156,10 +889,13 @@ def arguments(argv):
     for key in ['config','trust','server-manifest','manager-manifest','bundle','server-bundle']:
         install.add_argument('--'+key)
     install.add_argument('--bootstrap-docker',action='store_true')
+    install.add_argument('--new',action='store_true')
     invitation = sub.add_parser('initial-admin')
     invitation.add_argument('--url',action='store_true')
-    for name in ['status','doctor','logs','periodic','health','run-server','setup']:
+    for name in ['status','doctor','logs','periodic','health','run-server','setup','tui','start']:
         sub.add_parser(name)
+    stop = sub.add_parser('stop')
+    stop.add_argument('--yes',action='store_true')
     settings = sub.add_parser('settings')
     settings.add_argument('--apply',action='store_true')
     desktop = sub.add_parser('desktop')
@@ -172,12 +908,14 @@ def arguments(argv):
         update = sub.add_parser(name)
         update.add_argument('action',choices=['check','now'])
         update.add_argument('--manifest')
+        update.add_argument('--details',action='store_true')
         if name == 'manager':
             update.add_argument('--bundle')
     backup = sub.add_parser('backup')
-    backup.add_argument('action',choices=['create','list','restore'])
+    backup.add_argument('action',choices=['create','list','restore','delete'])
     backup.add_argument('name',nargs='?')
     backup.add_argument('--yes',action='store_true')
+    backup.add_argument('--json',action='store_true')
     backup.add_argument('--trust')
     uninstall = sub.add_parser('uninstall')
     uninstall.add_argument('--keep-data',action='store_true',required=True)
@@ -217,7 +955,11 @@ def desktop_updates(controller,keys,install=False,*,component='manager',found=UN
         save(controller.directory/(component+'-update.json'),dict(status='check-failed',checkedAt=int(time.time())))
         publish_desktop_status(controller)
         raise
-    from .native import installed_desktop_version
+    from .native import installed_desktop_version, manager_installer_field
+    if WINDOWS and component == 'manager' and found is not None:
+        field = manager_installer_field()
+        if field == 'windowsTuiInstaller' and field not in found:
+            found = None
     current=(installed_desktop_version() if WINDOWS else state['managerVersion']) if component=='manager' else state['version']
     available = found is not None and (release.semver(found['version']) > release.semver(current) or (component=='server' and state.get('localPackage') and release.semver(found['version'])==release.semver(current)))
     status = dict(status='available' if available else 'current',version=found['version'] if available else None,checkedAt=int(time.time()))
@@ -262,9 +1004,10 @@ def windows_periodic(controller):
 
 def publish_desktop_status(controller):
     if not WINDOWS: return
+    from .native import manager_values, installed_desktop_version, manager_installer_field
+    if manager_installer_field() == 'windowsTuiInstaller': return
     file=controller.directory/'manager-update.json'
     status=json.loads(file.read_text()) if file.exists() else dict(status='idle')
-    from .native import manager_values,installed_desktop_version
     config=manager_values(controller)
     installed=controller.state_file.exists() and not (controller.directory/'setup.json').exists()
     value=dict(update=status,language=config['PAWTALK_LANGUAGE'],autoManager=config['PAWTALK_MANAGER_AUTO_UPDATE']=='true',serverVersion=controller.state()['version'] if installed else '0.0.0',managerVersion=installed_desktop_version(),setupRequired=not installed)
@@ -402,10 +1145,12 @@ def main(argv=None):
             from .native import serve
             return serve(args.root)
         if not admin():
-            raise ValueError('Run with sudo/root')
+            raise ValueError(text('tui_admin_windows',lang) if WINDOWS and args.command == 'tui' else 'Run with sudo/root')
         if WINDOWS:
             protect(args.root)
         controller = Controller(args.root)
+        if args.command == 'tui':
+            return tui_main(args,lang,controller)
         if args.command=='manager-install':
             if not WINDOWS: raise ValueError('Windows Manager operation')
             from .native import install_manager_only
@@ -426,9 +1171,10 @@ def main(argv=None):
             if args.lang is None and controller.state_file.exists():
                 lang = controller.config()['PAWTALK_LANGUAGE']
             if args.command == 'settings':
-                if not WINDOWS or not controller.state_file.exists():
-                    raise ValueError('No installed Windows room')
-                controller.recover()
+                if not controller.state_file.exists() or (args.apply and not WINDOWS):
+                    raise ValueError('Settings unavailable')
+                if WINDOWS:
+                    controller.recover()
                 if args.apply:
                     raw = sys.stdin.buffer.read(32769)
                     if len(raw) > 32768:
@@ -455,6 +1201,8 @@ def main(argv=None):
                 return 0
             if args.command == 'install':
                 existing = controller.state_file.exists()
+                if args.new and existing:
+                    raise ValueError(text('existing',lang))
                 if existing:
                     directory = controller.root/'opt/pawtalk-manager/versions'/controller.state()['managerVersion']
                     bundles.self_test(directory)
@@ -463,9 +1211,11 @@ def main(argv=None):
                         handoff([sys.executable,'-B','-X','utf8','-I',str(directory/'manager/pawtalkctl'),*(argv if argv is not None else sys.argv[1:])])
                     controller.install(controller.config(),{},source_file(source, 'compose.server.yaml'),'')
                 else:
-                    config = read_config(args.config) if args.config else wizard(lang) if sys.stdin.isatty() else None
+                    config = read_config(args.config) if args.config else wizard(lang,independent_updates=args.new) if sys.stdin.isatty() else None
                     if config is None:
                         raise ValueError('Noninteractive install requires --config')
+                    if args.new and not args.config:
+                        confirm(text('tui_setup_confirm',lang),False,lang)
                     bootstrap = args.bootstrap_docker
                     if not WINDOWS and not shutil.which('docker') and not bootstrap and sys.stdin.isatty():
                         confirm(text('docker',lang),False,lang)
@@ -518,7 +1268,10 @@ def main(argv=None):
                 print(text('external',lang))
                 return 0
             if args.command == 'backup' and args.action == 'list':
-                print('\n'.join(p.name for p in sorted(controller.backups.glob('backup-*')) if p.is_dir()))
+                if args.json:
+                    print(json.dumps(backup_entries(controller.backups)))
+                else:
+                    print('\n'.join(p.name for p in sorted(controller.backups.glob('backup-*')) if p.is_dir()))
                 return 0
             if args.command == 'backup' and args.action == 'restore':
                 confirm(text('restore',lang),args.yes,lang)
@@ -556,6 +1309,14 @@ def main(argv=None):
                 raise ValueError('No installed room; run pawtalkctl install')
             controller.recover()
             config = controller.config()
+            if args.command in ('start','stop'):
+                if args.command == 'stop':
+                    confirm(text('stop',lang),args.yes,lang)
+                    controller.runtime.stop(controller.state(),config)
+                else:
+                    controller.runtime.start(controller.state(),config)
+                print(text('changed',lang))
+                return 0
             keys = json.loads((controller.etc/'trust.json').read_text())
             if args.command == 'periodic':
                 if WINDOWS:
@@ -579,7 +1340,22 @@ def main(argv=None):
             if args.command in ('update','manager'):
                 component = 'server' if args.command == 'update' else 'manager'
                 found = manifest(args.manifest,component,keys)
-                if not found:
+                if args.action == 'check' and args.details:
+                    key = 'version' if component == 'server' else 'managerVersion'
+                    state = controller.state()
+                    current = state[key]
+                    if WINDOWS and component == 'manager':
+                        from .native import installed_desktop_version, manager_installer_field
+                        current = installed_desktop_version()
+                    available = bool(found and (not WINDOWS or found.get('windows' if component == 'server' else manager_installer_field())) and (
+                        release.semver(found['version']) > release.semver(current) or
+                        (WINDOWS and component == 'server' and state.get('localPackage') and
+                         release.semver(found['version']) == release.semver(current))))
+                    details = dict(available=available)
+                    if available:
+                        details.update(version=found['version'],manifest=found['_signed'],digest=found.get('digest'))
+                    print(json.dumps(details))
+                elif not found:
                     print(text('unchanged',lang))
                 elif args.action == 'check':
                     print(json.dumps({component:found['version']}))
@@ -599,6 +1375,13 @@ def main(argv=None):
                 controller.configure(changes)
                 current = (controller.root/'opt/pawtalk-manager/versions'/controller.state()['managerVersion']) if WINDOWS else controller.root/'opt/pawtalk-manager/current'
                 bundles.install_units(controller.root,current.resolve(),controller.config(),args.no_systemd)
+                print(text('changed',lang))
+            elif args.command == 'backup' and args.action == 'delete':
+                name = args.name or ''
+                if not re.fullmatch(r'backup-[a-f0-9]{12}',name):
+                    raise ValueError('Invalid backup name')
+                confirm(text('tui_delete_confirm',lang).format(name=name),args.yes,lang)
+                controller.delete_backup(name)
                 print(text('changed',lang))
             elif args.command == 'backup':
                 print(controller.create_backup())

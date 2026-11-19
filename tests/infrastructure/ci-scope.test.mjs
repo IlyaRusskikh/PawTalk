@@ -54,14 +54,26 @@ for (const component of ['all', 'client', 'server', 'manager']) {
       assert.equal(commands.includes('npm run package'), scope.client);
       assert.equal(steps.some(step=>step.run==='node apps/server/scripts/build-windows-server.mjs'), scope.server);
       const managerBuilds = steps.filter(step => step.run?.startsWith('node apps/manager/windows/scripts/build-manager-windows.mjs'));
-      assert.equal(managerBuilds.some(step => !step.run.includes('--runtime-only')), scope.manager);
-      assert.equal(managerBuilds.some(step => step.run.includes('--runtime-only')), component === 'server');
+      assert.deepEqual(managerBuilds.map(step => step.run), [
+        ...(scope.manager ? [
+          'node apps/manager/windows/scripts/build-manager-windows.mjs',
+          'node apps/manager/windows/scripts/build-manager-windows.mjs --tui-only',
+        ] : []),
+        ...(component === 'server' ? ['node apps/manager/windows/scripts/build-manager-windows.mjs --runtime-only'] : []),
+      ]);
       assert.equal(commands.includes('--output-dir release/qa/api2-server'), component === 'manager');
       assert.equal(commands.includes('apps/manager/windows/scripts/windows-manager-smoke.mjs'), scope.host);
       assert.equal(commands.includes('npm run native:build'), scope.client);
       const renderer=steps.findIndex(step=>step.run==='npm run build');
       assert.ok(renderer>=0,`${component}: Client renderer is a host-test dependency`);
       const lifecycle=steps.findIndex(step=>step.run?.includes('apps/manager/windows/scripts/windows-manager-smoke.mjs'));
+      const tuiBootstrap = steps.findIndex(step => step.run?.includes('windows-tui/pawtalkctl.exe --self-test'));
+      if (scope.manager) {
+        assert.ok(steps.indexOf(managerBuilds[1]) < tuiBootstrap && tuiBootstrap < lifecycle);
+        assert.match(steps[lifecycle].run, /--installer/);
+      } else {
+        assert.equal(tuiBootstrap, -1);
+      }
       if(scope.host){
         assert.ok(renderer<lifecycle,`${component}: renderer exists before native host UI checks`);
         const media=steps.findIndex(step=>step.run==='npm run server:prepare'||step.run==='node tooling/build/prepare-server.mjs --livekit-only');
@@ -86,6 +98,7 @@ for (const component of ['all', 'client', 'server', 'manager']) {
     assert.equal(commands.includes('docker build -f apps/server/deploy/standalone.Dockerfile -t pawtalk-server:local'), true);
     assert.equal(commands.includes('tooling/ci/prepare-server-fixture.py --github-output'), false);
     assert.equal(commands.includes('apps/manager/tests/compose_integration.py'), scope.host);
+    assert.equal(commands.includes('infocmp xterm-256color'), scope.host);
     assert.equal(commands.includes('apps/server/scripts/server-smoke.mjs'), true);
   });
 }
@@ -95,10 +108,18 @@ test('prepared publisher artifact names and extraction paths match independent u
     const upload = check.jobs.windows.steps.find(step => step.with?.name === `pawtalk-${component}-windows`);
     const preparation = release.jobs[`prepare-${component}`];
     const download = preparation.steps.find(step => step.uses?.startsWith('actions/download-artifact@'));
-    assert.equal(download.with.name, upload.with.name);
+    if (component === 'server') {
+      const expression = download.with.name.match(/^\$\{\{ (.*) \}\}$/)[1];
+      const name = reused => Function('needs', `return (${expression});`)({'reuse-pr':{outputs:{reused}}});
+      assert.equal(name(''), upload.with.name);
+      assert.equal(name('true'), release.jobs['reuse-pr'].steps.find(step=>step.id==='server').with.name);
+    } else assert.equal(download.with.name, upload.with.name);
     assert.equal(download.with.path, `release/${component}`);
-    assert.ok(upload.with.path.startsWith(`release/${component}/`));
-    assert.ok(!upload.with.path.includes('\n'));
+    const packages = upload.with.path.trim().split('\n');
+    assert.deepEqual(packages, component === 'manager' ? [
+      'release/manager/PawTalk.Server.Manager.Setup.*.exe',
+      'release/manager/PawTalk.Server.Manager.TUI.Setup.*.exe',
+    ] : ['release/server/PawTalk.Server.*.windows-x64.zip']);
     const prepared = preparation.steps.find(step => step.uses?.startsWith('actions/upload-artifact@'));
     const publisher = release.jobs[`publish-${component}`].steps.find(step => step.with?.name === prepared.with.name);
     assert.ok(publisher, `${component} consumes complete prepared output`);

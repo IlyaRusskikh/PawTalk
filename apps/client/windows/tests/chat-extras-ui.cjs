@@ -61,6 +61,22 @@ app.whenReady().then(async()=>{
  await run('window.enableLive()');await wait(200);const reads=await run('window.pollReads');await wait(3700);assert.equal(await run('window.pollReads'),reads,'healthy server event stream disables per-poll timers');
  await run('window.openAvatar()');await until("!!document.querySelector('.avatar-crop-safe')",'square crop guide');assert.equal(await run("getComputedStyle(document.querySelector('.avatar-crop-preview')).borderRadius"),'0px');assert.equal(await run("getComputedStyle(document.querySelector('.avatar-crop-safe')).borderTopStyle"),'dashed');await wait(150);await fs.writeFile(path.join(os.tmpdir(),'pawtalk-square-crop-'+language+'.png'),(await win.webContents.capturePage()).toPNG());await run("document.querySelector('.avatar-editor .modal-heading button').click()");
  const imageID=await run('window.addImage()');await until("!!document.querySelector('[data-message-row=\""+imageID+"\"] .chat-image img')",'photo loaded');
+ const photoGeometry=await run(`(()=>{
+  const frame=document.querySelector('[data-message-row="${imageID}"] .chat-image');
+  const photo=frame.querySelector('img'),body=frame.closest('.chat-message-body');
+  const size=()=>{const r=frame.getBoundingClientRect(),img=photo.getBoundingClientRect();return {width:r.width,height:r.height,photoWidth:img.width,photoHeight:img.height};};
+  const initial=size();
+  body.style.maxWidth='160px';
+  const narrow=size();
+  body.style.removeProperty('max-width');
+  return {initial,narrow};
+ })()`);
+ for(const {width,height,photoWidth,photoHeight} of Object.values(photoGeometry)){
+  assert.ok(Math.abs(width-photoWidth)<1&&Math.abs(height-photoHeight)<1,'photo fills its frame without side borders');
+  assert.ok(Math.abs(width-height*800/1200)<1,'portrait preview keeps the original aspect ratio');
+ }
+ assert.ok(Math.abs(photoGeometry.initial.height-320)<1,'tall photo fits within the inline height limit');
+ assert.ok(Math.abs(photoGeometry.narrow.width-160)<1,'photo fits a narrower chat');
  await run("document.querySelector("+JSON.stringify('[data-message-row="'+imageID+'"] button[title="'+(language==='en'?'Edit':'Редактировать')+'"]')+").click()");await until("!!document.querySelector('.chat-image-remove')",'edit photo trash');
  win.webContents.sendInputEvent({type:'mouseMove',x:5,y:5});await wait(50);
  assert.equal(await run("getComputedStyle(document.querySelector('.chat-image-remove')).opacity"),'0','trash hidden without hover');

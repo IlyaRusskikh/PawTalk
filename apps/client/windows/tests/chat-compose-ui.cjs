@@ -8,6 +8,11 @@ app.whenReady().then(async()=>{
  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const until=async(code)=>{for(let i=0;i<120;i++){if(await run(code))return;await wait(50);}throw Error(code);};
  const set=text=>run(`(()=>{const e=document.querySelector('.member-composer textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,${JSON.stringify(text)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+ const previewCenterOffset=()=>run(`(()=>{
+  const shell=document.querySelector('.chat-input-shell').getBoundingClientRect();
+  const button=document.querySelector('.chat-preview-toggle').getBoundingClientRect();
+  return Math.abs((button.top+button.height/2)-(shell.top+shell.height/2));
+ })()`);
  const timer=setTimeout(()=>app.exit(1),60000);
  try{
  for(const lang of ['ru','en']){
@@ -17,6 +22,7 @@ app.whenReady().then(async()=>{
  await run("window.composerHeight=document.querySelector('.chat-input-shell').getBoundingClientRect().height");
  await run("document.querySelector('.chat-preview-toggle').click()");
  await until("!!document.querySelector('.chat-compose-preview table')");
+ assert.ok(await previewCenterOffset()<1,'preview toggle is centered in a multiline composer');
  assert.ok(await run("Math.abs(document.querySelector('.chat-input-shell').getBoundingClientRect().height-window.composerHeight)<1"),'preview preserves composer height');
  assert.equal(await run("document.querySelector('.chat-preview-toggle').getAttribute('aria-pressed')"),'true');
  assert.deepEqual(await run("[...document.querySelectorAll('.chat-compose-preview [data-marker]')].map(e=>e.dataset.marker)"),['1.','2.']);
@@ -32,6 +38,7 @@ app.whenReady().then(async()=>{
  const inputGlyphTop=glyphTop((await win.capturePage(crop)).toBitmap());
  await run("document.querySelector('.chat-preview-toggle').click()");
  await until("!!document.querySelector('.chat-compose-preview .chat-markdown-line')");
+ assert.ok(await previewCenterOffset()<1,'preview toggle is centered in a single-line composer');
  await run("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
  const previewGlyphTop=glyphTop((await win.capturePage(crop)).toBitmap());
  assert.ok(Number.isFinite(inputGlyphTop)&&Number.isFinite(previewGlyphTop)&&Math.abs(inputGlyphTop-previewGlyphTop)<=1,`single-line glyph baseline: input ${inputGlyphTop}, preview ${previewGlyphTop}`);
@@ -100,18 +107,22 @@ app.whenReady().then(async()=>{
  await run("document.querySelector('dialog .modal-actions button').click()");
  await run("(()=>{const input=document.querySelector('.chat-compose input[type=file]'),data=new DataTransfer();data.items.add(new File([Uint8Array.from(atob('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'),c=>c.charCodeAt(0))],'test.gif',{type:'image/gif'}));input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
  await run("document.querySelector('.member-composer').requestSubmit()");
- await until("!!document.querySelector('.chat-file button')&&document.querySelector('.chat-file button').disabled===false&&document.querySelector('.chat-attach').disabled===false");
- await run("document.querySelector('.chat-file button').click()");
- await until("!!document.querySelector('.chat-gif-preview img')");
+ await until("document.querySelector('.chat-gif-preview img[alt=\"test.gif\"]')?.naturalWidth===1&&document.querySelector('.chat-attach')?.disabled===false");
+ assert.equal(await run("document.querySelector('.chat-file a[download=\"test.gif\"]')"),null);
  await run("document.querySelector('.chat-gif-preview').click()");
  await until("!!document.querySelector('dialog .chat-gif-full')");
+ assert.equal(await run("document.querySelector('dialog .modal-footer a[download=\"test.gif\"]')?.href.startsWith('blob:')"),true);
  await run("document.querySelector('dialog').dispatchEvent(new Event('cancel',{bubbles:true,cancelable:true}))");
+ await run("(()=>{const input=document.querySelector('.chat-compose input[type=file]'),data=new DataTransfer();data.items.add(new File([Uint8Array.from(atob('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'),c=>c.charCodeAt(0))],'generic.GIF',{type:'application/octet-stream'}));input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
+ await until("document.querySelector('.attachment-thumbnail img,.attachment-thumbnail svg')!==null");
+ await run("document.querySelector('.member-composer').requestSubmit()");
+ await until("document.querySelector('.chat-gif-preview img[alt=\"generic.GIF\"]')?.naturalWidth===1");
  await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/server-chat.html?compose=1&legacygif=1&lang='+lang);
  await until("document.querySelectorAll('[data-message-row=\"178\"] .chat-link-gif,[data-message-row=\"179\"] .chat-link-gif').length===2");
  await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/server-chat.html?compose=1&fallbackgif=1&lang='+lang);
  await until("[...document.querySelectorAll('[data-message-row=\"178\"] .chat-link-gif,[data-message-row=\"179\"] .chat-link-gif')].filter(e=>e.src.startsWith('blob:')&&e.naturalWidth===1).length===2");
  assert.equal(await run("window.gifLoads"),2,'each separate message recovers from Chromium transport failure');
- console.log('PASS composer '+lang+': numbered preview, table, rule selected Markdown heading, checklist creation/check/edit modal alignment and GIF viewer');
+ console.log('PASS composer '+lang+': numbered preview, table, rule selected Markdown heading, checklist creation/check/edit modal alignment, GIF attachment autoplay and viewer');
  }
  clearTimeout(timer);app.exit(0);
  }catch(e){console.error(e);clearTimeout(timer);app.exit(1);}

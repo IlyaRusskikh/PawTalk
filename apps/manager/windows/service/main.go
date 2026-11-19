@@ -130,6 +130,16 @@ func launch(ctx context.Context, root string, args []string, job windows.Handle,
 		return e
 	}
 	command := python(ctx, script, append([]string{"--root", root}, args...)...)
+	if controllerCommand(args) == "tui" && windows.GetCurrentProcessToken().IsElevated() {
+		request, done, err := createTerminalEvents(root)
+		if err != nil {
+			return err
+		}
+		defer windows.CloseHandle(done)
+		defer windows.CloseHandle(request)
+		defer windows.SetEvent(done)
+		command.Env = append(command.Env, "PAWTALK_TUI_CLOSE_EVENT="+terminalEvent(root, "Close"))
+	}
 	if stdio {
 		command.Stdin = os.Stdin
 		command.Stdout = os.Stdout
@@ -471,6 +481,9 @@ func main() {
 		_ = json.NewEncoder(os.Stdout).Encode(desktopStatus(os.Args[2]))
 		return
 	}
+	if code, handled := installerCommand(os.Args[1:]); handled {
+		os.Exit(code)
+	}
 	if isTrayExecutable() {
 		os.Exit(trayMain(os.Args[1:]))
 	}
@@ -532,6 +545,8 @@ func main() {
 		if len(args) >= 2 && args[0] == "--root" {
 			root = args[1]
 			args = args[2:]
+		} else if controllerCommand(args) == "tui" {
+			root = registeredDataRoot(root)
 		}
 		err = launch(context.Background(), root, args, 0, true)
 	}

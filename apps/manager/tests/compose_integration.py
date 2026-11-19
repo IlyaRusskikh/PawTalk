@@ -4,15 +4,20 @@ from source_layout import bundle_source
 Run on Linux or in tests/integration/vps.Dockerfile with the test-only Docker socket mount.
 Only image-origin constants are redirected to the disposable local registry.
 The production allowlist/signature selection is separately tested without overrides.
+Pass --interactive-tui from a terminal to open the installed Manager with the test Server stopped.
 """
 import base64
 import contextlib
+import errno
 import hashlib
 import http.client
 import io
 import json
 import os
+import pty
 import random
+import re
+import select
 import signal
 import ssl
 import socket
@@ -34,6 +39,42 @@ def docker(*args,input=None):
     if result.returncode:
         raise RuntimeError('Test Docker command failed: '+args[0]+' '+result.stderr.decode(errors='replace')[-1500:])
     return result.stdout.decode().strip()
+
+
+def terminal_menu(root,answers):
+    launcher = root/'opt/pawtalk-manager/launcher'
+    master,slave = pty.openpty()
+    command = [sys.executable,str(launcher),'--root',str(root),'--lang','en','--no-systemd','tui']
+    try:
+        with subprocess.Popen(command,stdin=slave,stdout=slave,stderr=slave,env={**os.environ,'TERM':'dumb'}) as process:
+            os.close(slave)
+            slave = None
+            output = bytearray()
+            try:
+                os.write(master,answers.encode())
+                deadline = time.monotonic()+120
+                while time.monotonic()<deadline:
+                    if not select.select([master],[],[],0.2)[0]:
+                        continue
+                    try:
+                        chunk = os.read(master,65536)
+                    except OSError as error:
+                        if error.errno != errno.EIO:
+                            raise
+                        break
+                    if not chunk:
+                        break
+                    output.extend(chunk)
+                rendered = output.decode(errors='replace')
+                assert process.wait(timeout=2) == 0,rendered
+                return rendered
+            finally:
+                if process.poll() is None:
+                    process.kill()
+    finally:
+        os.close(master)
+        if slave is not None:
+            os.close(slave)
 
 
 class ShortRuntime(runtime.Runtime):
@@ -84,6 +125,9 @@ def main():
     if len(sys.argv)>1 and sys.argv[1] == '--install-worker':
         origin(sys.argv[2])
         raise SystemExit(cli.main(sys.argv[3:]))
+    interactive = sys.argv[1:] == ['--interactive-tui']
+    if interactive and not (sys.stdin.isatty() and sys.stdout.isatty()):
+        raise SystemExit('--interactive-tui needs a terminal (docker run -it)')
     source = Path(__file__).resolve().parents[3]
     prefix = 'pawtalk-ci-'+uuid.uuid4().hex[:12]
     base = os.environ.get('PAWTALK_COMPOSE_TEST_IMAGE','pawtalk-server:local')
@@ -100,7 +144,8 @@ def main():
             with socket.socket() as free:
                 free.bind(('127.0.0.1',0))
                 port = free.getsockname()[1]
-            docker('run','-d','--name',registry,'--label','io.pawtalk.test='+prefix,'--network','host','-e',f'REGISTRY_HTTP_ADDR=127.0.0.1:{port}','registry:3')
+            docker('run','-d','--name',registry,'--label','io.pawtalk.test='+prefix,'--network','host',
+                   '-e',f'REGISTRY_HTTP_ADDR=127.0.0.1:{port}','-e','REGISTRY_HTTP_DEBUG_ADDR=127.0.0.1:0','registry:3')
             # Docker returning a container ID does not mean its registry listener is ready.
             for attempt in range(100):
                 try:
@@ -113,7 +158,8 @@ def main():
                     pass
                 time.sleep(0.1)
             else:
-                raise RuntimeError('Disposable test registry did not become ready')
+                logs = subprocess.run(['docker','logs','--tail','20',registry],capture_output=True,text=True,timeout=10)
+                raise RuntimeError('Disposable test registry did not become ready\n'+logs.stdout+logs.stderr)
             repository = f'127.0.0.1:{port}/pawtalk-server'
             origin(repository)
             digests = []
@@ -181,6 +227,11 @@ def main():
             if c.state_file.exists():
                 project = c.state()['project']
             assert install.returncode == 0,install.stderr
+            if interactive:
+                launcher = c.root/'opt/pawtalk-manager/launcher'
+                entry = [sys.executable,str(launcher),'--root',str(c.root)]
+                subprocess.run([*entry,'stop','--yes'],check=True)
+                raise SystemExit(subprocess.run([*entry,'tui']).returncode)
             lines = install.stdout.splitlines()
             invitation = next(line for line in lines if line.startswith('pawtalk://'))
             fingerprint = invitation.split('#')[0].rsplit('/',1)[1]
@@ -197,6 +248,14 @@ def main():
             once = subprocess.run(['docker','exec',container['Id'],'/pawtalk','serve','initial-admin'],capture_output=True)
             assert once.returncode != 0
             print('PASS signed offline install, non-root Compose, one-time first-admin admission and no invitation in logs')
+
+            assert 'Cancelled.' in terminal_menu(c.root,'1\n3\n\n0\n0\n')
+            assert c.runtime.container(c.state(),c.config())['State']['Running']
+            assert 'Stopped' in terminal_menu(c.root,'1\n3\ny\n\n0\n0\n')
+            assert not c.runtime.container(c.state(),c.config())['State']['Running']
+            assert 'Changes applied.' in terminal_menu(c.root,'1\n2\n\n0\n0\n')
+            c.runtime.healthy(c.state(),c.config(),c.state()['identity'])
+            print('PASS installed Manager launcher opens the TUI in a Linux PTY and controls Compose')
 
             def api(path,body=None,token=None,expected=200):
                 connection = http.client.HTTPSConnection('127.0.0.1',room_port,context=ssl._create_unverified_context(),timeout=10)
@@ -221,9 +280,16 @@ def main():
             reinstall = subprocess.run([sys.executable,__file__,'--install-worker',repository,*command],capture_output=True,text=True,timeout=180)
             assert reinstall.returncode == 0,reinstall.stderr
             assert c.state() == original
-            checkpoint = c.create_backup()
-            print('PASS idempotent reinstall and consistent SQLite backup')
-            assert c.update_server(server_release('0.9.1',digests[1]))
+            backup_output = terminal_menu(c.root,'5\n1\ny\n\n0\n0\n')
+            created = re.search(r'^backup-[a-f0-9]{12}\r?$',backup_output,re.MULTILINE)
+            assert created,backup_output
+            checkpoint = created.group().rstrip('\r')
+            c.snapshot(checkpoint)
+            print('PASS idempotent reinstall and consistent SQLite backup from the TUI')
+            update_manifest = root/'update-server.json'
+            update_manifest.write_text(server_release('0.9.1',digests[1])['_signed'])
+            assert 'Changes applied.' in terminal_menu(c.root,f'4\n3\n{update_manifest}\ny\n\n0\n0\n')
+            assert c.state()['version'] == '0.9.1'
             preserved()
             assert c.configure({'PAWTALK_CHAT_MAX_MB':'64'})
             assert c.state()['version'] == '0.9.1'
@@ -253,15 +319,54 @@ def main():
             assert c.runtime.container(c.state(),c.config())['Id'] == old_id
             assert c.state()['version'] == '0.9.1' and c.state()['managerVersion'] == '0.1.1'
             print('PASS Manager-only self-update has no Server restart or digest change')
-            c.restore(checkpoint)
+            launcher = c.root/'opt/pawtalk-manager/launcher'
+            listed = subprocess.check_output([sys.executable,str(launcher),'--root',str(c.root),'backup','list','--json'])
+            choices = [entry['name'] for entry in json.loads(listed)]
+            choice = choices.index(checkpoint)+1
+            before_restore = c.state()
+            assert 'Cancelled.' in terminal_menu(c.root,f'5\n2\n{choice}\nn\n0\n0\n')
+            assert c.state() == before_restore
+            assert 'Changes applied.' in terminal_menu(c.root,f'5\n2\n{choice}\ny\n\n0\n0\n')
+            assert c.state()['version'] == '0.9.0' and c.state()['managerVersion'] == '0.1.1'
             preserved()
-            print('PASS explicit backup restore with membership/encrypted-history/TLS verification')
-            c.runtime.stop(c.state(),c.config())
-            c.runtime.compose(c.state(),c.config(),'down')
+            print('PASS TUI backup selection, cancellation and restore with membership/encrypted-history/TLS verification')
             fresh = controller.Controller(root/'fresh-host')
             fresh.runtime = ShortRuntime(fresh.template)
             shutil = __import__('shutil')
             shutil.copytree(c.backups/checkpoint,fresh.backups/checkpoint)
+
+            assert 'Changes applied.' in terminal_menu(c.root,'4\n4\n1\n\n0\n0\n')
+            assert c.config()['PAWTALK_SERVER_AUTO_UPDATE'] == 'true' and c.config()['PAWTALK_MANAGER_AUTO_UPDATE'] == 'false'
+            assert 'Changes applied.' in terminal_menu(c.root,'3\n2\n96\ny\n\n0\n0\n')
+            assert c.config()['PAWTALK_CHAT_MAX_MB'] == '96'
+            assert 'already initialized' in terminal_menu(c.root,'1\n4\n\n0\n0\n')
+            extra = re.search(r'^backup-[a-f0-9]{12}\r?$',terminal_menu(c.root,'5\n1\ny\n\n0\n0\n'),re.MULTILINE)
+            assert extra
+            extra = extra.group().rstrip('\r')
+            listed = subprocess.check_output([sys.executable,str(launcher),'--root',str(c.root),'backup','list','--json'])
+            choice = [entry['name'] for entry in json.loads(listed)].index(extra)+1
+            assert 'Changes applied.' in terminal_menu(c.root,f'5\n3\n{choice}\ny\n\n0\n0\n')
+            assert not (c.backups/extra).exists()
+            print('PASS TUI history, independent update preferences, initialized admission and backup removal')
+
+            original_info = c.runtime.command(c.state(),c.config(),'info').decode().strip()
+            original_status = c.runtime.command(c.state(),c.config(),'status')
+            new_port = choose_room_port(exclude=range(room_port,room_port+4))
+            port_result = terminal_menu(c.root,f'2\n2\n\n{new_port}\ny\n\n0\n0\n')
+            assert 'Changes applied.' in port_result,port_result
+            port_info = c.runtime.command(c.state(),c.config(),'info').decode().strip()
+            assert port_info == f'pawtalk://127.0.0.1:{new_port}/{original_info.rsplit("/",1)[1]}'
+            address_result = terminal_menu(c.root,'2\n2\n127.0.0.2\n\ny\n\n0\n0\n')
+            assert 'Changes applied.' in address_result,address_result
+            address_info = c.runtime.command(c.state(),c.config(),'info').decode().strip()
+            assert address_info.startswith(f'pawtalk://127.0.0.2:{new_port}/')
+            assert address_info.rsplit('/',1)[1] != port_info.rsplit('/',1)[1]
+            assert json.loads(c.runtime.command(c.state(),c.config(),'status')) == json.loads(original_status)
+            assert c.runtime.identity(c.state(),c.config()) == c.state()['identity']
+            print('PASS TUI port change preserves TLS and address change preserves initialized room identity with a new certificate')
+
+            c.runtime.stop(c.state(),c.config())
+            c.runtime.compose(c.state(),c.config(),'down')
             restored = subprocess.run([sys.executable,__file__,'--install-worker',repository,'--root',str(fresh.root),'--no-systemd','backup','restore',checkpoint,'--trust',str(trust),'--yes'],capture_output=True,text=True,timeout=180)
             assert restored.returncode == 0,restored.stderr
             c = fresh

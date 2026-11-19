@@ -18,20 +18,28 @@ import (
 )
 
 func bootstrapCommand(args []string) bool {
+	switch controllerCommand(args) {
+	case "--help", "-h", "logs", "uninstall", "manager-install", "status", "doctor", "backup", "configure", "setup", "update", "manager", "--self-test", "install", "initial-admin", "settings", "desktop", "periodic", "health", "run-server", "tui", "start", "stop":
+		return true
+	}
+	return false
+}
+
+func controllerCommand(args []string) string {
 	for len(args) > 0 {
 		switch args[0] {
 		case "--lang":
 			if len(args) < 2 {
-				return false
+				return ""
 			}
 			args = args[2:]
 		case "--no-systemd":
 			args = args[1:]
 		default:
-			return args[0] == "--help" || args[0] == "-h" || args[0] == "logs" || args[0] == "uninstall" || args[0] == "manager-install" || args[0] == "status" || args[0] == "doctor" || args[0] == "backup" || args[0] == "configure" || args[0] == "setup" || args[0] == "update" || args[0] == "manager" || args[0] == "--self-test" || args[0] == "install" || args[0] == "initial-admin" || args[0] == "settings" || args[0] == "desktop" || args[0] == "periodic" || args[0] == "health" || args[0] == "run-server"
+			return args[0]
 		}
 	}
-	return false
+	return ""
 }
 
 func copyInitialAdmin(root, lang string) error {

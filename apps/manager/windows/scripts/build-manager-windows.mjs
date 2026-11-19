@@ -1,5 +1,5 @@
 // Local builds never publish. Python is private to Manager; users install no runtime.
-import {cp,mkdir,readFile,writeFile,rm,chmod} from 'node:fs/promises';
+import {cp,mkdir,readFile,writeFile,rm,chmod,realpath} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
@@ -7,23 +7,31 @@ import path from 'node:path';
 import os from 'node:os';
 import { stageManagerSource } from '../../../../tooling/build/manager-layout.mjs';
 const root=path.resolve(import.meta.dirname,'../../../..');
-if(process.argv.slice(2).some(arg=>arg!=='--runtime-only'))throw Error('Supported option: --runtime-only');
-const runtimeOnly=process.argv.includes('--runtime-only');
+const options=process.argv.slice(2);
+if(options.length>1||options.some(arg=>!['--runtime-only','--tui-only'].includes(arg)))throw Error('Supported options: --runtime-only or --tui-only');
+const runtimeOnly=options.includes('--runtime-only');
+const tuiOnly=options.includes('--tui-only');
 if(process.platform!=='win32')throw Error('Build Windows Manager on Windows');
 const output=path.join(root,'release/manager');
-const stage=path.join(output,'windows');
-if(path.dirname(stage)!==path.join(root,'release/manager')||path.basename(stage)!=='windows')throw Error('Unsafe generated staging directory');
+const stage=path.join(output,tuiOnly?'windows-tui':'windows');
+await mkdir(output,{recursive:true});
+const resolvedStage=await realpath(stage).catch(error=>{if(error.code!=='ENOENT')throw error;return stage;});
+if(path.dirname(resolvedStage)!==output||resolvedStage!==stage||await realpath(output)!==output)throw Error('Unsafe generated staging directory');
 await rm(stage,{recursive:true,force:true});
 await mkdir(path.join(stage,'runtime'),{recursive:true});
 const run=(cmd,args,cwd=root)=>execFileSync(cmd,args,{cwd,stdio:'inherit',windowsHide:true});
 const go=process.env.PAWTALK_GO||'go';
+const trayArgs=['-trimpath','-ldflags=-H=windowsgui','-o'];
 let nativeGo=true;
 try{execFileSync(go,['version'],{windowsHide:true,stdio:'ignore'});}catch{nativeGo=false;}
 if(nativeGo){
  run(go,['build','-trimpath','-o',path.join(stage,'pawtalkctl.exe'),'.'],path.join(root,'apps/manager/windows/service'));
- run(go,['build','-trimpath','-ldflags=-H=windowsgui','-o',path.join(stage,'pawtalk-server-tray.exe'),'.'],path.join(root,'apps/manager/windows/service'));
+ if(!tuiOnly)run(go,['build',...trayArgs,path.join(stage,'pawtalk-server-tray.exe'),'.'],path.join(root,'apps/manager/windows/service'));
 }else{
- run('docker',['run','--rm','--mount',`type=bind,source=${path.join(root,'apps/manager/windows/service')},target=/src,readonly`,'--mount',`type=bind,source=${stage},target=/out`,'--mount','type=volume,source=pawtalk-go-mod,target=/go/pkg/mod','--mount','type=volume,source=pawtalk-go-build,target=/root/.cache/go-build','-w','/src','-e','GOOS=windows','-e','GOARCH=amd64','-e','CGO_ENABLED=0','golang:1.27.3-alpine','sh','-c','go build -trimpath -o /out/pawtalkctl.exe . && go build -trimpath -ldflags=-H=windowsgui -o /out/pawtalk-server-tray.exe . && cp /usr/local/go/LICENSE /out/GO-LICENSE && cp /go/pkg/mod/golang.org/x/sys@v0.49.0/LICENSE /out/X-SYS-LICENSE']);
+ const commands=['go build -trimpath -o /out/pawtalkctl.exe .'];
+ if(!tuiOnly)commands.push(`go build ${trayArgs.join(' ')} /out/pawtalk-server-tray.exe .`);
+ commands.push('cp /usr/local/go/LICENSE /out/GO-LICENSE','cp /go/pkg/mod/golang.org/x/sys@v0.49.0/LICENSE /out/X-SYS-LICENSE');
+ run('docker',['run','--rm','--mount',`type=bind,source=${path.join(root,'apps/manager/windows/service')},target=/src,readonly`,'--mount',`type=bind,source=${stage},target=/out`,'--mount','type=volume,source=pawtalk-go-mod,target=/go/pkg/mod','--mount','type=volume,source=pawtalk-go-build,target=/root/.cache/go-build','-w','/src','-e','GOOS=windows','-e','GOARCH=amd64','-e','CGO_ENABLED=0','golang:1.27.3-alpine','sh','-c',commands.join(' && ')]);
 }
 await cp(path.join(root,'apps/client/windows/assets/server.ico'),path.join(stage,'server.ico'));
 const pythonVersion='3.14.10';
@@ -37,6 +45,7 @@ if(!bytes||createHash('sha256').update(bytes).digest('hex')!==expected){
  await writeFile(archive,bytes);
 }
 run('tar.exe',['-xf',archive,'-C',path.join(stage,'runtime')]);
+if(tuiOnly)await rm(path.join(stage,'runtime','pythonw.exe'),{force:true});
 await stageManagerSource(root,path.join(stage,'bootstrap'));
 for(const file of ['LICENSE','THIRD_PARTY_NOTICES.md'])await cp(path.join(root,file),path.join(stage,file));
 if(nativeGo){
@@ -49,7 +58,9 @@ if(nativeGo){
 // installer. Keep the copied notice removable during explicit maintenance/QA.
 await chmod(path.join(stage,'X-SYS-LICENSE'),0o644);
 const version=(await readFile(path.join(root,'apps/manager/VERSION'),'utf8')).trim();
-if(!runtimeOnly){
+if(tuiOnly){
+ await writeFile(path.join(stage,'tui-version.json'),JSON.stringify({version})+'\n');
+}else if(!runtimeOnly){
 // The new UI is bundled with the installer; the apps/server/maintenance host remains Go.
 const desktopPackage=JSON.parse(await readFile(path.join(root,'apps/manager/windows/desktop/package.json'),'utf8'));
 if(desktopPackage.version!==version)throw Error('Manager desktop/VERSION mismatch');
@@ -67,5 +78,6 @@ if(runtimeOnly){
 }
 const {getMakeNsisPath}=createRequire(import.meta.url)('app-builder-lib/out/toolsets/windows.js');
 const makensis=process.env.PAWTALK_MAKENSIS?{path:process.env.PAWTALK_MAKENSIS}:await getMakeNsisPath();
-execFileSync(makensis.path,['/INPUTCHARSET','UTF8',`/DVERSION=${version}`,`/DSTAGE=${stage}`,`/DOUTPUT=${path.join(output,`PawTalk.Server.Manager.Setup.${version}.exe`)}`,path.join(root,'apps/manager/windows/service/installer.nsi')],{cwd:root,stdio:'inherit',windowsHide:true,env:{...process.env,...makensis.env}});
+const installer=`PawTalk.Server.Manager.${tuiOnly?'TUI.':''}Setup.${version}.exe`;
+execFileSync(makensis.path,['/INPUTCHARSET','UTF8',...(tuiOnly?['/DTUI_ONLY']:[]),`/DVERSION=${version}`,`/DSTAGE=${stage}`,`/DOUTPUT=${path.join(output,installer)}`,path.join(root,'apps/manager/windows/service/installer.nsi')],{cwd:root,stdio:'inherit',windowsHide:true,env:{...process.env,...makensis.env}});
 console.log('Windows Manager installer built; no publication performed.');

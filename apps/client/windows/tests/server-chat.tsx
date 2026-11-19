@@ -13,7 +13,11 @@ localStorage.clear();localStorage.setItem('pawtalk.chat.window','25');
 localStorage.setItem('pawtalk.v2.read.'+sid+'.'+cid,new URLSearchParams(location.search).get('unread')==='1'?'100':'180');
 let records:Message[]=Array.from({length:180},(_,i)=>({id:i+1,channelId:cid,authorProfileId:i===149?me:friend,requestId:(i+1).toString(16).padStart(32,'0'),sentAt:1700000000000+i*1000,content:{text:'Synthetic message '+(i+1)+': '+'wrapped content '.repeat(14)}}));
 if(new URLSearchParams(location.search).has('fallbackgif'))for(const index of [177,178])records[index].content.text='https://gif.example.test/fails.gif';
-if(new URLSearchParams(location.search).has('legacygif'))for(const index of [177,178])records[index].content.text='https://tenor.com/search/meow-gifs';
+const localizedTenor='https://tenor.com/ru/view/deal-with-it-dog-gif-9823664';
+if(new URLSearchParams(location.search).has('legacygif')){
+ records[177].content.text='https://tenor.com/search/meow-gifs';
+ records[178].content.text=localizedTenor;
+}
 records[19].content.text='Original **current**';records[179].content.reply={id:20,author:'Old name',text:'Stale snapshot'};
 const liveListeners=new Set<(event:any)=>void>();test.liveReads=[];
 const state:ServerState={serverId:sid,name:'Synthetic chat server',revision:1,controlRevision:1,self:{profileId:me,effectiveProfileId:me,deviceId:'c'.repeat(64),role:'member',permissions:[]},profiles:[{id:me,nickname:'Me',revision:1},{id:friend,nickname:'Friend',revision:1}],channels:[{id:cid,name:'General',kind:'text',protected:true,position:0,revision:1,messageRevision:1,lastMessageId:180},{id:other,name:'Other',kind:'text',protected:false,position:1,revision:1,messageRevision:1,lastMessageId:0}],members:[],devices:[],voice:[],bindings:[]};
@@ -42,11 +46,11 @@ test.gifLoads=0;
 test.desktop={onMembershipServerEvent:(listener:(event:any)=>void)=>{liveListeners.add(listener);return()=>liveListeners.delete(listener);},membership:async(action:string,input:any={})=>{
  await new Promise(resolve=>setTimeout(resolve,15));
  if(action==='gif.load'){test.gifLoads++;return{value:{mime:'image/gif',base64:'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'}};}
- if(action==='gif.resolve')return{value:(input.url==='https://gif.example.test/no-extension'||input.url==='https://klipy.com/gifs/rat-eat-pog'||input.url==='https://tenor.com/search/meow-gifs')?{url:'https://gif.example.test/animated.gif'}:null};
+ if(action==='gif.resolve')return{value:['https://gif.example.test/no-extension','https://klipy.com/gifs/rat-eat-pog','https://tenor.com/search/meow-gifs',localizedTenor].includes(input.url)?{url:'https://gif.example.test/animated.gif'}:null};
  if(action==='upload.file'){test.mediaBytes=input.bytes;const id=(++attachmentSequence).toString(16).padStart(32,'0');attachmentBytes.set(id,input);return{value:{id,mime:input.mime}};}
  if(action==='file')return{value:attachmentBytes.get(input.attachmentId)?.bytes||test.mediaBytes};
  if(action==='image'&&attachmentBytes.has(input.attachmentId)){const record=attachmentBytes.get(input.attachmentId)!;return{value:'data:'+record.mime+';base64,'+btoa(String.fromCharCode(...record.bytes))};}
- if(action==='image'){const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#888';ctx.fillRect(0,0,320,180);return{value:canvas.toDataURL('image/png')};}
+ if(action==='image'){const canvas=document.createElement('canvas'),portrait=input.attachmentId==='9'.repeat(32);canvas.width=portrait?800:320;canvas.height=portrait?1200:180;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#888';ctx.fillRect(0,0,canvas.width,canvas.height);return{value:canvas.toDataURL('image/png')};}
  if(action==='memory.status')return{value:{low:!!test.lowMemory}};
  if(action==='upload'){if(test.holdUpload)await new Promise<void>(resolve=>{releaseUpload=resolve;});const id=(++attachmentSequence).toString(16).padStart(32,'0');attachmentBytes.set(id,input);return{value:{id,mime:input.mime}};}
  if(action==='poll.create'){
@@ -64,6 +68,7 @@ test.desktop={onMembershipServerEvent:(listener:(event:any)=>void)=>{liveListene
  }
  if(action==='messages'){test.liveReads.push(structuredClone(input.options||{}));
   const o=input.options||{},all=records.filter(m=>m.channelId===input.channelId),limit=o.limit||100;let eligible=all.filter(m=>(!o.before||m.id<o.before)&&(!o.after||m.id>o.after));
+  if(test.holdOlderPage&&o.before&&limit>1){test.holdOlderPage=false;await new Promise<void>(resolve=>{test.releaseOlderPage=resolve;});}
   if(o.ids)eligible=eligible.filter(m=>o.ids.includes(m.id));
   if(o.around){const at=eligible.findIndex(m=>m.id>=o.around);eligible=eligible.slice(Math.max(0,at-Math.floor(limit/2)));}
   const page=o.ids||o.after||o.around?eligible.slice(0,limit):eligible.slice(-limit);

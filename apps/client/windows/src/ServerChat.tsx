@@ -74,7 +74,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const [away,setAway]=useState(false),[quotes,setQuotes]=useState(new Map<number,Message|null>()),[preview,setPreview]=useState('');
   const [menu,setMenu]=useState<{message:Message;x:number;y:number}>(),menuRef=useRef<HTMLDivElement>(null),[attachmentMenu,setAttachmentMenu]=useState(false);
   const pane=useRef<HTMLDivElement>(null),content=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null),editInput=useRef<HTMLTextAreaElement>(null),picker=useRef<HTMLInputElement>(null);
-  const savedPosition=useRef(readPosition(positionKey)),follow=useRef(savedPosition.current?.follow!==false),epoch=useRef(0),queue=useRef(Promise.resolve()),navigation=useRef(false),sendingRef=useRef(false),mutationRef=useRef(false);
+  const savedPosition=useRef(readPosition(positionKey)),follow=useRef(savedPosition.current?.follow!==false),epoch=useRef(0),queue=useRef(Promise.resolve()),navigation=useRef<LoadKind|undefined>(undefined),sendingRef=useRef(false),mutationRef=useRef(false);
   const pendingPosition=useRef<{bottom?:boolean;anchor?:Anchor;target?:number;unread?:boolean}|undefined>(undefined),lastAnchor=useRef<Anchor|undefined>(undefined),resizeAnchor=useRef<{id:number;offset:number;width:number;height:number}|undefined>(undefined),lastScroll=useRef(0);
   const current=useRef({state,channel,focused,onRead,onViewport,reply,pageSize:limit});current.current={state,channel,focused,onRead,onViewport,reply,pageSize:limit};
   const read=useRef(Number(localStorage.getItem(cursorKey(serverId,channelId)))||0),entryRead=useRef(read.current),[hasSent,setHasSent]=useState(false);
@@ -151,7 +151,15 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
       try{
         const targetLast=Math.max(reportedLast,current.current.channel.lastMessageId,eventLast.current,outgoingRef.current?.confirmed?outgoingRef.current.message.id:0);
         const cached=!fullSync.current&&loadedRevision.current>=revision&&(kind==='around'?history.current.activate(target!):kind==='latest'?history.current.latest(targetLast):undefined);
-        if(cached){predecessor.current=undefined;pendingPosition.current=kind==='latest'?{bottom:true}:{target};follow.current=kind==='latest';rows.current=cached;setMessages(cached);setAway(!follow.current);await refreshQuotes(cached,generation,true);return;}
+        if(cached){
+          predecessor.current=undefined;
+          pendingPosition.current=kind==='latest'?{bottom:true}:{target};
+          follow.current=kind==='latest';
+          // A cached jump must run the positioning effect even if the active block did not change.
+          const next=[...cached];
+          rows.current=next;setMessages(next);setAway(!follow.current);
+          await refreshQuotes(next,generation,true);return;
+        }
         let minimumRevision:number|undefined;
         if(kind==='sync'&&force&&history.current.all.length){
           const ids=history.current.all.map(m=>m.id),updates:Message[]=[],deleted:number[]=[];
@@ -164,23 +172,32 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
         history.current.page(page.messages.filter(m=>!deletedMessages.current.has(m.id)),kind==='older'||kind==='newer'||append);
         if(append&&page.hasNewer){page=await membership<MessagePage>('messages',{serverId,channelId,options:{limit:batchSize,readAfter:read.current}});if(generation!==epoch.current)return;history.current.page(page.messages);}
         if(kind==='sync'&&!follow.current&&previousActive)history.current.activate(oldAnchor?.id||previousActive);
-        let next=history.current.messages;
-        if(kind==='latest'||(kind==='initial'&&(!saved||saved.follow))){follow.current=true;pendingPosition.current={bottom:true};}
-        else if(kind==='around'){follow.current=false;pendingPosition.current={target};}
-        else if(kind==='initial'&&saved){follow.current=false;pendingPosition.current={anchor:saved};}
-        else pendingPosition.current=follow.current?{bottom:true}:{anchor:anchor()||oldAnchor};
+        const next=history.current.messages;
         predecessor.current=undefined;
         const oldBefore=next.length?existing.findIndex(m=>m.id===next[0].id):-1;
         if(oldBefore>0)predecessor.current=existing[oldBefore-1];
         else if(oldBefore===0)predecessor.current=oldPredecessor;
         else if(next.length&&next[0].id>page.first){const preceding=await membership<MessagePage>('messages',{serverId,channelId,options:{before:next[0].id,limit:1}});if(generation!==epoch.current)return;predecessor.current=preceding.messages.at(-1);}
+        if(kind==='latest'||(kind==='initial'&&(!saved||saved.follow))){follow.current=true;pendingPosition.current={bottom:true};}
+        else if(kind==='around'){follow.current=false;pendingPosition.current={target};}
+        else if(kind==='initial'&&saved){follow.current=false;pendingPosition.current={anchor:saved};}
+        else pendingPosition.current=follow.current?{bottom:true}:{anchor:anchor()||oldAnchor};
         confirmOutgoing(page.messages);setNewCount(page.unread);rows.current=next;setMessages(next);boundsRef.current={first:page.first,last:page.last};setBounds(boundsRef.current);setAway(!follow.current);setReady(true);setFailure('');
         loadedRevision.current=minimumRevision??page.revision??revision;clearConfirmedOutgoing();await refreshQuotes(next,generation,kind!=='sync'||!force);
       }catch(error){if(kind==='sync'&&force)fullSync.current=true;if(generation===epoch.current)setFailure((error as Error).message);}
       finally{if(generation===epoch.current)setLoading(false);}
     });queue.current=job;return job;
   }
-  async function navigate(kind:LoadKind,target?:number){if(navigation.current)return;navigation.current=true;try{if(kind!=='latest')follow.current=false;await load(kind,target);}finally{navigation.current=false;}}
+  async function navigate(kind:LoadKind,target?:number){
+    if(navigation.current&&(kind!=='latest'||navigation.current==='latest'))return;
+    navigation.current=kind;
+    try{
+      if(kind!=='latest')follow.current=false;
+      await load(kind,target);
+    }finally{
+      if(navigation.current===kind)navigation.current=undefined;
+    }
+  }
   useEffect(()=>{const generation=++epoch.current;void load('initial');return()=>{if(epoch.current===generation)epoch.current++;clearTimeout(highlightTimer.current);for(const timer of deliveryWaiters.current.values())clearTimeout(timer);deliveryWaiters.current.clear();history.current.clear();rows.current=[];quotesRef.current.clear();};},[key]);
   useEffect(()=>{const subscriptionId=crypto.randomUUID().replaceAll('-','');let cancelled=false,pending=false,dirty=false;
     const sync=async()=>{if(pending){dirty=true;return;}pending=true;do{dirty=false;await load('sync');}while(dirty&&!cancelled);pending=false;};
@@ -370,7 +387,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
         </article>;
       })}
       <div ref={newerEdge} className="chat-history-edge" aria-hidden="true"/>
-    </div></div>{ready&&loading&&<span className="chat-history-loading" role="status">{t('Загрузка истории…')}</span>}{(away||hasNewer&&!follow.current)&&<button className="member-load chat-jump" title={t('К новым сообщениям')} aria-label={newCount?t('Новых сообщений: {0}',newCount):t('К новым сообщениям')} onClick={()=>{follow.current=true;void navigate('latest');focusInput();}}><Icon name="arrow-down" size={20}/>{newCount>0&&<b className="chat-jump-count">{newCount}</b>}</button>}</div>
+    </div></div>{ready&&loading&&<span className="chat-history-loading" role="status">{t('Загрузка истории…')}</span>}{(away||hasNewer&&!follow.current)&&<button className="member-load chat-jump" title={t('К новым сообщениям')} aria-label={newCount?t('Новых сообщений: {0}',newCount):t('К новым сообщениям')} onClick={()=>{void navigate('latest');focusInput();}}><Icon name="arrow-down" size={20}/>{newCount>0&&<b className="chat-jump-count">{newCount}</b>}</button>}</div>
     {fileDragging&&createPortal(<div className="chat-file-drop-overlay" role="status"><div className="chat-file-drop-card"><Icon name="image" size={72}/><strong>{t('Загрузить в «{0}»',channel.name)}</strong><span>{t('Добавьте комментарий к файлам перед отправкой.')}</span></div></div>,document.body)}
     {failure&&<p className="member-chat-error text-error" role="alert">{failure}<button onClick={()=>void load('sync')}>{t('Повторить')}</button></p>}
     {sendError&&<p className="text-error" role="alert">{sendError}</p>}

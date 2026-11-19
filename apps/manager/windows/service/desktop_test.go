@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
@@ -94,6 +95,51 @@ func TestDesktopControlNamesAreStableAndRootScoped(t *testing.T) {
 func TestDesktopBrokerRejectsForeignPipeNames(t *testing.T) {
 	if desktopBroker(`\\.\pipe\other-application`, strings.Repeat("a", 64), t.TempDir()) == nil {
 		t.Fatal("foreign privileged pipe accepted")
+	}
+}
+
+func TestTerminalCommandsUseShippedController(t *testing.T) {
+	for _, command := range []string{"tui", "start", "stop"} {
+		if !bootstrapCommand([]string{"--lang", "en", command}) {
+			t.Fatalf("%s bypassed the shipped Windows controller", command)
+		}
+	}
+}
+
+func TestTerminalMaintenanceWaitsForControllerExit(t *testing.T) {
+	if !windows.GetCurrentProcessToken().IsElevated() {
+		t.Skip("terminal events are accessible to administrators and SYSTEM")
+	}
+	root := t.TempDir()
+	request, done, err := createTerminalEvents(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(request)
+	defer windows.CloseHandle(done)
+	if _, _, err := createTerminalEvents(strings.ToUpper(root)); err == nil {
+		t.Fatal("another console acquired the same root")
+	}
+	result := make(chan error, 1)
+	go func() { result <- closeTerminal(root) }()
+	if status, err := windows.WaitForSingleObject(request, 5000); err != nil || status != windows.WAIT_OBJECT_0 {
+		t.Fatalf("terminal did not receive the request: %v, %v", status, err)
+	}
+	select {
+	case err := <-result:
+		t.Fatalf("installer continued before the console finished: %v", err)
+	default:
+	}
+	if err := windows.SetEvent(done); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("installer did not continue after the console finished")
 	}
 }
 

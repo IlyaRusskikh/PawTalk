@@ -20,7 +20,22 @@ Unicode true
  SetErrorLevel 1
  Abort
 !macroend
-Name "PawTalk Server Manager"
+!ifdef TUI_ONLY
+ !define ManagerName "PawTalk Server Manager (TUI)"
+ !define InstallHelper "pawtalkctl.exe"
+!else
+ !define ManagerName "PawTalk Server Manager"
+ !define InstallHelper "pawtalk-server-tray.exe"
+!endif
+!macro InstallCommand COMMAND TARGET
+ !ifdef TUI_ONLY
+  nsExec::Exec /TIMEOUT=600000 '"$PLUGINSDIR\${InstallHelper}" ${COMMAND} "${TARGET}"'
+  Pop $0
+ !else
+  ExecWait '"$PLUGINSDIR\${InstallHelper}" ${COMMAND} "${TARGET}"' $0
+ !endif
+!macroend
+Name "${ManagerName}"
 OutFile "${OUTPUT}"
 InstallDir "$APPDATA\PawTalk Server Manager"
 RequestExecutionLevel admin
@@ -31,9 +46,11 @@ SetCompressor /SOLID lzma
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "${STAGE}\LICENSE"
 !insertmacro MUI_PAGE_INSTFILES
+!ifndef TUI_ONLY
 !define MUI_FINISHPAGE_RUN "$INSTDIR\pawtalk-server-tray.exe"
 !define MUI_FINISHPAGE_RUN_FUNCTION LaunchTray
 !define MUI_FINISHPAGE_RUN_TEXT "$(TrayRun)"
+!endif
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
 UninstPage custom un.DataCreate un.DataLeave
@@ -82,53 +99,96 @@ Function .onInit
   MessageBox MB_ICONSTOP "Windows 10 / Windows Server 2019 or newer is required."
   Abort
  ${EndIf}
+ IfSilent silentLanguage
  !insertmacro MUI_LANGDLL_DISPLAY
+ Goto languageReady
+ silentLanguage:
+ ClearErrors
+ ReadRegDWORD $0 HKLM "Software\PawTalk\ServerManager" "Language"
+ ${IfNot} ${Errors}
+  StrCpy $LANGUAGE $0
+ ${EndIf}
+ languageReady:
  StrCpy $LanguageValue "en"
  ${If} $LANGUAGE == ${LANG_RUSSIAN}
   StrCpy $LanguageValue "ru"
  ${EndIf}
 FunctionEnd
 
+!ifndef TUI_ONLY
 Function LaunchTray
  Exec '"$INSTDIR\pawtalk-server-tray.exe" --tray-control settings "$DataRoot" $LanguageValue'
 FunctionEnd
+!endif
 
 Section "PawTalk Server Manager"
  ; Use the new helper: older installed hosts do not know close-tray.
  InitPluginsDir
  SetOutPath "$PLUGINSDIR"
- File "/oname=pawtalk-server-tray.exe" "${STAGE}\pawtalk-server-tray.exe"
- ExecWait '"$PLUGINSDIR\pawtalk-server-tray.exe" --server-stopped "$DataRoot"' $0
+ File "/oname=${InstallHelper}" "${STAGE}\${InstallHelper}"
+ !insertmacro InstallCommand "--server-stopped" "$DataRoot"
  ${If} $0 == 0
   System::Call 'kernel32::SetEnvironmentVariableW(w "PAWTALK_INSTALL_KEEP_STOPPED", w "1")'
  ${EndIf}
  WriteRegStr HKLM "Software\PawTalk\ServerManager" "InstallStatus" "close-tray"
- ExecWait '"$PLUGINSDIR\pawtalk-server-tray.exe" --close-tray-for-upgrade "$DataRoot"' $0
+ !ifdef TUI_ONLY
+ !insertmacro InstallCommand "--close-tray" "$DataRoot"
+ !else
+ !insertmacro InstallCommand "--close-tray-for-upgrade" "$DataRoot"
+ !endif
  ${If} $0 != 0
   WriteRegStr HKLM "Software\PawTalk\ServerManager" "InstallStatus" "close-tray failed (exit $0)"
   SetErrorLevel 1
   Abort
  ${EndIf}
- ExecWait '"$PLUGINSDIR\pawtalk-server-tray.exe" --uninstall-services "$DataRoot"' $0
+ !insertmacro InstallCommand "--uninstall-services" "$DataRoot"
  ${If} $0 != 0
   WriteRegStr HKLM "Software\PawTalk\ServerManager" "InstallStatus" "uninstall-services failed (exit $0)"
   SetErrorLevel 1
   Abort
  ${EndIf}
- ExecWait '"$PLUGINSDIR\pawtalk-server-tray.exe" --prepare-install "$INSTDIR"' $0
+ !insertmacro InstallCommand "--prepare-install" "$INSTDIR"
  ${If} $0 != 0
   WriteRegStr HKLM "Software\PawTalk\ServerManager" "InstallStatus" "prepare-install failed (exit $0)"
   SetErrorLevel 1
   Abort
  ${EndIf}
  SetOutPath "$INSTDIR"
+ !ifdef TUI_ONLY
+ File /r /x server.ico /x tui-version.json "${STAGE}\*"
+ !else
  File /r "${STAGE}\*"
+ !endif
  !insertmacro InstallStage "protect-install"
  ExecWait '"$INSTDIR\pawtalkctl.exe" protect-install "$INSTDIR"' $0
  ${If} $0 != 0
   SetErrorLevel 1
   Abort
  ${EndIf}
+ !ifdef TUI_ONLY
+ !insertmacro InstallStage "tui-host-self-test"
+ nsExec::Exec /TIMEOUT=60000 '"$INSTDIR\pawtalkctl.exe" --root "$DataRoot" --self-test'
+ Pop $0
+ ${If} $0 != 0
+  SetErrorLevel 1
+  Abort
+ ${EndIf}
+ !insertmacro InstallStage "remove-desktop"
+ nsExec::Exec /TIMEOUT=600000 '"$INSTDIR\pawtalkctl.exe" --remove-desktop "$INSTDIR"'
+ Pop $0
+ ${If} $0 != 0
+  !insertmacro InstallStage "remove-desktop failed (exit $0)"
+  SetErrorLevel 1
+  Abort
+ ${EndIf}
+ File "${STAGE}\tui-version.json"
+ Delete "$SMPROGRAMS\PawTalk Server Manager\Status.lnk"
+ Delete "$SMPROGRAMS\PawTalk Server Manager\Configure.lnk"
+ Delete "$SMPROGRAMS\PawTalk Server Manager\PawTalk Server.lnk"
+ Delete "$DESKTOP\PawTalk Server.lnk"
+ Delete "$SMSTARTUP\PawTalk Server.lnk"
+ RMDir "$SMPROGRAMS\PawTalk Server Manager"
+ !else
  CreateDirectory "$SMPROGRAMS\PawTalk Server Manager"
  !insertmacro InstallStage "gui-host-self-test"
  ExecWait '"$INSTDIR\pawtalk-server-tray.exe" --self-test' $0
@@ -138,6 +198,12 @@ Section "PawTalk Server Manager"
  ${EndIf}
  Delete "$SMPROGRAMS\PawTalk Server Manager\Status.lnk"
  CreateShortcut "$SMPROGRAMS\PawTalk Server Manager\Configure.lnk" "$INSTDIR\pawtalk-server-tray.exe" '--tray-control settings "$DataRoot" $LanguageValue'
+ ClearErrors
+ Delete "$INSTDIR\tui-version.json"
+ IfFileExists "$INSTDIR\tui-version.json" 0 +3
+  SetErrorLevel 1
+  Abort
+ !endif
  ${If} $LanguageValue == ""
   StrCpy $LanguageValue "en"
  ${EndIf}
@@ -166,12 +232,14 @@ Section "PawTalk Server Manager"
   SetErrorLevel 1
   Abort
  ${EndIf}
- WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PawTalkServerManager" "DisplayName" "PawTalk Server Manager"
+ WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PawTalkServerManager" "DisplayName" "${ManagerName}"
  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PawTalkServerManager" "DisplayVersion" "${VERSION}"
  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PawTalkServerManager" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+ !ifndef TUI_ONLY
  CreateShortcut "$SMPROGRAMS\PawTalk Server Manager\PawTalk Server.lnk" "$INSTDIR\pawtalk-server-tray.exe" '--root "$DataRoot" --lang $LanguageValue' "$INSTDIR\server.ico"
+ !endif
  ${If} $PreviousInstall == "$PROGRAMFILES64\PawTalk Server Manager"
-  ExecWait '"$INSTDIR\pawtalk-server-tray.exe" --retire-legacy "$PreviousInstall"' $0
+  !insertmacro InstallCommand "--retire-legacy" "$PreviousInstall"
   ${If} $0 != 0
    DetailPrint "Legacy program directory preserved for manual review. Room data remains in ProgramData."
   ${EndIf}

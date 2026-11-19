@@ -92,8 +92,16 @@ def install_server_package(controller,identifier):
         controller.runtime.server_bundle=previous
 
 
+def manager_installer_field():
+    host = os.environ.get('PAWTALK_MANAGER_HOST')
+    if host and (Path(host).parent/'tui-version.json').is_file():
+        return 'windowsTuiInstaller'
+    return 'windowsInstaller'
+
+
 def installed_desktop_version():
-    file=Path(os.environ['PAWTALK_MANAGER_HOST']).parent/'desktop-version.json'
+    name = 'tui-version.json' if manager_installer_field() == 'windowsTuiInstaller' else 'desktop-version.json'
+    file=Path(os.environ['PAWTALK_MANAGER_HOST']).parent/name
     from .release import semver
     if not file.exists():
         if os.name=='nt':
@@ -113,8 +121,8 @@ def queue_manager_installer(controller,manifest):
     keys=json.loads((controller.etc/'trust.json').read_text())
     manifest=verify(manifest['_signed'], 'manager',keys)
     if semver(manifest['version']) <= semver(installed_desktop_version()): return False
-    artifact=manifest.get('windowsInstaller')
-    if not artifact: raise ValueError('Manager release has no signed Windows installer')
+    artifact=manifest.get(manager_installer_field())
+    if not artifact: raise ValueError('Manager release has no signed installer for the installed Windows edition')
     directory=controller.directory/'updates'
     directory.mkdir(parents=True,exist_ok=True); secure(directory)
     installer=directory/artifact['name']
@@ -126,9 +134,9 @@ def queue_manager_installer(controller,manifest):
     pending=directory/'pending.json'
     if pending.exists():
         saved=json.loads(pending.read_text())
-        if saved.get('version')==manifest['version'] and time.time()-saved.get('at',0)<900: return True
+        if saved.get('installer')==artifact['name'] and time.time()-saved.get('at',0)<900: return True
     schedule_manager_installer(controller,installer)
-    save(pending,dict(version=manifest['version'],at=int(time.time())))
+    save(pending,dict(version=manifest['version'],installer=artifact['name'],at=int(time.time())))
     return True
 
 

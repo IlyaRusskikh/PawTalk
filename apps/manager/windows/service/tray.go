@@ -160,8 +160,14 @@ func legacySettingsClass(root string) string {
 	return fmt.Sprintf("PawTalk.Server.Settings.%x", hash[:8])
 }
 func closeTrayMode(root string, restart bool) error {
+	if err := closeTerminal(root); err != nil {
+		return err
+	}
 	if err := closeDesktop(root, restart); err != nil {
 		return err
+	}
+	if err := trayUser.NewProc("FindWindowW").Find(); err != nil {
+		return nil // A console-only host may have no windowing APIs.
 	}
 	absolute, err := filepath.Abs(root)
 	if err != nil {
@@ -383,33 +389,6 @@ func trayMain(args []string) int {
 			return 1
 		}
 		return 0
-	}
-	if len(args) == 2 {
-		var err error
-		switch args[0] {
-		case "--server-stopped":
-			state, queryErr := trayState(args[1])
-			if queryErr == nil && state == svc.Stopped {
-				return 0
-			}
-			return 1
-		case "--prepare-install":
-			err = prepareInstall(args[1])
-		case "--uninstall-services":
-			err = uninstallServices(args[1])
-		case "--retire-legacy":
-			err = retireLegacyInstall(args[1])
-		default:
-			goto normalTray
-		}
-		return installerExitCode(err)
-	}
-normalTray:
-	if len(args) == 2 && args[0] == "--close-tray-for-upgrade" {
-		return installerExitCode(closeTrayMode(args[1], true))
-	}
-	if len(args) == 2 && args[0] == "--close-tray" {
-		return installerExitCode(closeTray(args[1]))
 	}
 	root, lang := defaultRoot(), "en"
 	language, _, _ := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetUserDefaultUILanguage").Call()

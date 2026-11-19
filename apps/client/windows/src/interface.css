@@ -52,7 +52,8 @@ input, select, textarea { background: var(--surface); color: var(--text); border
 .chat-reply-draft button, .chat-attachment-draft button, .chat-inline-notice button { background: transparent; color: var(--muted); font-size: 20px; width: 26px; height: 26px; }
 .chat-attachment-draft img { width: 44px; height: 44px; object-fit: cover; border-radius:calc(var(--ui-radius) * 0.5833); }.chat-attachment-draft strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .chat-inline-notice { display: flex; align-items: center; justify-content: space-between; color: var(--warning); font-size: 11px; padding: 6px 10px; background: var(--panel); border-radius:calc(var(--ui-radius) * 0.6667); margin-top: 8px; }
-.chat-image { max-width: 100%; max-height: 320px; overflow: hidden; border: 1px solid var(--line); border-radius:calc(var(--ui-radius) * 0.8333); margin-top: 6px; background: var(--panel); }
+.chat-image { max-width: 100%; overflow: hidden; border: 1px solid var(--line); border-radius:calc(var(--ui-radius) * 0.8333); margin-top: 6px; background: var(--panel); }
+.chat-image:has(> .chat-image-open) { border: 0; background: transparent; }
 .chat-image-open { display: block; width: 100%; height: 100%; background: transparent; padding: 0; }.chat-image img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .image-placeholder, .image-retry { height: 100%; min-height: 50px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 11px; background: transparent; }
 .image-viewer { width: min(1100px, 92vw); }.image-viewer .modal-body { padding: 0; margin: 0; overflow: auto; }.image-viewer img { display: block; width: 100%; height: auto; max-height: 78vh; object-fit: contain; }
