@@ -4,6 +4,10 @@
 
 One Manager tag covers Windows and Linux. The platforms below are documentation sections, **not distinct release versions**.
 
+## manager-v0.6.0
+
+[Release details](../../../releases/manager-v0.6.0.en.md)
+
 ## manager-v0.5.1 — 2026-11-15
 
 **Changes:** UI-first setup and API 2 admission. Shared Manager release. Check the linked release description for OS-specific changes.

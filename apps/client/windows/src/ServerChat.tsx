@@ -78,6 +78,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const pendingPosition=useRef<{bottom?:boolean;anchor?:Anchor;target?:number;unread?:boolean}|undefined>(undefined),lastAnchor=useRef<Anchor|undefined>(undefined),resizeAnchor=useRef<{id:number;offset:number;width:number;height:number}|undefined>(undefined),lastScroll=useRef(0);
   const current=useRef({state,channel,focused,onRead,onViewport,reply,pageSize:limit});current.current={state,channel,focused,onRead,onViewport,reply,pageSize:limit};
   const read=useRef(Number(localStorage.getItem(cursorKey(serverId,channelId)))||0),entryRead=useRef(read.current),[hasSent,setHasSent]=useState(false);
+  const entryUnread=useRef<number|undefined>(undefined),alignUnread=useRef(false);
   const sendTimes=useRef<number[]>([]);
   const uploaded=useRef(new Map<File,import('./membership').ChatAttachment>()),pendingSend=useRef<{signature:string;id:string}|undefined>(undefined),arrival=useRef<{x:number;y:number}|undefined>(undefined),highlightTimer=useRef<ReturnType<typeof setTimeout>>(undefined);
   const deletedMessages=useRef(new Set<number>()),fullSync=useRef(false),eventRevision=useRef(0),eventLast=useRef(0),loadedRevision=useRef(-1),quotesRef=useRef(new Map<number,Message|null>());
@@ -167,6 +168,25 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
           history.current.update(updates,deleted);
         }
         let page=await membership<MessagePage>('messages',{serverId,channelId,options});if(generation!==epoch.current)return;
+        if(kind==='initial'&&page.unread>0){
+          // The latest page can start well after the read cursor. Fetch near
+          // that boundary, including context before the first unread message.
+          const readAfter=entryRead.current,entryLast=page.last;
+          let unreadPage=await membership<MessagePage>('messages',{serverId,channelId,options:{limit:batchSize,around:readAfter+1,readAfter}});
+          if(generation!==epoch.current)return;
+          while(unreadPage.unread>0){
+            const state=current.current.state;
+            const first=unreadPage.messages.find(message=>message.id>readAfter&&!deletedMessages.current.has(message.id)&&
+              (message.systemKind||effectiveProfile(state,message.authorProfileId)!==state.self.effectiveProfileId));
+            if(first){page=unreadPage;entryUnread.current=first.id;break;}
+            // Messages sent by another device on this profile do not count as unread.
+            const after=unreadPage.messages.at(-1)?.id;
+            if(!unreadPage.hasNewer||!after||after>=entryLast)break;
+            unreadPage=await membership<MessagePage>('messages',{serverId,channelId,options:{limit:batchSize,after,readAfter}});
+            if(generation!==epoch.current)return;
+            if((unreadPage.messages.at(-1)?.id??0)<=after)break;
+          }
+        }
         history.current.update([],history.current.all.filter(m=>m.id<page.first||m.id>page.last).map(m=>m.id));
         const previousActive=existing[0]?.id;
         history.current.page(page.messages.filter(m=>!deletedMessages.current.has(m.id)),kind==='older'||kind==='newer'||append);
@@ -178,7 +198,8 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
         if(oldBefore>0)predecessor.current=existing[oldBefore-1];
         else if(oldBefore===0)predecessor.current=oldPredecessor;
         else if(next.length&&next[0].id>page.first){const preceding=await membership<MessagePage>('messages',{serverId,channelId,options:{before:next[0].id,limit:1}});if(generation!==epoch.current)return;predecessor.current=preceding.messages.at(-1);}
-        if(kind==='latest'||(kind==='initial'&&(!saved||saved.follow))){follow.current=true;pendingPosition.current={bottom:true};}
+        if(kind==='initial'&&entryUnread.current!==undefined||kind==='newer'&&alignUnread.current){follow.current=false;pendingPosition.current={unread:true};}
+        else if(kind==='latest'||(kind==='initial'&&(!saved||saved.follow))){follow.current=true;pendingPosition.current={bottom:true};}
         else if(kind==='around'){follow.current=false;pendingPosition.current={target};}
         else if(kind==='initial'&&saved){follow.current=false;pendingPosition.current={anchor:saved};}
         else pendingPosition.current=follow.current?{bottom:true}:{anchor:anchor()||oldAnchor};
@@ -190,6 +211,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   }
   async function navigate(kind:LoadKind,target?:number){
     if(navigation.current&&(kind!=='latest'||navigation.current==='latest'))return;
+    if(kind==='latest'||kind==='around')alignUnread.current=false;
     navigation.current=kind;
     try{
       if(kind!=='latest')follow.current=false;
@@ -234,14 +256,21 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     };
     void check();const timer=setInterval(()=>void check(),15000);return()=>{cancelled=true;clearInterval(timer);};
   },[key,ready]);
-  useEffect(()=>{if(!failure)return;const timer=setInterval(()=>void load('sync'),3500);return()=>clearInterval(timer);},[failure]);
+  useEffect(()=>{if(!failure)return;const timer=setInterval(()=>void load(ready?'sync':'initial'),3500);return()=>clearInterval(timer);},[failure,ready]);
   useEffect(()=>{drafts.set(key,{text,mentions,media,reply});if(drafts.size>100){const oldest=drafts.keys().next().value!;drafts.get(oldest)?.media?.forEach(disposeDraft);drafts.delete(oldest);}},[text,mentions,media,reply,key]);
   useEffect(()=>{if(!file||!file.type.startsWith('image/')){setPreview('');return;}const url=URL.createObjectURL(file);setPreview(url);return()=>URL.revokeObjectURL(url);},[file]);
   useEffect(()=>{if(focused&&!editing&&!menu){const timer=setTimeout(focusInput,0);return()=>clearTimeout(timer);}},[focused,key,editing?.id,!!menu,!!deleting]);
   useLayoutEffect(()=>{
     const list=pane.current;if(!list)return;const position=pendingPosition.current;pendingPosition.current=undefined;
     if(position?.bottom)list.scrollTop=list.scrollHeight;
-    else if(position?.unread){const divider=list.querySelector<HTMLElement>('.chat-divider');if(divider)list.scrollTop+=divider.getBoundingClientRect().top-list.getBoundingClientRect().top;follow.current=!hasNewer&&list.scrollHeight-list.scrollTop-list.clientHeight<12;setAway(!follow.current);}
+    else if(position?.unread){
+      const divider=list.querySelector<HTMLElement>('.chat-divider'),top=list.getBoundingClientRect().top;
+      if(divider)list.scrollTop+=divider.getBoundingClientRect().top-top;
+      // A short page may hit the bottom before the divider reaches the top.
+      // Keep the target while the history observer fetches the next page.
+      alignUnread.current=!!divider&&hasNewer&&divider.getBoundingClientRect().top-top>2;
+      follow.current=!hasNewer&&list.scrollHeight-list.scrollTop-list.clientHeight<12;setAway(!follow.current);
+    }
     else if(position?.anchor)restoreAnchor(position.anchor);
     else if(position?.target){const row=list.querySelector<HTMLElement>(`[data-message-row="${position.target}"]`);if(row){list.scrollTop+=row.getBoundingClientRect().top-list.getBoundingClientRect().top-list.clientHeight/2+row.offsetHeight/2;highlight(row);follow.current=!hasNewer&&list.scrollHeight-list.scrollTop-list.clientHeight<12;setAway(!follow.current);}else setNotice(t('Исходное сообщение уже недоступно.'));}
     const sent=arrival.current;if(sent){const row=list.querySelector<HTMLElement>('.chat-message-pending .member-message-text');if(row){arrival.current=undefined;if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
@@ -367,7 +396,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
       {ready&&!displayed.length&&<div className="member-chat-welcome"><Icon name="chat" size={42}/><h2>{channel.name}</h2><p>{t('Начните общение в этом чате.')}</p></div>}
       {displayed.map((message,index)=>{
         const local=message===outgoing?.message,pending=local&&!outgoing!.confirmed,author=profileFor(state,message.authorProfileId),system=message.systemKind==='poll-result',own=!system&&effectiveProfile(state,message.authorProfileId)===state.self.effectiveProfileId,previous=index?displayed[index-1]:predecessor.current,isEditing=editing?.id===message.id;
-        const firstUnread=!local&&!own&&!hasSent&&message.id>entryRead.current&&(!previous||previous.id<=entryRead.current),continuation=!isEditing&&!firstUnread&&!message.content.reply&&!message.content.poll&&!previous?.content.poll&&previous&&effectiveProfile(state,previous.authorProfileId)===effectiveProfile(state,message.authorProfileId)&&message.sentAt>=previous.sentAt&&message.sentAt-previous.sentAt<=300000&&new Date(message.sentAt).toDateString()===new Date(previous.sentAt).toDateString();
+        const firstUnread=!local&&!own&&!hasSent&&(entryUnread.current!==undefined?message.id===entryUnread.current:message.id>entryRead.current&&(!previous||previous.id<=entryRead.current)),continuation=!isEditing&&!firstUnread&&!message.content.reply&&!message.content.poll&&!previous?.content.poll&&previous&&effectiveProfile(state,previous.authorProfileId)===effectiveProfile(state,message.authorProfileId)&&message.sentAt>=previous.sentAt&&message.sentAt-previous.sentAt<=300000&&new Date(message.sentAt).toDateString()===new Date(previous.sentAt).toDateString();
         const reference=message.content.reply&&quote(message.content.reply.id,message.content.reply);
         return <article className={`member-message chat-message${pending?' chat-message-pending':''}${message.content.mentions?.some(m=>effectiveProfile(state,m.profileId)===state.self.effectiveProfileId)?' chat-message-mentioned':''}${continuation?' chat-message-continuation':''}`} key={message.id} aria-busy={pending||undefined}>
           {firstUnread&&<div className="chat-divider">{t('Новые сообщения')}</div>}

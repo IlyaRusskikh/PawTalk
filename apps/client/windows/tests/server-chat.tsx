@@ -10,7 +10,8 @@ import '../src/membership.css';import '../src/style.css';import '../src/interfac
 const test=window as any,sid='1'.repeat(32),cid='2'.repeat(32),other='3'.repeat(32),me='a'.repeat(64),friend='b'.repeat(64);
 await changeLanguage(new URLSearchParams(location.search).get('lang')==='en'?'en':'ru');applyTheme(defaultTheme);
 localStorage.clear();localStorage.setItem('pawtalk.chat.window','25');
-localStorage.setItem('pawtalk.v2.read.'+sid+'.'+cid,new URLSearchParams(location.search).get('unread')==='1'?'100':'180');
+const unreadFixture=new URLSearchParams(location.search).get('unread');
+localStorage.setItem('pawtalk.v2.read.'+sid+'.'+cid,unreadFixture==='all'?'0':unreadFixture?'100':'180');
 let records:Message[]=Array.from({length:180},(_,i)=>({id:i+1,channelId:cid,authorProfileId:i===149?me:friend,requestId:(i+1).toString(16).padStart(32,'0'),sentAt:1700000000000+i*1000,content:{text:'Synthetic message '+(i+1)+': '+'wrapped content '.repeat(14)}}));
 if(new URLSearchParams(location.search).has('fallbackgif'))for(const index of [177,178])records[index].content.text='https://gif.example.test/fails.gif';
 const localizedTenor='https://tenor.com/ru/view/deal-with-it-dog-gif-9823664';
@@ -19,6 +20,10 @@ if(new URLSearchParams(location.search).has('legacygif')){
  records[178].content.text=localizedTenor;
 }
 records[19].content.text='Original **current**';records[179].content.reply={id:20,author:'Old name',text:'Stale snapshot'};
+if(unreadFixture==='own'){
+ records=records.filter(message=>message.id!==100).map(message=>message.id>100&&message.id<=128?{...message,authorProfileId:me}:message);
+ localStorage.setItem('pawtalk.v2.position.'+sid+':'+cid,JSON.stringify({id:30,offset:0,follow:false}));
+}
 const liveListeners=new Set<(event:any)=>void>();test.liveReads=[];
 const state:ServerState={serverId:sid,name:'Synthetic chat server',revision:1,controlRevision:1,self:{profileId:me,effectiveProfileId:me,deviceId:'c'.repeat(64),role:'member',permissions:[]},profiles:[{id:me,nickname:'Me',revision:1},{id:friend,nickname:'Friend',revision:1}],channels:[{id:cid,name:'General',kind:'text',protected:true,position:0,revision:1,messageRevision:1,lastMessageId:180},{id:other,name:'Other',kind:'text',protected:false,position:1,revision:1,messageRevision:1,lastMessageId:0}],members:[],devices:[],voice:[],bindings:[]};
 const features=new URLSearchParams(location.search).has('features');
@@ -72,7 +77,7 @@ test.desktop={onMembershipServerEvent:(listener:(event:any)=>void)=>{liveListene
   if(o.ids)eligible=eligible.filter(m=>o.ids.includes(m.id));
   if(o.around){const at=eligible.findIndex(m=>m.id>=o.around);eligible=eligible.slice(Math.max(0,at-Math.floor(limit/2)));}
   const page=o.ids||o.after||o.around?eligible.slice(0,limit):eligible.slice(-limit);
-  return{value:{messages:structuredClone(page),first:all[0]?.id||0,last:all.at(-1)?.id||0,hasOlder:!!page.length&&page[0].id>all[0].id,hasNewer:!!page.length&&page.at(-1)!.id<all.at(-1)!.id,unread:all.filter(m=>m.id>(o.readAfter||0)).length}};
+  return{value:{messages:structuredClone(page),first:all[0]?.id||0,last:all.at(-1)?.id||0,hasOlder:!!page.length&&page[0].id>all[0].id,hasNewer:!!page.length&&page.at(-1)!.id<all.at(-1)!.id,unread:all.filter(m=>m.id>(o.readAfter||0)&&(m.systemKind||m.authorProfileId!==me)).length}};
  }
  if(action==='send'){
   test.sendRequests.push(structuredClone(input));
