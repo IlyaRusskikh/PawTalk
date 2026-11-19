@@ -100,18 +100,22 @@ app.whenReady().then(async()=>{
  await run("document.querySelector('dialog .modal-actions button').click()");
  await run("(()=>{const input=document.querySelector('.chat-compose input[type=file]'),data=new DataTransfer();data.items.add(new File([Uint8Array.from(atob('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'),c=>c.charCodeAt(0))],'test.gif',{type:'image/gif'}));input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
  await run("document.querySelector('.member-composer').requestSubmit()");
- await until("!!document.querySelector('.chat-file button')&&document.querySelector('.chat-file button').disabled===false&&document.querySelector('.chat-attach').disabled===false");
- await run("document.querySelector('.chat-file button').click()");
- await until("!!document.querySelector('.chat-gif-preview img')");
+ await until("document.querySelector('.chat-gif-preview img[alt=\"test.gif\"]')?.naturalWidth===1&&document.querySelector('.chat-attach')?.disabled===false");
+ assert.equal(await run("document.querySelector('.chat-file a[download=\"test.gif\"]')"),null);
  await run("document.querySelector('.chat-gif-preview').click()");
  await until("!!document.querySelector('dialog .chat-gif-full')");
+ assert.equal(await run("document.querySelector('dialog .modal-footer a[download=\"test.gif\"]')?.href.startsWith('blob:')"),true);
  await run("document.querySelector('dialog').dispatchEvent(new Event('cancel',{bubbles:true,cancelable:true}))");
+ await run("(()=>{const input=document.querySelector('.chat-compose input[type=file]'),data=new DataTransfer();data.items.add(new File([Uint8Array.from(atob('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'),c=>c.charCodeAt(0))],'generic.GIF',{type:'application/octet-stream'}));input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
+ await until("document.querySelector('.attachment-thumbnail img,.attachment-thumbnail svg')!==null");
+ await run("document.querySelector('.member-composer').requestSubmit()");
+ await until("document.querySelector('.chat-gif-preview img[alt=\"generic.GIF\"]')?.naturalWidth===1");
  await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/server-chat.html?compose=1&legacygif=1&lang='+lang);
  await until("document.querySelectorAll('[data-message-row=\"178\"] .chat-link-gif,[data-message-row=\"179\"] .chat-link-gif').length===2");
  await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/server-chat.html?compose=1&fallbackgif=1&lang='+lang);
  await until("[...document.querySelectorAll('[data-message-row=\"178\"] .chat-link-gif,[data-message-row=\"179\"] .chat-link-gif')].filter(e=>e.src.startsWith('blob:')&&e.naturalWidth===1).length===2");
  assert.equal(await run("window.gifLoads"),2,'each separate message recovers from Chromium transport failure');
- console.log('PASS composer '+lang+': numbered preview, table, rule selected Markdown heading, checklist creation/check/edit modal alignment and GIF viewer');
+ console.log('PASS composer '+lang+': numbered preview, table, rule selected Markdown heading, checklist creation/check/edit modal alignment, GIF attachment autoplay and viewer');
  }
  clearTimeout(timer);app.exit(0);
  }catch(e){console.error(e);clearTimeout(timer);app.exit(1);}
