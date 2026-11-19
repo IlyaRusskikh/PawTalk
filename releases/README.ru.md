@@ -16,6 +16,7 @@
 - [client-v0.12.1](client-v0.12.1.ru.md)
 - [client-v0.13.0](client-v0.13.0.ru.md) — исходник выпуска
 - [client-v0.14.0](client-v0.14.0.ru.md) — источник выпуска
+- [client-v0.14.1](client-v0.14.1.ru.md)
 
 ## Server
 
@@ -35,5 +36,6 @@
 - [manager-v0.4.0](manager-v0.4.0.ru.md)
 - [manager-v0.5.0](manager-v0.5.0.ru.md) — неопубликованный неудачный кандидат
 - [manager-v0.5.1](manager-v0.5.1.ru.md)
+- [manager-v0.6.0](manager-v0.6.0.ru.md)
 
 [Опубликованные GitHub Releases](https://github.com/IlyaRusskikh/PawTalk/releases) определяют доступность тегов. Не используйте один общий `releases/latest`.
