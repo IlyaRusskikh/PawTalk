@@ -102,11 +102,6 @@ async function test(window) {
   }
   assert.ok(measuredCache,'expected ten local refreshes during an uninterrupted live snapshot');
   console.log('PASS ten local refreshes issue zero server state requests');
-  assert.ok(chatSockets.length>0);chatSockets.at(-1).close();await run('window.__chatEvents=[]');
-  await run(`window.desktop.membership('send',{serverId:${JSON.stringify(fixture.serverId)},channelId:${JSON.stringify(liveChannel)},content:{text:'Synthetic WebSocket reconnect catchup'}})`);
-  await until("window.__chatEvents.length>0&&document.querySelector('.member-history').innerText.includes('Synthetic WebSocket reconnect catchup')",'reconnected WebSocket catches missed messages');
-  console.log('PASS active chat reconnect and missed-message catchup');
-  await new Promise(resolve=>setTimeout(resolve,350));
   const beforeAppend=memberReads.length;
   await run(`window.desktop.membership('send',{serverId:${JSON.stringify(fixture.serverId)},channelId:${JSON.stringify(liveChannel)},content:{text:'Synthetic incremental append'}})`);
   await until("document.querySelector('.member-history').innerText.includes('Synthetic incremental append')",'incremental stream append');
@@ -231,7 +226,20 @@ async function test(window) {
     await until("[...document.querySelectorAll('.member-channel')].some(e=>e.textContent.includes('QA unread')&&e.querySelector('.member-channel-count')?.textContent==='1')",'unread retries after one failed fetch');
     assert.equal(unreadFailed,false,'live unread updates do not fetch history');
     console.log('PASS background unread counts use WS without HTTP');
-    chatSockets.at(-1).close();await guest.send(fixture.serverId,created.value.id,{text:'Synthetic fallback unread retry'});
+    // Keep reconnect and its HTTP catchup after the healthy stream measurements.
+    await run('window.__chatEvents=[]');
+    const disconnected=chatSockets.find(socket=>socket.url.endsWith('/api/v2/events/messages')&&socket.readyState===1);
+    assert.ok(disconnected,'healthy socket before forced reconnect');
+    const closed=new Promise(resolve=>disconnected.addEventListener('close',resolve,{once:true}));
+    disconnected.close();
+    await closed;
+    const catchup=await guest.send(fixture.serverId,liveChannel,{text:'Synthetic WebSocket reconnect catchup'});
+    await guest.send(fixture.serverId,created.value.id,{text:'Synthetic fallback unread retry'});
+    await until(`window.__chatEvents.some(e=>e.channelId===${JSON.stringify(liveChannel)}&&!e.delivery)&&document.querySelector('.member-history').innerText.includes('Synthetic WebSocket reconnect catchup')`,'reconnected WebSocket catches missed messages');
+    await until(`(async()=>{const {value}=await ${connect};return value?.eventsLive;})()`,'replacement WebSocket is live');
+    assert.ok(chatSockets.some(socket=>socket!==disconnected&&socket.url.endsWith('/api/v2/events/messages')&&socket.readyState===1),'new event socket replaced the disconnected one');
+    console.log('PASS active chat reconnect and missed-message catchup');
+    await run(`localStorage.setItem(${JSON.stringify('pawtalk.v2.read.'+fixture.serverId+'.'+liveChannel)},${JSON.stringify(String(catchup.id))})`);
     await until("[...document.querySelectorAll('.member-channel')].some(e=>e.textContent.includes('QA unread')&&e.querySelector('.member-channel-count')?.textContent==='2')",'fallback unread retries after a failed HTTP read');
     assert.equal(unreadFailed,true);assert.ok(await run("document.querySelector('.member-error').getBoundingClientRect().top<60"),'internal notification appears at the top');
   }finally{Client.prototype.messages=originalMessages;}
