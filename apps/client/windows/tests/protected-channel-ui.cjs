@@ -39,6 +39,9 @@ app.whenReady().then(async () => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
 
+  const motion = value => win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
+    features: [{ name: 'prefers-reduced-motion', value }],
+  });
   try {
     for (const language of ['ru', 'en']) {
       const english = language === 'en';
@@ -60,6 +63,8 @@ app.whenReady().then(async () => {
         await until("document.querySelector('#server-channels .member-channel[aria-current=true], #server-channels .member-channel.selected')?.textContent === 'General'", 'Protected channel appears');
       };
       await load('paging-chat');
+      if (!win.webContents.debugger.isAttached()) win.webContents.debugger.attach('1.3');
+      await motion('no-preference');
       const entry = position => `[...document.querySelectorAll('.member-history article')].find(row => row.textContent.includes('Entry ${position}'))`;
       await until(`!!${entry(96)} && !!${entry(65)}`, 'Opens on the latest page');
       await run("document.querySelector('.member-roster-toggle[aria-expanded=false]')?.click()");
@@ -115,16 +120,22 @@ app.whenReady().then(async () => {
       await run("document.querySelector('.member-composer textarea').click()");
       assert.equal(await run("!!document.querySelector('.chat-unread-divider:not([data-closing])')"), true,
         'Clicking the composer before reading retains the marker');
-      assert.equal(await run(`(() => {
+      const jump = await run(`(() => {
         const list = document.querySelector('.protected-chat-stream');
-        const top = list.scrollTop;
+        const bottom = list.scrollHeight - list.clientHeight;
         const original = list.scrollTo;
-        let behavior;
-        list.scrollTo = function(options) { behavior = options.behavior; original.call(this, options); };
-        document.querySelector('.protected-chat-jump').click();
-        delete list.scrollTo;
-        return behavior === 'smooth' && list.scrollTop === top;
-      })()`), true, 'Jumping starts a smooth scroll from the current position');
+        let request;
+        list.scrollTo = function(options) {
+          request = { behavior: options.behavior, top: options.top, start: this.scrollTop };
+          original.call(this, options);
+        };
+        try { document.querySelector('.protected-chat-jump').click(); }
+        finally { delete list.scrollTo; }
+        return { request, bottom };
+      })()`);
+      assert.equal(jump.request?.behavior, 'smooth');
+      assert.equal(jump.request.top, jump.bottom);
+      assert.ok(jump.request.start < jump.bottom, 'The smooth scroll starts above the bottom');
       await until("window.lastVisibleEntry()?.includes('Entry 97') && !document.querySelector('.protected-chat-jump') && (() => {const list = document.querySelector('.protected-chat-stream'); return list.scrollHeight - list.clientHeight - list.scrollTop <= 1;})()",
         'The jump brings the latest message into view and dismisses the button');
       await run("document.getElementById('chat-resize-fixture').remove()");
@@ -1060,10 +1071,7 @@ app.whenReady().then(async () => {
         { role: '@everyone', permission: 'message.send', rule: 'allow' },
       ]);
       assert.deepEqual(Object.keys(result.confirmation).sort(), ['previewId', 'serverId']);
-      win.webContents.debugger.attach('1.3');
-      await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
-        features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
-      });
+      await motion('reduce');
       await openServerMenu();
       await click(createChannel, '.member-context button');
       await until("!!document.querySelector('dialog input:not(:disabled)')", 'Create form appears');
@@ -1236,7 +1244,7 @@ app.whenReady().then(async () => {
       await until("window.protectedChanges.length === 9 && !document.querySelector('dialog[open]')", 'Category order applied');
       const categoryOrder = await run('window.protectedChanges[8].draft');
       assert.deepEqual([categoryOrder.action, categoryOrder.anchorId, categoryOrder.after], ['category.order', 'destination', false]);
-      win.webContents.debugger.detach();
+      await motion('no-preference');
 
       await run('window.protectedTotalChannels = 1');
       await openChannelSettings();
