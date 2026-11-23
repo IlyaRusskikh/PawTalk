@@ -126,7 +126,8 @@ def queue_manager_installer(controller,manifest):
     directory=controller.directory/'updates'
     directory.mkdir(parents=True,exist_ok=True); secure(directory)
     installer=directory/artifact['name']
-    if installer.is_symlink() or installer.is_junction(): raise ValueError('Unsafe installer path')
+    if installer.is_symlink() or (os.name == 'nt' and installer.is_junction()):
+        raise ValueError('Unsafe installer path')
     if not installer.exists() or installer.stat().st_size!=artifact['size'] or hashlib.sha256(installer.read_bytes()).hexdigest()!=artifact['sha256']:
         data=fetch(f'https://github.com/{REPO}/releases/download/manager-v{manifest["version"]}/{artifact["name"]}',artifact['size'])
         if len(data)!=artifact['size'] or hashlib.sha256(data).hexdigest()!=artifact['sha256']: raise ValueError('Manager installer hash/size mismatch')
