@@ -27,26 +27,31 @@ type memberChecklistUpdate struct {
 }
 
 type memberEvent struct {
-	Checklists     []memberChecklistUpdate `json:"checklists,omitempty"`
-	PollIDs        []string                `json:"pollIds,omitempty"`
-	Delivery       bool                    `json:"delivery,omitempty"`
-	Previous       int64                   `json:"previous"`
-	First          int64                   `json:"first"`
-	Messages       []memberMessage         `json:"messages"`
-	Deleted        []memberDeleted         `json:"deleted,omitempty"`
-	wire           []byte
-	metadata       []byte
-	metadataRescan []byte
-	Sequence       uint64 `json:"sequence"`
-	Type           string `json:"type"`
-	ChannelID      string `json:"channelId,omitempty"`
-	Revision       int64  `json:"revision"`
-	Last           int64  `json:"last"`
-	Rescan         bool   `json:"rescan,omitempty"`
+	Checklists         []memberChecklistUpdate `json:"checklists,omitempty"`
+	PollIDs            []string                `json:"pollIds,omitempty"`
+	Delivery           bool                    `json:"delivery,omitempty"`
+	Previous           int64                   `json:"previous"`
+	First              int64                   `json:"first"`
+	Messages           []memberMessage         `json:"messages"`
+	Deleted            []memberDeleted         `json:"deleted,omitempty"`
+	wire               []byte
+	metadata           []byte
+	metadataRescan     []byte
+	protectedAppend    bool
+	protectedProfileID string
+	composerProfileID  string
+	composerKind       string
+	Sequence           uint64 `json:"sequence"`
+	Type               string `json:"type"`
+	ChannelID          string `json:"channelId,omitempty"`
+	Revision           int64  `json:"revision"`
+	Last               int64  `json:"last"`
+	Rescan             bool   `json:"rescan,omitempty"`
 }
 type eventSubscription struct {
 	device, channel string
 	payloads        bool
+	composer        bool
 	bytes           int
 	pending         map[string]memberEvent
 }
@@ -61,9 +66,9 @@ func (e *chatEvents) subscribe(device string) (chan struct{}, func(), bool) {
 	return e.subscribeChannel(device, "")
 }
 func (e *chatEvents) subscribeChannel(device, channel string) (chan struct{}, func(), bool) {
-	return e.subscribeStream(device, channel, false)
+	return e.subscribeStream(device, channel, false, false)
 }
-func (e *chatEvents) subscribeStream(device, channel string, payloads bool) (chan struct{}, func(), bool) {
+func (e *chatEvents) subscribeStream(device, channel string, payloads, composer bool) (chan struct{}, func(), bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if len(e.subscribers) >= 8192 {
@@ -82,7 +87,7 @@ func (e *chatEvents) subscribeStream(device, channel string, payloads bool) (cha
 		e.subscribers = make(map[chan struct{}]*eventSubscription)
 	}
 	ch := make(chan struct{}, 1)
-	e.subscribers[ch] = &eventSubscription{device: device, channel: channel, payloads: payloads, pending: make(map[string]memberEvent)}
+	e.subscribers[ch] = &eventSubscription{device: device, channel: channel, payloads: payloads, composer: composer, pending: make(map[string]memberEvent)}
 	return ch, func() { e.mu.Lock(); delete(e.subscribers, ch); e.mu.Unlock() }, true
 }
 func (e *chatEvents) publish(event memberEvent) {
@@ -101,11 +106,14 @@ func (e *chatEvents) publish(event memberEvent) {
 	meta.Rescan = true
 	event.metadataRescan, _ = json.Marshal(meta)
 	for wake, sub := range e.subscribers {
+		if event.Type == "composer" && !sub.composer {
+			continue
+		}
 		if sub.channel != "" && event.ChannelID != "" && event.ChannelID != sub.channel {
 			continue
 		}
 		queued := event
-		key := event.Type + event.ChannelID
+		key := event.Type + event.ChannelID + event.protectedProfileID + event.composerProfileID
 		if sub.payloads && event.Delivery {
 			key += ":" + strconv.FormatInt(event.Revision, 10)
 		}
@@ -229,33 +237,20 @@ func (a *membershipAPI) chatEvents(w http.ResponseWriter, r *http.Request) {
 		memberFail(w, memberError(400, "INVALID_WEBSOCKET"))
 		return
 	}
-	changes, unsubscribe, ok := a.store.events.subscribeStream(access.DeviceID, channel, payloads)
+	changes, unsubscribe, ok := a.store.events.subscribeStream(access.DeviceID, channel, payloads, false)
 	if !ok {
 		memberFail(w, memberError(429, "RATE_LIMIT"))
 		return
 	}
 	defer unsubscribe()
-	hj, ok := w.(http.Hijacker)
-	if !ok {
-		memberFail(w, memberError(500, "SERVER_ERROR"))
-		return
-	}
-	conn, rw, err := hj.Hijack()
+	conn, reader, err := upgradeMembershipWS(w, r.Header.Get("Sec-WebSocket-Key"))
 	if err != nil {
 		return
 	}
 	defer conn.Close()
-	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	accept := sha1.Sum([]byte(r.Header.Get("Sec-WebSocket-Key") + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
-	if _, err = rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + base64.StdEncoding.EncodeToString(accept[:]) + "\r\n\r\n"); err != nil {
-		return
-	}
-	if rw.Flush() != nil {
-		return
-	}
 	controls := make(chan wsControl, 4)
 	done := make(chan struct{})
-	go func() { defer close(done); readWSControls(conn, rw.Reader, controls) }()
+	go func() { defer close(done); readWSControls(conn, reader, controls) }()
 	// Always invalidate on connect: covers writes during handshake and offline gaps.
 	initial := []byte("changed")
 	if channel == "" {
@@ -345,6 +340,30 @@ func (a *membershipAPI) chatEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func upgradeMembershipWS(w http.ResponseWriter, key string) (net.Conn, *bufio.Reader, error) {
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		err := memberError(500, "SERVER_ERROR")
+		memberFail(w, err)
+		return nil, nil, err
+	}
+	conn, rw, err := hj.Hijack()
+	if err != nil {
+		return nil, nil, err
+	}
+	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	accept := sha1.Sum([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+	_, err = rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + base64.StdEncoding.EncodeToString(accept[:]) + "\r\n\r\n")
+	if err == nil {
+		err = rw.Flush()
+	}
+	if err != nil {
+		conn.Close()
+		return nil, nil, err
+	}
+	return conn, rw.Reader, nil
+}
+
 type wsControl struct {
 	op   byte
 	data []byte
@@ -393,7 +412,17 @@ func readWSControls(conn net.Conn, r *bufio.Reader, out chan<- wsControl) {
 	}
 }
 func writeWS(conn net.Conn, op byte, data []byte) error {
-	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	return writeWSWithin(conn, op, data, 5*time.Second)
+}
+
+func writeWSWithin(conn net.Conn, op byte, data []byte, timeout time.Duration) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		return err
+	}
+	return writeWSFrame(conn, op, data)
+}
+
+func writeWSFrame(conn net.Conn, op byte, data []byte) error {
 	header := []byte{128 | op, byte(len(data))}
 	if len(data) > 60000 {
 		return io.ErrShortBuffer
@@ -411,6 +440,8 @@ type eventResponse struct {
 	http.ResponseWriter
 	status int
 }
+
+func (w *eventResponse) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func (w *eventResponse) WriteHeader(code int) { w.status = code; w.ResponseWriter.WriteHeader(code) }
 func (w *eventResponse) Write(p []byte) (int, error) {

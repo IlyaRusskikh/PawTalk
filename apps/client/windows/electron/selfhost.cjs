@@ -33,13 +33,43 @@ async function checkPorts(port) {
   } catch { throw new HostError(t("Порты комнаты заняты. Укажите другой порт.")); }
   finally { for (const socket of sockets) { try { socket.close(); } catch {} } }
 }
-function childReady(child, ready) {
-  return bounded(new Promise((resolve, reject) => {
-    const lines = createInterface({ input: child.stdout });
-    const fail = () => reject(new HostError(t("Не удалось запустить встроенный сервер. Возможно, порт занят.")));
-    child.once('error', fail); child.once('exit', fail);
-    lines.on('line', line => { const value = ready(line); if (value) { child.off('error', fail); child.off('exit', fail); lines.close(); child.stdout.resume(); resolve(value); } });
-  }), 15000, t("Встроенный сервер не запустился вовремя"));
+async function childReady(child, config, handshake) {
+  const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
+  const failed = () => new HostError(t("Не удалось запустить встроенный сервер. Возможно, порт занят."));
+  let fail;
+  const eof = new Promise((_, reject) => {
+    fail = () => reject(failed());
+    child.once('error', fail);
+    child.once('exit', fail);
+  });
+  const iterator = lines[Symbol.asyncIterator]();
+  async function read() {
+    const { value, done } = await iterator.next();
+    if (done || value.length > 50 * 1024) throw failed();
+    const ready = JSON.parse(value);
+    if (!/^[a-f0-9]{64}$/.test(ready?.fingerprint)) throw failed();
+    return ready;
+  }
+  async function exchange() {
+    child.stdin.write(JSON.stringify(config) + '\n');
+    const offer = await read();
+    if (!handshake) return offer;
+    if (!offer.protected || offer.bootstrap !== undefined) {
+      throw new HostError(t("Встроенный сервер несовместим с клиентом"));
+    }
+    const approval = handshake.authorize(offer);
+    child.stdin.write(JSON.stringify(approval) + '\n');
+    const receipt = await read();
+    return { fingerprint: receipt.fingerprint, protectedBootstrap: handshake.confirm(receipt) };
+  }
+  try {
+    return await bounded(Promise.race([exchange(), eof]), 15000, t("Встроенный сервер не запустился вовремя"));
+  } finally {
+    child.off('error', fail);
+    child.off('exit', fail);
+    lines.close();
+    child.stdout.resume();
+  }
 }
 class SelfHost {
   constructor(resources, onChange = () => {}) {
@@ -49,12 +79,16 @@ class SelfHost {
     this.children = [];
   }
   status() { return this.state; }
-  async start(input) {
+  async start(input, protectedHost) {
     if (this.starting || this.stopping || this.state.running) throw new HostError(t("Комната уже запущена или меняет состояние"));
     if (!input || typeof input !== 'object') throw new HostError(t("Неверные настройки сервера"));
     if (input.name !== undefined && (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 80)) throw new HostError(t("Укажите название комнаты до 80 символов"));
     const port = Number(input.port);
     if (!Number.isInteger(port) || port < 1024 || port > 65532) throw new HostError(t("Укажите порт от 1024 до 65532"));
+    const protocol = input.protocol ?? 2;
+    if (![2, 3].includes(protocol) || (protocol === 3) !== !!protectedHost) {
+      throw new HostError(t("Неверные настройки сервера"));
+    }
     this.starting = true;
     this.cancelled = false;
     try {
@@ -87,16 +121,33 @@ class SelfHost {
       else api.stderr.resume();
       api.stdin.on('error', () => {});
       this.children.push(api);
-      const ready = childReady(api, line => { try { const v = JSON.parse(line); return /^[a-f0-9]{64}$/.test(v.fingerprint) ? v : null; } catch { return null; } });
-      api.stdin.write(JSON.stringify({ Port: port, MediaPort: port+3, Key: key, Secret: secret, Name: input.name, Addresses: [...lan, ...(mapped && publicIPv4(externalIP) ? [externalIP] : [])], MediaExecutable: path.join(this.resources, 'livekit-server.exe'), MediaConfig: config })+'\n');
-      const { fingerprint, bootstrap } = await ready;
-      if (!bootstrap || !/^[a-f0-9]{32}$/.test(bootstrap.serverId) || !/^[a-f0-9]{32}$/.test(bootstrap.inviteId) || !/^[\w-]{43}$/.test(bootstrap.token)) throw new HostError(t("Встроенный сервер несовместим с клиентом"));
+      const { fingerprint, bootstrap, protectedBootstrap } = await childReady(api, {
+        Port: port, MediaPort: port+3, Key: key, Secret: secret, Name: input.name,
+        Addresses: [...lan, ...(mapped && publicIPv4(externalIP) ? [externalIP] : [])],
+        MediaExecutable: path.join(this.resources, 'livekit-server.exe'), MediaConfig: config,
+        ...(protectedHost && { Protected: protectedHost.input }),
+      }, protectedHost);
       if (this.cancelled) throw new HostError(t("Создание комнаты отменено: компьютер перешёл в сон"));
-      api.once('exit', () => { if (this.state.running) void this.stop(t("Сервер комнаты остановился")); });
       const invite = ip => `pawtalk://${ip}:${port}/${fingerprint}`;
-      this.bootstrapAddress = invite('127.0.0.1') + '#' + new URLSearchParams({v:'2',server:bootstrap.serverId,invite:bootstrap.inviteId,token:bootstrap.token,setup:'1'});
+      const localAddress = invite('127.0.0.1');
+      let serverId;
+      if (protectedHost) {
+        serverId = protectedBootstrap.trust.serverId;
+        await protectedHost.register(localAddress, protectedBootstrap);
+      } else {
+        if (!bootstrap || !/^[a-f0-9]{32}$/.test(bootstrap.serverId) || !/^[a-f0-9]{32}$/.test(bootstrap.inviteId) || !/^[\w-]{43}$/.test(bootstrap.token)) {
+          throw new HostError(t("Встроенный сервер несовместим с клиентом"));
+        }
+        serverId = bootstrap.serverId;
+        this.bootstrapAddress = localAddress + '#' + new URLSearchParams({v:'2',server:serverId,invite:bootstrap.inviteId,token:bootstrap.token,setup:'1'});
+      }
+      if (api.exitCode !== null || api.signalCode !== null || this.cancelled) {
+        if (protectedHost) await protectedHost.unregister(serverId);
+        throw new HostError(t("Не удалось запустить встроенный сервер. Возможно, порт занят."));
+      }
+      api.once('exit', () => { if (this.state.running) void this.stop(t("Сервер комнаты остановился")); });
       const internet = mapped && publicIPv4(externalIP);
-      this.state = { running: true, serverId: bootstrap.serverId, e2ee: true, name: input.name || t("Комната"), port, mapped, internet, localAddress: invite('127.0.0.1'), invitations: [...(internet ? [invite(externalIP)] : []), ...lan.map(invite)], message: internet ? t("Порты открыты на роутере. Доступность из интернета не проверена.") : t("Комната работает в локальной сети. Автопроброс недоступен или у провайдера дополнительный NAT."), fingerprint };
+      this.state = { running: true, serverId, apiProtocolVersion: protocol, e2ee: true, name: input.name || t("Комната"), port, mapped, internet, localAddress, invitations: [...(internet ? [invite(externalIP)] : []), ...lan.map(invite)], message: internet ? t("Порты открыты на роутере. Доступность из интернета не проверена.") : t("Комната работает в локальной сети. Автопроброс недоступен или у провайдера дополнительный NAT."), fingerprint };
       this.onChange(this.state); return this.state;
     } catch (error) { await this.cleanup(); throw error; }
     finally { this.starting = false; }
@@ -104,7 +155,7 @@ class SelfHost {
   async cleanup() {
     this.bootstrapAddress = undefined;
     for (const child of this.children.splice(0)) {
-      const exited = new Promise(resolve => { child.once('exit', resolve); if (child.exitCode !== null) resolve(); });
+      const exited = new Promise(resolve => { child.once('exit', resolve); if (child.exitCode !== null || child.signalCode !== null) resolve(); });
       child.stdin?.end();
       try { await bounded(exited, 3000, 'shutdown timeout'); } catch { child.kill(); }
     }
@@ -122,4 +173,4 @@ class SelfHost {
     return this.stopping;
   }
 }
-module.exports = { SelfHost, publicIPv4, localAddresses, checkPorts };
+module.exports = { SelfHost, publicIPv4, localAddresses, checkPorts, childReady };

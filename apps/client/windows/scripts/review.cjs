@@ -9,5 +9,6 @@ if (profile && !/^[a-zA-Z0-9_-]{1,40}$/.test(profile)) {
 } else {
 app.setPath('userData', path.resolve(__dirname, `../../../../release/review-api2-profile${profile ? '-' + profile : ''}`));
 delete process.env.PAWTALK_DEV_URL;
+process.env.PAWTALK_REVIEW_API3_ONLY = 'true';
 require('../electron/main.cjs');
 }

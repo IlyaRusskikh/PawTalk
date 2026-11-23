@@ -40,6 +40,8 @@ sudo pawtalkctl doctor
 
 Restoring to a fresh supported host is a separate procedure: copy the full backup to `/var/backups/pawtalk/` with private root permissions, prepare a trusted checkout and Docker/Compose, **do not install a new Server first**, then run `sudo python3 -B -I apps/manager/linux/pawtalkctl backup restore "$PAWTALK_BACKUP_NAME" --trust apps/manager/linux/trust.json` from that checkout. The old IP/base port and saved GHCR image digest must remain available. No API 1 migration. Server backups never contain Client E2EE roots.
 
+For a protected room, keep Client devices that hold newer signed checkpoints. A Client that detects a policy rollback pauses affected sends. If only the older backup survives, its signatures establish the state at the time of the backup. Detecting and reconciling later changes to roles and device revocations requires surviving verifiable evidence newer than that copy.
+
 ## Stop and uninstall without erasing data
 
 ~~~bash

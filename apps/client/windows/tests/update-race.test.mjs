@@ -51,7 +51,7 @@ test('a small complete GitHub artifact does not open mirror connections',async()
 });
 test('a source that stalls after winning is excluded and remaining sources are measured again',()=>fixture(async({options,partial,base,requests})=>{
  const selected=[];
- await downloadFastest({...options,policy:{...options.policy,minBytesPerSecond:1,totalMs:10000},
+ await downloadFastest({...options,policy:{...options.policy,minBytesPerSecond:1,sampleMs:200,headerMs:1000,idleMs:1000,totalMs:15000},
   fetchFor:source=>(url,init)=>fetch(source?url:base+'/bursty/file',init),
   rooms:[{name:'slow',prepare:async()=>({base:base+'/slow'})}],onProgress:(_progress,source)=>selected.push(source)});
  assert.equal(selected[0],'GitHub');assert.equal(selected.at(-1),'slow');assert.equal(requests.filter(s=>s==='bursty').length,1);

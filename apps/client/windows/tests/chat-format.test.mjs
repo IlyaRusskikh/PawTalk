@@ -28,3 +28,16 @@ test('HTML and unsafe links remain inert text; code fences suppress formatting',
   assert.deepEqual(messageMarkdown('```js\n**raw**\n```'), [{type:'pre',text:'**raw**'}]);
   assert.deepEqual(messageMarkdown('# Heading\n> Quote\n- item').map(x=>x.type), ['heading','quote','item']);
 });
+
+test('verified mention offsets survive rich text without styling duplicates or changing a link target', () => {
+  const text = '# @Friend **@Friend**\n| [@Friend](https://example.test/@Friend) | Col |\n| --- | --- |';
+  const boldMention = text.indexOf('@Friend', text.indexOf('**'));
+  const linkMention = text.indexOf('@Friend', text.indexOf('['));
+  const [heading, table] = messageMarkdown(text, [
+    { start: boldMention, end: boldMention + 7 },
+    { start: linkMention, end: linkMention + 7 },
+  ]);
+  assert.deepEqual(heading.children, ['@Friend ', { type: 'bold', children: [{ type: 'mention', text: '@Friend' }] }]);
+  assert.deepEqual(table.children[0].children[0].children,
+    [{ type: 'link', url: 'https://example.test/@Friend', children: [{ type: 'mention', text: '@Friend' }] }]);
+});

@@ -28,11 +28,13 @@ var membershipFeaturesSchema string
 const membershipSchemaVersion = 2
 
 type membershipStore struct {
-	events     chatEvents
-	deliveries messageDeliveries
-	db         *sql.DB
-	now        func() time.Time
-	maxBytes   int64
+	events           chatEvents
+	deliveries       messageDeliveries
+	voiceNetwork     voiceNetworkCache
+	db               *sql.DB
+	now              func() time.Time
+	maxBytes         int64
+	protectedBinding string
 }
 
 func randomHex(size int) (string, error) {
@@ -103,8 +105,18 @@ func (s *membershipStore) initialize() error {
 		return err
 	}
 	if tables > 0 {
+		if version == membershipMigrationSchemaVersion || version == protectedDataSchemaVersion {
+			return errors.New("database uses a protected schema or is under migration maintenance; API 2 startup refused")
+		}
 		if version != membershipSchemaVersion {
 			return errors.New("unsupported server database schema; use a fresh API 2 data file")
+		}
+		var protected bool
+		if err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='protected_policy' COLLATE NOCASE)").Scan(&protected); err != nil {
+			return err
+		}
+		if protected {
+			return errors.New("database contains protected policy state; API 2 startup refused")
 		}
 		var declared int
 		if err := s.db.QueryRow("SELECT schema_version FROM server_state WHERE id=1").Scan(&declared); err != nil || declared != version {

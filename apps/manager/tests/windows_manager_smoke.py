@@ -12,6 +12,7 @@ import sqlite3
 import ssl
 import subprocess
 import sys
+import tarfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -24,6 +25,7 @@ from pawtalk_manager import bundles, native, release, preflight, cli
 from pawtalk_manager.config import atomic, lock
 from pawtalk_manager.controller import Controller
 from pawtalk_manager.platforms import host as real_host, protect
+from protected_migration_smoke import activate_and_verify
 
 preflight.supported_windows()
 assert subprocess.run([str(stage/'pawtalk-server-tray.exe'),'--self-test'],capture_output=True,timeout=45).returncode==0,'GUI -> Python -> console host DPAPI protocol failed'
@@ -107,17 +109,89 @@ else: raise RuntimeError('No free port range')
 config=dict(PAWTALK_PUBLIC_IP='127.0.0.1',PAWTALK_PORT=str(port))
 client_directory=fixtures/'native-client'
 client_result=fixtures/'membership-result.json'
-def run_client(mode,address=None):
+def run_client(mode,address=None,**fields):
     input_file=fixtures/'membership-input.json'
-    input_file.write_text(json.dumps(dict(mode=mode,address=address or runtime.command(c.state(),c.config(),'info').decode().strip())),encoding='utf-8')
+    input_file.write_text(json.dumps(dict(mode=mode,address=address or runtime.command(c.state(),c.config(),'info').decode().strip(),**fields)),encoding='utf-8')
+    client_result.unlink(missing_ok=True)
     env={**os.environ,'PAWTALK_APP_TEST_DIR':str(client_directory),'PAWTALK_APP_TEST_INPUT':str(input_file),'PAWTALK_APP_TEST_OUTPUT':str(client_result)}
     env.pop('ELECTRON_RUN_AS_NODE',None)
     result=subprocess.run([os.environ['PAWTALK_ELECTRON'],str(repository/'apps/manager/windows/tests/manager-membership-client.cjs')],env=env,capture_output=True,timeout=45,creationflags=subprocess.CREATE_NO_WINDOW)
     if result.returncode:
         report=(result.stdout+result.stderr).decode(errors='replace')
         if address:report=report.replace(address,'[invitation redacted]')
-        raise RuntimeError('Native API 2 client failed: '+report)
+        raise RuntimeError(f'Native Client failed at {fields.get("phase",mode)}: '+report)
     return json.loads(client_result.read_text())
+
+def protected_migration(controller, expected_server, certificate, *, cutover):
+    original = controller.state()
+    settings = controller.config()
+    native_server = controller.runtime
+    source_database = native_server.data(original)/'membership-v2.sqlite'
+    context = ssl.create_default_context(cadata=certificate)
+
+    def request(path, expected, headers=None):
+        with closing(http.client.HTTPSConnection('127.0.0.1',int(settings['PAWTALK_PORT']),context=context,timeout=10)) as connection:
+            connection.request('GET',path,headers=headers or {})
+            response = connection.getresponse()
+            body = response.read()
+            assert response.status == expected,(path,response.status)
+            return body
+
+    with lock(controller.directory/'operation.lock',timeout=10):
+        source_digest = hashlib.sha256(source_database.read_bytes()).hexdigest()
+        report = json.loads(native_server.migration_command(original,settings,'migration-check'))
+        assert report['serverId'] == expected_server and report['dataSchema'] == 2
+        assert len(report['ownerProfileId']) == 64 and report['inventory']['messages'] >= 1
+        assert source_digest == hashlib.sha256(source_database.read_bytes()).hexdigest()
+        assert native_server.container(original,settings)['State']['Running']
+
+        prepared = controller.prepare_protected_migration()
+        assert prepared['phase'] == 'migration-prepared' and controller.state() == original
+        checkpoint = prepared['checkpoint']
+        assert checkpoint['serverId'] == expected_server and checkpoint['ownerProfileId'] == report['ownerProfileId']
+        assert checkpoint['dataSchema'] == 3 and checkpoint['maintenance'] is True
+        _, archive = controller.snapshot(prepared['backup'])
+        archive_digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        assert archive_digest == checkpoint['backupArchiveSha256']
+        with tarfile.open(archive) as contents:
+            with contents.extractfile('membership-v2.sqlite') as snapshot:
+                assert hashlib.file_digest(snapshot,'sha256').hexdigest() == checkpoint['backupSha256']
+        with closing(sqlite3.connect(source_database.as_uri()+'?mode=ro',uri=True)) as database:
+            assert database.execute('PRAGMA user_version').fetchone() == (3,)
+
+        health = '/api/v3/migration/healthz'
+        headers = {'X-PawTalk-Migration-Checkpoint':archive_digest}
+        assert json.loads(request(health,200,headers)) == {'status':'maintenance'}
+        request(health,409,{'X-PawTalk-Migration-Checkpoint':'0'*64})
+        request('/api/config',503)
+        request('/api/v2/state',404)
+
+        native_server.stop(original,settings)
+        restarted = Controller(controller.root)
+        assert restarted.prepare_protected_migration() == prepared
+        assert list(restarted.backups.glob('backup-*')) == [archive.parent]
+        assert hashlib.sha256(archive.read_bytes()).hexdigest() == archive_digest
+        assert json.loads(request(health,200,headers)) == {'status':'maintenance'}
+
+        if cutover:
+            def client(phase, **fields):
+                return run_client('protected-migration',phase=phase,serverId=expected_server,archiveSha256=archive_digest,
+                                  ownerProfileId=checkpoint['ownerProfileId'],**fields)
+            activate_and_verify(restarted,prepared,client)
+        else:
+            restarted.rollback_protected_migration()
+            assert restarted.migration_status() == {'phase':'inactive'}
+            assert restarted.state()['volume'] != original['volume']
+            assert restarted.state()['identity'] == original['identity']
+            assert hashlib.sha256(archive.read_bytes()).hexdigest() == archive_digest
+            assert json.loads(request('/api/config',200))['apiProtocolVersion'] == 2
+    backend = 'SCM' if scm else 'console/job (SCM calls simulated)'
+    if cutover:
+        print(f'PASS Windows {backend}: signed API 3 cutover, pinned TLS and DPAPI Client history after restart, original API 2 archive preserved')
+    else:
+        run_client('verify')
+        print(f'PASS Windows {backend}: read-only migration check, backup and TLS checkpoint, prepare restart, explicit rollback')
+
 try:
     with patch.object(native,'host',side_effect=control),patch.object(bundles,'host',side_effect=control),patch.object(native,'fetch',side_effect=fetch):
         fresh_root=root.with_name(root.name+'-first-ui');roots.append(fresh_root)
@@ -199,6 +273,10 @@ try:
         member=run_client('join',shared['url'])
         assert runtime.initialized(before,c.config()) is True
         assert runtime.invitation(before,c.config()) is None
+        if '--protected-migration' in sys.argv or '--protected-migration-prepare' in sys.argv:
+            saved = json.loads((runtime.data(before)/'state.json').read_text())
+            protected_migration(c,member['serverId'],saved['Certificate'],cutover='--protected-migration' in sys.argv)
+            raise SystemExit(0)
         assert shared['url'].encode() not in (root/'var/log/pawtalk/server.log').read_bytes()
         assert not (c.directory/'invitation.dpapi').exists()
         try:runtime.command(before,c.config(),'initial-admin');raise AssertionError('administrative link issued after setup')
@@ -550,6 +628,8 @@ try:
                     print("Installer cleanup failed: "+type(cleanup_error).__name__+"; original error preserved",file=sys.stderr)
 finally:
     primary_error=sys.exception()
+    if isinstance(primary_error,SystemExit) and primary_error.code == 0:
+        primary_error=None
     cleanup_errors=[]
     clean = True
     for target in roots:

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
@@ -16,10 +17,11 @@ import (
 )
 
 type membershipAPI struct {
-	store     *membershipStore
-	cfg       config
-	limiterMu sync.Mutex
-	attempts  map[string]attempt
+	store        *membershipStore
+	cfg          config
+	voiceChanged func(string)
+	limiterMu    sync.Mutex
+	attempts     map[string]attempt
 }
 
 func newMembershipHandler(store *membershipStore, cfg config) http.Handler {
@@ -129,6 +131,10 @@ func (a *membershipAPI) rate(w http.ResponseWriter, r *http.Request) bool {
 	if err != nil {
 		host = r.RemoteAddr
 	}
+	return a.allowRate(w, host, 120)
+}
+
+func (a *membershipAPI) allowRate(w http.ResponseWriter, key string, limit int) bool {
 	now := a.store.now()
 	a.limiterMu.Lock()
 	defer a.limiterMu.Unlock()
@@ -137,21 +143,23 @@ func (a *membershipAPI) rate(w http.ResponseWriter, r *http.Request) bool {
 			delete(a.attempts, key)
 		}
 	}
-	bucket, exists := a.attempts[host]
+	bucket, exists := a.attempts[key]
 	if !exists {
 		if len(a.attempts) >= 4096 {
+			w.Header().Set("Retry-After", "60")
 			memberFail(w, memberError(429, "RATE_LIMIT"))
 			return false
 		}
 		bucket = attempt{start: now}
 	}
-	if bucket.count >= 120 {
-		w.Header().Set("Retry-After", "60")
+	if bucket.count >= limit {
+		remaining := time.Minute - now.Sub(bucket.start)
+		w.Header().Set("Retry-After", strconv.Itoa(int((remaining+time.Second-1)/time.Second)))
 		memberFail(w, memberError(429, "RATE_LIMIT"))
 		return false
 	}
 	bucket.count++
-	a.attempts[host] = bucket
+	a.attempts[key] = bucket
 	return true
 }
 
@@ -163,7 +171,7 @@ func decodeMemberJSON(w http.ResponseWriter, r *http.Request, limit int64, targe
 	if err != nil {
 		return nil, memberError(413, "BODY_TOO_LARGE")
 	}
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(target) != nil || decoder.Decode(new(any)) != io.EOF {
 		return nil, memberError(400, "INVALID_JSON")

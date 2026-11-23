@@ -75,3 +75,12 @@ values (including quality tooltips), with localized fallback for unknown values.
 Check English/Russian, normal/reduced motion, empty/populated clipboard and actual
 Electron/native APIs when affected; add regression coverage for CI-only failures.
 Do not mock nonexistent platform APIs or rely on workstation defaults.
+
+## Client performance diagnostics
+
+Client timing collection is off by default. To capture a local trace, uncomment
+the `clientPerformance` import and the `diagnostics` option in
+`apps/client/windows/electron/main.cjs`, then restart the Client or `review.cmd`.
+Read `diagnostics/client-performance.jsonl` under that client's `userData`
+directory. A default `review.cmd` profile uses `release/review-api2-profile`.
+Re-comment both lines after collecting the trace. Keep trace files out of Git.

@@ -11,6 +11,7 @@ const { X509Certificate } = require('node:crypto');
 const { externalLinkHandler } = require('./external-links.cjs');
 const { serverURL, invitation } = require('./address.cjs');
 const { diagnosticCommand } = require('./diagnostic-command.cjs');
+// const { clientPerformance } = require('./client-performance.cjs');
 const { SelfHost } = require('./selfhost.cjs');
 const { HostCheck } = require('./host-check.cjs');
 const { HostError, hostResult } = require('./host-errors.cjs');
@@ -148,6 +149,10 @@ function registerIPC() {
     if (typeof address !== 'string' || address.length > 14000) throw new Error(t("Неверное приглашение"));
     clipboard.writeText(diagnosticCommand(address));
   });
+  ipcMain.handle('client-performance', (event, stage, ms) => {
+    authorized(event);
+    membershipClient?.diagnostics?.renderer(stage, ms);
+  });
   ipcMain.handle('invitation-copy', (event, address) => {
     authorized(event);
     if (typeof address !== 'string' || address.length > 14000 || !invitation(address)) throw new Error(t("Неверное приглашение"));
@@ -167,14 +172,23 @@ function registerIPC() {
     authorized(event);
     return hostResult(async () => {
       if (hostCheck.running) throw new HostError(t("Дождитесь завершения проверки сети."));
-      const result = await hosting.start(input);
-      trustInvitation(result.localAddress);
+      if (membershipClient.protectedOnly && input?.protocol !== 3) throw new HostError(t('Версия API сервера не поддерживается. Обновите клиент или обратитесь к владельцу сервера.'));
+      const nickname = typeof input?.nickname === 'string' && input.nickname.trim() ? input.nickname.trim() : t('Гость');
+      const protectedHost = input?.protocol === 3 ? await membershipClient.prepareProtectedSelfHost(nickname, t('Компьютер')) : undefined;
       try {
-        await membershipClient.join(hosting.bootstrapAddress, typeof input.nickname === 'string' ? input.nickname : t('Гость'), t('Компьютер'));
-        hosting.bootstrapAddress = undefined;
+        const result = await hosting.start(input, protectedHost);
+        if (!protectedHost) {
+          try {
+            trustInvitation(result.localAddress);
+            await membershipClient.join(hosting.bootstrapAddress, nickname, t('Компьютер'));
+            hosting.bootstrapAddress = undefined;
+          } catch (error) { await hosting.stop(); throw error; }
+        }
         send('membership-changed', { serverId: result.serverId });
-      } catch (error) { await hosting.stop(); throw error; }
-      return result;
+        return result;
+      } finally {
+        protectedHost?.clear();
+      }
     }, t("Не удалось запустить встроенный сервер. Возможно, порт занят."));
   });
   ipcMain.handle('host-stop', async event => {
@@ -254,7 +268,9 @@ else {
       encryptString: value => safeStorage.encryptStringAsync(value),
       decryptString: async value => (await safeStorage.decryptStringAsync(value)).result,
     });
-    membershipClient=new MembershipClient({credentials,fetcher:memberFetch,verify:address=>serverCertificate(address),trust:address=>trustInvitation(address),allowLoopback:!app.isPackaged});
+    membershipClient=new MembershipClient({credentials,fetcher:memberFetch,verify:address=>serverCertificate(address),trust:address=>trustInvitation(address),allowLoopback:!app.isPackaged,
+      // diagnostics: clientPerformance(path.join(app.getPath('userData'), 'diagnostics')),
+      protectedOnly: process.env.PAWTALK_REVIEW_API3_ONLY === 'true'});
     membershipLinks=new MembershipLinks(membershipClient);
     session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
       callback(contents === win?.webContents && (permission === 'fullscreen' || permission === 'media' && details.mediaTypes?.every(type => type === 'audio')));
@@ -293,7 +309,7 @@ else {
     quitting = true; membershipIPC?.stop();restoreAudio(); native?.shutdown(); globalShortcut.unregisterAll();
     if (hosting && !hostShutdown) {
       event.preventDefault(); hostShutdown = true;
-      void (async () => { await hostCheck.cancel(); while (hosting.starting) await new Promise(resolve => setTimeout(resolve, 100)); await hosting.stop(); })().finally(() => app.quit());
+      void (async () => { await hostCheck.cancel(); while (hosting.starting) await new Promise(resolve => setTimeout(resolve, 100)); await hosting.stop(); await membershipClient?.diagnostics?.close(); })().finally(() => app.quit());
     }
   });
   app.on('window-all-closed', () => { if (quitting) app.quit(); });

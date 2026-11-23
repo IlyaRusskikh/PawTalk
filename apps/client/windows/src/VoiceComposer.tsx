@@ -4,13 +4,18 @@ import {VoicePlayer} from './VoicePlayer';
 import {t} from './i18n';
 export type VoiceDraft={file:File;duration:number;waveform:number[]};
 
-export function VoiceComposer({onCancel,onSend,busy}:{onCancel():void;onSend(value:VoiceDraft):void;busy:boolean}){
+export function VoiceComposer({onCancel,onSend,busy,sendDisabled,onRecordingChange}:{onCancel():void;onSend(value:VoiceDraft):void;busy:boolean;sendDisabled?:boolean;onRecordingChange?(recording:boolean):void}){
  const recorder=useRef<MediaRecorder>(null);
  const sendWhenStopped=useRef(false);
  const sendDraft=useEffectEvent(onSend);
  const [phase,setPhase]=useState<'starting'|'recording'|'stopping'|'ready'>('starting');
  const [samples,setSamples]=useState<number[]>([]),[sampleAt,setSampleAt]=useState(0),[elapsed,setElapsed]=useState(0);
  const [draft,setDraft]=useState<VoiceDraft>(),[url,setUrl]=useState(''),[error,setError]=useState('');
+ useEffect(()=>{
+  if(phase!=='recording'||!onRecordingChange)return;
+  onRecordingChange(true);
+  return()=>onRecordingChange(false);
+ },[phase,onRecordingChange]);
 
  function finishRecording(send:boolean){
   const active=recorder.current;
@@ -113,7 +118,7 @@ export function VoiceComposer({onCancel,onSend,busy}:{onCancel():void;onSend(val
    values:samples,sampleAt,elapsed,starting:phase!=='recording',onStop:()=>finishRecording(false)
   }}/>
   <button type="button" className="icon-button" aria-label={t('Удалить запись')} disabled={busy||phase==='stopping'} onClick={onCancel}><Icon name="trash" size={19}/></button>
-  <button type="button" className="icon-button voice-send" aria-label={t('Отправить')} disabled={busy||!(phase==='recording'||draft)} onClick={()=>{
+  <button type="button" className="icon-button voice-send" aria-label={t('Отправить')} disabled={busy||sendDisabled||!(phase==='recording'||draft)} onClick={()=>{
    if(draft)onSend(draft);
    else finishRecording(true);
   }}><Icon name="send" size={21}/></button>

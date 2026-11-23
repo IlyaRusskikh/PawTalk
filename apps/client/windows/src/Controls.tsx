@@ -3,6 +3,8 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
     paw: <g fill="currentColor" stroke="none"><ellipse cx="5" cy="9" rx="2.4" ry="3.2" transform="rotate(-25 5 9)"/><ellipse cx="10" cy="5" rx="2.3" ry="3" transform="rotate(-8 10 5)"/><ellipse cx="16" cy="5.5" rx="2.3" ry="3" transform="rotate(14 16 5.5)"/><ellipse cx="20" cy="10" rx="2.3" ry="3" transform="rotate(30 20 10)"/><path d="M6 16c1.5-1.5 2.7-5 6-5s4.5 3.5 6 5c3 3-1 6-4 4.5a4.5 4.5 0 0 0-4 0C7 22 3 19 6 16Z"/></g>,
     copy: <><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></>,
+    folder: <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
+    search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></>,
     'zoom-in': <><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6M10 7v6M7 10h6"/></>,
     'zoom-out': <><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6M7 10h6"/></>,
     users: <><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M17 5a3 3 0 0 1 0 6m2 10v-3a5 5 0 0 0-2-4"/></>,
@@ -23,8 +25,13 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
     palette: <><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a3 3 0 0 0 3-3 9 9 0 0 0-9-8Z"/><path d="M7 11h.01M9 7h.01M14 6h.01M17 9h.01"/></>,
     reply: <path d="m9 5-7 7 7 7v-5h5c4 0 6 2 8 5 0-9-5-12-13-12z"/>,
     more: <><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></>,
+    grip: <>{[8, 16].flatMap(x => [5, 12, 19].map(y => <circle key={x + ':' + y} cx={x} cy={y} r="1.25" fill="currentColor"/>))}</>,
     image: <><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/></>,
     plus: <path d="M12 5v14M5 12h14"/>,
+    'channel-add': <><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z"/><path d="M12 7v8m-4-4h8"/></>,
+    'folder-add': <><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6m-3-3h6"/></>,
+    bell: <><path d="M18 9a6 6 0 0 0-12 0c0 6-3 6-3 8h18c0-2-3-2-3-8M10 21h4"/></>,
+    'bell-off': <><path d="m3 3 18 18M9 4a6 6 0 0 1 9 5c0 2 .3 3.4 1 4.5M6 9c0 6-3 6-3 8h14m-7 4h4"/></>,
     send: <path d="m3 3 19 9-19 9 4-9zm4 9h15"/>,
     chat: <><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z"/><path d="M7 9h10M7 13h7"/></>,
     download: <><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></>,
@@ -35,7 +42,8 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
     chevron: <path d="m6 14 6-6 6 6"/>,
     'chevron-right': <path d="m9 6 6 6-6 6"/>,
     'arrow-down': <path d="M12 4v16m-6-6 6 6 6-6"/>,
-    bookmark: <><path d="M6 3h12v19l-6-4-6 4z"/><path d="M12 7v6M9 10h6"/></>,
+    pin: <path d="M16 3l5 5-4 1-3 3v4l-2 2-6-6 2-2h4l3-3 1-4ZM9 15l-6 6"/>,
+    'pin-off': <path d="m3 3 18 18M16 3l5 5-4 1-3 3M8 10h2M6 12l6 6 2-2v-2M9 15l-6 6"/>,
     invite: <><circle cx="9" cy="7" r="4"/><path d="M2 21v-3a7 7 0 0 1 13-3M19 8v8M15 12h8"/></>,
     'mic-off': <><path d="m3 3 18 18M9 9v3a3 3 0 0 0 5 2M9 5a3 3 0 0 1 6 0v5M5 10v2a7 7 0 0 0 12 5M12 19v3M8 22h8"/></>,
     'headphones-off': <><path d="m3 3 18 18M3 14v-2a9 9 0 0 1 1-4M8 4a9 9 0 0 1 13 8v2"/><rect x="2" y="12" width="5" height="9" rx="2"/><path d="M17 14v5a2 2 0 0 0 2 2h1"/></>,
@@ -55,6 +63,9 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
     signal: <><path d="M4 20v-3M9 20v-7M14 20V9M19 20V4"/></>,
     exit: <><path d="M10 4H4v16h6M10 12h11m-4-4 4 4-4 4"/></>,
     shield: <><path d="m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6zM8 12l3 3 5-6"/></>,
+    lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></>,
+    ban: <><circle cx="12" cy="12" r="9"/><path d="m6 18 12-12"/></>,
+    devices: <><path d="M13 16H3V4h16v4M7 20h5m-3-4v4"/><rect x="15" y="10" width="6" height="11" rx="1.5"/></>,
     info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></>,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.mic}</svg>;
@@ -62,6 +73,6 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
 export function Toggle({ label, detail, checked, onChange, disabled }: { label: string; detail?: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
   return <label className={`toggle-row ${disabled ? 'disabled' : ''}`}><span><strong>{label}</strong>{detail && <small>{detail}</small>}</span><input type="checkbox" role="switch" checked={checked} onChange={event => onChange(event.target.checked)} disabled={disabled}/></label>;
 }
-export function Slider({ label, value, min, max, step = 1, format, onChange }: { label: string; value: number; min: number; max: number; step?: number; format?: string; onChange: (value: number) => void }) {
+export function Slider({ label, value, min, max, step = 1, format, onChange }: { label: ReactNode; value: number; min: number; max: number; step?: number; format?: string; onChange: (value: number) => void }) {
   return <label className="slider-label"><span>{label}<b>{format ?? value}</b></span><input style={{ background: `linear-gradient(to right, var(--accent) ${(value-min)/(max-min)*100}%, var(--line) ${(value-min)/(max-min)*100}%)` }} type="range" min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))}/></label>;
 }

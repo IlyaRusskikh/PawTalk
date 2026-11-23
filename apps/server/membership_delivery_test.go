@@ -130,7 +130,7 @@ func TestFailedMessageTransactionDoesNotPublishOrLeakPlans(t *testing.T) {
 	owner := bootstrapTestServer(t, s, newTestMemberSigner(10))
 	var channel string
 	s.db.QueryRow("SELECT channel_id FROM channels WHERE kind='text'").Scan(&channel)
-	wake, off, _ := s.events.subscribeStream("observer", "", true)
+	wake, off, _ := s.events.subscribeStream("observer", "", true, false)
 	defer off()
 	s.maxBytes = 1
 	if _, err := s.postMessage(context.Background(), owner.Token, channel, testMessage('a')); err == nil {
@@ -150,7 +150,7 @@ func TestFailedMessageTransactionDoesNotPublishOrLeakPlans(t *testing.T) {
 }
 func TestPayloadQueueByteBudgetForcesResync(t *testing.T) {
 	var events chatEvents
-	wake, off, _ := events.subscribeStream("slow", "", true)
+	wake, off, _ := events.subscribeStream("slow", "", true, false)
 	defer off()
 	for i := int64(1); i <= 30; i++ {
 		events.publish(memberEvent{Type: "chat", ChannelID: strings.Repeat("a", 32), Delivery: true, Previous: i - 1, Revision: i, Messages: []memberMessage{{ID: i, Ciphertext: strings.Repeat("a", 12000)}}})

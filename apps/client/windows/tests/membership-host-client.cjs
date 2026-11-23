@@ -3,6 +3,7 @@
 const fs = require('node:fs/promises');
 const https = require('node:https');
 const tls = require('node:tls');
+const { randomBytes } = require('node:crypto');
 const assert = require('node:assert/strict');
 const { MembershipClient } = require('../electron/membership-client.cjs');
 const { invitation } = require('../electron/address.cjs');
@@ -41,6 +42,34 @@ async function pinnedSocket(url, pin) {
     await assert.rejects(client.verified(address),error=>error.code==='UNSUPPORTED_PROTOCOL');
     assert.deepEqual(entries,{},'legacy peer received or created a device identity');
     console.log('PASS frozen API 1 peer rejected before identity or admission');return;
+  }
+  if (mode === 'protected-review-join' || mode === 'protected-review-connect') {
+    const text = 'Protected review server encrypted lifecycle fixture';
+    if (mode === 'protected-review-join') {
+      const invalid = new URL(address);
+      const fields = new URLSearchParams(invalid.hash.slice(1));
+      fields.set('token', 'f'.repeat(64));
+      invalid.hash = fields.toString();
+      await assert.rejects(client.join(invalid.href, 'Synthetic review owner', 'Synthetic device'), { code: 'INVALID_INVITE' });
+      await client.join(address, 'Synthetic review owner', 'Synthetic device');
+    }
+    const [record] = await client.registry();
+    const connection = await client.openStoredProtectedRuntime(record.serverId);
+    const state = await client.readProtectedRuntimeState(connection);
+    assert.equal(state.apiProtocolVersion, 3);
+    assert.equal(state.canManageChannels, true);
+    const channel = state.channels.find(value => value.kind === 'text');
+    if (mode === 'protected-review-join') {
+      await client.rotateProtectedRuntimeText(connection, channel.id, 'live');
+      await client.rotateProtectedRuntimeText(connection, channel.id, 'archive');
+      await client.withCurrentProtectedChatPolicy(connection, options =>
+        client.sendProtectedRuntimeText(connection, channel.id, text, randomBytes(16).toString('hex'), options));
+      await assert.rejects(client.join(address, 'Synthetic review owner', 'Synthetic device'), error => error.status === 404);
+    }
+    const page = await client.readProtectedChatPage(connection, channel.id, 0);
+    assert.ok(page.messages.some(message => message.text === text));
+    console.log('PASS real API 3 owner and encrypted history: ' + mode);
+    return;
   }
   const state = mode === 'join' ? await client.join(address, 'Synthetic Linux admin', 'Synthetic Linux device') : await client.connect((await client.registry())[0]);
   assert.equal(state.self.role, 'admin');

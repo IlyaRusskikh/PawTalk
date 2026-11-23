@@ -32,7 +32,8 @@ control=net.createServer(socket=>{
 control.on('error',error=>{console.error(error.message);app.exit(1);});control.listen(runtime.pipe);
 app.on('will-quit',()=>{control.close();try{const current=JSON.parse(fs.readFileSync(paths.runtime,'utf8'));if(current.token===runtime.token)fs.unlinkSync(paths.runtime);}catch{}});
 if(component==='client'){
- app.setPath('userData',paths.userData);entry=require('../../apps/client/windows/electron/main.cjs');
+ app.setPath('userData',paths.userData);process.env.PAWTALK_REVIEW_API3_ONLY='true';
+ entry=require('../../apps/client/windows/electron/main.cjs');
 }else{
  process.argv.push('--root',runtime.managerRoot,'--review-host-dir',runtime.managerHost,'--review-user-data',paths.userData,'--lang','ru');
  entry=require('../../apps/manager/windows/desktop/main.cjs');

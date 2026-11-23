@@ -1,13 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
+
+	"pawtalk/server/internal/access"
 )
 
 const membershipProtocol = 2
@@ -16,20 +16,10 @@ const membershipSessionSeconds = 43200
 const membershipReservationSeconds = 120
 const membershipLinkSeconds = 600
 
-var membershipCapabilities = []string{"media-gallery-v1", "media-files-v1", "checklist-events-v1", "checklists-v1", "membership-v1", "channels-v1", "device-links-v1", "invites-v1", "mandatory-e2ee-v1", "activity-v1", "attachment-removal-v1", "link-cancel-v1", "server-avatar-v1", "polls-v1", "system-poll-results-v1", "chat-events-v1", "server-events-v1", "message-events-v1"}
+var membershipCapabilities = []string{"media-variants-v1", "media-gallery-v1", "media-files-v1", "checklist-events-v1", "checklists-v1", "membership-v1", "channels-v1", "device-links-v1", "invites-v1", "mandatory-e2ee-v1", "activity-v1", "attachment-removal-v1", "link-cancel-v1", "server-avatar-v1", "polls-v1", "system-poll-results-v1", "chat-events-v1", "server-events-v1", "message-events-v1"}
 
 func signatureFrame(fields ...string) ([]byte, error) {
-	var out bytes.Buffer
-	for _, field := range fields {
-		if out.Len()+4+len(field) > 65536 {
-			return nil, errors.New("signature frame too large")
-		}
-		var length [4]byte
-		binary.BigEndian.PutUint32(length[:], uint32(len(field)))
-		out.Write(length[:])
-		out.WriteString(field)
-	}
-	return out.Bytes(), nil
+	return access.SignatureFrame(fields...)
 }
 
 func publicKeyID(key []byte) string {

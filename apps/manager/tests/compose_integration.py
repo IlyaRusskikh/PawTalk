@@ -5,6 +5,8 @@ Run on Linux or in tests/integration/vps.Dockerfile with the test-only Docker so
 Only image-origin constants are redirected to the disposable local registry.
 The production allowlist/signature selection is separately tested without overrides.
 Pass --interactive-tui from a terminal to open the installed Manager with the test Server stopped.
+Pass --protected-migration to isolate the signed migration and post-cutover restart scenario.
+Pass --protected-migration-prepare to isolate maintenance restart and explicit rollback.
 """
 import base64
 import contextlib
@@ -30,7 +32,8 @@ import uuid
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[3]/'apps/manager/linux'))
 from pawtalk_manager import bundles, cli, controller, release, runtime, preflight
-from pawtalk_manager.config import save, write_config
+from pawtalk_manager.config import lock, save, write_config
+from protected_migration_smoke import activate_and_verify
 from release_contract_test import ReleaseTests
 
 
@@ -86,6 +89,67 @@ def origin(repository):
     release.IMAGE = runtime.IMAGE = controller.IMAGE = repository
 
 
+def protected_migration(c, client_file, source, *, cutover=True):
+    installed, config = c.state(), c.config()
+    address = c.runtime.command(installed,config,'info').decode().strip()
+    certificate = ssl.get_server_certificate(('127.0.0.1',int(config['PAWTALK_PORT'])),timeout=10)
+    prepared = c.prepare_protected_migration()
+    assert prepared['phase'] == 'migration-prepared' and c.state() == installed
+    checkpoint = prepared['checkpoint']
+    server_id, archive_sha = checkpoint['serverId'], checkpoint['backupArchiveSha256']
+    assert checkpoint['maintenance'] is True and checkpoint['dataSchema'] == 3
+    _, archive = c.snapshot(prepared['backup'])
+    assert hashlib.sha256(archive.read_bytes()).hexdigest() == archive_sha
+    with tarfile.open(archive) as contents:
+        databases = [item for item in contents if item.isfile() and item.name.removeprefix('./') == 'membership-v2.sqlite']
+        assert len(databases) == 1
+        with contents.extractfile(databases[0]) as database:
+            assert hashlib.file_digest(database,'sha256').hexdigest() == checkpoint['backupSha256']
+
+    def request(path, status, headers=None):
+        context = ssl.create_default_context(cadata=certificate)
+        with contextlib.closing(http.client.HTTPSConnection('127.0.0.1',int(config['PAWTALK_PORT']),context=context,timeout=10)) as connection:
+            connection.request('GET',path,headers=headers or {})
+            response = connection.getresponse()
+            body = response.read()
+            assert response.status == status, (path, response.status)
+            return json.loads(body)
+
+    health = '/api/v3/migration/healthz'
+    headers = {'X-PawTalk-Migration-Checkpoint':archive_sha}
+    assert request(health,200,headers) == {'status':'maintenance'}
+    request(health,409,{'X-PawTalk-Migration-Checkpoint':'0'*64})
+    request('/api/config',503)
+    c.runtime.stop(installed,config)
+    restarted = controller.Controller(c.root)
+    restarted.runtime = ShortRuntime(restarted.template)
+    assert restarted.prepare_protected_migration() == prepared
+    assert list(restarted.backups.glob('backup-*')) == [archive.parent]
+    assert request(health,200,headers) == {'status':'maintenance'}
+
+    if not cutover:
+        restarted.rollback_protected_migration()
+        assert restarted.migration_status() == {'phase':'inactive'}
+        assert restarted.state()['volume'] != installed['volume']
+        assert restarted.state()['identity'] == installed['identity']
+        assert hashlib.sha256(archive.read_bytes()).hexdigest() == archive_sha
+        assert request('/api/config',200)['apiProtocolVersion'] == 2
+        return
+
+    script = source/'apps/manager/tests/protected_migration_client.cjs'
+
+    def client(phase, **fields):
+        request = dict(phase=phase,file=str(client_file),address=address,certificate=certificate,serverId=server_id,
+                       archiveSha256=archive_sha,ownerProfileId=checkpoint['ownerProfileId'],**fields)
+        result = subprocess.run(['node',str(script)],input=json.dumps(request),capture_output=True,text=True,timeout=100)
+        if result.returncode:
+            raise RuntimeError(f'Migration Client failed at {phase}: {result.stderr}')
+        return json.loads(result.stdout)
+
+    activate_and_verify(restarted,prepared,client)
+    print('PASS protected cutover in real Compose, TLS and decrypted history after restart, original API 2 archive preserved')
+
+
 def choose_room_port(*,exclude=(),ephemeral_range=None,candidates=None):
     """Keep the fixture's listeners outside Linux's outgoing source-port pool."""
     if ephemeral_range is None:
@@ -125,7 +189,7 @@ def main():
     if len(sys.argv)>1 and sys.argv[1] == '--install-worker':
         origin(sys.argv[2])
         raise SystemExit(cli.main(sys.argv[3:]))
-    interactive = sys.argv[1:] == ['--interactive-tui']
+    interactive = '--interactive-tui' in sys.argv[1:]
     if interactive and not (sys.stdin.isatty() and sys.stdout.isatty()):
         raise SystemExit('--interactive-tui needs a terminal (docker run -it)')
     source = Path(__file__).resolve().parents[3]
@@ -248,6 +312,14 @@ def main():
             once = subprocess.run(['docker','exec',container['Id'],'/pawtalk','serve','initial-admin'],capture_output=True)
             assert once.returncode != 0
             print('PASS signed offline install, non-root Compose, one-time first-admin admission and no invitation in logs')
+            prepare_migration = '--protected-migration-prepare' in sys.argv[1:]
+            if prepare_migration or '--protected-migration' in sys.argv[1:]:
+                with lock(c.directory/'operation.lock'):
+                    protected_migration(c,root/'client-keys.json',source,cutover=not prepare_migration)
+                if prepare_migration:
+                    native_client('verify')
+                    print('PASS real Compose: reentered maintenance after restart, rolled back explicitly to API 2 and reopened encrypted history')
+                return
 
             assert 'Cancelled.' in terminal_menu(c.root,'1\n3\n\n0\n0\n')
             assert c.runtime.container(c.state(),c.config())['State']['Running']

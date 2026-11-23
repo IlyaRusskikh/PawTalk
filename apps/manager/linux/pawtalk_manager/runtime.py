@@ -8,12 +8,21 @@ from pathlib import Path
 from .release import DIGEST, IMAGE
 
 
-def run(args, *, input=None, timeout=180, output=None):
-    result = subprocess.run(args,input=input,stdout=output or subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout)
+def run(args, *, input=None, stdin=None, timeout=180, output=None):
+    result = subprocess.run(args,input=input,stdin=stdin,stdout=output or subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout)
     if result.returncode:
         # Docker output can include room credentials/config; keep it out of ordinary logs.
         raise RuntimeError(f'{args[0]} {args[1]} failed (exit {result.returncode}); run pawtalkctl doctor')
     return result.stdout
+
+
+def protected_host_identity(protected, command):
+    command('protected-healthcheck',protected['cutoverDigest'])
+    address = command('info').decode().strip()
+    server_id = protected['serverId']
+    if not re.fullmatch(r'pawtalk://[^/\s]+/[a-f0-9]{64}',address) or not re.fullmatch(r'[a-f0-9]{32}',server_id):
+        raise ValueError('Invalid protected room identity')
+    return hashlib.sha256(('pawtalk-host-v2\n'+address+'\n'+server_id).encode()).hexdigest()
 
 
 class Runtime:
@@ -24,7 +33,21 @@ class Runtime:
         container = self.container(state, config)['Id']
         return run(['docker', 'exec', container, '/pawtalk', 'serve', *args])
 
+    def migration_command(self,state,config,*args,archive=None):
+        self.check_volume(state)
+        volume = 'type=volume,source='+state['volume']+',target=/data'
+        activate = len(args) == 2 and args[0] == 'migration-activate' and re.fullmatch(r'[a-f0-9]{64}',args[1])
+        if archive is None and not activate:
+            volume += ',readonly'
+        return run(['docker','run','--rm','-i','--pull=never','--network','none','--read-only',
+                    '--user','65532:65532','--cap-drop','ALL','--security-opt','no-new-privileges:true',
+                    '--mount',volume,'--entrypoint','/pawtalk',self.pinned_image(state),'serve',*args],
+                   stdin=archive if archive is not None else subprocess.DEVNULL,timeout=600)
+
     def initialized(self, state, config):
+        if state.get('protectedRuntime'):
+            self.identity(state,config)
+            return True
         from .admission import status
         return status(lambda *args: self.command(state, config, *args))
 
@@ -128,6 +151,9 @@ class Runtime:
         return hashlib.sha256(('pawtalk-host-v2\n'+address+'\n'+server_id).encode()).hexdigest()
 
     def identity(self,state,config):
+        protected = state.get('protectedRuntime')
+        if protected is not None:
+            return protected_host_identity(protected,lambda *args: self.command(state,config,*args))
         return self.identity_digest(*self.identity_parts(lambda action: self.command(state,config,action)))
 
     def reconfigure_network(self,state,old,new):

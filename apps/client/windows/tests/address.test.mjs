@@ -11,6 +11,22 @@ test('room invitations carry a strict certificate pin without weakening IP/TLS v
  assert.equal(invitation(address).fingerprint, pin);
  for (const bad of [`pawtalk://example.com:18443/${pin}`, `pawtalk://203.0.113.10/${pin}`, `pawtalk://203.0.113.10:18443/abc`, `${address}?x=1`, `${address}#x`, `pawtalk://user@203.0.113.10:18443/${pin}`]) assert.throws(() => serverURL(bad));
 });
+test('protected invitations pin DNS servers and reject ambiguous or noncanonical claims', () => {
+ const fingerprint = 'a'.repeat(64);
+ const address = `pawtalk://example.com:8443/${fingerprint}/v3`;
+ const token = Buffer.alloc(32, 7).toString('base64url');
+ const fields = { v: '3', server: 'b'.repeat(32), invite: 'c'.repeat(32), token,
+   cutover: 'd'.repeat(64), anchor: 'e'.repeat(64), owner: 'f'.repeat(64), ownerDevice: '1'.repeat(64) };
+ const link = `${address}#${new URLSearchParams(fields)}`;
+ assert.equal(serverURL(link), 'https://example.com:8443');
+ assert.equal(invitation(address).fingerprint, fingerprint);
+ assert.equal(invitation(link).protectedInvite.seed, token);
+ assert.equal(invitation(link).protectedInvite.trust.anchorDigest, fields.anchor);
+ for (const value of [link + '&token=' + token, link + '&open=' + fingerprint, link.replace('/v3#', '#'),
+   link.replace(token, token.slice(0, -1) + 'x'), link.replace('example.com', 'bad_host.example')]) {
+   assert.throws(() => invitation(value));
+ }
+});
 test('accept IP literals and explicit TLS ports', () => {
  assert.equal(serverURL('203.0.113.10'), 'https://203.0.113.10');
  assert.equal(serverURL('203.0.113.10:8443'), 'https://203.0.113.10:8443');

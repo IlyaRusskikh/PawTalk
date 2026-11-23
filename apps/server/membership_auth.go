@@ -171,43 +171,52 @@ func (s *membershipStore) proveDeviceTx(ctx context.Context, tx *sql.Tx, proof m
 	return result, nil
 }
 
-func (s *membershipStore) resolveAccessTx(ctx context.Context, tx *sql.Tx, id memberIdentity) (memberAccess, error) {
+type membershipIdentityQuery interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func (s *membershipStore) resolveIdentity(ctx context.Context, query membershipIdentityQuery, id memberIdentity) (memberAccess, error) {
+	return s.resolveLegacyIdentity(ctx, query, id, false)
+}
+
+func (s *membershipStore) resolveLegacyIdentity(ctx context.Context, query membershipIdentityQuery, id memberIdentity, skipLegacyBan bool) (memberAccess, error) {
 	access := memberAccess{memberIdentity: id, EffectiveProfileID: id.ProfileID, Permissions: []string{}}
 	var target string
-	err := tx.QueryRowContext(ctx, "SELECT target_profile_id FROM profile_bindings WHERE source_profile_id=?", id.ProfileID).Scan(&target)
+	err := query.QueryRowContext(ctx, "SELECT target_profile_id FROM profile_bindings WHERE source_profile_id=?", id.ProfileID).Scan(&target)
 	if err == nil {
 		access.EffectiveProfileID = target
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return access, err
 	}
 	var state, originalState string
-	err = tx.QueryRowContext(ctx, "SELECT state FROM memberships WHERE profile_id=?", access.EffectiveProfileID).Scan(&state)
+	err = query.QueryRowContext(ctx, "SELECT state FROM memberships WHERE profile_id=?", access.EffectiveProfileID).Scan(&state)
 	if errors.Is(err, sql.ErrNoRows) {
 		return access, memberError(403, "NOT_A_MEMBER")
 	}
 	if err != nil {
 		return access, err
 	}
-	var banUntil sql.NullInt64
-	err = tx.QueryRowContext(ctx, `SELECT a.expires_at FROM ban_subjects b JOIN ban_actions a ON a.ban_id=b.ban_id
+	if !skipLegacyBan {
+		var banUntil sql.NullInt64
+		err = query.QueryRowContext(ctx, `SELECT a.expires_at FROM ban_subjects b JOIN ban_actions a ON a.ban_id=b.ban_id
         WHERE b.profile_id IN (?,?) AND a.revoked_at IS NULL AND (a.expires_at IS NULL OR a.expires_at>?)
         ORDER BY CASE WHEN a.expires_at IS NULL THEN 1 ELSE 0 END DESC,a.expires_at DESC LIMIT 1`, id.ProfileID, access.EffectiveProfileID, s.now().UnixMilli()).Scan(&banUntil)
-	if err == nil {
-		var expires any
-		if banUntil.Valid {
-			expires = banUntil.Int64
+		if err == nil {
+			var expires any
+			if banUntil.Valid {
+				expires = banUntil.Int64
+			}
+			return access, &membershipError{Code: "BANNED", Status: 403, Details: map[string]any{"expiresAt": expires}}
 		}
-		return access, &membershipError{Code: "BANNED", Status: 403, Details: map[string]any{"expiresAt": expires}}
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return access, err
+		if !errors.Is(err, sql.ErrNoRows) {
+			return access, err
+		}
 	}
 	if state != "active" {
 		return access, &membershipError{Code: "NOT_A_MEMBER", Status: 403, Details: map[string]any{"membershipState": state}}
 	}
-	var banned int
 	if access.EffectiveProfileID != id.ProfileID {
-		if err = tx.QueryRowContext(ctx, "SELECT state FROM memberships WHERE profile_id=?", id.ProfileID).Scan(&originalState); errors.Is(err, sql.ErrNoRows) {
+		if err = query.QueryRowContext(ctx, "SELECT state FROM memberships WHERE profile_id=?", id.ProfileID).Scan(&originalState); errors.Is(err, sql.ErrNoRows) {
 			return access, memberError(403, "NOT_A_MEMBER")
 		}
 		if err != nil {
@@ -217,6 +226,18 @@ func (s *membershipStore) resolveAccessTx(ctx context.Context, tx *sql.Tx, id me
 			return access, memberError(403, "NOT_A_MEMBER")
 		}
 	}
+	return access, nil
+}
+
+func (s *membershipStore) resolveAccessTx(ctx context.Context, tx *sql.Tx, id memberIdentity) (memberAccess, error) {
+	access, err := s.resolveIdentity(ctx, tx, id)
+	if err != nil {
+		return access, err
+	}
+	return loadLegacyRoles(ctx, tx, access)
+}
+
+func loadLegacyRoles(ctx context.Context, tx *sql.Tx, access memberAccess) (memberAccess, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT p.permission FROM effective_profile_roles r JOIN role_permissions p ON p.role_id=r.role_id WHERE r.profile_id=? ORDER BY p.permission`, access.EffectiveProfileID)
 	if err != nil {
 		return access, err
@@ -234,11 +255,12 @@ func (s *membershipStore) resolveAccessTx(ctx context.Context, tx *sql.Tx, id me
 		return access, err
 	}
 	rows.Close()
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(CASE r.system_kind WHEN 'admin' THEN 3 WHEN 'moderator' THEN 2 ELSE 1 END),1) FROM effective_profile_roles p JOIN roles r ON r.role_id=p.role_id WHERE p.profile_id=?`, access.EffectiveProfileID).Scan(&banned)
+	var rank int
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(CASE r.system_kind WHEN 'admin' THEN 3 WHEN 'moderator' THEN 2 ELSE 1 END),1) FROM effective_profile_roles p JOIN roles r ON r.role_id=p.role_id WHERE p.profile_id=?`, access.EffectiveProfileID).Scan(&rank)
 	if err != nil {
 		return access, err
 	}
-	access.Role = map[int]string{1: "member", 2: "moderator", 3: "admin"}[banned]
+	access.Role = map[int]string{1: "member", 2: "moderator", 3: "admin"}[rank]
 	return access, nil
 }
 
@@ -289,6 +311,14 @@ func (s *membershipStore) newSessionTx(ctx context.Context, tx *sql.Tx, id membe
 }
 
 func (s *membershipStore) sessionAccessTx(ctx context.Context, tx *sql.Tx, token string) (memberAccess, error) {
+	identity, err := s.sessionIdentity(ctx, tx, token)
+	if err != nil {
+		return identity, err
+	}
+	return loadLegacyRoles(ctx, tx, identity)
+}
+
+func (s *membershipStore) sessionIdentity(ctx context.Context, query membershipIdentityQuery, token string) (memberAccess, error) {
 	var result memberAccess
 	raw, err := decodeFixed(token, 32)
 	if err != nil {
@@ -297,7 +327,7 @@ func (s *membershipStore) sessionAccessTx(ctx context.Context, tx *sql.Tx, token
 	hash := sha256.Sum256(raw)
 	var id memberIdentity
 	var sessionID string
-	err = tx.QueryRowContext(ctx, `SELECT s.session_id,s.device_id,d.original_profile_id FROM sessions s JOIN devices d ON d.device_id=s.device_id
+	err = query.QueryRowContext(ctx, `SELECT s.session_id,s.device_id,d.original_profile_id FROM sessions s JOIN devices d ON d.device_id=s.device_id
         WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>?`, hash[:], s.now().UnixMilli()).Scan(&sessionID, &id.DeviceID, &id.ProfileID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return result, memberError(401, "INVALID_SESSION")
@@ -305,7 +335,7 @@ func (s *membershipStore) sessionAccessTx(ctx context.Context, tx *sql.Tx, token
 	if err != nil {
 		return result, err
 	}
-	result, err = s.resolveAccessTx(ctx, tx, id)
+	result, err = s.resolveIdentity(ctx, query, id)
 	result.SessionID = sessionID
 	return result, err
 }

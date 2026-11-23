@@ -6,12 +6,15 @@ const { createHash } = require('node:crypto');
 class CredentialStore {
   constructor(directory, encryption) { this.directory = directory; this.encryption = encryption; this.queue = Promise.resolve(); }
   file(origin) { return path.join(this.directory, createHash('sha256').update(origin).digest('hex') + '.secret'); }
-  async load(origin) {
-    return (await this.loadMany([origin]))[0];
+  async load(origin, options) {
+    return (await this.loadMany([origin], options))[0];
   }
-  loadMany(origins) {
+  loadMany(origins, { required = false } = {}) {
     const operation = this.queue.catch(() => {}).then(async () => {
-      if (!await this.encryption.isEncryptionAvailable()) return origins.map(() => null);
+      if (!await this.encryption.isEncryptionAvailable()) {
+        if (required) throw Object.assign(new Error('SECURE_STORAGE_UNAVAILABLE'), { code: 'SECURE_STORAGE_UNAVAILABLE' });
+        return origins.map(() => null);
+      }
       return Promise.all(origins.map(async origin => {
         try { return await this.encryption.decryptString(await fs.readFile(this.file(origin))); }
         catch (error) { if (error.code === 'ENOENT') return null; throw new Error(t("Не удалось прочитать сохранённый пароль")); }
@@ -36,7 +39,7 @@ class CredentialStore {
         if (encrypted === null) { await fs.rm(target,{force:true}); continue; }
         await fs.mkdir(this.directory,{recursive:true});
         const temporary=target+'.tmp';
-        await fs.writeFile(temporary,encrypted,{mode:0o600});
+        await fs.writeFile(temporary,encrypted,{mode:0o600,flush:true});
         await fs.rename(temporary,target);
       }
     });

@@ -41,6 +41,9 @@ async function open(bytes, packet, aad, keyId, max) {
   if (!packet || packet.version !== 2 || packet.keyId !== keyId || Object.keys(packet).some(key => !['version', 'keyId', 'nonce', 'ciphertext'].includes(key))) throw Error('Invalid encrypted packet');
   const nonce = decodeBytes(packet.nonce, 12), ciphertext = decodeBytes(packet.ciphertext, max);
   if (nonce.length !== 12 || ciphertext.length < 17) throw Error('Invalid encrypted packet');
+  return decrypt(bytes, nonce, ciphertext, aad);
+}
+async function decrypt(bytes, nonce, ciphertext, aad) {
   return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce, additionalData: aad, tagLength: 128 }, await aesKey(bytes, ['decrypt']), ciphertext));
 }
 export async function sealInvitation(secret, serverId, inviteId, openingSecret) {
@@ -86,4 +89,19 @@ export async function sealContent(secret, serverId, purpose, channelId, resource
 export async function openContent(secret, serverId, purpose, channelId, resourceId, authorProfileId, packet) {
   const keyId = await rootKeyID(secret), key = await deriveChannelBytes(secret, serverId, purpose, channelId);
   return open(key, packet, contentContext(serverId, purpose, channelId, resourceId, authorProfileId, keyId), keyId, purpose === 'attachment' ? 50 * 1024 * 1024 + 16 : undefined);
+}
+
+// Migration receives the frozen API 2 ciphertext as bytes, especially for
+// large attachments that need no extra base64 round trip.
+export async function openContentBytes(secret, serverId, purpose, channelId, resourceId, authorProfileId, packet) {
+  const keyId = await rootKeyID(secret);
+  const max = purpose === 'attachment' ? 50 * 1024 * 1024 + 16 : 2 * 1024 * 1024 + 16;
+  if (!packet || packet.keyId !== keyId || !(packet.nonce instanceof Uint8Array) || packet.nonce.length !== 12 ||
+      !(packet.ciphertext instanceof Uint8Array) || packet.ciphertext.length < 17 || packet.ciphertext.length > max) throw Error('Invalid encrypted packet');
+  const key = await deriveChannelBytes(secret, serverId, purpose, channelId);
+  try {
+    return await decrypt(key, packet.nonce, packet.ciphertext, contentContext(serverId, purpose, channelId, resourceId, authorProfileId, keyId));
+  } finally {
+    key.fill(0);
+  }
 }

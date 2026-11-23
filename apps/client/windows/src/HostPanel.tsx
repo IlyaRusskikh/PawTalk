@@ -58,7 +58,7 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
     setFailure(''); setBusy(true); onBusy(true);
     try {
       const roomName = (name ?? "").trim() || t("{0} хостит", nickname);
-      const next = await window.desktop.startHost({ port, name: roomName, nickname }); setStatus(next);
+      const next = await window.desktop.startHost({ port, name: roomName, nickname, protocol: 3 }); setStatus(next);
       setLevel(next.internet ? 'global' : 'local');
       onCreated(roomName);
     } catch (error) { setFailure(error instanceof Error ? error.message : String(error)); onError(error instanceof Error ? error.message : String(error)); }
@@ -112,7 +112,7 @@ export function HostPanel({ nickname, active, modal, onClose, onCreated, onStatu
     </> : <form onSubmit={e => { e.preventDefault(); void start(); }}><div className="form-fields"><div className="form-grid">
       <label className="wide">{t("Название комнаты")}<input required maxLength={80} value={name ?? t("{0} хостит", nickname)} onChange={e => setName(e.target.value)} disabled={busy}/></label>
     </div>
-      <p className="host-hint">{t('Сквозное шифрование включено. Вы станете администратором сервера.')}</p>
+      <p className="host-hint">{t('Сквозное шифрование включено. Вы станете владельцем сервера.')}</p>
     </div>
       <div className="host-chat-hints" aria-live="polite">
         <p className="host-chat-kept">{t("Сообщения не пропадут при перезаходе в комнату")}</p>

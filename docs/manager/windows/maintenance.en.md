@@ -8,6 +8,8 @@
 
 **Recovery:** if a package install fails, retain Manager's transaction state and service data so that its supported retry/recovery path can run. Do not delete state journals, service directories or TLS keys to force a fresh install. A Server API 1 backup is not an API 2 restore input.
 
+For a protected room, keep Client devices that hold newer signed checkpoints. A Client that detects a policy rollback pauses affected sends. If only the older backup survives, its signatures establish the state at the time of the backup. Detecting and reconciling later changes to roles and device revocations requires surviving verifiable evidence newer than that copy.
+
 **Removal:** decide explicitly whether to keep Server data and copies before uninstalling Manager or Server. Avoid bulk deletion of system services/volumes; verify service ownership and use the provided uninstaller.
 
 No claim is made that Windows 10/11 or Server 2019 received the same live acceptance as Windows Server 2022/2025 CI checks. Verify the real host setup.

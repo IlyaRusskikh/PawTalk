@@ -16,7 +16,6 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -80,8 +79,10 @@ func selfhost() error {
 		RequireE2EE     bool
 		E2EEKeyID       string
 		Name            string
+		Protected       *protectedSelfhostOwner
 	}
-	if e := json.NewDecoder(os.Stdin).Decode(&c); e != nil {
+	control := json.NewDecoder(os.Stdin)
+	if e := control.Decode(&c); e != nil {
 		return e
 	}
 	if c.Port < 1024 || c.Port > 65535 || c.MediaPort < 1024 || c.MediaPort > 65535 || len(c.Secret) < 32 || len(c.Name) > 256 {
@@ -131,33 +132,47 @@ func selfhost() error {
 		return fmt.Errorf("open membership store: %w", e)
 	}
 	defer store.db.Close()
-	pollContext, stopPolls := context.WithCancel(context.Background())
-	defer stopPolls()
-	go store.runPollClock(pollContext)
 	if strings.TrimSpace(c.Name) != "" {
 		if _, e = store.db.Exec("UPDATE server_state SET name=? WHERE id=1", strings.TrimSpace(c.Name)); e != nil {
 			return e
 		}
 	}
-	bootstrap, e := store.createBootstrap(context.Background())
-	if e != nil {
-		return e
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	output := json.NewEncoder(os.Stdout)
+	target, _ := url.Parse(cfg.PresenceURL)
+	readyMessage := map[string]any{"fingerprint": fingerprint}
+	var apiHandler http.Handler
+	if c.Protected == nil {
+		go store.runPollClock(ctx)
+		bootstrap, err := store.createBootstrap(ctx)
+		if err != nil {
+			return err
+		}
+		readyMessage["bootstrap"] = bootstrap
+		legacy := newMembershipHandler(store, cfg)
+		mediaHandler := membershipMediaHandler(store, cfg, target)
+		apiHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/rtc" || strings.HasPrefix(r.URL.Path, "/rtc/") {
+				mediaHandler.ServeHTTP(w, r)
+				return
+			}
+			legacy.ServeHTTP(w, r)
+		})
+	} else {
+		runtime, protectedReady, err := bootstrapProtectedSelfhost(ctx, store, fingerprint, *c.Protected, control, output)
+		if err != nil {
+			return err
+		}
+		readyMessage["protected"] = protectedReady
+		stopWorkers := runtime.startWorkers(ctx, cfg)
+		defer stopWorkers()
+		apiHandler = runtime.handlerWithVoice(cfg, target)
 	}
-	apiHandler := newMembershipHandler(store, cfg)
-	target, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", c.MediaPort))
-	proxy := httputil.NewSingleHostReverseProxy(target)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host, port, err := net.SplitHostPort(r.Host)
 		if err != nil || net.ParseIP(host) == nil || port != fmt.Sprint(c.Port) {
 			http.Error(w, "invalid host", 400)
-			return
-		}
-		if r.URL.Path == "/rtc" || strings.HasPrefix(r.URL.Path, "/rtc/") {
-			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/rtc")
-			if r.URL.Path == "" {
-				r.URL.Path = "/"
-			}
-			proxy.ServeHTTP(w, r)
 			return
 		}
 		// Each request gets its own config: local host and remote guests use different addresses.
@@ -166,7 +181,7 @@ func selfhost() error {
 	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}}
 	go func() { <-mediaDone; _ = srv.Close() }()
 	// Private parent pipe only: bootstrap never appears in server logs or public status.
-	if e = json.NewEncoder(os.Stdout).Encode(map[string]any{"fingerprint": fingerprint, "bootstrap": bootstrap}); e != nil {
+	if e = output.Encode(readyMessage); e != nil {
 		return e
 	}
 	// Parent closes stdin on exit. This also releases listeners after an unexpected parent crash.

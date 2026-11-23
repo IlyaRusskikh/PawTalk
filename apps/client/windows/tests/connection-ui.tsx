@@ -44,6 +44,68 @@ Object.assign(window, {
       session.diagnostics.setState('reconnecting'); session.state = 'reconnecting';
       resolve(new Map()); await pending; session.localTrack = track;
     },
+    protectedAudioState: async () => {
+      const voice: any = new VoiceSession({} as any);
+      const microphone = { isMuted: true };
+      const peer = { identity: 'other', name: 'Other', getTrackPublication: () => microphone };
+      voice.room = { localParticipant: local, remoteParticipants: new Map([[peer.identity, peer]]) };
+      voice.state = 'connected';
+      voice.peerDeafened.set(peer.identity, true);
+      let remote: { deafened?: boolean } | undefined;
+      voice.onUpdate = snapshot => { remote = snapshot.people.find(person => !person.local); };
+      const requests: { sample: { deafened: boolean }; reply: (value: unknown) => void }[] = [];
+      voice.protectedVoice = { transport: {
+        telemetry: sample => new Promise(resolve => requests.push({ sample, reply: resolve })),
+      } };
+      const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+      voice.setMute(true, true);
+      voice.setMute(false, false);
+      requests[0].reply({ peers: [{ sessionId: peer.identity, deafened: true, rtt: null, loss: null }], commands: [] });
+      await flush();
+      const whileDeafened = remote?.deafened;
+      microphone.isMuted = false;
+      voice.emit();
+      const afterMicResumes = remote?.deafened;
+      microphone.isMuted = true;
+      requests[1].reply({ peers: [{ sessionId: peer.identity, rtt: null, loss: null }], commands: [] });
+      await flush();
+      return { sent: requests.map(request => request.sample.deafened), whileDeafened, afterMicResumes, afterClearing: remote?.deafened };
+    },
+    protectedStatusTransitions: async () => {
+      const voice: any = new VoiceSession({} as any);
+      const active = { scope: { serverId: 'server', channelId: 'room' }, connected: true, keyPending: false, serverDeafened: false };
+      voice.room = { state: 'connected', isE2EEEnabled: true, localParticipant: local, remoteParticipants: new Map() };
+      voice.state = 'connected';
+      voice.protectedVoice = active;
+      voice.protectedWorkerReady = true;
+      voice.protectedEpoch = { epochId: 'a'.repeat(32), expiresAt: Date.now() + 15000 };
+      const states: string[] = [];
+      voice.onUpdate = snapshot => {
+        if (snapshot.voiceProtection) states.push(snapshot.voiceProtection.state + ':' + snapshot.voiceProtection.reason);
+      };
+      voice.updateProtectedVoiceStatus(active);
+      let blockedVolume: number | undefined;
+      voice.mixers.set('remote', { identity: 'remote', track: { setVolume: (value: number) => { blockedVolume = value; } } });
+      voice.room.localParticipant = { ...local, permissions: { canSubscribe: false, canPublish: false } };
+      voice.updateProtectedVoiceStatus(active);
+      const mediaDeafen = { protection: voice.voiceProtection.state, volume: blockedVolume };
+      voice.mixers.clear();
+      voice.room.localParticipant = local;
+      active.keyPending = true;
+      voice.updateProtectedVoiceStatus(active);
+      const mediaReadyDuringUpdate = voice.protectedMediaReady();
+      active.keyPending = false;
+      voice.updateProtectedVoiceStatus(active);
+      active.keyPending = true;
+      voice.updateProtectedVoiceStatus(active);
+      await new Promise(resolve => setTimeout(resolve, 1400));
+      active.keyPending = false;
+      voice.updateProtectedVoiceStatus(active);
+      active.serverDeafened = true;
+      voice.updateProtectedVoiceStatus(active);
+      voice.setProtectedVoiceStatus(active, 'red', 'VOICE_KEY_INVALID');
+      return { states, mediaDeafen, mediaReadyDuringUpdate };
+    },
     disconnect: async () => { session.room = undefined; session.localTrack = undefined; await session.disconnect(); },
   }
 });

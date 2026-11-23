@@ -69,7 +69,7 @@ app.whenReady().then(async()=>{
   await fs.writeFile(path.join(os.tmpdir(),'pawtalk-photo-centered-'+lang+'.png'),(await win.capturePage()).toPNG());
 
   await run("document.exitFullscreen()");
-  await run("document.querySelector('.photo-viewer .video-viewer-header button').click()");
+  await run(`document.querySelector('.photo-viewer .video-viewer-header button[aria-label="${lang === 'en' ? 'Close' : 'Закрыть'}"]').click()`);
   await until("!document.querySelector('.video-dialog')");
   await run("document.querySelector('.chat-video-open').click()");
   await until("!!document.querySelector('.video-viewer video')&&!document.querySelector('.video-viewer video').paused");
@@ -98,8 +98,101 @@ app.whenReady().then(async()=>{
   assert.equal(await run("document.querySelector('.video-viewer').dataset.controls"),'true','moving pointer reveals hidden controls');
   await run("document.querySelector('.video-viewer video').pause();document.querySelector('.video-viewer').focus();document.querySelector('.video-viewer').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}))");
   assert.ok(await run("document.querySelector('.video-viewer video').currentTime>2"),'arrow key seeks by five seconds capped at duration');
-  await run("document.querySelector('.video-viewer-header button').click()");
+  await run(`document.querySelector('.video-viewer-header button[aria-label="${lang === 'en' ? 'Close' : 'Закрыть'}"]').click()`);
   await until("!document.querySelector('.video-dialog')");
   console.log('PASS custom video '+lang+': sender poster, multiple attachments, rename, shared previews, autoplay, navigation, 0–200% vertical volume, actual fullscreen and Escape');
- }clearTimeout(timer);app.exit(0);}catch(error){console.error(error.stack);clearTimeout(timer);app.exit(1);}
+ }
+ await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/server-chat.html?compose=1&media-variants=1&lang=en');
+ await until("document.querySelectorAll('[data-message-row]').length===25");
+ const originalSize = await run(`(async()=>{
+  const canvas=document.createElement('canvas');canvas.width=4000;canvas.height=3000;
+  const context=canvas.getContext('2d'),image=context.createImageData(4000,3000);
+  let random=59173;
+  for(let y=0;y<3000;y++)for(let x=0;x<4000;x++){
+   random=(Math.imul(random,1664525)+1013904223)>>>0;
+   const i=(y*4000+x)*4,noise=(random>>>27)-16;
+   image.data[i]=128+90*Math.sin(x/37)+noise;
+   image.data[i+1]=128+80*Math.sin(y/62)+noise;
+   image.data[i+2]=128+85*Math.cos((x+y)/53)+noise;
+   image.data[i+3]=255;
+  }
+  context.putImageData(image,0,0);
+  const photo=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.72));
+  const digest=async blob=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer())));
+  window.originalDigest=await digest(photo);
+  window.desktop.copyChatImage=async ({bytes})=>{
+   window.copiedImage=new File([bytes],'Copied.png',{type:'image/png'});
+   const bitmap=await createImageBitmap(window.copiedImage);
+   window.copiedWidth=bitmap.width;
+   bitmap.close();
+  };
+  const anchorClick=HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click=function(){
+   if(this.download==='Original.jpg'){
+    void fetch(this.href).then(response=>response.blob()).then(blob=>digest(blob)).then(value=>{window.downloadDigest=value;});
+   }else anchorClick.call(this);
+  };
+  const input=document.querySelector('.chat-compose input[type=file]'),transfer=new DataTransfer();
+  transfer.items.add(new File([photo],'Original.jpg',{type:'image/jpeg'}));
+  const gif=Uint8Array.from(atob('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'),c=>c.charCodeAt(0));
+  transfer.items.add(new File([gif],'Tiny.gif',{type:'image/gif'}));
+  input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+  return photo.size;
+ })()`);
+ assert.ok(originalSize>=1024*1024 && originalSize<=2*1024*1024);
+ await until("document.querySelectorAll('.attachment-thumbnail img').length===2&&!document.querySelector('.attachment-preparing')");
+ await run("document.querySelector('.member-composer').requestSubmit()");
+ await until("document.querySelectorAll('.chat-photo-card .video-poster img').length===2 && [...document.querySelectorAll('.chat-photo-card .video-poster img')].every(img=>img.naturalWidth>0)");
+ const [photo,gif] = await run('window.sendRequests.at(-1).content.files');
+ assert.equal(photo.size,originalSize);
+ assert.equal(photo.preview.mime,'image/webp');
+ assert.ok(photo.preview.size<=80*1024 && photo.view.size<=originalSize/2);
+ assert.equal(gif.preview.mime,'image/webp');
+ assert.equal(gif.view,undefined);
+ assert.deepEqual([...new Set(await run('window.attachmentReads'))].sort(),[photo.preview.id,gif.preview.id].sort());
+ await run("document.querySelector('.chat-photo-card .chat-video-open').click()");
+ await until("document.querySelector('.photo-viewer-image')?.naturalWidth===2048");
+ assert.deepEqual(await run("[...document.querySelectorAll('.photo-viewer .video-viewer-actions button')].slice(-2).map(button=>button.getAttribute('aria-label'))"),
+  ['Copy image','Close']);
+ assert.equal(await run('window.attachmentReads.at(-1)'),photo.view.id);
+ await run("document.querySelector('button[aria-label=\"Copy image\"]').click()");
+ await until('window.copiedWidth===2048');
+ await until("document.querySelector('.viewer-image-status')?.textContent.includes('Image copied')");
+ assert.equal(await run(`(() => {
+  const toast=document.querySelector('.viewer-image-status').getBoundingClientRect();
+  const viewer=document.querySelector('.photo-viewer').getBoundingClientRect();
+  return toast.top >= viewer.top && toast.bottom <= viewer.top + viewer.height / 3;
+ })()`),true,'Copy notice is shown at the top of the viewer');
+ assert.ok(!(await run('window.attachmentReads')).includes(photo.id));
+ await run("document.querySelector('button[aria-label=\"Download original\"]').click()");
+ await until('!!window.downloadDigest');
+ assert.equal(await run('window.attachmentReads.at(-1)'),photo.id);
+ assert.deepEqual(await run('window.downloadDigest'),await run('window.originalDigest'),'download preserves the original SHA-256');
+ await run("document.querySelector('.photo-viewer button[aria-label=\"Close\"]').click()");
+ assert.ok(await run('window.copiedImage.size > 2 * 1024 * 1024'),'The preview expands into an oversized clipboard PNG');
+ await run(`(() => {
+  const clipboardData=new DataTransfer();
+  clipboardData.items.add(window.copiedImage);
+  document.querySelector('.member-composer textarea').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData}));
+ })()`);
+ await until("document.querySelector('.attachment-filename')?.textContent === 'Copied.webp' && document.querySelector('.attachment-thumbnail img')?.naturalWidth > 0");
+ assert.ok(await run("fetch(document.querySelector('.attachment-thumbnail img').src).then(response=>response.blob()).then(blob=>blob.size <= 2 * 1024 * 1024)"));
+ await run("document.querySelector('.attachment-card-actions .danger-button').click()");
+ await run(`(async()=>{
+  const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;
+  const context=canvas.getContext('2d');context.fillStyle='green';context.fillRect(0,0,320,180);
+  const image=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+  const input=document.querySelector('.chat-compose input[type=file]'),transfer=new DataTransfer();
+  transfer.items.add(new File([image],'Small.png',{type:'image/png'}));
+  input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+ })()`);
+ await until("document.querySelector('.attachment-thumbnail img')&&!document.querySelector('.attachment-preparing')");
+ await run("document.querySelector('.member-composer').requestSubmit()");
+ await until('window.sendRequests.length===2');
+ const single = await run('window.sendRequests.at(-1).content.image');
+ assert.equal(single.mime,'image/png');
+ assert.equal(single.preview.mime,'image/webp');
+ assert.equal(single.view,undefined);
+ console.log('PASS media variants: static photo/GIF previews, optimized photo on open, byte-identical original on download');
+ clearTimeout(timer);app.exit(0);}catch(error){console.error(error.stack);clearTimeout(timer);app.exit(1);}
 });

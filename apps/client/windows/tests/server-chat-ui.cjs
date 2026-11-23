@@ -56,7 +56,7 @@ app.whenReady().then(async()=>{
   await run("document.querySelector('.member-history').scrollTop=0;document.querySelector('.member-history').dispatchEvent(new Event('scroll'))");
   await until("Number(document.querySelector('[data-message-row]').dataset.messageRow)<8",'scroll loads previous page');
   assert.ok(await run("document.querySelectorAll('[data-message-row]').length>25"),'older pages retain the already loaded messages');
-  await set('.member-composer textarea','Saved draft');await run("window.select('other')");await until("!!document.querySelector('.member-chat-welcome')",'second chat');
+  await set('.member-composer textarea','Saved draft');await run("window.select('other')");await until("!!document.querySelector('.chat-empty-state')",'second chat');
   await run("window.select('general')");await until("document.querySelector('.member-composer textarea')?.value==='Saved draft'&&!!document.querySelector('[data-message-row]')",'draft and position restored');
   assert.ok(await run("Number(document.querySelector('[data-message-row]').dataset.messageRow)<100"),'reading position survives channel switch');
   await run("document.querySelector('.chat-jump').click()");

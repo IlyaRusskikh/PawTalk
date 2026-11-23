@@ -19,7 +19,7 @@ import (
 
 func bootstrapCommand(args []string) bool {
 	switch controllerCommand(args) {
-	case "--help", "-h", "logs", "uninstall", "manager-install", "status", "doctor", "backup", "configure", "setup", "update", "manager", "--self-test", "install", "initial-admin", "settings", "desktop", "periodic", "health", "run-server", "tui", "start", "stop":
+	case "--help", "-h", "logs", "uninstall", "manager-install", "status", "doctor", "backup", "migration", "configure", "setup", "update", "manager", "--self-test", "install", "initial-admin", "settings", "desktop", "periodic", "health", "run-server", "tui", "start", "stop":
 		return true
 	}
 	return false

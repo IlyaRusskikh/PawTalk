@@ -138,13 +138,13 @@ async function test(window) {
   assert.ok(await run("(()=>{const b=document.querySelector('.image-toolbar button[aria-label=\"Сохранить изображение\"]'),r=b.getBoundingClientRect();return b.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))})()"),'photo toolbar is not covered by the fullscreen footer');
   const savedImage=path.join(process.env.PAWTALK_APP_TEST_DIR,'synthetic-saved.png');dialog.showSaveDialog=async()=>({canceled:false,filePath:savedImage});
   await run("document.querySelector('.image-toolbar [aria-label=\"Сохранить изображение\"]').click()");
-  await until("document.querySelector('.image-action-status')?.innerText.includes('сохранено')",'native image save');
+  await until("document.querySelector('.viewer-image-status')?.innerText.includes('сохранено')",'native image save');
   assert.ok((await fs.stat(savedImage)).size>0);
   await clipboard.write([]);
-  await run("document.querySelector('.image-toolbar [aria-label=\"Копировать изображение\"]').click()");
-  await until("document.querySelector('.image-action-status')?.innerText.includes('скопировано')",'native image clipboard');
+  await run("document.querySelector('.video-viewer-actions [aria-label=\"Копировать изображение\"]').click()");
+  await until("document.querySelector('.viewer-image-status')?.innerText.includes('скопировано')",'native image clipboard');
   assert.ok((await clipboard.read()).some(item=>item.types.includes('image/png')));
-  await run("document.querySelector('dialog.image-viewer .modal-heading button').click()");
+  await run("document.querySelector('dialog.image-viewer [aria-label=\"Закрыть\"]').click()");
   await run("document.querySelector('[aria-label=\"Пригласить пользователя\"]').click()");
   await run("document.querySelector('dialog form').requestSubmit()");
   await until("document.querySelector('.member-invite-notice')?.textContent.includes('Ссылка скопирована')",'invitation copied on creation');
@@ -211,7 +211,7 @@ async function test(window) {
   await until("document.fullscreenElement?.classList.contains('video-viewer')",'main-process permission allows custom viewer fullscreen');
   assert.equal(window.isFullScreen(),true,'actual app window enters native fullscreen');
   await run("document.exitFullscreen()");
-  await run("document.querySelector('.video-viewer-header button').click()");
+  await run("document.querySelector('.video-viewer-header button[aria-label=\"Закрыть\"]').click()");
   await until("!document.querySelector('.video-dialog')",'viewer closes after native fullscreen');
   console.log('PASS encrypted gallery over actual TLS/WS: two saved posters decoded by receiver, original video bytes preserved');
   await guest.request(fixture.serverId,'/api/v2/messages/'+galleryMessage.id,'DELETE',{requestId:'a'.repeat(32)});
@@ -394,7 +394,7 @@ async function test(window) {
   window.webContents.debugger.attach('1.3');
   await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
   assert.equal(await run("matchMedia('(prefers-reduced-motion:reduce)').matches"),true);
-  assert.ok(await run("parseFloat(getComputedStyle(document.querySelector('.member-toolbar [aria-pressed]')).borderTopLeftRadius)>10"),'participant toggle honors maximum radius');
+  assert.ok(await run("parseFloat(getComputedStyle(document.querySelector('.member-roster-toggle')).borderTopLeftRadius)>10"),'participant toggle honors maximum radius');
   await wait(150);await fs.writeFile(path.resolve('release/qa/membership-english.png'),(await window.webContents.capturePage()).toPNG());
   console.log('PASS actual main/preload/renderer + TLS bootstrap + DPAPI + encrypted chat + channels + roster + E2EE LiveKit synthetic microphone');
   } finally {dialog.showSaveDialog=saveDialog;await clipboard.write(originalClipboard);}

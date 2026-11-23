@@ -207,7 +207,19 @@ class NativeRuntime:
             raise RuntimeError('Server command failed; run pawtalkctl doctor')
         return result.stdout
 
+    def migration_command(self,state,config,*args,archive=None):
+        self.check_volume(state)
+        result = subprocess.run([str(self.binary(state)),'serve',*args],env=self.env(state,config),
+                                stdin=archive if archive is not None else subprocess.DEVNULL,
+                                capture_output=True,timeout=600)
+        if result.returncode:
+            raise RuntimeError('Server migration command failed; run pawtalkctl doctor')
+        return result.stdout
+
     def initialized(self,state,config):
+        if state.get('protectedRuntime'):
+            self.identity(state,config)
+            return True
         from .admission import status
         return status(lambda *args: self.command(state,config,*args))
 
@@ -322,6 +334,9 @@ class NativeRuntime:
         return {'Id':'PawTalkServer','State':{'Running':running,'Health':{'Status':'healthy' if healthy else 'unhealthy'}}}
 
     def identity(self,state,config):
+        if state.get('protectedRuntime') is not None:
+            from .runtime import protected_host_identity
+            return protected_host_identity(state['protectedRuntime'],lambda *args: self.command(state,config,*args))
         raw = self.command(state,config,'info').decode().strip()
         if not re.fullmatch(r'pawtalk://[^/\s]+/[a-f0-9]{64}',raw):
             raise ValueError('Invalid room identity')
@@ -360,6 +375,9 @@ class NativeRuntime:
                 if file.is_symlink() or file.is_junction():
                     raise ValueError('Data directory contains a link')
                 archive.add(file,arcname=str(file.relative_to(self.data(state))).replace('\\','/'),recursive=False)
+
+        with open(destination,'r+b') as stream:
+            os.fsync(stream.fileno())
 
     def import_backup(self,state,source):
         self.create_volume(state)

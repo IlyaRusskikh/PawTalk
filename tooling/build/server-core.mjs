@@ -19,7 +19,7 @@ export async function serverDefinition(root = repositoryRoot) {
     for (const entry of await readdir(path.join(root, 'apps/server', directory), { withFileTypes: true })) {
       const relative = path.posix.join(directory, entry.name);
       if (entry.isDirectory()) await visit(relative);
-      else if (entry.isFile() && (/\.(go|sql)$/.test(entry.name) || ['go.mod', 'go.sum', 'VERSION', 'deploy/standalone.Dockerfile'].includes(relative))) {
+      else if (entry.isFile() && (/\.(go|sql)$/.test(entry.name) || ['go.mod', 'go.sum', 'VERSION', 'deploy/standalone.Dockerfile', 'internal/access/catalog.json'].includes(relative))) {
         inputs.push([relative, createHash('sha256').update(await readFile(path.join(root, 'apps/server', relative))).digest('hex')]);
       }
     }

@@ -1,0 +1,296 @@
+{
+  "version": 1,
+  "permissions": [
+    {
+      "id": "server.administrator",
+      "scope": "server",
+      "en": "Administrator",
+      "ru": "Администратор",
+      "keyEffect": "all"
+    },
+    {
+      "id": "server.edit",
+      "scope": "server",
+      "en": "Change community settings",
+      "ru": "Изменять настройки сообщества"
+    },
+    {
+      "id": "audit.view",
+      "scope": "server",
+      "en": "View audit log",
+      "ru": "Просматривать журнал аудита"
+    },
+    {
+      "id": "member.list",
+      "scope": "server",
+      "en": "View all members",
+      "ru": "Просматривать всех участников"
+    },
+    {
+      "id": "role.edit",
+      "scope": "server",
+      "en": "Edit role definitions",
+      "ru": "Редактировать определения ролей"
+    },
+    {
+      "id": "role.assign",
+      "scope": "server",
+      "en": "Assign and remove roles",
+      "ru": "Назначать и снимать роли",
+      "rank": "critical"
+    },
+    {
+      "id": "channel.create",
+      "scope": "category",
+      "en": "Create channels and categories",
+      "ru": "Создавать каналы и категории"
+    },
+    {
+      "id": "channel.edit",
+      "scope": "resource",
+      "en": "Edit and reorder channels and categories",
+      "ru": "Изменять и перемещать каналы и категории"
+    },
+    {
+      "id": "channel.access.edit",
+      "scope": "resource",
+      "en": "Edit access rules",
+      "ru": "Изменять правила доступа",
+      "keyEffect": "policy"
+    },
+    {
+      "id": "channel.delete",
+      "scope": "resource",
+      "en": "Delete channels and categories",
+      "ru": "Удалять каналы и категории"
+    },
+    {
+      "id": "channel.view",
+      "scope": "channel",
+      "en": "View and access channel",
+      "ru": "Видеть и открывать канал",
+      "keyEffect": "admission",
+      "default": true
+    },
+    {
+      "id": "invite.create",
+      "scope": "server",
+      "en": "Create, list and revoke own invitations",
+      "ru": "Создавать, просматривать и отзывать свои приглашения"
+    },
+    {
+      "id": "invite.view-all",
+      "scope": "server",
+      "en": "View invitation metadata",
+      "ru": "Просматривать сведения обо всех приглашениях"
+    },
+    {
+      "id": "invite.manage-all",
+      "scope": "server",
+      "en": "Revoke other invitations",
+      "ru": "Отзывать чужие приглашения"
+    },
+    {
+      "id": "member.kick",
+      "scope": "server",
+      "en": "Kick members",
+      "ru": "Исключать участников",
+      "keyEffect": "membership",
+      "rank": "critical"
+    },
+    {
+      "id": "member.ban",
+      "scope": "server",
+      "en": "Ban and unban members",
+      "ru": "Блокировать и разблокировать участников",
+      "keyEffect": "membership",
+      "rank": "critical",
+      "lift": true
+    },
+    {
+      "id": "member.timeout",
+      "scope": "server",
+      "en": "Set and lift timeouts",
+      "ru": "Назначать и снимать тайм-ауты",
+      "rank": "critical",
+      "lift": true
+    },
+    {
+      "id": "profile.edit-self",
+      "scope": "server",
+      "en": "Change own nickname",
+      "ru": "Изменять свой ник",
+      "default": true
+    },
+    {
+      "id": "profile.edit-other",
+      "scope": "server",
+      "en": "Change another member’s nickname",
+      "ru": "Изменять чужой ник",
+      "rank": "important"
+    },
+    {
+      "id": "message.send",
+      "scope": "text",
+      "en": "Send and edit own messages",
+      "ru": "Отправлять и редактировать свои сообщения",
+      "default": true,
+      "blockedByTimeout": true
+    },
+    {
+      "id": "history.full",
+      "scope": "text",
+      "en": "Read the full retained history",
+      "ru": "Читать всю сохранённую историю",
+      "keyEffect": "history",
+      "default": true
+    },
+    {
+      "id": "message.delete-other",
+      "scope": "text",
+      "en": "Delete other members’ messages",
+      "ru": "Удалять чужие сообщения"
+    },
+    {
+      "id": "message.attach",
+      "scope": "text",
+      "en": "Attach files",
+      "ru": "Прикладывать файлы",
+      "default": true,
+      "requires": [
+        "message.send"
+      ]
+    },
+    {
+      "id": "message.voice",
+      "scope": "text",
+      "en": "Send built-in voice messages",
+      "ru": "Отправлять встроенные голосовые сообщения",
+      "default": true,
+      "requires": [
+        "message.send"
+      ]
+    },
+    {
+      "id": "mention.mass",
+      "scope": "text",
+      "en": "Mention everyone or online members",
+      "ru": "Упоминать всех или участников онлайн",
+      "requires": [
+        "message.send"
+      ]
+    },
+    {
+      "id": "mention.any-role",
+      "scope": "text",
+      "en": "Mention any role",
+      "ru": "Упоминать любые роли",
+      "requires": [
+        "message.send"
+      ]
+    },
+    {
+      "id": "poll.create",
+      "scope": "text",
+      "en": "Create polls",
+      "ru": "Создавать опросы",
+      "default": true,
+      "requires": [
+        "message.send"
+      ]
+    },
+    {
+      "id": "poll.vote",
+      "scope": "text",
+      "en": "Vote in polls",
+      "ru": "Голосовать в опросах",
+      "default": true,
+      "blockedByTimeout": true
+    },
+    {
+      "id": "poll.close-other",
+      "scope": "text",
+      "en": "Close other members’ polls",
+      "ru": "Завершать чужие опросы"
+    },
+    {
+      "id": "poll.delete-completed",
+      "scope": "text",
+      "en": "Delete completed polls and results",
+      "ru": "Удалять завершённые опросы и результаты"
+    },
+    {
+      "id": "checklist.create",
+      "scope": "text",
+      "en": "Create checklists",
+      "ru": "Создавать чек-листы",
+      "default": true,
+      "requires": [
+        "message.send"
+      ]
+    },
+    {
+      "id": "checklist.check",
+      "scope": "text",
+      "en": "Check checklist items",
+      "ru": "Отмечать пункты чек-листов",
+      "default": true,
+      "blockedByTimeout": true
+    },
+    {
+      "id": "message.pin",
+      "scope": "text",
+      "en": "Pin and unpin content",
+      "ru": "Закреплять и откреплять содержимое"
+    },
+    {
+      "id": "message.slowmode.bypass",
+      "scope": "text",
+      "en": "Bypass slowmode",
+      "ru": "Обходить медленный режим"
+    },
+    {
+      "id": "voice.connect",
+      "scope": "voice",
+      "en": "Connect to voice",
+      "ru": "Подключаться к голосовому каналу",
+      "keyEffect": "voice",
+      "default": true,
+      "blockedByTimeout": true
+    },
+    {
+      "id": "voice.speak",
+      "scope": "voice",
+      "en": "Speak in voice",
+      "ru": "Говорить в голосовом канале",
+      "keyEffect": "voice",
+      "default": true,
+      "requires": [
+        "voice.connect"
+      ]
+    },
+    {
+      "id": "voice.mute",
+      "scope": "voice",
+      "en": "Apply and remove server mute",
+      "ru": "Запрещать и разрешать передачу голоса",
+      "rank": "important",
+      "lift": true
+    },
+    {
+      "id": "voice.deafen",
+      "scope": "voice",
+      "en": "Apply and remove server deafen",
+      "ru": "Запрещать и разрешать приём и передачу голоса",
+      "rank": "important",
+      "lift": true
+    },
+    {
+      "id": "voice.move",
+      "scope": "voice",
+      "en": "Move or disconnect voice participants",
+      "ru": "Перемещать и отключать участников голосовых каналов",
+      "rank": "important"
+    }
+  ]
+}

@@ -4,7 +4,10 @@ import {membership} from './membership';
 import {pollDurations, validatePoll} from '../../../../shared/polls.mjs';
 import {t} from './i18n';
 
-export function PollDialog({serverId, channelId, onClose, onPosted}: {serverId: string; channelId: string; onClose(): void; onPosted(): Promise<void>}) {
+export function PollDialog({serverId, channelId, onClose, onPosted, commit, canSubmit = true}: {
+  serverId: string; channelId: string; onClose(): void; onPosted(): Promise<void>; canSubmit?: boolean;
+  commit?(question: string, definition: ReturnType<typeof validatePoll>, operationId: string): Promise<void>;
+}) {
   const [question, setQuestion] = useState(''), [options, setOptions] = useState(['', '']);
   const [duration, setDuration] = useState(86400), [multiple, setMultiple] = useState(false);
   const [anonymous, setAnonymous] = useState(true), [intermediate, setIntermediate] = useState(true);
@@ -13,18 +16,19 @@ export function PollDialog({serverId, channelId, onClose, onPosted}: {serverId: 
   const pending = useRef<{signature: string; id: string}|undefined>(undefined);
   const valid = !!question.trim() && Array.from(question).length <= 300 && options.every(option => !!option.trim());
   async function publish() {
-    if (busy || !valid) return;
+    if (busy || !valid || !canSubmit) return;
     setBusy(true); setError('');
     try {
       const definition = validatePoll({options, duration, multiple, anonymous, intermediate});
       const signature = JSON.stringify({question: question.trim(), definition});
       if (pending.current?.signature !== signature) pending.current = {signature, id: crypto.randomUUID().replaceAll('-', '')};
-      await membership('poll.create', {serverId, channelId, question: question.trim(), definition, requestId: pending.current!.id});
+      if (commit) await commit(question.trim(), definition, pending.current.id);
+      else await membership('poll.create', {serverId, channelId, question: question.trim(), definition, requestId: pending.current.id});
       await onPosted(); onClose();
     } catch (error) { setError((error as Error).message); }
     finally { setBusy(false); }
   }
-  return <Modal title={t('Создание опроса')} className="poll-dialog" footer={<div className="modal-actions"><button type="button" disabled={busy} onClick={onClose}>{t('Отмена')}</button><button form={formId} type="submit" className="primary" disabled={busy || !valid}>{t('Публикация')}</button></div>} onClose={() => {if (!busy) onClose();}}>
+  return <Modal title={t('Создание опроса')} className="poll-dialog" footer={<div className="modal-actions"><button type="button" disabled={busy} onClick={onClose}>{t('Отмена')}</button><button form={formId} type="submit" className="primary" disabled={busy || !valid || !canSubmit}>{t('Публикация')}</button></div>} onClose={() => {if (!busy) onClose();}}>
     <form id={formId} onSubmit={event => {event.preventDefault(); void publish();}}>
       <div className="form-fields">
         <label>{t('Вопрос')}<input autoFocus required maxLength={300} disabled={busy} placeholder={t('Какой вопрос вы хотите задать?')} value={question} onChange={event => setQuestion(event.target.value)}/><small className="poll-question-limit">{Array.from(question).length} / 300</small></label>

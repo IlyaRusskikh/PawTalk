@@ -25,6 +25,7 @@ function render(nodes: MarkdownNode[], preview: boolean, labels: string[]): Reac
       case 'strike': return <s key={i}>{children}</s>;
       case 'code': return <code key={i}>{children}</code>;
       case 'pre': return <span className="chat-code-block" key={i}><code>{children}</code></span>;
+      case 'mention': return <span key={i} className="chat-mention">{children}</span>;
       case 'link': return preview ? <span key={i}>{children}</span> : <a key={i} href={node.url} target="_blank" rel="noopener noreferrer">{children}</a>;
       case 'spoiler': if (preview) return <span key={i} className="chat-spoiler" aria-expanded="false">{children}</span>; return <button key={i} type="button" className="chat-spoiler" aria-label={t("Показать спойлер")} aria-expanded="false" onClick={event => { const button = event.currentTarget; const shown = button.getAttribute('aria-expanded') !== 'true'; button.setAttribute('aria-expanded', String(shown)); button.setAttribute('aria-label', t(shown ? "Скрыть спойлер" : "Показать спойлер")); }}>{children}</button>;
       default: return <span key={i} className={`chat-markdown-${node.type}`} data-level={node.level} data-marker={node.marker && /^\d/.test(node.marker) ? node.marker : undefined}>{children || '\u00a0'}</span>;
@@ -54,9 +55,12 @@ function GifLink({url,source=url,mime}:{url:string;source?:string;mime?:string})
  return type?.startsWith('video/')?<video className="member-chat-image chat-link-gif" src={src} autoPlay loop muted playsInline aria-label={t('GIF')} onError={()=>void fallback()}/>:<img className="member-chat-image chat-link-gif" src={src} referrerPolicy="no-referrer" alt={t('GIF')} onError={()=>void fallback()}/>;
 }
 function DeferredGif({source}:{source:string}){const [media,setMedia]=useState<{url:string;mime?:string}|null>(null);useEffect(()=>{let cancelled=false;const timer=setTimeout(()=>{void membership<{url:string;mime?:string}|null>('gif.resolve',{url:source}).then(result=>{if(!cancelled&&result?.url)setMedia(result);}).catch(()=>{});},150);return()=>{cancelled=true;clearTimeout(timer);};},[source]);return media?<GifLink url={media.url} source={source} mime={media.mime}/>:<a href={source} target="_blank" rel="noopener noreferrer">{source}</a>;}
-export function MessageText({ text, preview = false, mentions=[],gif }: { text: string; preview?: boolean; mentions?:Mention[];gif?:{url:string;source:string;mime?:string} }) {
- let gifURL=gif?.source===text?gif.url:undefined;
- if(!preview&&!gifURL){
+export function MessageText({ text, preview = false, mentions = [], verifiedMentions, gif, allowRemotePreview = true }: {
+ text: string; preview?: boolean; mentions?: Mention[]; verifiedMentions?: readonly { start: number; end: number }[];
+ gif?: { url: string; source: string; mime?: string }; allowRemotePreview?: boolean;
+}) {
+ let gifURL=allowRemotePreview&&gif?.source===text?gif.url:undefined;
+ if(!preview&&allowRemotePreview&&!gifURL){
   try{
    const url=new URL(text.trim());
    if(url.protocol==='https:'&&!url.username&&!url.password&&/\.gif$/i.test(url.pathname))gifURL=url.href;
@@ -64,5 +68,5 @@ export function MessageText({ text, preview = false, mentions=[],gif }: { text: 
   }catch{}
  }
  if(gifURL&&!preview)return <GifLink key={gifURL} url={gifURL} source={text} mime={gif?.mime}/>;
- return <>{render(messageMarkdown(text),preview,mentions.map(m=>text.slice(m.start,m.end)))}</>;
+ return <>{render(messageMarkdown(text,verifiedMentions),preview,mentions.map(m=>text.slice(m.start,m.end)))}</>;
 }

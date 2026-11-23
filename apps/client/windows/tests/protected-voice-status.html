@@ -1,0 +1,103 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Protected voice status fixture</title></head><body>
+<script type="module">
+import { VoiceSession } from '/src/session.ts';
+import { defaults } from '/src/settings.ts';
+import { createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import { Participants } from '/src/Participants.tsx';
+import { changeLanguage } from '/src/i18n.ts';
+import * as LivekitClient from 'livekit-client';
+
+const voice = new VoiceSession({ ...defaults, sounds: false });
+let join, completion, nextKey, refreshFailure;
+let reconnect, movedChannel;
+let pendingHeartbeat;
+const states = [];
+const mediaStates = [];
+const sendWorkerMessage = Worker.prototype.postMessage;
+let heldWorkerMessages;
+let participantUI;
+let participantRender = 0;
+const moveCalls = [];
+Worker.prototype.postMessage = function (message, ...args) {
+  if (heldWorkerMessages && message?.kind === 'encryptDataRequest') {
+    heldWorkerMessages.push([this, message, args]);
+  } else {
+    sendWorkerMessage.call(this, message, ...args);
+  }
+};
+voice.onUpdate = ({ voiceProtection, state }) => {
+  if (JSON.stringify(voiceProtection) !== JSON.stringify(states.at(-1))) states.push(voiceProtection);
+  if (state !== mediaStates.at(-1)) mediaStates.push(state);
+};
+
+window.protectedVoiceStatusFixture = {
+  begin({ move, controlRefresh, ...scope }) {
+    join = Promise.withResolvers();
+    nextKey = undefined;
+    refreshFailure = undefined;
+    reconnect = undefined;
+    movedChannel = undefined;
+    pendingHeartbeat = undefined;
+    completion = voice.connectProtected({
+      join: () => join.promise,
+      refresh: async epochId => {
+        if (controlRefresh) {
+          pendingHeartbeat = { epochId, ...Promise.withResolvers() };
+          return pendingHeartbeat.promise;
+        }
+        if (refreshFailure) throw Object.assign(new Error(refreshFailure), { code: refreshFailure });
+        return nextKey?.epochId !== epochId ? nextKey ?? null : null;
+      },
+      reconnect: async () => {
+        if (!move) throw new Error('Unexpected native fixture reconnect');
+        reconnect = Promise.withResolvers();
+        return reconnect.promise;
+      },
+      leave: async () => {},
+      onChannelChange: destination => { movedChannel = destination; },
+    }, scope).then(() => true, error => typeof error.code === 'string' ? error.code : String(error));
+  },
+  grant(access) { join.resolve(access); },
+  joined: () => completion,
+  bindMedia() { window.LivekitClient = LivekitClient; window.smokePeer = { room: voice.room, audio: voice.playback }; },
+  respondHeartbeat(result) {
+    const pending = pendingHeartbeat;
+    pendingHeartbeat = undefined;
+    if (result?.error) pending.reject(Object.assign(new Error(result.error), { code: result.error }));
+    else pending.resolve(result);
+  },
+  rotate(key) { nextKey = key; },
+  rejectRefresh(code) { refreshFailure = code; },
+  resumeMove(access) { reconnect.resolve(access); reconnect = undefined; },
+  setLocalAudio({ muted, ptt }) { voice.setMute(muted, false); voice.setPtt(ptt); },
+  async showParticipantMenu({ scope, targetSessionId, restrictions = [], language = 'ru' }) {
+    moveCalls.length = 0;
+    window.desktop = { duck: async () => {}, membership: async (action, input) => {
+      moveCalls.push({ action, input });
+      if (action === 'voice.protected.restriction-choices') return { value: restrictions };
+      return { value: true };
+    } };
+    await changeLanguage(language);
+    participantUI ??= createRoot(document.body.appendChild(document.createElement('div')));
+    participantUI.render(createElement(Participants, { key: ++participantRender,
+      people: [{ id: targetSessionId, name: 'Synthetic voice participant', local: false, speaking: false, muted: false }],
+      prefs: {}, onChange() {}, moderation: scope }));
+  },
+  moveCalls: () => moveCalls,
+  holdWorkerProof() { heldWorkerMessages = []; },
+  releaseWorkerProof() {
+    const messages = heldWorkerMessages;
+    heldWorkerMessages = undefined;
+    for (const [worker, message, args] of messages) sendWorkerMessage.call(worker, message, ...args);
+  },
+  disconnect() { pendingHeartbeat?.resolve(null); pendingHeartbeat = undefined; return voice.disconnect(); },
+  read: () => ({ states, mediaStates, pendingWorkerMessages: heldWorkerMessages?.length ?? 0,
+    encrypted: voice.room?.isE2EEEnabled === true, connection: voice.room?.state, reconnect: Boolean(reconnect), movedChannel,
+    heartbeatEpoch: pendingHeartbeat?.epochId, heartbeatPending: Boolean(pendingHeartbeat), checkpointEpoch: voice.protectedEpoch?.epochId,
+    remoteTracks: voice.mixers.size,
+    muted: voice.muted, ptt: voice.ptt, microphone: Boolean(voice.localTrack),
+    canPublish: voice.room?.localParticipant.permissions?.canPublish, canSubscribe: voice.room?.localParticipant.permissions?.canSubscribe }),
+};
+</script>
+</body></html>

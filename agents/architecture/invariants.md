@@ -4,12 +4,13 @@
   through tooling/build/server-core.mjs with the same toolchain/flags; receipt hashes
   and tooling/build/check-server-core.mjs verify byte equality. selfhost and serve
   differ in lifetime/storage. Server release alone does not patch installed Client.
-- API protocol 2 and capabilities, not release numbers, determine compatibility.
-  Missing/legacy/unknown protocol is rejected before identity or admission proofs.
+- API protocol and capabilities determine compatibility. Client supports API 2 and 3.
+  Missing, legacy and unknown protocols are rejected before identity or admission proofs.
   API 1 has no production fallback or data migration. Follow docs/server/compatibility.en.md.
-- TLS invitation fingerprint is checked before HTTP credentials. E2EE is mandatory:
-  clients create/retain the server root and derive channel/purpose keys; the host
-  stores opaque packages only. No automatic rotation or forward secrecy is promised.
+- TLS invitation fingerprint is checked before HTTP credentials. E2EE is mandatory.
+  API 2 derives channel and purpose keys from a client-held server root. API 3 uses
+  scoped voice, message and archive keys with signed delivery and rotation. The host
+  stores opaque key packages. Revocation cannot retract delivered keys or data.
 - Membership, voice presence and server-local device bindings are independent.
   Every authenticated action checks current membership/role/ban. Original message
   authors remain immutable. Unlink ends inherited edit/admin rights immediately.

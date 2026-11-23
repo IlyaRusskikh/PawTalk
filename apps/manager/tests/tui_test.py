@@ -17,6 +17,23 @@ from pawtalk_manager import cli
 
 
 class TerminalMenuTests(unittest.TestCase):
+    def test_restore_confirmation_shows_the_rollback_detection_limit(self):
+        for lang in ('ru', 'en'):
+            with self.subTest(lang=lang):
+                prompts = []
+                backup = 'backup-0123456789ab'
+
+                def execute(*command):
+                    self.assertEqual(command, ('backup', 'list', '--json'))
+                    return 0, json.dumps([{'name': backup, 'created': 1000000000}])
+
+                ui = SimpleNamespace(choose=lambda heading, choices: 0,
+                                     approve=lambda heading, message: prompts.append(message))
+                cli.tui_extra('tui_restore', lang, execute, ui)
+                self.assertEqual(len(prompts), 1)
+                self.assertIn(backup, prompts[0])
+                self.assertIn(cli.text('restore_freshness', lang), prompts[0])
+
     def test_update_applies_the_exact_manifest_presented_for_confirmation(self):
         original = '{"signed":"candidate-a"}'
         executed = []

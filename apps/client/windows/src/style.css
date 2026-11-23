@@ -39,7 +39,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:radial-gra
 .rail>.server-orb{background:transparent}.rail>.server-orb>img{display:block;width:44px;height:44px}
 
 /* Compact participants and their per-user controls. */
-.people-grid{grid-template-columns:repeat(auto-fill,minmax(144px,160px));gap:12px}.person-card{padding:10px 12px;border-radius:calc(var(--ui-radius) * 0.9167);min-width:0}.person-card .person-top{margin-bottom:8px;gap:6px}.person-card .avatar{width:44px;height:44px;border-radius:calc(var(--ui-radius) * 1.25);font-size:20px;margin-bottom:9px}.person-card h3{font-size:12px}.person-network{padding:2px}.person-local-mute{display:block;color:var(--danger);font-size:9px;margin-top:7px}.person-menu{position:fixed;z-index:60;width:260px;background:var(--surface);border:1px solid var(--line);border-radius:calc(var(--ui-radius) * 0.8333);padding:18px;box-shadow:0 10px 30px color-mix(in srgb, var(--shadow) 46.7%, transparent)}.person-menu>strong{display:block;margin-bottom:18px;font-size:13px}.person-menu .inline-check{margin-top:18px}.bookmark-orb.selected:before{display:block}.bookmark-list{overflow-x:hidden}.rail>.home-orb{display:grid;place-items:center;padding:0;line-height:1;flex-shrink:0}.rail>.home-orb img{object-fit:contain}.server-orb:before{left:-15px}.bookmark-list{overflow:visible;max-height:calc(100vh - 200px)}
+.people-grid{grid-template-columns:repeat(auto-fill,minmax(144px,160px));gap:12px}.person-card{padding:10px 12px;border-radius:calc(var(--ui-radius) * 0.9167);min-width:0}.person-card .person-top{margin-bottom:8px;gap:6px}.person-card .avatar{width:44px;height:44px;border-radius:calc(var(--ui-radius) * 1.25);font-size:20px;margin-bottom:9px}.person-card h3{font-size:12px}.person-network{padding:2px}.person-local-mute{display:block;color:var(--danger);font-size:9px;margin-top:7px}.bookmark-orb.selected:before{display:block}.bookmark-list{overflow-x:hidden}.rail>.home-orb{display:grid;place-items:center;padding:0;line-height:1;flex-shrink:0}.rail>.home-orb img{object-fit:contain}.server-orb:before{left:-15px}.bookmark-list{overflow:visible;max-height:calc(100vh - 200px)}
 
 .server-orb:not(.selected):before{display:none}.bookmark-list{overflow-y:auto;overflow-x:hidden;max-height:none;flex-shrink:1}.diagnostic-row{display:flex;align-items:center;gap:12px;margin:14px 0 20px}.diagnostic-row .diagnostic-copy{width:auto;flex-shrink:0;display:inline-flex;padding:4px 0;margin:0;border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:400;text-align:left}.diagnostic-row .diagnostic-copy:hover{color:var(--accent);text-decoration:underline;background:transparent}.diagnostic-row>span{font-size:10px;line-height:1.6;color:var(--muted)}@media(max-width:600px){.diagnostic-row{align-items:flex-start;flex-direction:column;gap:4px}}
 
@@ -60,7 +60,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:radial-gra
 
 /* Keep the user dock entirely to the right of the bookmark rail. */
 .rail{padding-bottom:22px}.bookmark-list{overflow-y:auto;overflow-x:hidden;max-height:calc(100vh - 112px);flex:1}
-.person-status-icons{display:flex;align-items:center;gap:6px;min-height:19px;color:var(--danger)}.person-status-icons>span{display:inline-flex}
+.person-status-icons{display:flex;align-items:center;gap:6px;min-height:19px;color:var(--muted)}.person-status-icons>span{display:inline-flex}
+.person-status-icons > [data-server] { color:var(--danger); }
 .update-indicator{flex:none;width:44px;height:44px;border:1px solid color-mix(in srgb, var(--accent) 45%, var(--line));border-radius:calc(var(--ui-radius) * 1);background:var(--raised);color:var(--accent);padding:10px}
 .update-actions{display:flex;gap:12px;align-items:center;justify-content:flex-end;margin-top:24px}.modal .modal-actions>button,.modal .update-actions>button{margin:0;min-height:42px;padding-block:9px;display:inline-flex;align-items:center;justify-content:center}.update-modal p{font-size:13px;line-height:1.7;margin:12px 0;color:var(--text)}.update-modal progress{width:100%;accent-color:var(--accent)}
 @media(max-width:900px){.profile{gap:5px}.profile .icon-button{padding:4px}}
@@ -246,14 +247,14 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:radial-gra
 .composer-avatar { margin-bottom: 3px; transition: transform 150ms ease; }
 .chat-compose[data-sending] .composer-avatar { transform: translateX(6px) scale(.92); }
 .chat-typing { display: flex; align-items: center; gap: 7px; color: var(--text); font-size: 12px; }
-.chat-typing-paws { display: flex; gap: 4px; align-items: center; color: var(--accent); }
-.chat-typing-paws svg { flex: none; opacity: .3; animation: typing-paw 1.4s infinite; }
-.chat-typing-paws svg:nth-child(2) { animation-delay: 160ms; }
-.chat-typing-paws svg:nth-child(3) { animation-delay: 320ms; }
-@keyframes typing-paw { 0%, 70%, 100% { opacity: .3; transform: translateY(0) rotate(-8deg); } 30% { opacity: 1; transform: translateY(-2px) rotate(8deg); } }
+:is(.chat-typing-paws, .chat-recording-cats) { display: flex; gap: 4px; flex: none; align-items: center; color: var(--accent); }
+:is(.chat-typing-paws, .chat-recording-cats) svg { flex: none; opacity: .3; animation: chat-activity-beat 1.4s infinite; }
+:is(.chat-typing-paws, .chat-recording-cats) svg:nth-child(2) { animation-delay: 160ms; }
+:is(.chat-typing-paws, .chat-recording-cats) svg:nth-child(3) { animation-delay: 320ms; }
+@keyframes chat-activity-beat { 0%, 70%, 100% { opacity: .3; transform: translateY(0) rotate(-8deg); } 30% { opacity: 1; transform: translateY(-2px) rotate(8deg); } }
 @media (prefers-reduced-motion: reduce) {
   .person-visual, .person-details, .composer-avatar { transition: none; }
-  .chat-date-tip, .chat-typing-paws svg { animation: none; opacity: 1; }
+  .chat-date-tip, .chat-typing-paws svg, .chat-recording-cats svg { animation: none; opacity: 1; }
 }
 .chat-compose textarea {
   display: block; flex: 1; min-width: 0; min-height: 46px; max-height: min(164px, 50cqh);

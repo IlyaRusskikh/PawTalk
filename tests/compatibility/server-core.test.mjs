@@ -26,6 +26,10 @@ test('shared-core receipt detects uncommitted source changes and toolchain/versi
     assert.notEqual(schemaReceipt.sourceSha256, first.sourceSha256, 'embedded SQLite schema is a Go build input');
     await write('membership.sql', 'CREATE TABLE membership(id TEXT PRIMARY KEY, state TEXT);\n');
     assert.notEqual((await serverDefinition(root)).sourceSha256, schemaReceipt.sourceSha256, 'schema edits invalidate shared-core receipt');
+    await mkdir(path.join(root, 'apps/server/internal/access'), {recursive:true});
+    const beforeCatalog = await serverDefinition(root);
+    await write('internal/access/catalog.json', '{"version":1,"permissions":[]}\n');
+    assert.notEqual((await serverDefinition(root)).sourceSha256, beforeCatalog.sourceSha256, 'embedded permission catalog is a Go build input');
     await write('main.go', 'package main\nfunc main() { println("changed") }\n');
     assert.notEqual((await serverDefinition(root)).sourceSha256, first.sourceSha256);
     await write('VERSION', '0.11.0\n');

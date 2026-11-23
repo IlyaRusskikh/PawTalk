@@ -105,6 +105,14 @@ app.whenReady().then(async () => {
       assert.equal(await run(`document.querySelectorAll('dl>div').length`),2);
       await run(`document.body.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));document.activeElement.blur()`);
     }
+    assert.deepEqual(await run(`fixture.protectedAudioState()`),
+      { sent: [true, false], whileDeafened: true, afterMicResumes: false, afterClearing: false });
+    assert.deepEqual(await run('fixture.protectedStatusTransitions()'), {
+      mediaReadyDuringUpdate: false,
+      mediaDeafen: { protection: 'green', volume: 0 },
+      states: ['green:VOICE_VERIFIED', 'yellow:VOICE_KEY_PENDING', 'green:VOICE_VERIFIED',
+        'grey:VOICE_SERVER_DEAFENED', 'red:VOICE_KEY_INVALID'],
+    }, 'Brief refreshes preserve the verified indication without opening the audio gate. A sustained update and a failure are shown.');
     await run(`fixture.disconnect()`);
     assert.equal(await run(`fixture.snapshot().rtt.length+fixture.snapshot().loss.length+Object.keys(fixture.snapshot().series).length`),0);
     assert.deepEqual(errors,[]);
