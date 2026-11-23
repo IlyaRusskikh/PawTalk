@@ -50,18 +50,14 @@ func openStandaloneMigrationStore(path string) (*standaloneMigrationStore, error
 	}, nil
 }
 
-func serveStandaloneMigration(ctx context.Context, store *membershipStore, path string, certificate tls.Certificate, automatic bool) error {
+func serveStandaloneMigration(ctx context.Context, store *membershipStore, path string, certificate tls.Certificate) error {
 	writer, err := openMigrationImportDatabase(path)
 	if err != nil {
 		return err
 	}
 	defer writer.Close()
 	importer := &membershipStore{db: writer, now: store.now}
-	var controlDir string
-	if automatic {
-		controlDir = filepath.Dir(path)
-	}
-	server := standaloneHTTPServer(newProtectedMigrationHandlerWithControl(store, importer, controlDir), certificate)
+	server := standaloneHTTPServer(newProtectedMigrationHandlerWithControl(store, importer, filepath.Dir(path)), certificate)
 	server.ReadTimeout = 2 * time.Minute
 	server.WriteTimeout = 2 * time.Minute
 	return serveStandaloneTLS(ctx, server, "PawTalk migration maintenance ready.", nil)
@@ -127,7 +123,7 @@ func serveAutomaticMigration(ctx context.Context, dir, path string, migration *s
 			}
 		}
 	}()
-	if err := serveStandaloneMigration(maintenance, migration.membershipStore, path, certificate, true); err != nil {
+	if err := serveStandaloneMigration(maintenance, migration.membershipStore, path, certificate); err != nil {
 		return err
 	}
 	if ctx.Err() != nil {

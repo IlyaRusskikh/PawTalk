@@ -28,6 +28,7 @@
 - [server-v0.12.0](server-v0.12.0.ru.md) — исходник выпуска
 - [server-v0.13.0](server-v0.13.0.ru.md) — источник выпуска
 - [server-v0.14.0](server-v0.14.0.ru.md)
+- [server-v0.14.1](server-v0.14.1.ru.md)
 
 ## Manager
 

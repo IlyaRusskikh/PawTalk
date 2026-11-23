@@ -14,3 +14,5 @@ Release sources for protected access:
 - [Client 0.15.0](releases/client-v0.15.0.en.md)
 - [Server 0.14.0](releases/server-v0.14.0.en.md)
 - [Manager 0.7.0](releases/manager-v0.7.0.en.md)
+
+- [Server 0.14.1](releases/server-v0.14.1.en.md) fixes owner confirmation for Manager-prepared API 3 migration.

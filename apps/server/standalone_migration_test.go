@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
@@ -276,7 +277,7 @@ func TestStandaloneMigrationModeServesOnlyMaintenance(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	store, _, _, _, _, report := testMigrationHistoryHTTPSource(t, dir, "manual")
+	store, _, owner, _, _, report := testMigrationHistoryHTTPSource(t, dir, "manual")
 	if err := store.db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -399,6 +400,34 @@ func TestStandaloneMigrationModeServesOnlyMaintenance(t *testing.T) {
 	response.Body.Close()
 	if err != nil || response.StatusCode != http.StatusOK || challenge.ServerID != report.ServerID || !validHexID(challenge.Nonce, 64) {
 		t.Fatalf("normal standalone startup lost the frozen server identity: %+v, %v", challenge, err)
+	}
+	proof := migrationHistoryProof{Nonce: challenge.Nonce, DeviceID: publicKeyID(owner.device.Public().(ed25519.PublicKey)), Limit: 1}
+	frame, err := migrationHistoryProofFrame(report.ServerID, "checkpoint", proof)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof.Signature = b64.EncodeToString(ed25519.Sign(owner.device, frame))
+	body, err := json.Marshal(proof)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Post(base+"/api/v3/migration/checkpoint", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var checkpoint migrationHistoryResponse
+	err = json.NewDecoder(response.Body).Decode(&checkpoint)
+	response.Body.Close()
+	if err != nil || response.StatusCode != http.StatusOK || checkpoint.ArchiveSHA256 != report.BackupArchiveSHA256 {
+		t.Fatalf("owner checkpoint request: HTTP %d, decode error %v", response.StatusCode, err)
+	}
+	response, err = client.Post(base+"/api/v3/migration/control/report", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("migration control did not reject an unsigned request: HTTP %d", response.StatusCode)
 	}
 	if err := stdin.Close(); err != nil {
 		t.Fatal(err)
