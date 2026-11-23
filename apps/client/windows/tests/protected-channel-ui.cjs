@@ -776,13 +776,30 @@ app.whenReady().then(async () => {
       };
       const openChannelContext = () => run("document.querySelector('.protected-channel-row[data-selected=true]').dispatchEvent(new MouseEvent('contextmenu', { bubbles:true }))");
       const openOrder = async () => { await openChannelContext(); await click(reorder, '.member-context button'); };
+      const resizeRoleWindow = async (size, viewportReady) => {
+        const [width, height] = win.getSize();
+        if (width === size[0] && height === size[1]) return;
+        // An updated innerWidth can be visible before Chromium dispatches resize.
+        // Wait for the event before opening a menu that closes on resize.
+        await run(`(() => {
+          window.roleResizeSettled = false;
+          const onResize = () => {
+            if (!(${viewportReady})) return;
+            window.removeEventListener('resize', onResize);
+            requestAnimationFrame(() => requestAnimationFrame(() => { window.roleResizeSettled = true; }));
+          };
+          window.addEventListener('resize', onResize);
+        })()`);
+        win.setSize(...size);
+        await until('window.roleResizeSettled', 'The role settings viewport settles after resizing');
+      };
       const openRoleEditor = async (label, scoped = false) => {
         await openServerSettings(label);
         if (scoped) await click(english ? 'Server roles' : 'Роли сервера', '.protected-server-settings .settings-panel button');
         else {
           const size = win.getSize();
-          win.setSize(660, size[1]);
-          await until('innerWidth <= 660', 'Settings fit in a narrow window');
+          const originalWidth = await run('innerWidth');
+          await resizeRoleWindow([660, size[1]], 'innerWidth <= 660');
           assert.equal(await run("document.querySelector('.server-settings-roles li').dataset.reorderId"), 'administrator');
           assert.equal(await run(`(() => {
             const label = document.querySelector('.role-list-name span:last-child');
@@ -812,7 +829,7 @@ app.whenReady().then(async () => {
             const element = document.querySelector('.protected-server-settings ' + selector);
             return element.scrollWidth <= element.clientWidth;
           })`), true, 'The role editor does not scroll horizontally');
-          win.setSize(...size);
+          await resizeRoleWindow(size, `innerWidth === ${originalWidth}`);
         }
         await until("!!document.querySelector('.protected-server-settings .protected-role-editor')", 'Role editor is embedded in settings');
       };
