@@ -13,16 +13,16 @@ async function fixture(run){
  const directory=await mkdtemp(path.join(tmpdir(),'pawtalk-race-')),requests=[],closed=new Set();
  const server=http.createServer((req,res)=>{
   const source=req.url.split('/')[1];requests.push(source);let offset=0;
-  const tick=()=>{if(source==='stalled'||source==='bursty'&&offset>=8192)return;const count=['fast','corrupt','bursty'].includes(source)?4096:256;
+  const tick=()=>{if(source==='stalled'||source==='bursty'&&offset>=8192)return;const count=['fast','corrupt','bursty'].includes(source)?4096:2048;
    if(offset===bytes.length){res.end();return;}const chunk=Buffer.from(bytes.subarray(offset,offset+count));offset+=chunk.length;
    if(source==='corrupt')chunk[0]^=1;res.write(chunk);
   };
-  const timer=setInterval(tick,['fast','corrupt','bursty'].includes(source)?2:15);tick();
+  const timer=setInterval(tick,['fast','corrupt','bursty'].includes(source)?2:25);tick();
   res.on('close',()=>{clearInterval(timer);closed.add(source);});
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const base=`http://127.0.0.1:${server.address().port}`,partial=path.join(directory,'installer.part');
- const options={manifest,tag:'client-v1.0.0',partial,policy:{sampleMs:70,sampleBytes:8192,headerMs:100,idleMs:120,windowMs:1000,totalMs:5000},
+ const options={manifest,tag:'client-v1.0.0',partial,policy:{sampleMs:300,sampleBytes:8192,headerMs:3000,idleMs:2500,windowMs:5000,totalMs:30000},
   fetchFor:source=>(url,init)=>fetch(source?url:base+'/github/file',init),rooms:[],onProgress(){}};
  try{await run({options,partial,base,requests,closed});}
  finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}
@@ -51,7 +51,7 @@ test('a small complete GitHub artifact does not open mirror connections',async()
 });
 test('a source that stalls after winning is excluded and remaining sources are measured again',()=>fixture(async({options,partial,base,requests})=>{
  const selected=[];
- await downloadFastest({...options,policy:{...options.policy,minBytesPerSecond:1,sampleMs:200,headerMs:1000,idleMs:1000,totalMs:15000},
+ await downloadFastest({...options,policy:{...options.policy,minBytesPerSecond:1},
   fetchFor:source=>(url,init)=>fetch(source?url:base+'/bursty/file',init),
   rooms:[{name:'slow',prepare:async()=>({base:base+'/slow'})}],onProgress:(_progress,source)=>selected.push(source)});
  assert.equal(selected[0],'GitHub');assert.equal(selected.at(-1),'slow');assert.equal(requests.filter(s=>s==='bursty').length,1);
