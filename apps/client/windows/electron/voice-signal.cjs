@@ -9,7 +9,12 @@ const { isIP } = require('node:net');
 const { randomBytes, createHash } = require('node:crypto');
 class VoiceSignal {
   async open(address, fingerprint, {eventPath, eventToken, onEventActivity} = {}) {
-    if(eventPath!==undefined&&(!/^\/api\/v2\/(?:events(?:\/messages)?|channels\/[a-f0-9]{32}\/events)$/.test(eventPath)||typeof eventToken!=='string'||! /^[\w-]{43}$/.test(eventToken)))throw Error('Invalid event endpoint');
+    const protectedEvents = /^\/api\/v3\/events\?after=(0|[1-9][0-9]{0,15})(&delivery=1)?(&voice=1)?(&composer=1)?$/.exec(eventPath);
+    const eventPayloadLimit = protectedEvents?.[2] || eventPath === '/api/v2/events/messages' ? 60000 : 2048;
+    const legacyEvents = /^\/api\/v2\/(?:events(?:\/messages)?|channels\/[a-f0-9]{32}\/events)$/.test(eventPath);
+    if (eventPath !== undefined && ((!legacyEvents && !protectedEvents) ||
+        (protectedEvents && (Number(protectedEvents[1]) >= Number.MAX_SAFE_INTEGER || !fingerprint)) ||
+        typeof eventToken !== 'string' || !/^[\w-]{43}$/.test(eventToken))) throw Error('Invalid event endpoint');
     this.close();
     const remote = new URL(address);
     if (remote.protocol !== 'wss:' || remote.username || remote.password || remote.search || remote.hash || (fingerprint && !/^[a-f0-9]{64}$/.test(fingerprint))) throw Error('Invalid media endpoint');
@@ -36,6 +41,7 @@ class VoiceSignal {
       const headers = { ...request.headers, host: remote.host };
       delete headers.cookie; delete headers['proxy-authorization'];
       if(eventPath)headers.authorization='Bearer '+eventToken;
+      if(protectedEvents)delete headers.origin;
       const upstream = https.request({ hostname, port: Number(remote.port) || 443, path: remote.pathname.replace(/\/$/, '') + suffix, method: request.method, headers, agent });
       pending.add(upstream); upstream.once('close', () => pending.delete(upstream));
       upstream.on('error', () => { if (response && !response.headersSent) response.writeHead(502).end(); else response?.destroy(); socket?.destroy(); });
@@ -49,7 +55,7 @@ class VoiceSignal {
             // Accept bounded, unfragmented event/control frames. Only the opt-in
             // message stream permits larger envelopes; reject before buffering.
             let buffered=Buffer.alloc(0),paused=false;
-            const receive=chunk=>{if(chunk.length>65536){peer.destroy();socket.destroy();return;}buffered=Buffer.concat([buffered,chunk]);while(buffered.length>=2){const opcode=buffered[0]&15,marker=buffered[1];let length=marker,header=2;if(marker===126){if(buffered.length<4)return;length=buffered.readUInt16BE(2);header=4;}if((buffered[0]&240)!==128||marker>126||length>(eventPath==='/api/v2/events/messages'?60000:2048)||![1,8,9,10].includes(opcode)||(opcode!==1&&length>125)){peer.destroy();socket.destroy();return;}if(buffered.length<length+header)return;onEventActivity?.();if(!socket.write(buffered.subarray(0,length+header))&&!paused){paused=true;peer.pause();socket.once('drain',()=>{paused=false;peer.resume();});}buffered=buffered.subarray(length+header);}};
+            const receive=chunk=>{if(chunk.length>65536){peer.destroy();socket.destroy();return;}buffered=Buffer.concat([buffered,chunk]);while(buffered.length>=2){const opcode=buffered[0]&15,marker=buffered[1];let length=marker,header=2;if(marker===126){if(buffered.length<4)return;length=buffered.readUInt16BE(2);header=4;}if((buffered[0]&240)!==128||marker>126||length>eventPayloadLimit||![1,8,9,10].includes(opcode)||(opcode!==1&&length>125)){peer.destroy();socket.destroy();return;}if(buffered.length<length+header)return;onEventActivity?.();if(!socket.write(buffered.subarray(0,length+header))&&!paused){paused=true;peer.pause();socket.once('drain',()=>{paused=false;peer.resume();});}buffered=buffered.subarray(length+header);}};
             peer.on('data',receive);if(upstreamHead.length)receive(upstreamHead);
           }else{if(upstreamHead.length)socket.write(upstreamHead);peer.pipe(socket);}
           peer.on('error', () => socket.destroy()); socket.on('error', () => peer.destroy());

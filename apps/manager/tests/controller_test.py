@@ -1,5 +1,6 @@
 """Deterministic fault injection complements, rather than replaces, real Compose tests."""
 import io
+import hashlib
 import json
 import tempfile
 import tarfile
@@ -76,6 +77,228 @@ class ControllerTests(unittest.TestCase):
         self.c.install({'PAWTALK_PUBLIC_IP':'203.0.113.10'},self.manifest,template,'0.1.0')
 
     def tearDown(self): self.temp.cleanup()
+
+    def migration_command(self,state,config,*args,archive=None):
+        server_id = 'a'*32
+        if args == ('migration-check',):
+            self.assertIsNone(archive)
+            return json.dumps(dict(dataSchema=2,serverId=server_id,ownerProfileId='b'*64))
+        action,digest = args
+        self.assertEqual(action,'migration-prepare')
+        if self.room.data == b'original SQLite snapshot':
+            self.assertFalse(self.room.running)
+        backup = archive.read()
+        self.assertEqual(hashlib.sha256(backup).hexdigest(),digest)
+        with tarfile.open(fileobj=io.BytesIO(backup)) as contents:
+            source = contents.extractfile('membership-v2.sqlite').read()
+        self.assertEqual(source,b'original SQLite snapshot')
+        self.room.data = b'frozen SQLite snapshot'
+        self.archive_digest = digest
+        return json.dumps(dict(maintenance=True,dataSchema=3,serverId=server_id,ownerProfileId='b'*64,
+                               backupArchiveSha256=digest,backupSha256=hashlib.sha256(source).hexdigest()))
+
+    def migration_healthcheck(self,state,config,*args):
+        self.assertTrue(self.room.running)
+        self.assertEqual(self.room.data,b'frozen SQLite snapshot')
+        self.assertEqual(args,('migration-healthcheck',self.archive_digest))
+
+    def install_cutover_fixture(self):
+        self.room.migration_command = self.migration_command
+        self.room.command = self.migration_healthcheck
+        prepared = self.c.prepare_protected_migration()
+        checkpoint = prepared['checkpoint']
+        self.cutover_receipt = dict(serverId=checkpoint['serverId'],archiveSha256=self.archive_digest,
+                                    cutoverDigest='c'*64,deviceId='d'*64)
+        self.cutover_approved = False
+        self.crash_cutover = False
+        self.cutover_commands = []
+
+        def command(state,config,action,digest,archive=None):
+            self.assertEqual(digest,self.archive_digest)
+            self.cutover_commands.append(action)
+            if action == 'migration-approve-cutover':
+                self.assertEqual(archive.read(),b'{"test":"synthetic signed approval"}')
+                self.cutover_approved = True
+                return json.dumps(self.cutover_receipt)
+            if action == 'migration-verify':
+                review = {key:self.cutover_receipt[key] for key in ('serverId','archiveSha256','cutoverDigest')}
+                if self.cutover_approved:
+                    review['cutoverApproval'] = self.cutover_receipt
+                return json.dumps(review)
+            self.assertEqual(action,'migration-activate')
+            self.assertTrue(self.cutover_approved)
+            self.assertFalse(self.room.running)
+            self.room.data = b'activated SQLite snapshot'
+            if self.crash_cutover:
+                raise PowerLoss()
+            return json.dumps(self.cutover_receipt)
+
+        self.room.migration_command = command
+        return prepared
+
+    def test_protected_activation_requires_owner_approval_and_preserves_backup(self):
+        prepared = self.install_cutover_fixture()
+        with self.assertRaisesRegex(ValueError,'no verified owner approval'):
+            self.c.activate_protected_migration()
+        self.assertTrue(self.room.running)
+        self.assertEqual(self.c.migration_status(),prepared)
+        active = self.c.activate_protected_migration(io.BytesIO(b'{"test":"synthetic signed approval"}'))
+        self.assertEqual(active['phase'],'migration-active')
+        self.assertEqual(active['backup'],prepared['backup'])
+        self.assertEqual(self.c.state()['protectedRuntime']['cutoverDigest'],self.cutover_receipt['cutoverDigest'])
+        self.assertEqual(self.c.state()['dataSchema'],2) # Signed installed image metadata.
+        self.assertEqual(self.room.data,b'activated SQLite snapshot')
+        self.assertTrue(self.room.running)
+        self.assertTrue((self.c.backups/prepared['backup']/'data.tar').is_file())
+        self.assertEqual(self.c.activate_protected_migration(),active)
+        self.assertEqual(self.cutover_commands.count('migration-activate'),1)
+        with self.assertRaisesRegex(ValueError,'Unsupported server data/protocol transition'):
+            self.c.update_server({**self.manifest,'version':'0.9.1'})
+        self.assertTrue(self.room.running)
+
+    def test_protected_activation_resumes_without_restoring_pre_cutover_data(self):
+        prepared = self.install_cutover_fixture()
+        self.cutover_approved = True
+        self.crash_cutover = True
+        with self.assertRaises(PowerLoss):
+            self.c.activate_protected_migration()
+        self.assertEqual(self.room.data,b'activated SQLite snapshot')
+        self.assertEqual(self.c.migration_status()['phase'],'migration-activating')
+        with self.assertRaisesRegex(RuntimeError,'activation is in progress'):
+            self.c.recover()
+        with self.assertRaisesRegex(RuntimeError,'activation is in progress'):
+            self.c.rollback_protected_migration()
+        self.crash_cutover = False
+        resumed = Controller(self.temp.name,self.room)
+        self.assertEqual(resumed.activate_protected_migration()['phase'],'migration-active')
+        self.assertEqual(self.room.data,b'activated SQLite snapshot')
+        self.assertTrue((resumed.backups/prepared['backup']/'data.tar').is_file())
+        self.assertEqual(self.cutover_commands,['migration-verify','migration-activate','migration-activate'])
+
+    def test_protected_activation_rechecks_tls_and_keeps_the_pre_cutover_archive(self):
+        prepared = self.install_cutover_fixture()
+        self.cutover_approved = True
+        original = self.c.state()
+        _, archive = self.c.snapshot(prepared['backup'])
+        pre_cutover_data = archive.read_bytes()
+        expected_cutover = self.cutover_receipt['cutoverDigest']
+
+        def wrong_cutover(state, config, expected):
+            self.assertTrue(self.room.running)
+            self.assertEqual(state['protectedRuntime']['cutoverDigest'], expected_cutover)
+            self.assertEqual(expected, original['identity'])
+            raise RuntimeError('Protected TLS healthcheck did not confirm the requested cutover')
+
+        with patch.object(self.room, 'healthy', side_effect=wrong_cutover):
+            with self.assertRaisesRegex(RuntimeError, 'did not confirm the requested cutover'):
+                self.c.activate_protected_migration()
+        self.assertEqual(self.c.migration_status()['phase'],'migration-activating')
+        self.assertEqual(self.c.state(),original)
+        self.assertEqual(archive.read_bytes(),pre_cutover_data)
+        self.assertEqual(self.room.data,b'activated SQLite snapshot')
+
+        resumed = Controller(self.temp.name,self.room)
+        self.room.running = False
+        with patch.object(self.room, 'healthy', wraps=self.room.healthy) as check:
+            self.assertEqual(resumed.activate_protected_migration()['phase'],'migration-active')
+            state, _, identity = check.call_args.args
+            self.assertEqual(state['protectedRuntime']['cutoverDigest'],expected_cutover)
+            self.assertEqual(identity,original['identity'])
+        self.assertTrue(self.room.running)
+        self.assertEqual(self.cutover_commands,['migration-verify','migration-activate'])
+        active_state = resumed.state()
+        with patch.object(self.room, 'stop', wraps=self.room.stop) as stop, patch.object(self.room, 'pull') as pull:
+            with self.assertRaisesRegex(ValueError,'Cannot restore an API 2 backup'):
+                resumed.restore(prepared['backup'])
+            stop.assert_not_called()
+            pull.assert_not_called()
+        self.assertEqual(resumed.state(),active_state)
+        self.assertEqual(self.room.data,b'activated SQLite snapshot')
+        self.assertEqual(archive.read_bytes(),pre_cutover_data)
+
+    def test_protected_migration_pins_backup_until_explicit_rollback(self):
+        self.room.migration_command = self.migration_command
+        self.room.command = self.migration_healthcheck
+        installed = self.c.state()
+        prepared = self.c.prepare_protected_migration()
+        self.assertEqual(prepared['phase'],'migration-prepared')
+        self.assertTrue(self.room.running)
+        self.assertEqual(self.room.data,b'frozen SQLite snapshot')
+        self.assertEqual(self.c.state(),installed)
+        self.assertEqual(self.c.prepare_protected_migration(),prepared)
+        self.room.running = False
+        self.assertEqual(self.c.prepare_protected_migration(),prepared)
+        self.assertTrue(self.room.running)
+        self.assertEqual(len(list(self.c.backups.glob('backup-*'))),1)
+        with self.assertRaisesRegex(ValueError,'required for pending recovery'):
+            self.c.delete_backup(prepared['backup'])
+        with self.assertRaisesRegex(RuntimeError,'Protected migration is prepared'):
+            self.c.watchdog()
+        self.assertTrue(self.room.running)
+        self.c.rollback_protected_migration()
+        self.assertEqual(self.c.migration_status(),dict(phase='inactive'))
+        self.assertEqual(self.room.data,b'original SQLite snapshot')
+        self.assertTrue(self.room.running)
+        self.assertNotEqual(self.c.state()['volume'],installed['volume'])
+        self.assertTrue((self.c.backups/prepared['backup']/'data.tar').is_file())
+
+    def test_protected_migration_readiness_failure_rolls_back_before_ready(self):
+        self.room.migration_command = self.migration_command
+        original = self.c.state()
+        self.room.running = False
+
+        def blocked_probe(state,config,*args):
+            self.migration_healthcheck(state,config,*args)
+            self.assertEqual(self.c.migration_status()['phase'],'applying')
+            raise RuntimeError('wrong migration checkpoint')
+
+        self.room.command = blocked_probe
+        later = iter((0,0,100))
+        with patch('pawtalk_manager.controller.time.monotonic',side_effect=lambda:next(later)), patch('pawtalk_manager.controller.time.sleep'):
+            with self.assertRaisesRegex(RuntimeError,'expected migration checkpoint'):
+                self.c.prepare_protected_migration()
+        self.assertEqual(self.c.migration_status(),dict(phase='inactive'))
+        self.assertEqual(self.room.data,b'original SQLite snapshot')
+        self.assertFalse(self.room.running)
+        self.assertNotEqual(self.c.state()['volume'],original['volume'])
+        self.assertEqual(len(list(self.c.backups.glob('backup-*'))),1)
+
+    def test_interrupted_protected_migration_recovers_from_verified_archive(self):
+        def crash_after_commit(state,config,*args,archive=None):
+            result = self.migration_command(state,config,*args,archive=archive)
+            if archive is not None:
+                raise PowerLoss()
+            return result
+
+        self.room.migration_command = crash_after_commit
+        with self.assertRaises(PowerLoss):
+            self.c.prepare_protected_migration()
+        self.assertEqual(self.c.migration_status()['phase'],'applying')
+        self.assertEqual(self.room.data,b'frozen SQLite snapshot')
+        self.assertFalse(self.room.running)
+        restarted = Controller(self.temp.name,self.room)
+        self.assertTrue(restarted.recover())
+        self.assertEqual(restarted.migration_status(),dict(phase='inactive'))
+        self.assertEqual(self.room.data,b'original SQLite snapshot')
+        self.assertTrue(self.room.running)
+
+    def test_protected_migration_backup_failure_resumes_source(self):
+        self.room.migration_command = self.migration_command
+        self.room.backup_error = True
+        with self.assertRaisesRegex(OSError,'full disk'):
+            self.c.prepare_protected_migration()
+        self.assertEqual(self.c.migration_status(),dict(phase='inactive'))
+        self.assertEqual(self.room.data,b'original SQLite snapshot')
+        self.assertTrue(self.room.running)
+
+    def test_protected_migration_rejects_owner_blocker_before_stopping_source(self):
+        output = json.dumps(dict(dataSchema=2,serverId='a'*32,ownerBlocker='NO_ELIGIBLE_ADMINISTRATOR'))
+        with patch.object(self.room,'migration_command',return_value=output,create=True):
+            with self.assertRaisesRegex(ValueError,'NO_ELIGIBLE_ADMINISTRATOR'):
+                self.c.prepare_protected_migration()
+        self.assertTrue(self.room.running)
+        self.assertEqual(self.c.migration_status(),dict(phase='inactive'))
+        self.assertFalse(list(self.c.backups.glob('backup-*')))
 
     def test_update_rollback_restores_data_and_keeps_old_volume(self):
         original = self.c.state()

@@ -1,0 +1,83 @@
+.protected-invites {
+  container-type: inline-size;
+}
+
+.protected-invites .invite-card {
+  max-width: 580px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--ui-radius);
+}
+
+.invite-card-heading,
+.invite-history-heading,
+.invite-empty,
+.invite-copy-retry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.invite-card-heading { margin-bottom: 16px; }
+.invite-card-heading h3, .invite-history-heading h3 { font-size: 14px; }
+
+.invite-art {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--accent);
+  background: radial-gradient(circle at 30% 20%, var(--raised), transparent),
+    color-mix(in srgb, var(--accent) 13%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: var(--ui-radius);
+}
+
+.invite-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.invite-fields label { min-width: 0; }
+.invite-fields select { text-overflow: ellipsis; }
+
+.invite-history-heading {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.invite-history-heading small, .invite-pagination span, .invite-empty { color: var(--muted); }
+.invite-empty { padding-block: 8px; }
+
+.protected-invites .invite-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(140px, 1fr) auto;
+}
+
+.invite-row > .invite-author:first-child {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.invite-author .avatar { flex: none; }
+.invite-author > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invite-details { min-width: 0; display: grid; gap: 3px; overflow-wrap: anywhere; }
+.invite-pagination span { margin-inline-end: auto; font-size: 12px; }
+.invite-copy-retry { margin-top: 12px; flex-wrap: wrap; }
+
+.protected-invites .invite-toast {
+  inset-block-start: 12px;
+  width: max-content;
+  max-width: min(480px, calc(100vw - 32px));
+}
+
+@container (max-width: 430px) {
+  .invite-fields { grid-template-columns: minmax(0, 1fr); }
+  .protected-invites .invite-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .invite-row .invite-details { grid-row: 2; }
+  .invite-row > button { grid-column: 2; grid-row: 1 / span 2; }
+}

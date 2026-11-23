@@ -175,10 +175,17 @@ test('blocked GitHub metadata uses a favorite room and independently verifies it
   const updater = new Updater({ keys, current: '0.1.0', fetcher: async () => { throw Error('GitHub blocked'); },
     rooms: () => [{ name: 'Offline', prepare: async () => { throw Error('offline'); } }, { name: 'Favorite', prepare: async () => ({ base: 'https://room.example' }) }],
     roomFetcher: async (url, options) => { requests.push(url); assert.equal(options.redirect, 'error');
-      return url.includes('/releases?') ? Response.json([release('0.2.0')]) : new Response(manifest()); } });
+      switch (new URL(url).pathname) {
+        case '/api/updates/releases': return Response.json([familyRelease('0.2.0', 'client')]);
+        case '/api/updates/assets/client-v0.2.0/update-manifest.json': return new Response(manifest());
+        default: return new Response(null, { status: 400 });
+      }
+    } });
   assert.equal((await updater.check()).status, 'available');
-  assert.equal(requests.length, 2);
-  assert.ok(requests.every(url => url.startsWith('https://room.example/api/updates/')));
+  assert.deepEqual(requests, [
+    'https://room.example/api/updates/releases?per_page=100&page=1',
+    'https://room.example/api/updates/assets/client-v0.2.0/update-manifest.json',
+  ]);
 });
 
 test('untrusted manifests from a favorite report its name and never offer installation', async () => {
@@ -234,18 +241,34 @@ test('real HTTP stalled and slow downloads abort and fall back to a room stream'
   const directory = await mkdtemp(path.join(tmpdir(), 'pawtalk-http-update-'));
   let mode = 'slow', relayCalls = 0;
   const primary = createServer((req, res) => {
-    if (req.url.includes('/repos/')) return res.end(JSON.stringify([release('0.2.0')]));
-    if (req.url.endsWith('update-manifest.json')) return res.end(manifest());
+    if (req.url === '/repos/IlyaRusskikh/PawTalk/releases?per_page=100&page=1') {
+      return res.end(JSON.stringify([familyRelease('0.2.0', 'client')]));
+    }
+    if (req.url === '/IlyaRusskikh/PawTalk/releases/download/client-v0.2.0/update-manifest.json') return res.end(manifest());
+    if (req.url !== '/IlyaRusskikh/PawTalk/releases/download/client-v0.2.0/PawTalk.Setup.0.2.0.exe') {
+      res.writeHead(404);
+      return res.end();
+    }
     res.writeHead(200); res.flushHeaders();
     if (mode === 'slow') res.write(bytes.subarray(0, 1));
   });
-  const relay = createServer((_req, res) => { relayCalls++; res.end(bytes); });
+  const relay = createServer((req, res) => {
+    if (req.url !== '/api/updates/assets/client-v0.2.0/PawTalk.Setup.0.2.0.exe') {
+      res.writeHead(400);
+      return res.end();
+    }
+    relayCalls++;
+    res.end(bytes);
+  });
   await Promise.all([new Promise(resolve => primary.listen(0, '127.0.0.1', resolve)), new Promise(resolve => relay.listen(0, '127.0.0.1', resolve))]);
   try {
     for (mode of ['slow', 'stalled']) {
       let launched = false;
       const updater = new Updater({ keys, current: '0.1.0', directory, script: path.join(directory, 'helper.ps1'), installDirectory: directory,
-        fetcher: (url, options) => fetch(`http://127.0.0.1:${primary.address().port}${new URL(url).pathname}`, options),
+        fetcher: (url, options) => {
+          const { pathname, search } = new URL(url);
+          return fetch(`http://127.0.0.1:${primary.address().port}${pathname}${search}`, options);
+        },
         rooms: () => [{ name: 'Local relay', prepare: async () => ({ base: `http://127.0.0.1:${relay.address().port}` }) }], roomFetcher: fetch,
         downloadPolicy: { idleMs: mode === 'stalled' ? 50 : 1000, windowMs: 50, minBytesPerSecond: mode === 'slow' ? 65536 : 0, totalMs: 2000 },
         launch: () => { launched = true; throw Error('test stops before execution'); } });

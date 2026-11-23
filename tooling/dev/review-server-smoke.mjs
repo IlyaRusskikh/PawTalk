@@ -17,17 +17,26 @@ for (let i = 0; i < 50; i++) {const candidate = 30000 + Math.floor(Math.random()
 assert.ok(port, 'no free test port group');
 const options = reviewServerOptions(['--profile', profile, '--port', String(port)]);
 const files = reviewServerPaths(profile);
+async function smokeClient(mode, credentials, address) {
+  try {
+    return await execute(process.execPath, ['apps/client/windows/tests/membership-host-client.cjs', mode, credentials, address],
+      {cwd: repositoryRoot, windowsHide: true, timeout: 30000});
+  } catch (error) {
+    throw new Error(`Review client ${mode} failed: ${error.stderr?.trim() || 'no diagnostic output'}`);
+  }
+}
 let server;
 try {
   server = await startReviewServer(options, {quiet: true});
   assert.equal(server.status.initialized, false);
+  assert.equal(server.status.apiProtocolVersion, 3);
   await assert.rejects(startReviewServer(options, {build: false, quiet: true}), /already running/);
   const credentials = path.join(files.directory, 'synthetic-client');
   await import('node:fs/promises').then(fs => fs.mkdir(credentials));
   await writeFile(path.join(credentials, 'client-keys.json'), '{}', {mode: 0o600});
   const invitation = (await readFile(files.invitation, 'utf8')).trim();
-  const join = await execute(process.execPath, ['apps/client/windows/tests/membership-host-client.cjs', 'join', credentials, invitation], {cwd: repositoryRoot, windowsHide: true, timeout: 30000});
-  assert.match(join.stdout, /PASS real API 2/);
+  const join = await smokeClient('protected-review-join', credentials, invitation);
+  assert.match(join.stdout, /PASS real API 3/);
   const identity = server.status.serverId;
   await stopReviewServer(options); await server.stop(); server = undefined;
   await assert.rejects(access(files.runtime));
@@ -35,8 +44,8 @@ try {
   assert.equal(server.status.serverId, identity, 'restart changed persistent server identity');
   assert.equal(server.status.initialized, true);
   await assert.rejects(access(files.invitation), 'stale first-admin invitation must be removed');
-  const connect = await execute(process.execPath, ['apps/client/windows/tests/membership-host-client.cjs', 'connect', credentials, server.address], {cwd: repositoryRoot, windowsHide: true, timeout: 30000});
-  assert.match(connect.stdout, /PASS real API 2/);
+  const connect = await smokeClient('protected-review-connect', credentials, server.address);
+  assert.match(connect.stdout, /PASS real API 3/);
   await stopReviewServer(options); await server.stop(); server = undefined;
   console.log('PASS native review server: current shared build, isolated persistent data, pinned TLS, encrypted chat after restart, duplicate-profile rejection and graceful stop');
 } finally {

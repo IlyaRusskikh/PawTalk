@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const { randomBytes } = require('node:crypto');
 const api2Fixture=process.env.PAWTALK_API2_FIXTURE?JSON.parse(require('node:fs').readFileSync(process.env.PAWTALK_API2_FIXTURE,'utf8')):undefined;
 const api2Clients=[];let api2Heartbeat;
 const serverAddress = process.env.PAWTALK_TEST_SERVER || 'http://127.0.0.1:8080';
@@ -35,12 +36,13 @@ app.whenReady().then(async () => {
  pinTestServer(session.defaultSession);
  const windows=[];
  const credentials=[];
+ const firstVoiceEpoch = api2Fixture ? { epochId: randomBytes(16).toString('hex'), expiresAt: Date.now()+90000 } : undefined;
  const lines=[];
  const record = message => { lines.push(message); console.log(message); };
  const grant=async index=>{
   const client=api2Clients[index],state=await client.state(api2Fixture.serverId);
   const access=await client.voice(state.serverId,state.channels.find(channel=>channel.kind==='voice').id);
-  return {...access,e2eeKey:access.key};
+  return {...access,e2eeKey:access.key,voiceEpoch:firstVoiceEpoch};
  };
  const closeAPI2=async()=>{clearInterval(api2Heartbeat);await Promise.all(api2Clients.map(client=>client.request(api2Fixture.serverId,'/api/v2/voice/leave','POST',{}).catch(()=>{})));};
  try {
@@ -132,6 +134,37 @@ app.whenReady().then(async () => {
   const replacedBefore=await b.executeJavaScript('window.energy()');
   await until(async()=>(await b.executeJavaScript('window.energy()')).energy>replacedBefore.energy+0.000001,'audio after microphone replacement');
   record('PASS shared AudioContext survives mic stop/replacement and retains remote playback');
+  if (firstVoiceEpoch) {
+    const next = { epochId: randomBytes(16).toString('hex'), key: randomBytes(32).toString('hex'), expiresAt: Date.now()+90000 };
+    const rotate = `window.voice.rotateProtectedVoiceKey(${JSON.stringify(firstVoiceEpoch.epochId)},${JSON.stringify(next)})`;
+    for (const client of [a,b]) await client.executeJavaScript('window.beforeRotation = { room: window.voice.room, mic: window.voice.mic }; undefined');
+    await a.executeJavaScript(`window.nextVoiceKey = ${JSON.stringify(next)}; undefined`);
+    await until(() => a.executeJavaScript(`window.voice.protectedEpoch?.epochId === ${JSON.stringify(next.epochId)}`), 'automatic first key refresh');
+    await wait(1300);
+    const stale = await b.executeJavaScript('window.energy()');
+    await wait(1100);
+    const stillStale = await b.executeJavaScript('window.energy()');
+    assert.ok(stillStale.bytes > stale.bytes, 'encrypted RTP continues arriving during rotation');
+    assert.ok(stillStale.energy - stale.energy < 0.000001, 'old key decoded audio after rotation');
+    const beforeA = await a.executeJavaScript('window.energy()');
+    await b.executeJavaScript(`window.nextVoiceKey = ${JSON.stringify(next)}; undefined`);
+    await until(async () => (await b.executeJavaScript('window.energy()')).energy > stillStale.energy + 0.000001 &&
+      (await a.executeJavaScript('window.energy()')).energy > beforeA.energy + 0.000001, 'bidirectional audio after key rotation');
+    for (const client of [a,b]) {
+      assert.equal(await client.executeJavaScript('window.voice.room === window.beforeRotation.room && window.voice.mic === window.beforeRotation.mic && window.voice.ptt && !window.voice.muted'),true);
+      assert.equal(await client.executeJavaScript(`(async()=>{try{await ${rotate};return false}catch{return true}})()`),true);
+    }
+    record('PASS rotating E2EE in the open room drops stale-key audio and restores bidirectional audio without resetting PTT');
+    const fresh = { ...await grant(0), key: next.key, epoch: { epochId: next.epochId, expiresAt: next.expiresAt } };
+    assert.notEqual(fresh.token, credentials[0].token);
+    await a.executeJavaScript(`window.nextVoiceGrant = ${JSON.stringify(fresh)}; undefined`);
+    await a.executeJavaScript("window.voice.room.simulateScenario('full-reconnect')");
+    await until(() => a.executeJavaScript("window.grantRequests === 1 && window.snapshot.state === 'connected' && window.voice.room !== window.beforeRotation.room && window.voice.ptt"), 'reconnect with a fresh application grant');
+    const afterReconnect = await b.executeJavaScript('window.energy()');
+    await until(async () => (await b.executeJavaScript('window.energy()')).energy > afterReconnect.energy + 0.000001,
+      'audio after fresh-grant reconnect');
+    record('PASS a signaling failure requests a fresh application grant and restores encrypted audio with PTT preserved');
+  }
   await a.executeJavaScript('window.voice.disconnect()');
   await until(()=>b.executeJavaScript('window.snapshot.people?.length === 1'),'participant cleanup after rejoin');
   await b.executeJavaScript('window.voice.disconnect()');

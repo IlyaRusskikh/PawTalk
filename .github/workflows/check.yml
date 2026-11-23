@@ -99,6 +99,12 @@ jobs:
         if: steps.scope.outputs.host == 'true'
         run: sudo python3 apps/manager/tests/compose_integration.py
         timeout-minutes: 25
+      - name: Verify protected migration and rollback with Compose
+        if: steps.scope.outputs.host == 'true'
+        run: |
+          sudo python3 apps/manager/tests/compose_integration.py --protected-migration-prepare
+          sudo python3 apps/manager/tests/compose_integration.py --protected-migration
+        timeout-minutes: 25
       - name: Debian 12 userspace install and recovery with the real Docker engine
         if: steps.scope.outputs.host == 'true'
         run: |
@@ -213,6 +219,12 @@ jobs:
       - name: Verify shared-core temporary API privacy and chat lifecycle
         if: steps.scope.outputs.client == 'true'
         run: node apps/client/windows/scripts/selfhost-smoke.cjs
+      - name: Verify protected channel UI and lifecycle
+        if: steps.scope.outputs.client == 'true'
+        run: |
+          node apps/client/windows/scripts/server-chat-ui-smoke.mjs apps/client/windows/tests/protected-channel-ui.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node apps/client/windows/scripts/protected-selfhost-smoke.mjs --protected-channel-lifecycle
       - name: Build Windows Manager installer
         if: steps.scope.outputs.manager == 'true'
         run: node apps/manager/windows/scripts/build-manager-windows.mjs
@@ -250,6 +262,15 @@ jobs:
         env:
           PAWTALK_WINDOWS_SERVER_ZIP: ${{ steps.api2fixture.outputs.zip }}
         run: node apps/manager/windows/scripts/windows-manager-smoke.mjs --scm ${{ steps.scope.outputs.manager == 'true' && '--installer' || '' }}
+      - name: Verify protected migration and rollback with Windows SCM
+        if: steps.scope.outputs.host == 'true'
+        env:
+          PAWTALK_WINDOWS_SERVER_ZIP: ${{ steps.api2fixture.outputs.zip }}
+        run: |
+          node apps/manager/windows/scripts/windows-manager-smoke.mjs --scm --protected-migration-prepare
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node apps/manager/windows/scripts/windows-manager-smoke.mjs --scm --protected-migration
+        timeout-minutes: 25
       - name: Upload Windows Server package
         if: steps.scope.outputs.server == 'true' && matrix.runner == 'windows-2025'
         uses: actions/upload-artifact@v6

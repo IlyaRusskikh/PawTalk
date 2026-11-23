@@ -1,0 +1,345 @@
+{
+  "policy": {
+    "owner": "owner",
+    "order": [
+      "allow",
+      "deny",
+      "mod",
+      "admin"
+    ],
+    "roles": {
+      "@everyone": {
+        "grants": [
+          "channel.view",
+          "message.send",
+          "history.full",
+          "poll.vote",
+          "message.attach",
+          "message.voice",
+          "voice.connect"
+        ]
+      },
+      "allow": {},
+      "deny": {},
+      "mod": {
+        "grants": [
+          "member.kick",
+          "voice.mute",
+          "message.delete-other",
+          "channel.access.edit"
+        ]
+      },
+      "admin": {
+        "grants": [
+          "server.administrator"
+        ]
+      }
+    }
+  },
+  "subjects": {
+    "owner": {
+      "id": "owner",
+      "active": true
+    },
+    "member": {
+      "id": "member",
+      "active": true,
+      "roles": [
+        "deny",
+        "allow"
+      ]
+    },
+    "personal": {
+      "id": "personal",
+      "active": true,
+      "roles": [
+        "allow"
+      ]
+    },
+    "granted": {
+      "id": "granted",
+      "active": true,
+      "roles": [
+        "deny"
+      ]
+    },
+    "staff": {
+      "id": "mod",
+      "active": true,
+      "roles": [
+        "mod"
+      ]
+    },
+    "peer": {
+      "id": "peer",
+      "active": true,
+      "roles": [
+        "mod"
+      ]
+    },
+    "admin": {
+      "id": "admin",
+      "active": true,
+      "roles": [
+        "admin"
+      ],
+      "timeoutUntil": 2
+    },
+    "banned": {
+      "id": "banned"
+    },
+    "none": {}
+  },
+  "scopes": {
+    "server": {},
+    "voice": {
+      "kind": "voice"
+    },
+    "text": {
+      "kind": "text",
+      "synchronized": true,
+      "category": {
+        "roles": {
+          "@everyone": {
+            "deny": [
+              "message.send"
+            ]
+          },
+          "allow": {
+            "allow": [
+              "message.send"
+            ]
+          },
+          "deny": {
+            "deny": [
+              "message.send"
+            ]
+          }
+        },
+        "profiles": {
+          "personal": {
+            "deny": [
+              "message.send"
+            ]
+          },
+          "granted": {
+            "allow": [
+              "message.send"
+            ]
+          },
+          "admin": {
+            "deny": [
+              "channel.view"
+            ]
+          }
+        }
+      },
+      "local": {
+        "roles": {
+          "@everyone": {
+            "deny": [
+              "channel.view"
+            ]
+          }
+        }
+      }
+    },
+    "hidden": {
+      "kind": "text",
+      "local": {
+        "roles": {
+          "@everyone": {
+            "deny": [
+              "channel.view"
+            ]
+          }
+        }
+      }
+    },
+    "noFiles": {
+      "kind": "text",
+      "local": {
+        "roles": {
+          "@everyone": {
+            "deny": [
+              "message.attach"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "Role allow wins",
+      "actor": "member",
+      "target": "none",
+      "scope": "text",
+      "permission": "message.send",
+      "want": "allowed"
+    },
+    {
+      "name": "Personal deny wins",
+      "actor": "personal",
+      "target": "none",
+      "scope": "text",
+      "permission": "message.send",
+      "want": "missing_grant"
+    },
+    {
+      "name": "Personal allow wins",
+      "actor": "granted",
+      "target": "none",
+      "scope": "text",
+      "permission": "message.send",
+      "want": "allowed"
+    },
+    {
+      "name": "Admin bypasses ACL for history",
+      "actor": "admin",
+      "target": "none",
+      "scope": "text",
+      "permission": "history.full",
+      "want": "allowed"
+    },
+    {
+      "name": "Admin subject to timeout",
+      "actor": "admin",
+      "target": "none",
+      "scope": "text",
+      "permission": "message.send",
+      "want": "timed_out"
+    },
+    {
+      "name": "Administrator cannot kick owner",
+      "actor": "admin",
+      "target": "owner",
+      "scope": "server",
+      "permission": "member.kick",
+      "want": "hierarchy_denied"
+    },
+    {
+      "name": "Owner can kick admin",
+      "actor": "owner",
+      "target": "admin",
+      "scope": "server",
+      "permission": "member.kick",
+      "want": "allowed"
+    },
+    {
+      "name": "Kick lower rank",
+      "actor": "staff",
+      "target": "member",
+      "scope": "server",
+      "permission": "member.kick",
+      "want": "allowed"
+    },
+    {
+      "name": "Kick peer",
+      "actor": "staff",
+      "target": "peer",
+      "scope": "server",
+      "permission": "member.kick",
+      "want": "hierarchy_denied"
+    },
+    {
+      "name": "Mute peer",
+      "actor": "staff",
+      "target": "peer",
+      "scope": "voice",
+      "permission": "voice.mute",
+      "want": "allowed"
+    },
+    {
+      "name": "Lift mute on higher rank",
+      "actor": "staff",
+      "target": "admin",
+      "scope": "voice",
+      "permission": "voice.mute",
+      "want": "allowed",
+      "lift": true
+    },
+    {
+      "name": "Lift own timeout",
+      "actor": "admin",
+      "target": "admin",
+      "scope": "server",
+      "permission": "member.timeout",
+      "want": "allowed",
+      "lift": true
+    },
+    {
+      "name": "No content immunity",
+      "actor": "staff",
+      "target": "owner",
+      "scope": "text",
+      "permission": "message.delete-other",
+      "want": "allowed"
+    },
+    {
+      "name": "Banned actor cannot lift ban",
+      "actor": "banned",
+      "target": "banned",
+      "scope": "server",
+      "permission": "member.ban",
+      "want": "inactive",
+      "lift": true
+    },
+    {
+      "name": "Owner cannot use unknown permission",
+      "actor": "owner",
+      "target": "none",
+      "scope": "server",
+      "permission": "unknown",
+      "want": "invalid_action"
+    },
+    {
+      "name": "Owner cannot send in voice",
+      "actor": "owner",
+      "target": "none",
+      "scope": "voice",
+      "permission": "message.send",
+      "want": "wrong_scope"
+    },
+    {
+      "name": "Attachment requires send",
+      "actor": "personal",
+      "target": "none",
+      "scope": "text",
+      "permission": "message.attach",
+      "want": "missing_grant"
+    },
+    {
+      "name": "Voting independent of send",
+      "actor": "personal",
+      "target": "none",
+      "scope": "text",
+      "permission": "poll.vote",
+      "want": "allowed"
+    },
+    {
+      "name": "Voice message independent of attachments",
+      "actor": "member",
+      "target": "none",
+      "scope": "noFiles",
+      "permission": "message.voice",
+      "want": "allowed"
+    },
+    {
+      "name": "Own channel rules can deny visibility",
+      "actor": "member",
+      "target": "none",
+      "scope": "hidden",
+      "permission": "channel.view",
+      "want": "channel_restricted"
+    },
+    {
+      "name": "Personal ACL requires lower rank",
+      "actor": "staff",
+      "target": "peer",
+      "scope": "text",
+      "permission": "channel.access.edit",
+      "want": "hierarchy_denied"
+    }
+  ]
+}

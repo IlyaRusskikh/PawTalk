@@ -29,6 +29,7 @@ const state:ServerState={serverId:sid,name:'Synthetic chat server',revision:1,co
 const features=new URLSearchParams(location.search).has('features');
 if(features){state.capabilities=['polls-v1'];state.members=[{profileId:me,online:true,role:'member'},{profileId:friend,online:true,role:'member'}];}
 if(new URLSearchParams(location.search).has('compose'))state.capabilities=['checklists-v1','media-files-v1','media-gallery-v1'];
+if(new URLSearchParams(location.search).has('media-variants'))state.capabilities?.push('media-variants-v1');
 const checklistStates=new Map<number,Record<string,boolean>>();const checklistVersions=new Map<number,number>();test.checklistReads=0;
  test.enableChecklistWS=()=>{state.eventsLive=true;state.capabilities=[...(state.capabilities||[]),'checklist-events-v1'];refresh();};
  test.pushChecklist=(messageId:number,checked:Record<string,boolean>,revision:number)=>{checklistStates.set(messageId,checked);checklistVersions.set(messageId,revision);for(const fn of liveListeners)fn({serverId:sid,type:'chat',channelId:cid,checklists:[{messageId,revision,checked}]});};
@@ -40,6 +41,7 @@ test.sendRequests=[];test.read=[];test.failNext=false;test.hold=false;test.relea
 test.setBatch=(size:number)=>{localStorage.setItem('pawtalk.chat.window',String(size));refresh();};
 test.extendHistory=(last:number)=>{for(let id=records.at(-1)!.id+1;id<=last;id++)records.push({id,channelId:cid,authorProfileId:friend,requestId:id.toString(16).padStart(32,'0'),sentAt:1700000000000+id*1000,content:{text:'Extended history '+id}});state.channels[0].lastMessageId=last;state.channels[0].messageRevision++;refresh();};
 const attachmentBytes=new Map<string,{bytes:Uint8Array;mime:string}>();let attachmentSequence=32;
+test.attachmentReads = [];
 let releaseUpload:undefined|(()=>void);test.releaseUpload=()=>releaseUpload?.();
 test.attachImage=()=>{const input=document.querySelector<HTMLInputElement>('.chat-compose input[type=file]')!,data=new DataTransfer(),bytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aEAAAAABJRU5ErkJggg=='),c=>c.charCodeAt(0));data.items.add(new File([bytes],'pending.png',{type:'image/png'}));input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));};
 test.confirmPending=()=>{const input=test.sendRequests.at(-1),channel=state.channels.find(c=>c.id===input.channelId)!,previous=channel.messageRevision,id=Math.max(...records.map(m=>m.id))+1,row:Message={id,channelId:input.channelId,authorProfileId:me,requestId:input.requestId,sentAt:Date.now(),content:structuredClone(input.content)};records.push(row);channel.lastMessageId=id;channel.messageRevision++;state.eventsLive=true;for(const fn of liveListeners)fn({serverId:sid,channelId:input.channelId,type:'chat',delivery:true,previous,revision:channel.messageRevision,first:records[0].id,last:id,messages:[structuredClone(row)],deleted:[]});refresh();return id;};
@@ -53,7 +55,7 @@ test.desktop={onMembershipServerEvent:(listener:(event:any)=>void)=>{liveListene
  if(action==='gif.load'){test.gifLoads++;return{value:{mime:'image/gif',base64:'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'}};}
  if(action==='gif.resolve')return{value:['https://gif.example.test/no-extension','https://klipy.com/gifs/rat-eat-pog','https://tenor.com/search/meow-gifs',localizedTenor].includes(input.url)?{url:'https://gif.example.test/animated.gif'}:null};
  if(action==='upload.file'){test.mediaBytes=input.bytes;const id=(++attachmentSequence).toString(16).padStart(32,'0');attachmentBytes.set(id,input);return{value:{id,mime:input.mime}};}
- if(action==='file')return{value:attachmentBytes.get(input.attachmentId)?.bytes||test.mediaBytes};
+ if(action==='file'){test.attachmentReads.push(input.attachmentId);return{value:attachmentBytes.get(input.attachmentId)?.bytes||test.mediaBytes};}
  if(action==='image'&&attachmentBytes.has(input.attachmentId)){const record=attachmentBytes.get(input.attachmentId)!;return{value:'data:'+record.mime+';base64,'+btoa(String.fromCharCode(...record.bytes))};}
  if(action==='image'){const canvas=document.createElement('canvas'),portrait=input.attachmentId==='9'.repeat(32);canvas.width=portrait?800:320;canvas.height=portrait?1200:180;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#888';ctx.fillRect(0,0,canvas.width,canvas.height);return{value:canvas.toDataURL('image/png')};}
  if(action==='memory.status')return{value:{low:!!test.lowMemory}};

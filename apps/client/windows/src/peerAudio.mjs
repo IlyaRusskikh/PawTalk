@@ -8,6 +8,9 @@ export function loadPeerAudio(storage){
  }catch{return {};}
 }
 export function savePeerAudio(storage,value){storage.setItem(peerAudioStorageKey,JSON.stringify(value));}
-export function projectPeerAudio(saved,serverId,presences,resolve){
- return Object.fromEntries(presences.map(presence=>[presence.identity,saved[serverId+':'+resolve(presence.profileId)]||{volume:1,muted:false}]));
+export function projectPeerAudio(saved,serverId,presences,resolve=profileId=>profileId){
+ return Object.fromEntries(presences.flatMap(presence => {
+  const identity = presence.identity ?? presence.sessionId;
+  return identity ? [[identity, saved[serverId+':'+resolve(presence.profileId)] ?? {volume:1,muted:false}]] : [];
+ }));
 }

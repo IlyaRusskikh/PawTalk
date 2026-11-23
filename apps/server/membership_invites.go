@@ -246,7 +246,7 @@ func (s *membershipStore) createInvite(ctx context.Context, token string, input 
 	})
 }
 
-func (s *membershipStore) memberBannedTx(ctx context.Context, tx *sql.Tx, profile string) error {
+func (s *membershipStore) memberBannedTx(ctx context.Context, tx membershipIdentityQuery, profile string) error {
 	var count int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM ban_subjects s JOIN ban_actions a ON a.ban_id=s.ban_id WHERE s.profile_id=? AND a.revoked_at IS NULL AND (a.expires_at IS NULL OR a.expires_at>?)`, profile, s.now().UnixMilli()).Scan(&count); err != nil {
 		return err

@@ -26,6 +26,7 @@ async function test(window){
   await run(`[...document.querySelectorAll('.member-home-navigation button')].find(e=>e.textContent.includes(${JSON.stringify(t('Создать сервер'))})).click()`);
   assert.equal(await run("getComputedStyle(document.querySelector('dialog .form-fields')).gap"),'20px');
   assert.equal(await run("!!document.querySelector('dialog input[type=password],dialog .encryption-toggle')"),false);
+  assert.equal(await run("!!document.querySelector('dialog form select')"),false,'the host form offers only protected access');
   port=18443;await require('../electron/selfhost.cjs').checkPorts(port);
   assert.ok(port,'free room port group');
   await new Promise((resolve,reject)=>{occupied.once('error',reject);occupied.listen(port,'0.0.0.0',resolve);});
@@ -38,10 +39,17 @@ async function test(window){
   await run("document.querySelector('dialog form').requestSubmit()");
   await until("window.desktop.hostStatus().then(s=>s.running)",'actual host starts');
   await until("!!document.querySelector('.member-channel')&&!document.querySelector('dialog')",'creator joins automatically');
-  host=await run('window.desktop.hostStatus()');assert.equal(host.e2ee,true);assert.ok(host.serverId);assert.ok(!host.bootstrap&&!host.secret&&!host.password);
-  const state=await run(`window.desktop.membership('connect',{serverId:${JSON.stringify(host.serverId)}})`);assert.equal(state.value.self.role,'admin');assert.equal(state.value.channels.length,2);
+  host=await run('window.desktop.hostStatus()');assert.equal(host.e2ee,true);assert.equal(host.apiProtocolVersion,3);
+  assert.ok(host.serverId);assert.ok(!host.bootstrap&&!host.protectedBootstrap&&!host.secret&&!host.password);
+  const state=await run(`window.desktop.membership('connect',{serverId:${JSON.stringify(host.serverId)}})`);
+  assert.equal(state.value.canManageChannels,true);
+  assert.equal(state.value.apiProtocolVersion,3);
+  assert.equal(state.value.channels.length,2);
   assert.equal(await run("!!document.querySelector('.member-audio-buttons .person-network')"),false,'creating server does not enter voice');
-  const link=await run(`window.desktop.membership('invite',{serverId:${JSON.stringify(host.serverId)},kind:'single'})`);assert.match(link.value,/#v=2&/);assert.ok(new URL(link.value).hash.includes('open='));
+  const link=await run(`window.desktop.membership('invite',{serverId:${JSON.stringify(host.serverId)},kind:'single'})`);
+  const payload=new URLSearchParams(new URL(link.value).hash.slice(1));
+  assert.equal(payload.get('v'),'3');
+  assert.ok(payload.get('anchor'));
   await run("document.querySelector('.member-server-list button').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:45,clientY:120}))");
   await run(`[...document.querySelectorAll('[role=menuitem]')].find(e=>e.textContent===${JSON.stringify(t('Выйти с сервера'))}).click()`);
   assert.equal(await run("document.querySelector('dialog h2').textContent"),t('Остановить сервер и выйти?'));
@@ -53,6 +61,6 @@ async function test(window){
   await until("!document.querySelector('dialog')",'host cleanup completes');
   assert.equal((await run('window.desktop.hostStatus()')).running,false);
   const invalid=await run('window.desktop.checkHost(1).then(()=>null,e=>e.message)');assert.equal(invalid,t('Укажите порт от 1024 до 65532.'));
-  console.log(`PASS actual selfhost IPC/UI, occupied port, creator admin, mandatory E2EE, timed invite, chat-only and stop cleanup (${language}, reduced=${reduced})`);
+  console.log(`PASS actual selfhost API 3 IPC/UI, occupied port, creator rights, mandatory E2EE, timed invite and stop cleanup (${language}, reduced=${reduced})`);
  }finally{if(occupied.listening)await new Promise(resolve=>occupied.close(resolve));await run('window.desktop.stopHost()').catch(()=>{});}
 }

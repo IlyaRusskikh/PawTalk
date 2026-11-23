@@ -2,8 +2,10 @@ const { app } = require('electron');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const { waitForHelper, helperLaunch } = require('../electron/update-progress.cjs');
+const directory = process.env.PAWTALK_HANDOFF_DIRECTORY;
+app.setPath('userData', directory);
+app.disableHardwareAcceleration();
 app.whenReady().then(async () => {
-  const directory = process.env.PAWTALK_HANDOFF_DIRECTORY;
   const childPid = path.join(directory, 'child-pid');
   const ready = path.join(directory, 'ready');
   const done = path.join(directory, 'done');

@@ -37,6 +37,35 @@ export function reviewServerPaths(profile) {
 async function run(file, args, env, timeout = 15000) {
   return (await execute(file, args, {cwd: repositoryRoot, env, windowsHide: true, timeout, maxBuffer: 1024 * 1024})).stdout.trim();
 }
+async function stopOrphanedReviewMedia(mediaPath) {
+  // A forcibly terminated Windows server can leave LiveKit holding the binary and ports.
+  // Only recover the executable belonging to this locked review profile.
+  const script = `
+    $ErrorActionPreference = 'Stop'
+    $media = Get-CimInstance Win32_Process -Filter "Name = 'livekit-server.exe'"
+    foreach ($candidate in $media) {
+      if ($candidate.ExecutablePath -ne $env:PAWTALK_REVIEW_MEDIA_PATH) { continue }
+      $parent = Get-CimInstance Win32_Process -Filter "ProcessId = $($candidate.ParentProcessId)"
+      if ($parent -and $parent.CreationDate -le $candidate.CreationDate) { continue }
+      $process = Get-Process -Id $candidate.ProcessId -ErrorAction SilentlyContinue
+      if (!$process -or $process.Path -ne $candidate.ExecutablePath) { continue }
+      try {
+        $process.Kill()
+        if (!$process.WaitForExit(5000)) { throw 'Orphaned review LiveKit did not exit' }
+      } catch {
+        if (!$process.HasExited) { throw }
+      } finally {
+        $process.Dispose()
+      }
+    }
+  `;
+  try {
+    await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
+      {...process.env, PAWTALK_REVIEW_MEDIA_PATH: mediaPath});
+  } catch (error) {
+    throw Error('Could not clean up the previous review LiveKit process: ' + (error.stderr?.trim() || error.message));
+  }
+}
 export async function stopReviewServer(options) {
   const paths = reviewServerPaths(options.profile);
   const raw = await readFile(paths.runtime, 'utf8').catch(error=>{if(error.code==='ENOENT')return null;throw error;});
@@ -77,6 +106,7 @@ export async function startReviewServer(options, {build = true, quiet = false} =
   })();
   try {
     await lock.writeFile(JSON.stringify({pid: process.pid, pipe, token}) + '\n');
+    await stopOrphanedReviewMedia(paths.media);
     await checkPorts(options.port);
     await mkdir(path.dirname(paths.binary), {recursive: true});
     if (build) {
@@ -85,7 +115,8 @@ export async function startReviewServer(options, {build = true, quiet = false} =
       await copyFile(path.join(repositoryRoot, 'resources/server/livekit-server.exe'), paths.media);
     }
     const env = {...process.env, PAWTALK_DATA_DIR: paths.data, PAWTALK_PUBLIC_IP: options.ip,
-      PAWTALK_PORT: String(options.port), PAWTALK_LIVEKIT_EXECUTABLE: paths.media, PAWTALK_MANAGED_STDIN: 'true'};
+      PAWTALK_PORT: String(options.port), PAWTALK_LIVEKIT_EXECUTABLE: paths.media, PAWTALK_MANAGED_STDIN: 'true',
+      PAWTALK_STANDALONE_AUTO_MIGRATION: 'true'};
     child = spawn(paths.binary, ['serve'], {env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']});
     child.stdin.on('error', () => {});
     let diagnostics = '';
@@ -132,6 +163,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     else {
       const server = await startReviewServer(options);
       console.log(`Review server ready: ${server.address}\nData: ${server.paths.data}`);
+      if (server.status.maintenance) console.log('Open this server in the owner’s review Client and confirm the API 3 migration.');
       if (!server.status.initialized) console.log(`First administrator invitation: ${server.paths.invitation}\nPaste the file contents into the review Client's Join dialog. This is a private one-time link.`);
       console.log('Use npm run review in another terminal. Stop with Ctrl+C or npm run review:server -- --stop (same --profile if selected).');
       const shutdown = () => void server.stop();

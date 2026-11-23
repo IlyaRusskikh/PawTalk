@@ -78,7 +78,10 @@ app.whenReady().then(async()=>{
    await capture(`release/qa/manager-${language}-${reduced?'reduced':'normal'}-local-package.png`);
    await click(t('cancel'));
    assert.equal(await run(`window.managerFixture.calls().filter(c=>c.action==='install-server-package').length`),0,'selecting or canceling never installs executable code');
-   await click(t('backups'));await click(t('restoreBackup'));await until(`!!document.querySelector('dialog[open]')`,'restore warning');await click(t('cancel'));
+   await click(t('backups'));await click(t('restoreBackup'));await until(`!!document.querySelector('dialog[open]')`,'restore warning');
+   const freshness = language === 'ru' ? 'сведения новее копии' : 'evidence newer than the backup';
+   assert.ok(await run(`document.querySelector('dialog').textContent.includes(${JSON.stringify(freshness)})`),'restore explains the evidence needed to detect a rollback');
+   await click(t('cancel'));
    const deletionCount=await run(`window.managerFixture.calls().filter(c=>c.action==='backup-delete').length`);
    const rowCenters=await run(`Array.from(document.querySelectorAll('.backup-row .modal-actions button')).map(b=>{const r=b.getBoundingClientRect();return r.y+r.height/2;})`);
    assert.ok(Math.max(...rowCenters)-Math.min(...rowCenters)<1,'backup action centers align');

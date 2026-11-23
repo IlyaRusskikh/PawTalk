@@ -16,6 +16,7 @@ const config={
   "files": [
     "apps/client/windows/dist/**/*",
     "apps/client/windows/electron/**/*",
+    "apps/server/internal/access/catalog.json",
     "shared/**/*",
     "package.json",
     "THIRD_PARTY_NOTICES.md",

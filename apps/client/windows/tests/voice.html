@@ -35,7 +35,22 @@ window.renderParticipants = () => {
 window.snapshot = {};
 c.onUpdate = value => { window.snapshot = value; };
 c.onError = message => { window.lastError = message; };
-window.start = async data => { await c.connect(data.url,data.token,{required:data.e2eeRequired,key:data.e2eeKey}); c.setMute(false,false); c.setPtt(true); };
+window.start = async data => {
+ if (data.voiceEpoch) {
+  window.nextVoiceKey = undefined;
+  window.nextVoiceGrant = undefined;
+  window.grantRequests = 0;
+  await c.connectProtected({
+   join: async () => ({ ...data, key: data.e2eeKey, epoch: data.voiceEpoch }),
+   refresh: async epochId => window.nextVoiceKey?.epochId !== epochId ? window.nextVoiceKey ?? null : null,
+   reconnect: async () => { window.grantRequests++; return window.nextVoiceGrant; },
+   leave: async () => {},
+  });
+ } else {
+  await c.connect(data.url,data.token,{required:data.e2eeRequired,key:data.e2eeKey});
+ }
+ c.setMute(false,false); c.setPtt(true);
+};
 let decodedEnergy = 0;
 const meters = new Map();
 setInterval(() => {

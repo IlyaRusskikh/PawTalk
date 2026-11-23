@@ -43,6 +43,7 @@ Response times and fix timelines are not guaranteed. Security fixes are shipped 
 ### Known limitations
 
 - API 2 in the development tree requires E2EE for voice, text and attachments. Clients create and retain the root; the server stores encrypted packages. This does not update published API 1 binaries. [E2EE model](architecture/security.en.md).
-- Leaving, kicks and bans revoke server access but cannot erase delivered data or keys. Automatic rotation and forward secrecy are absent. The server sees metadata, roles and presence; issued LiveKit tokens retain a documented reuse window.
+- In API 2, leaving, kicks and bans revoke server access. Already delivered data and keys remain on the recipients' devices, and the shared root stays in use. The server sees metadata, roles and presence. Issued LiveKit tokens retain a documented reuse window.
+- Protected-access development builds using API 3 apply channel-specific admission, scoped history keys and key rotation on revocation. Recipients retain previously delivered data and keys. See the [API 3 security boundaries](architecture/security.en.md#protected-access-in-api-3-development-builds).
 - Windows installers are not yet Authenticode-signed. Published SHA-256 checksums and Ed25519-signed update manifests serve different purposes and do not replace a Windows publisher signature. [Updates](architecture/updates.en.md).
 - Hardware acceptance remains open for physical microphones, game/PTT behavior, external networks, and 30-participant loads. [Acceptance checklist](architecture/verification.en.md).

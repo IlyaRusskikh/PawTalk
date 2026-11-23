@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 // Each language/motion combination uses a fresh actual main/preload process.
-for (const language of ['ru', 'en']) for (const reduced of ['0', '1']) {
+const scenarios = ['ru', 'en'].flatMap(language => ['0', '1'].map(reduced => ({ language, reduced })));
+for (const { language, reduced } of scenarios) {
   const env = { ...process.env, PAWTALK_TEST_LANGUAGE: language, PAWTALK_TEST_REDUCED: reduced };
   delete env.ELECTRON_RUN_AS_NODE;
   const code = await new Promise((resolve, reject) => {

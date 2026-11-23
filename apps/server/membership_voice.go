@@ -8,18 +8,23 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type memberVoice struct {
-	URL          string `json:"url"`
-	Token        string `json:"token"`
-	ChannelID    string `json:"channelId"`
-	Identity     string `json:"identity"`
-	Room         string `json:"room"`
-	ExpiresAt    int64  `json:"expiresAt"`
-	E2EERequired bool   `json:"e2eeRequired"`
+	URL            string `json:"url"`
+	Token          string `json:"token"`
+	ChannelID      string `json:"channelId"`
+	Identity       string `json:"identity"`
+	Room           string `json:"room"`
+	ExpiresAt      int64  `json:"expiresAt"`
+	E2EERequired   bool   `json:"e2eeRequired"`
+	KeyEpoch       string `json:"keyEpoch,omitempty"`
+	ServerDeafened bool   `json:"serverDeafened,omitempty"`
 }
 
 func signedMediaClaims(cfg config, claims map[string]any) (string, error) {
@@ -157,21 +162,49 @@ func (a *membershipAPI) mediaRPC(ctx context.Context, room, method string, body 
 	if room == "" || a.cfg.PresenceURL == "" {
 		return
 	}
-	claims := map[string]any{"iss": a.cfg.APIKey, "sub": "pawtalk-control", "nbf": a.store.now().Unix() - 5, "exp": a.store.now().Unix() + 30, "video": map[string]any{"roomAdmin": true, "room": room}}
-	token, err := signedMediaClaims(a.cfg, claims)
-	if err != nil {
-		return
+	_ = callRoomService(ctx, a.cfg, a.store.now(), room, method, body)
+}
+
+func callRoomService(ctx context.Context, cfg config, now time.Time, room, method string, body any) error {
+	return roomServiceJSON(ctx, cfg, now, room, method, body, nil)
+}
+
+type mediaResponseError struct{ Status int }
+
+func (e mediaResponseError) Error() string {
+	return fmt.Sprintf("media control returned HTTP %d", e.Status)
+}
+
+func roomServiceJSON(ctx context.Context, cfg config, now time.Time, room, method string, body, result any) error {
+	if room == "" || cfg.PresenceURL == "" {
+		return errors.New("media control is unavailable")
 	}
-	payload, _ := json.Marshal(body)
-	request, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(a.cfg.PresenceURL, "/")+"/twirp/livekit.RoomService/"+method, bytes.NewReader(payload))
+	claims := map[string]any{"iss": cfg.APIKey, "sub": "pawtalk-control", "nbf": now.Unix() - 5, "exp": now.Unix() + 30, "video": map[string]any{"roomAdmin": true, "room": room}}
+	token, err := signedMediaClaims(cfg, claims)
 	if err != nil {
-		return
+		return err
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(cfg.PresenceURL, "/")+"/twirp/livekit.RoomService/"+method, bytes.NewReader(payload))
+	if err != nil {
+		return err
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer "+token)
-	client := &http.Client{Timeout: 3_000_000_000, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return errors.New("media redirect forbidden") }}
+	client := &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return errors.New("media redirect forbidden") }}
 	response, err := client.Do(request)
-	if err == nil {
-		response.Body.Close()
+	if err != nil {
+		return err
 	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return mediaResponseError{Status: response.StatusCode}
+	}
+	if result != nil {
+		return json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(result)
+	}
+	return nil
 }

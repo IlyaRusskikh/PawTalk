@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react';
 
-type Placement = { ids: string[]; tops: number[]; steps: number[]; from: number; to: number; commit(ids: string[]): void };
+type Placement = { ids: string[]; tops: number[]; steps: number[]; from: number; to: number; commit(ids: string[], movedId: string): void };
 
 // Use a separate transparent surface: Chromium otherwise captures the sidebar
 // behind rounded buttons as part of its native drag image.
@@ -18,7 +18,7 @@ export function setTransparentDragImage(event: DragEvent<HTMLElement>) {
   setTimeout(() => surface.remove(), 0);
 }
 
-export function useReorderDrag(ids: string[], commit: (ids: string[]) => void) {
+export function useReorderDrag(ids: string[], commit: (ids: string[], movedId: string) => void) {
   const drag = useRef<Placement | undefined>(undefined), suppressClick = useRef(0);
   const [placement, setPlacement] = useState<Placement>();
   const signature = JSON.stringify(ids), latest = useRef(signature); latest.current = signature;
@@ -53,7 +53,8 @@ export function useReorderDrag(ids: string[], commit: (ids: string[]) => void) {
       const to = slot(event, current), valid = JSON.stringify(current.ids) === latest.current;
       end();
       if (!valid || to === current.from) return;
-      const next = [...current.ids]; next.splice(to, 0, next.splice(current.from, 1)[0]); current.commit(next);
+      const next = [...current.ids]; const [movedId] = next.splice(current.from, 1);
+      next.splice(to, 0, movedId); current.commit(next, movedId);
     },
   };
   function item(id: string) {

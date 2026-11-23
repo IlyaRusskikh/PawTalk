@@ -150,6 +150,11 @@ func TestPurgeBoundaryAndOwnership(t *testing.T) {
 }
 
 func TestWindowsBootstrapRoutes(t *testing.T) {
+	for _, action := range []string{"prepare", "status", "activate", "rollback"} {
+		if !bootstrapCommand([]string{"--lang", "en", "migration", action}) {
+			t.Fatalf("Windows migration %s must use the installed Manager", action)
+		}
+	}
 	for _, args := range [][]string{{"--help"}, {"-h"}, {"logs"}, {"uninstall", "--keep-data"}, {"manager-install"}, {"status"}, {"doctor"}, {"backup", "list"}, {"configure"}, {"setup"}, {"update", "check"}, {"manager", "now"}, {"--self-test"}, {"install"}, {"--lang", "ru", "install"}, {"initial-admin", "--url"}, {"--lang", "en", "initial-admin", "--url"}, {"settings"}, {"settings", "--apply"}, {"desktop", "snapshot"}, {"periodic"}, {"--lang", "en", "health"}, {"run-server"}} {
 		if !bootstrapCommand(args) {
 			t.Fatal("Windows UX used a downloaded older Manager", args)

@@ -1,10 +1,35 @@
 // Parse a bounded, HTML-free subset of Discord Markdown. Never interpret HTML.
-export function inlineMarkdown(text, depth = 0) {
+function mentionAt(text, mentions, start, offset) {
+  const end = mentions?.get(offset + start);
+  if (end > offset + start && end <= offset + text.length) {
+    return { type: 'mention', text: text.slice(start, end - offset) };
+  }
+}
+
+function literalText(text, mentions, offset) {
+  if (!mentions?.size) return [text];
+  const nodes = [];
+  let pending = 0;
+  for (let i = 0; i < text.length;) {
+    const mention = mentionAt(text, mentions, i, offset);
+    if (!mention) { i++; continue; }
+    if (pending < i) nodes.push(text.slice(pending, i));
+    nodes.push(mention);
+    i += mention.text.length;
+    pending = i;
+  }
+  if (pending < text.length) nodes.push(text.slice(pending));
+  return nodes;
+}
+
+export function inlineMarkdown(text, depth = 0, mentions, offset = 0) {
   if (depth > 12) return [text];
   const nodes = [];
   const add = value => { if (typeof value === 'string' && typeof nodes.at(-1) === 'string') nodes[nodes.length - 1] += value; else nodes.push(value); };
   const marks = [['***', 'boldItalic'], ['**', 'bold'], ['__', 'underline'], ['~~', 'strike'], ['||', 'spoiler'], ['*', 'italic'], ['_', 'italic']];
   for (let i = 0; i < text.length;) {
+    const mention = mentionAt(text, mentions, i, offset);
+    if (mention) { add(mention); i += mention.text.length; continue; }
     if (text[i] === '\\' && /[\\*_~|`\[\]()]/.test(text[i + 1] ?? '')) { add(text[i + 1]); i += 2; continue; }
     if (text[i] === '`') {
       const mark = text.startsWith('``', i) ? '``' : '`';
@@ -16,7 +41,9 @@ export function inlineMarkdown(text, depth = 0) {
     if (link) {
       const url = link[2] ?? link[1];
       try { const parsed = new URL(url); if (['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password) {
-        add({ type: 'link', url, children: [link[2] ? link[1] : url] }); i += link[0].length; continue;
+        const label = link[2] ? link[1] : url;
+        add({ type: 'link', url, children: literalText(label, mentions, offset + i + (link[2] ? 1 : 0)) });
+        i += link[0].length; continue;
       } } catch { /* Render malformed URLs as ordinary text. */ }
     }
     let matched = false;
@@ -26,7 +53,7 @@ export function inlineMarkdown(text, depth = 0) {
       while (end >= 0 && text[end - 1] === '\\') end = text.indexOf(mark, end + mark.length);
       if (end <= i + mark.length) continue;
       if (mark === '**' || mark === '__') while (text[end + mark.length] === mark[0]) end++;
-      add({ type, children: inlineMarkdown(text.slice(i + mark.length, end), depth + 1) });
+      add({ type, children: inlineMarkdown(text.slice(i + mark.length, end), depth + 1, mentions, offset + i + mark.length) });
       i = end + mark.length; matched = true; break;
     }
     if (!matched) add(text[i++]);
@@ -34,8 +61,15 @@ export function inlineMarkdown(text, depth = 0) {
   return nodes;
 }
 
-export function messageMarkdown(text) {
+export function messageMarkdown(text, verifiedMentions) {
   const lines = text.split('\n'), nodes = [];
+  const mentions = verifiedMentions?.length ? new Map(verifiedMentions.map(({ start, end }) => [start, end])) : undefined;
+  let cursor = 0;
+  const offsets = lines.map(line => {
+    const offset = cursor;
+    cursor += line.length + 1;
+    return offset;
+  });
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.startsWith('```')) {
@@ -45,16 +79,29 @@ export function messageMarkdown(text) {
     }
     if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { nodes.push({type:'rule'}); continue; }
     if (line.includes('|') && i+1<lines.length && lines[i+1].trim().replace(/^\||\|$/g,'').split('|').every(cell=>/^\s*:?-{3,}:?\s*$/.test(cell))) {
-      const cells = row => row.trim().replace(/^\||\|$/g,'').split('|').map(cell=>({type:'cell',children:inlineMarkdown(cell.trim())}));
-      const rows=[{type:'header',children:cells(line)}];i++;
-      while(i+1<lines.length && lines[i+1].includes('|'))rows.push({type:'row',children:cells(lines[++i])});
+      const cells = (row, rowOffset) => {
+        const trimmed = row.trim();
+        let cellOffset = rowOffset + row.length - row.trimStart().length + Number(trimmed.startsWith('|'));
+        return trimmed.replace(/^\||\|$/g, '').split('|').map(cell => {
+          const children = inlineMarkdown(cell.trim(), 0, mentions, cellOffset + cell.length - cell.trimStart().length);
+          cellOffset += cell.length + 1;
+          return { type: 'cell', children };
+        });
+      };
+      const rows = [{ type: 'header', children: cells(line, offsets[i]) }];
+      i++;
+      while (i + 1 < lines.length && lines[i + 1].includes('|')) {
+        i++;
+        rows.push({ type: 'row', children: cells(lines[i], offsets[i]) });
+      }
       nodes.push({type:'table',children:rows});continue;
     }
     const heading = line.match(/^(#{1,6})\s+(.+)$/);
     const quote = line.match(/^>\s?(.*)$/);
     const list = line.match(/^([-*]|\d+\.)\s+(.+)$/);
+    const body = heading?.[2] ?? quote?.[1] ?? list?.[2] ?? line;
     nodes.push({ type: heading ? 'heading' : quote ? 'quote' : list ? 'item' : 'line', level: heading?.[1].length, marker: list?.[1],
-      children: inlineMarkdown(heading?.[2] ?? quote?.[1] ?? list?.[2] ?? line) });
+      children: inlineMarkdown(body, 0, mentions, offsets[i] + line.length - body.length) });
   }
   return nodes;
 }

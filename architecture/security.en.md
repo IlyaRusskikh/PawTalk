@@ -2,6 +2,16 @@
 
 [Русский](security.ru.md) · [Index](README.md)
 
+## Protected access in API 3 development builds
+
+Server applies signed policy changes and checks current membership, device identity, channel access and history position when serving protected data. Client verifies the relevant policy and epoch proofs. Live keys, archive keys and attachment keys have separate purposes. Archive packages follow the granted history scope. Clients prepare addressed recovery packages and keep private device keys and recovery codes in their own custody.
+
+Revocation stops delivery to the removed recipient and starts rotation. Still-admitted writers may use an allowed previous generation for up to 60 seconds from the effective revoke. A new rotation leaves that deadline in place. Previously delivered data and keys remain on the devices that obtained them. The room avatar has a separate key with device and recovery packages.
+
+Server sees operational metadata. LiveKit media grants have a finite lifetime. The [implementation map](../agents/decisions/012-protected-access.en.md) and [acceptance matrix](../agents/testing/protected-access-acceptance.md) record the checks and available environments.
+
+## API 2
+
 API 2 requires end-to-end encryption of **voice, text and image attachments**; TLS and E2EE serve different purposes.
 
 | Mechanism | Protects | Does not guarantee |

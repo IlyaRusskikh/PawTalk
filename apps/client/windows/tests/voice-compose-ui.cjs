@@ -44,7 +44,33 @@ app.whenReady().then(async()=>{
  await run("(()=>{const input=document.querySelector('.voice-volume-popover input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'2');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
  assert.equal(await run("window.testGains.at(-1).gain.value"),2);
  assert.equal(await run("getComputedStyle(document.querySelector('.voice-volume-popover input')).writingMode"),'vertical-lr');
+ await run(`(() => {
+  const audio = document.querySelector('.chat-voice audio');
+  audio.pause();
+  const timeline = document.querySelector('.chat-voice .voice-timeline input');
+  // MediaRecorder WebM fixtures do not always expose seekable metadata.
+  Object.defineProperty(audio, 'currentTime', { configurable: true, value: Number(timeline.max) / 2 });
+  audio.dispatchEvent(new Event('timeupdate'));
+ })()`);
+ await until(`(() => {
+  const wave = document.querySelector('.chat-voice .voice-wave svg');
+  const played = Number(wave.querySelector('clipPath rect').getAttribute('width'));
+  return Math.abs(played / wave.viewBox.baseVal.width - 0.5) < 0.01;
+ })()`);
+ await run('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))');
+ const { bounds, accent } = await run(`(() => {
+  const wave = document.querySelector('.chat-voice .voice-wave svg');
+  const { x, y, width, height } = wave.getBoundingClientRect();
+  const accent = getComputedStyle(document.querySelector('.chat-voice .voice-play')).backgroundColor;
+  return { bounds: { x: Math.ceil(x), y: Math.ceil(y), width: Math.floor(width / 2), height: Math.floor(height) }, accent };
+ })()`);
+ const [red, green, blue] = accent.match(/\d+/g).map(Number);
+ const pixels = (await win.capturePage(bounds)).toBitmap();
  await fs.writeFile(path.join(os.tmpdir(),'pawtalk-voice-player-'+lang+'.png'),(await win.capturePage()).toPNG());
+ assert.ok(pixels.some((value, index) => index % 4 === 0 &&
+  Math.abs(value - blue) < 3 && Math.abs(pixels[index + 1] - green) < 3 && Math.abs(pixels[index + 2] - red) < 3),
+ 'the played part of the waveform is rendered in the theme accent');
+ await run("delete document.querySelector('.chat-voice audio').currentTime");
 
  await until("document.querySelector('.chat-attach')?.disabled===false");
  await run("document.querySelector('.chat-attach').click()");

@@ -26,6 +26,8 @@ This is a difference in product approach, **not** a claim that one application i
 - Adjust microphone, output, Push-to-Talk, RNNoise noise reduction and notification sounds.
 - Use mandatory E2EE for voice, messages and attachments; see [security boundaries](architecture/security.en.md).
 
+Client 0.15.0 creates API 3 temporary rooms with channel-specific keys. Existing API 2 permanent rooms remain compatible with the new Client. Migrating a permanent room uses Server 0.14.0 and Manager 0.7.0. See [compatibility and upgrade requirements](docs/server/compatibility.en.md#protected-access-api-3).
+
 ## Download and start
 
 - [Windows Client](https://ilyarusskikh.github.io/PawTalk/downloads/#client) — communicate, create a temporary server.

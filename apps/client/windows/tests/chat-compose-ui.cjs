@@ -106,6 +106,7 @@ app.whenReady().then(async()=>{
  assert.equal(await run("document.querySelector('dialog input').value"),'Tasks');
  await run("document.querySelector('dialog .modal-actions button').click()");
  await run("(()=>{const input=document.querySelector('.chat-compose input[type=file]'),data=new DataTransfer();data.items.add(new File([Uint8Array.from(atob('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'),c=>c.charCodeAt(0))],'test.gif',{type:'image/gif'}));input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
+ await until("document.querySelector('.attachment-thumbnail') && document.querySelector('.chat-attach')?.disabled===false");
  await run("document.querySelector('.member-composer').requestSubmit()");
  await until("document.querySelector('.chat-gif-preview img[alt=\"test.gif\"]')?.naturalWidth===1&&document.querySelector('.chat-attach')?.disabled===false");
  assert.equal(await run("document.querySelector('.chat-file a[download=\"test.gif\"]')"),null);

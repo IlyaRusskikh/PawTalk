@@ -10,7 +10,7 @@ import { managerSourceFiles } from '../../../../tooling/build/manager-layout.mjs
 const root=path.resolve(import.meta.dirname,'../../../..');
 if(process.platform!=='win32')throw Error('Windows smoke requires Windows');
 const directory=await mkdtemp(path.join(os.tmpdir(),'pawtalk-windows-manager-'));
-const stage=path.join(root,'release/manager/windows');
+const stage=path.resolve(process.env.PAWTALK_WINDOWS_MANAGER_STAGE || path.join(root,'release/manager/windows'));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 let vite;
 try{
@@ -49,8 +49,10 @@ try{
  }else{
   execFileSync('docker',['run','--rm','--mount',`type=bind,source=${path.join(root,'apps/manager/windows/service')},target=/src,readonly`,'--mount',`type=bind,source=${directory},target=/out`,'--mount','type=volume,source=pawtalk-go-mod,target=/go/pkg/mod','--mount','type=volume,source=pawtalk-go-build,target=/root/.cache/go-build','-w','/src','-e','GOOS=windows','-e','GOARCH=amd64','golang:1.27.3-alpine','go','test','-c','-o','/out/clipboard-test.exe'],{stdio:'inherit',windowsHide:true});
  }
- await writeFile(path.join(directory,'clipboard.html'),'<!doctype html><meta charset="utf-8"><title>PawTalk clipboard fixture</title>');
- execFileSync(env.PAWTALK_ELECTRON,[path.join(root,'apps/client/windows/tests/windows-clipboard.cjs'),directory],{cwd:root,env,stdio:'inherit',windowsHide:true,timeout:30000});
+ if(!['--protected-migration-prepare','--protected-migration'].some(flag=>process.argv.includes(flag))){
+  await writeFile(path.join(directory,'clipboard.html'),'<!doctype html><meta charset="utf-8"><title>PawTalk clipboard fixture</title>');
+  execFileSync(env.PAWTALK_ELECTRON,[path.join(root,'apps/client/windows/tests/windows-clipboard.cjs'),directory],{cwd:root,env,stdio:'inherit',windowsHide:true,timeout:30000});
+ }
  await new Promise((resolve,reject)=>{
   const child=spawn(path.join(stage,'runtime/python.exe'),['-u','-B','-X','utf8','-I',path.join(root,'apps/manager/tests/windows_manager_smoke.py'),directory,stage,...process.argv.slice(2)],{cwd:root,stdio:'inherit',windowsHide:true,env});
   child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(Error('Windows Manager smoke failed: '+code)));

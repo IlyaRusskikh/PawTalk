@@ -1,18 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { inspectImage, type ChatImage as Image } from './chatImages';
+import { copyChatImage, inspectImage, withImageSlot, type ChatImage as Image } from './chatImages';
 import {VideoViewer} from './VideoViewer';
 import { Icon } from './Controls';
 import { t } from './i18n';
 
-// At most two downloads/decryptions across the room. No image cache survives a row.
-let active = 0;
-const waiting: (() => void)[] = [];
-async function withImageSlot<T>(callback: () => Promise<T>) {
-  if (active >= 2) await new Promise<void>(resolve => waiting.push(resolve)); else active++;
-  try { return await callback(); }
-  finally { const next = waiting.shift(); if (next) next(); else active--; }
-}
 export function ChatImage({ image: inputImage, load, onRemove, removing = false,credits }: { image: Image; load(): Promise<Blob>; onRemove?(): void; removing?: boolean;credits?:{author?:string;avatar?:string;date?:number} }) {
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>();
   const image = { ...inputImage, ...dimensions };
@@ -52,14 +44,7 @@ export function ChatImage({ image: inputImage, load, onRemove, removing = false,
         else { const link = document.createElement('a'); link.href = url; link.download = image.name; link.click(); }
         setActionStatus(t("Изображение сохранено"));
       } else {
-        const bitmap = await createImageBitmap(blob.current);
-        try {
-          const canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height;
-          canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
-          const png = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Image encoding failed')), 'image/png'));
-          if (window.desktop?.copyChatImage) await window.desktop.copyChatImage({ bytes: new Uint8Array(await png.arrayBuffer()), name: image.name });
-          else await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
-        } finally { bitmap.close(); }
+        await copyChatImage(blob.current, image.name);
         setActionStatus(t("Изображение скопировано"));
       }
     } catch { setActionStatus(t("Не удалось сохранить или скопировать изображение.")); }
@@ -106,7 +91,8 @@ export function ChatImage({ image: inputImage, load, onRemove, removing = false,
       : <span className="image-placeholder"><Icon name="image"/>{visible ? t("Загружаем изображение…") : t("Изображение")}</span>}
     {onRemove && <button type="button" className="chat-image-remove" title={t('Удалить вложение')} aria-label={t('Удалить вложение')} disabled={removing} onClick={onRemove}><Icon name="trash" size={18}/></button>}
     {actionStatus && !open && <span className="image-action-toast" role="status">{actionStatus}</span>}
-    {open && url && <VideoViewer items={[{id:image.id,name:image.name,image:true,load:async()=>url}]} {...credits} onClose={() => setOpen(false)} photoContent={<>
+    {open && url && <VideoViewer items={[{id:image.id,name:image.name,image:true,load:async()=>url}]} {...credits} onClose={() => setOpen(false)}
+      photoStatus={actionStatus} photoCopy={{ action: () => void imageAction('copy'), disabled: working }} photoContent={<>
       <div className="image-stage" ref={stage} data-zoomed={zoom > 1 || undefined} onContextMenu={showMenu} onDoubleClick={() => changeZoom(zoom > 1 ? 1 : 2)} onPointerDown={event => {
         if (event.button !== 0 || zoom <= 1) return;
         event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { x: event.clientX, y: event.clientY, left: offset.x, top: offset.y };
@@ -119,8 +105,6 @@ export function ChatImage({ image: inputImage, load, onRemove, removing = false,
         <button type="button" className="icon-button" aria-label={t("Увеличить")} disabled={zoom >= 4} onClick={() => changeZoom(zoom + .25)}><Icon name="zoom-in"/></button>
         <span className="image-toolbar-divider"/>
         <button type="button" className="icon-button" aria-label={t("Сохранить изображение")} disabled={working} onClick={() => void imageAction('save')}><Icon name="download"/></button>
-        <button type="button" className="icon-button" aria-label={t("Копировать изображение")} disabled={working} onClick={() => void imageAction('copy')}><Icon name="copy"/></button>
-        <span className="image-action-status" role="status">{actionStatus}</span>
       </div>
     </>}/> }
     {menu && createPortal(<div ref={menuElement} className="chat-image-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={event => event.stopPropagation()}>

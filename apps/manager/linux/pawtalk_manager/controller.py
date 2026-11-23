@@ -5,14 +5,16 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import tarfile
+import tempfile
 import time
 import uuid
 from pathlib import Path
 from .config import atomic, read_config, remove, save, validate, write_config
 from .release import IMAGE, semver
 from .runtime import Runtime, run
-from .platforms import WINDOWS, secure
+from .platforms import WINDOWS, secure, sync_directory
 
 
 def checksum(file):
@@ -40,9 +42,11 @@ class Controller:
     def config(self):
         return read_config(self.etc/'config.env')
 
-    def transaction(self,state,config,kind):
+    def transaction(self,state,config,kind,*,resume=None):
         entry = dict(previous=state,config=config,kind=kind,phase='prepared',backup=None,
                      template=base64.b64encode(self.template.read_bytes()).decode())
+        if resume is not None:
+            entry['resume'] = resume
         if kind == 'manager-update':
             agent = self.root/'opt/pawtalk-manager'
             entry['pointers'] = ({name:json.loads((agent/(name+'.json')).read_text()) for name in ['current','previous'] if (agent/(name+'.json')).exists()} if WINDOWS else
@@ -64,7 +68,10 @@ class Controller:
     def prune(self):
         if not self.state_file.exists():
             return
-        project = self.state()['project']
+        state = self.state()
+        project = state['project']
+        pinned = json.loads(self.journal.read_text()).get('backup') if self.journal.exists() else None
+        protected_backup = state.get('protectedRuntime',{}).get('backup')
         candidates = []
         for p in self.backups.glob('backup-*'):
             if p.is_symlink() or p.resolve().parent != self.backups.resolve() or not re.fullmatch(r'backup-[a-f0-9]{12}',p.name):
@@ -76,7 +83,8 @@ class Controller:
             except (OSError,ValueError,KeyError):
                 continue
         for _,_,p in sorted(candidates,reverse=True)[int(self.config()['PAWTALK_BACKUP_KEEP']):]:
-            shutil.rmtree(p)
+            if p.name not in (pinned,protected_backup):
+                shutil.rmtree(p)
 
     def backup(self,entry,resume=True):
         state,config = entry['previous'],entry['config']
@@ -105,6 +113,7 @@ class Controller:
             save(temporary/'metadata.json',metadata)
             secure(temporary)
             os.rename(temporary,self.backups/name)
+            sync_directory(self.backups)
             entry.update(backup=name,phase='backed-up')
             save(self.journal,entry)
         finally:
@@ -164,6 +173,10 @@ class Controller:
         if not self.journal.exists():
             return False
         entry = json.loads(self.journal.read_text())
+        if entry['phase'] == 'migration-prepared':
+            raise RuntimeError('Protected migration is prepared. Use pawtalkctl migration status, activate or rollback')
+        if entry['phase'] == 'migration-activating':
+            raise RuntimeError('Protected migration activation is in progress. Resume with pawtalkctl migration activate')
         if entry['phase'] == 'committed':
             remove(self.journal)
             return True
@@ -210,6 +223,152 @@ class Controller:
                 shutil.rmtree(partial)
         self.finish('recovered')
         return True
+
+    def migration_status(self):
+        if self.journal.exists():
+            entry = json.loads(self.journal.read_text())
+            if entry['kind'] == 'protected-migration' and entry['phase'] != 'committed':
+                result = dict(phase=entry['phase'],backup=entry['backup'],checkpoint=entry.get('checkpoint'))
+                if entry.get('cutoverDigest'):
+                    result['cutoverDigest'] = entry['cutoverDigest']
+                return result
+        if self.state_file.exists():
+            protected = self.state().get('protectedRuntime')
+            if protected:
+                return dict(phase='migration-active',backup=protected['backup'],activation=protected)
+        return dict(phase='inactive')
+
+    def migration_backup(self,entry):
+        meta,archive = self.snapshot(entry['backup'])
+        if meta['state'] != entry['previous']:
+            raise ValueError('Migration backup does not describe the installed source')
+        return meta['sha256'],archive
+
+    def prepare_migration_source(self,entry,server_id,archive_sha256,archive):
+        state,config = entry['previous'],entry['config']
+        with archive.open('rb') as stream:
+            raw = self.runtime.migration_command(state,config,'migration-prepare',archive_sha256,archive=stream)
+        report = json.loads(raw)
+        if (not isinstance(report,dict) or report.get('maintenance') is not True or report.get('dataSchema') != 3
+                or report.get('serverId') != server_id or report.get('backupArchiveSha256') != archive_sha256
+                or not re.fullmatch(r'[a-f0-9]{64}',str(report.get('backupSha256','')))
+                or not re.fullmatch(r'[a-f0-9]{64}',str(report.get('ownerProfileId','')))):
+            raise ValueError('Server did not confirm the expected migration checkpoint')
+        return report
+
+    def ensure_migration_server(self,entry,checkpoint,timeout=90):
+        state,config = entry['previous'],entry['config']
+        if not self.runtime.container(state,config)['State'].get('Running'):
+            self.runtime.start(state,config)
+        deadline = time.monotonic()+timeout
+        while time.monotonic() < deadline:
+            try:
+                self.runtime.command(state,config,'migration-healthcheck',checkpoint['backupArchiveSha256'])
+                return
+            except (RuntimeError,subprocess.TimeoutExpired):
+                time.sleep(1)
+        raise RuntimeError('Server did not become ready for the expected migration checkpoint')
+
+    def prepare_protected_migration(self):
+        if self.migration_status()['phase'] == 'migration-prepared':
+            entry = json.loads(self.journal.read_text())
+            self.runtime.verify_image(entry['previous'])
+            checkpoint = entry['checkpoint']
+            archive_sha256,archive = self.migration_backup(entry)
+            if archive_sha256 != checkpoint['backupArchiveSha256']:
+                raise ValueError('Migration backup differs from the confirmed checkpoint')
+            if self.prepare_migration_source(entry,checkpoint['serverId'],archive_sha256,archive) != checkpoint:
+                raise ValueError('Server migration checkpoint changed')
+            self.ensure_migration_server(entry,checkpoint)
+            return self.migration_status()
+        self.recover()
+        state,config = self.state(),self.config()
+        self.runtime.verify_image(state)
+        report = json.loads(self.runtime.migration_command(state,config,'migration-check'))
+        if (not isinstance(report,dict) or report.get('dataSchema') != 2 or report.get('maintenance')
+                or not re.fullmatch(r'[a-f0-9]{32}',str(report.get('serverId','')))):
+            raise ValueError('Server did not report an API 2 migration source')
+        if report.get('ownerBlocker'):
+            raise ValueError('Migration owner selection blocked: '+str(report['ownerBlocker']))
+        was_running = bool(self.runtime.container(state,config)['State'].get('Running'))
+        entry = self.transaction(state,config,'protected-migration',resume=was_running)
+        try:
+            self.backup(entry,resume=False)
+            archive_sha256,archive = self.migration_backup(entry)
+            entry['phase'] = 'applying'
+            save(self.journal,entry)
+            checkpoint = self.prepare_migration_source(entry,report['serverId'],archive_sha256,archive)
+            self.ensure_migration_server(entry,checkpoint)
+            entry.update(phase='migration-prepared',checkpoint=checkpoint)
+            save(self.journal,entry)
+        except Exception:
+            self.recover()
+            raise
+        return self.migration_status()
+
+    def rollback_protected_migration(self):
+        phase = self.migration_status()['phase']
+        if phase in ('inactive','committed','migration-active'):
+            raise ValueError('No pending protected migration')
+        if phase == 'migration-prepared':
+            entry = json.loads(self.journal.read_text())
+            archive_sha256,_ = self.migration_backup(entry)
+            if archive_sha256 != entry['checkpoint']['backupArchiveSha256']:
+                raise ValueError('Migration backup differs from the confirmed checkpoint')
+            entry['phase'] = 'applying'
+            save(self.journal,entry)
+        self.recover()
+
+    def activate_protected_migration(self,approval=None):
+        phase = self.migration_status()['phase']
+        if phase == 'migration-active':
+            self.recover()
+            return self.migration_status()
+        if phase not in ('migration-prepared','migration-activating'):
+            raise ValueError('No prepared protected migration to activate')
+        entry = json.loads(self.journal.read_text())
+        source,config,checkpoint = entry['previous'],entry['config'],entry['checkpoint']
+        archive_sha256,_ = self.migration_backup(entry)
+        if archive_sha256 != checkpoint['backupArchiveSha256']:
+            raise ValueError('Migration backup differs from the confirmed checkpoint')
+        self.runtime.verify_image(source)
+        current = self.state()
+        if current != source and current != {**source,'protectedRuntime':entry.get('activation')}:
+            raise ValueError('Installed state differs from the prepared migration')
+        if phase == 'migration-prepared':
+            if approval is not None:
+                payload = approval.read(1025)
+                if not payload or len(payload) > 1024:
+                    raise ValueError('Invalid signed cutover approval size')
+                with tempfile.TemporaryFile() as stream:
+                    stream.write(payload)
+                    stream.seek(0)
+                    self.runtime.migration_command(source,config,'migration-approve-cutover',archive_sha256,archive=stream)
+            review = json.loads(self.runtime.migration_command(source,config,'migration-verify',archive_sha256))
+            recorded = review.get('cutoverApproval') if isinstance(review,dict) else None
+            if (not isinstance(recorded,dict) or review.get('serverId') != checkpoint['serverId']
+                    or review.get('archiveSha256') != archive_sha256 or recorded.get('cutoverDigest') != review.get('cutoverDigest')
+                    or not re.fullmatch(r'[a-f0-9]{64}',str(recorded.get('cutoverDigest','')))
+                    or not re.fullmatch(r'[a-f0-9]{64}',str(recorded.get('deviceId','')))):
+                raise ValueError('Server has no verified owner approval for the expected cutover')
+            entry.update(phase='migration-activating',cutoverDigest=recorded['cutoverDigest'],cutoverDeviceId=recorded['deviceId'])
+            save(self.journal,entry)
+        if not entry.get('activation'):
+            self.runtime.stop(source,config)
+            receipt = json.loads(self.runtime.migration_command(source,config,'migration-activate',archive_sha256))
+            expected = dict(serverId=checkpoint['serverId'],archiveSha256=archive_sha256,
+                            cutoverDigest=entry['cutoverDigest'],deviceId=entry['cutoverDeviceId'])
+            if not isinstance(receipt,dict) or any(receipt.get(key) != value for key,value in expected.items()):
+                raise ValueError('Server did not confirm the expected protected activation')
+            entry['activation'] = {**expected,'dataSchema':4,'apiProtocol':3,'backup':entry['backup']}
+            save(self.journal,entry)
+        target = {**source,'protectedRuntime':entry['activation']}
+        if not self.runtime.container(source,config)['State'].get('Running'):
+            self.runtime.start(target,config)
+        self.runtime.healthy(target,config,source.get('identity'))
+        save(self.state_file,target)
+        self.finish()
+        return self.migration_status()
 
     def install(self,config,manifest,template,manager_version):
         config = validate(config)
@@ -287,7 +446,8 @@ class Controller:
             raise ValueError('Published Windows Server version was replaced')
         if not replacing_local and semver(manifest['version']) <= semver(state['version']):
             return False
-        if manifest['dataSchema'] != state['dataSchema'] or manifest['apiProtocol'] != 2:
+        runtime = state.get('protectedRuntime',{'dataSchema':state['dataSchema'],'apiProtocol':2})
+        if manifest['dataSchema'] != runtime['dataSchema'] or manifest['apiProtocol'] != runtime['apiProtocol']:
             raise ValueError('Unsupported server data/protocol transition')
         candidate = {**state,'version':manifest['version'],'image':IMAGE+'@'+manifest['digest'],'serverManifest':manifest['_signed']}
         candidate.pop('localPackage',None)
@@ -361,8 +521,12 @@ class Controller:
 
     def restore(self,name):
         meta,_ = self.snapshot(name) # Verify completely before interrupting a running room.
-        if self.state_file.exists() and meta['state']['project'] != self.state()['project'] and self.runtime.project_exists(meta['state'],meta['config']):
-            raise ValueError('Refusing to restore over another existing Docker project')
+        if self.state_file.exists():
+            installed = self.state()
+            if installed.get('protectedRuntime') and not meta['state'].get('protectedRuntime'):
+                raise ValueError('Cannot restore an API 2 backup over an active protected room')
+            if meta['state']['project'] != installed['project'] and self.runtime.project_exists(meta['state'],meta['config']):
+                raise ValueError('Refusing to restore over another existing Docker project')
         self.runtime.pull(meta['state'])
         self.recover()
         if self.state_file.exists():

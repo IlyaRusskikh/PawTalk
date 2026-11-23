@@ -297,26 +297,34 @@ func (s *membershipStore) deleteMessage(ctx context.Context, token string, id in
 	})
 }
 
+func memberStorageUsed(ctx context.Context, tx *sql.Tx) (int64, error) {
+	var pages, free, size int64
+	if err := tx.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pages); err != nil {
+		return 0, err
+	}
+	if err := tx.QueryRowContext(ctx, "PRAGMA freelist_count").Scan(&free); err != nil {
+		return 0, err
+	}
+	if err := tx.QueryRowContext(ctx, "PRAGMA page_size").Scan(&size); err != nil {
+		return 0, err
+	}
+	return (pages - free) * size, nil
+}
+
 func (s *membershipStore) enforceMemberStorageTx(ctx context.Context, tx *sql.Tx, protected int64) error {
 	if s.maxBytes == 0 {
 		return nil
 	}
 	for {
-		var pages, free, size int64
-		if err := tx.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pages); err != nil {
+		used, err := memberStorageUsed(ctx, tx)
+		if err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, "PRAGMA freelist_count").Scan(&free); err != nil {
-			return err
-		}
-		if err := tx.QueryRowContext(ctx, "PRAGMA page_size").Scan(&size); err != nil {
-			return err
-		}
-		if (pages-free)*size <= s.maxBytes {
+		if used <= s.maxBytes {
 			return nil
 		}
 		var oldest int64
-		err := tx.QueryRowContext(ctx, "SELECT message_id FROM messages WHERE message_id<>? ORDER BY message_id LIMIT 1", protected).Scan(&oldest)
+		err = tx.QueryRowContext(ctx, "SELECT message_id FROM messages WHERE message_id<>? ORDER BY message_id LIMIT 1", protected).Scan(&oldest)
 		if errors.Is(err, sql.ErrNoRows) {
 			return memberError(507, "STORAGE_LIMIT")
 		}

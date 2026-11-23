@@ -4,7 +4,12 @@
 
 Fetch current `main`, inspect status, preserve unrelated user work. All edits use
 working branches from main; direct main commits and force pushes to main are forbidden.
-Release branches: `work/{service}-v{version}`; multi-component:
+Start each new branch as `rename-me-before-pr`. If the name is already in use,
+add a numeric suffix, starting with `rename-me-before-pr-2`. Before opening a PR,
+review the final diff and rename the branch to describe the changes it contains.
+
+Use `work/{service}-v{version}` as the final name for single-component release
+branches. For multi-component releases, use
 `work/client-vX.Y.Z__server-vX.Y.Z`. Other work uses `work/docs-*`, `work/ci-*`,
 `work/chore-*`. Keep a PR to one coherent task including code, tests, both READMEs,
 documentation and landing pages as applicable. Push working branches within the
@@ -70,3 +75,12 @@ values (including quality tooltips), with localized fallback for unknown values.
 Check English/Russian, normal/reduced motion, empty/populated clipboard and actual
 Electron/native APIs when affected; add regression coverage for CI-only failures.
 Do not mock nonexistent platform APIs or rely on workstation defaults.
+
+## Client performance diagnostics
+
+Client timing collection is off by default. To capture a local trace, uncomment
+the `clientPerformance` import and the `diagnostics` option in
+`apps/client/windows/electron/main.cjs`, then restart the Client or `review.cmd`.
+Read `diagnostics/client-performance.jsonl` under that client's `userData`
+directory. A default `review.cmd` profile uses `release/review-api2-profile`.
+Re-comment both lines after collecting the trace. Keep trace files out of Git.

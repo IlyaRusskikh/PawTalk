@@ -82,7 +82,7 @@ class Updater {
     }
     const release = selectRelease(releases, this.current, this.channel);
     if (!release) return null;
-    const raw = await metadata(this.fetchFor(source), source, 'apps/client/windows/assets/' + release.tag + '/update-manifest.json', 16384);
+    const raw = await metadata(this.fetchFor(source), source, 'assets/' + release.tag + '/update-manifest.json', 16384);
     let manifest;
     try {
       manifest = verifyManifest(raw, this.keys);

@@ -38,6 +38,8 @@ MESSAGES = {
  'changed':('Изменения применены.','Changes applied.'),
  'unchanged':('Изменений нет.','No changes.'),
  'restore':('Восстановить копию? Работающая комната будет остановлена.','Restore backup? The running room will stop.'),
+ 'restore_freshness':('Для обнаружения отката ролей и отзывов устройств нужны сохранившиеся проверяемые сведения новее копии.',
+                      'Detecting rolled-back roles and device revocations requires surviving verifiable evidence newer than the backup.'),
  'uninstall':('Остановить комнату и таймеры? Данные и настройки сохранятся.','Stop room and timers? Data and settings will be kept.'),
  'healthy':('Работает','Healthy'),'unhealthy':('Ошибка проверки здоровья','Unhealthy'),
  'starting':('Запускается','Starting'),'unknown':('Состояние неизвестно','Unknown state'),
@@ -46,6 +48,9 @@ MESSAGES = {
  'invalid_port':('Введите порт от 1024 до 65532.','Enter a port from 1024 to 65532.'),
  'invalid_chat':('Введите целое число от 0 до 1048576 МиБ.','Enter an integer from 0 to 1048576 MiB.'),
  'stop':('Остановить сервер? Текущие звонки прервутся.','Stop the server? Active calls will disconnect.'),
+ 'migration_prepare':('Остановить сервер и подготовить миграцию защищённого доступа?','Stop the server and prepare protected-access migration?'),
+ 'migration_activate':('Переключить сервер на API 3 после проверки подписи владельца?','Switch the server to API 3 after verifying the owner signature?'),
+ 'migration_rollback':('Восстановить резервную копию до миграции?','Restore the backup from before migration?'),
  'tui_backup_confirm':('Для создания копии работающий сервер временно остановится. Текущие звонки прервутся.','Creating a backup temporarily stops a running server and disconnects active calls.'),
  'tui_terminal':('Откройте интерактивный терминал. Для SSH выделите TTY (ssh -t).','Use an interactive terminal. For SSH, allocate a TTY (ssh -t).'),
  'tui_status':('Сервер {server} · Manager {manager} · {status}','Server {server} · Manager {manager} · {status}'),
@@ -464,7 +469,10 @@ def tui_extra(key,lang,execute,ui):
         if choice is not None:
             name = entries[choice]['name']
             action,message = ('restore','tui_restore_confirm') if key == 'tui_restore' else ('delete','tui_delete_confirm')
-            if ui.approve(heading,text(message,lang).format(name=name)):
+            prompt = text(message,lang).format(name=name)
+            if action == 'restore':
+                prompt += '\n\n' + text('restore_freshness',lang)
+            if ui.approve(heading,prompt):
                 ui.run(heading,('backup',action,name,'--yes'))
     elif key == 'tui_initial_admin':
         code,output = execute('initial-admin','--url')
@@ -917,6 +925,10 @@ def arguments(argv):
     backup.add_argument('--yes',action='store_true')
     backup.add_argument('--json',action='store_true')
     backup.add_argument('--trust')
+    migration = sub.add_parser('migration')
+    migration.add_argument('action',choices=['prepare','status','activate','rollback'])
+    migration.add_argument('--yes',action='store_true')
+    migration.add_argument('--approval',type=Path)
     uninstall = sub.add_parser('uninstall')
     uninstall.add_argument('--keep-data',action='store_true',required=True)
     uninstall.add_argument('--yes',action='store_true')
@@ -1274,7 +1286,7 @@ def main(argv=None):
                     print('\n'.join(p.name for p in sorted(controller.backups.glob('backup-*')) if p.is_dir()))
                 return 0
             if args.command == 'backup' and args.action == 'restore':
-                confirm(text('restore',lang),args.yes,lang)
+                confirm(text('restore',lang)+'\n'+text('restore_freshness',lang),args.yes,lang)
                 meta,_ = controller.snapshot(args.name or '')
                 key_file = args.trust or (controller.etc/'trust.json' if (controller.etc/'trust.json').exists() else source/'trust.json')
                 keys = json.loads(Path(key_file).read_text())
@@ -1307,6 +1319,27 @@ def main(argv=None):
                 return 0
             if not controller.state_file.exists():
                 raise ValueError('No installed room; run pawtalkctl install')
+            if args.command == 'migration':
+                if args.approval is not None and args.action != 'activate':
+                    raise ValueError('--approval is only accepted for migration activate')
+                if args.action == 'prepare':
+                    confirm(text('migration_prepare',lang),args.yes,lang)
+                    print(json.dumps(controller.prepare_protected_migration()))
+                elif args.action == 'activate':
+                    confirm(text('migration_activate',lang),args.yes,lang)
+                    if args.approval is None:
+                        result = controller.activate_protected_migration()
+                    else:
+                        with args.approval.open('rb') as approval:
+                            result = controller.activate_protected_migration(approval=approval)
+                    print(json.dumps(result))
+                elif args.action == 'rollback':
+                    confirm(text('migration_rollback',lang),args.yes,lang)
+                    controller.rollback_protected_migration()
+                    print(text('changed',lang))
+                else:
+                    print(json.dumps(controller.migration_status()))
+                return 0
             controller.recover()
             config = controller.config()
             if args.command in ('start','stop'):

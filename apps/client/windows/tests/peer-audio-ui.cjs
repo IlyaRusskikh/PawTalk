@@ -26,7 +26,7 @@ app.whenReady().then(async()=>{
    const {loadPeerAudio,savePeerAudio,projectPeerAudio}=await import('/src/peerAudio.mjs');
    const server='a'.repeat(32),profile='b'.repeat(64);
    if(${JSON.stringify(phase)}==='write'){savePeerAudio(localStorage,{[server+':'+profile]:{volume:1.65,muted:true}});return true;}
-   return projectPeerAudio(loadPeerAudio(localStorage),server,[{identity:'new-voice-identity',profileId:profile}],id=>id)['new-voice-identity'];
+   return projectPeerAudio(loadPeerAudio(localStorage),server,[{sessionId:'new-voice-session',profileId:profile}])['new-voice-session'];
   })()`,true);
   if(phase==='read')assert.deepEqual(result,{volume:1.65,muted:true});else assert.equal(result,true);
   session.defaultSession.flushStorageData();win.destroy();app.exit(0);
