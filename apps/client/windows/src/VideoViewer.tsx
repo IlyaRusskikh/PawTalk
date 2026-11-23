@@ -6,18 +6,18 @@ import {t} from './i18n';
 import {voiceTime} from './VoicePlayer';
 import {copyChatImage} from './chatImages';
 
-export type VideoItem={id:string;name:string;load():Promise<string>;image?:boolean;downloadOriginal?():Promise<void>};
+export type VideoItem={id:string;name:string;load():Promise<string>;image?:boolean;downloadOriginal?():Promise<boolean | void>};
 export function VideoViewer({items,initial=0,author,date,avatar,onClose,photoContent,photoStatus,photoCopy}:{photoContent?:ReactNode;photoStatus?:string;photoCopy?:{action():void;disabled:boolean};items:VideoItem[];initial?:number;author?:string;avatar?:string;date?:number;onClose():void}){
  const dialog=useRef<HTMLDialogElement>(null),root=useRef<HTMLDivElement>(null),video=useRef<HTMLVideoElement>(null),generation=useRef(0),timer=useRef<ReturnType<typeof setTimeout>>(undefined),lastExit=useRef(0);
  const graph=useRef<{context:AudioContext;source:MediaElementAudioSourceNode;gain:GainNode}|undefined>(undefined);
  const [index,setIndex]=useState(initial),[playing,setPlaying]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[time,setTime]=useState(0),[duration,setDuration]=useState(0),[volume,setVolume]=useState(1),[volumeOpen,setVolumeOpen]=useState(false),[visible,setVisible]=useState(true),[fullscreen,setFullscreen]=useState(false),[url,setUrl]=useState('');
  const item=items[index],photo=!!item?.image;
- const [savingOriginal,setSavingOriginal]=useState(false),[copyStatus,setCopyStatus]=useState('');
+ const [savingOriginal,setSavingOriginal]=useState(false),[imageStatus,setImageStatus]=useState('');
  const photoStage=useRef<HTMLDivElement>(null),photoImage=useRef<HTMLImageElement>(null),pan=useRef<{x:number;y:number;left:number;top:number}|undefined>(undefined);
  const [zoom,setZoom]=useState(1),[offset,setOffset]=useState({x:0,y:0});
  function limit(point:{x:number;y:number},scale:number){const stage=photoStage.current,img=photoImage.current;if(!stage||!img)return{x:0,y:0};const fit=Math.min(stage.clientWidth/(img.naturalWidth||1),stage.clientHeight/(img.naturalHeight||1)),x=Math.max(0,(img.naturalWidth*fit*scale-stage.clientWidth)/2),y=Math.max(0,(img.naturalHeight*fit*scale-stage.clientHeight)/2);return{x:Math.max(-x,Math.min(x,point.x)),y:Math.max(-y,Math.min(y,point.y))};}
  function changeZoom(value:number){const scale=Math.max(1,Math.min(4,value));setZoom(scale);setOffset(previous=>limit(previous,scale));}
- useEffect(()=>{setZoom(1);setOffset({x:0,y:0});setCopyStatus('');},[index]);
+ useEffect(()=>{setZoom(1);setOffset({x:0,y:0});setImageStatus('');},[index]);
  useEffect(()=>{const stage=photoStage.current;if(!photo||photoContent||!stage)return;const wheel=(event:WheelEvent)=>{event.preventDefault();changeZoom(zoom+(event.deltaY<0?.25:-.25));};stage.addEventListener('wheel',wheel,{passive:false});return()=>stage.removeEventListener('wheel',wheel);},[photo,photoContent,zoom]);
  const current=useRef({playing,volumeOpen,items,onClose});current.current={playing,volumeOpen,items,onClose};
  function reveal(){setVisible(true);clearTimeout(timer.current);timer.current=setTimeout(()=>{if(current.current.playing&&!current.current.volumeOpen&&!(root.current?.contains(document.activeElement)&&document.activeElement?.matches('button,input,a')))setVisible(false);},2000);}
@@ -43,7 +43,11 @@ export function VideoViewer({items,initial=0,author,date,avatar,onClose,photoCon
   if(!item?.downloadOriginal||savingOriginal)return;
   const request=generation.current;
   setSavingOriginal(true);
-  try{await item.downloadOriginal();}
+  if (photo) setImageStatus('');
+  try {
+   const saved = await item.downloadOriginal();
+   if (saved === true && photo && request === generation.current) setImageStatus(t('Изображение сохранено'));
+  }
   catch{if(request===generation.current)setError(t('Не удалось скачать оригинал.'));}
   finally{setSavingOriginal(false);}
  }
@@ -53,9 +57,9 @@ export function VideoViewer({items,initial=0,author,date,avatar,onClose,photoCon
   const request = generation.current;
   try {
    await copyChatImage(image, item.name);
-   if (request === generation.current) setCopyStatus(t('Изображение скопировано'));
+   if (request === generation.current) setImageStatus(t('Изображение скопировано'));
   } catch {
-   if (request === generation.current) setCopyStatus(t('Не удалось сохранить или скопировать изображение.'));
+   if (request === generation.current) setImageStatus(t('Не удалось сохранить или скопировать изображение.'));
   }
  }
  function close(){if(document.fullscreenElement===root.current)void document.exitFullscreen().catch(()=>{}).finally(onClose);else onClose();}
@@ -73,7 +77,7 @@ export function VideoViewer({items,initial=0,author,date,avatar,onClose,photoCon
     title={t('Копировать изображение')} disabled={photoCopy?.disabled??!url} onClick={photoCopy?.action??(()=>void copyPhoto())}><Icon name="copy"/></button>}
    <button type="button" className="icon-button" aria-label={t('Закрыть')} onClick={close}><Icon name="close"/></button>
   </div></header>
-  {(photoStatus || copyStatus) && <p className="image-action-toast viewer-image-status" role="status">{photoStatus || copyStatus}</p>}
+  {(photoStatus || imageStatus) && <p className="image-action-toast viewer-image-status" role="status">{photoStatus || imageStatus}</p>}
   <div className="video-stage" onClick={event=>{if(event.target===event.currentTarget)close();}}>{photo?(photoContent||<div ref={photoStage} className="photo-zoom-stage" data-zoomed={zoom>1||undefined} onDoubleClick={()=>changeZoom(zoom>1?1:2)} onPointerDown={event=>{if(event.button!==0||zoom<=1)return;event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);pan.current={x:event.clientX,y:event.clientY,left:offset.x,top:offset.y};}} onPointerMove={event=>{if(pan.current)setOffset(limit({x:pan.current.left+event.clientX-pan.current.x,y:pan.current.top+event.clientY-pan.current.y},zoom));}} onPointerUp={()=>{pan.current=undefined;}} onPointerCancel={()=>{pan.current=undefined;}}><img ref={photoImage} className="photo-viewer-image" src={url||undefined} alt={item.name} draggable={false} style={{transform:`translate(${offset.x}px,${offset.y}px) scale(${zoom})`}}/></div>):<video ref={video} playsInline preload="metadata" onClick={()=>{root.current?.focus();void toggle();}} onDoubleClick={()=>void full()} onPlay={()=>{setPlaying(true);document.dispatchEvent(new CustomEvent('pawtalk-voice-play',{detail:video.current}));}} onPause={()=>setPlaying(false)} onEnded={()=>{setPlaying(false);setVisible(true);}} onLoadedMetadata={event=>setDuration(Number.isFinite(event.currentTarget.duration)?event.currentTarget.duration:0)} onDurationChange={event=>{if(Number.isFinite(event.currentTarget.duration))setDuration(event.currentTarget.duration);}} onWaiting={()=>setLoading(true)} onCanPlay={()=>setLoading(false)} onTimeUpdate={event=>setTime(event.currentTarget.currentTime)} onError={()=>{setLoading(false);setError(t('Не удалось воспроизвести видео.'));}}/>}{loading&&<span className="video-loading" role="status">{t('Загрузка…')}</span>}{error&&<p className="video-error text-error" role="alert">{error}</p>}</div>
   {items.length>1&&<><button type="button" className="icon-button video-previous video-controls" disabled={!index} aria-label={t(photo?'Предыдущее изображение':'Предыдущее видео')} onClick={()=>move(index-1)}><Icon name="arrow-left"/></button><button type="button" className="icon-button video-next video-controls" disabled={index===items.length-1} aria-label={t(photo?'Следующее изображение':'Следующее видео')} onClick={()=>move(index+1)}><Icon name="arrow-right"/></button><span className="video-counter video-controls">{index+1} / {items.length}</span></>}
   <footer className="video-viewer-footer video-controls">{photo&&!photoContent&&<div className="photo-zoom-toolbar"><button type="button" className="icon-button" aria-label={t('Уменьшить')} disabled={zoom<=1} onClick={()=>changeZoom(zoom-.25)}><Icon name="zoom-out"/></button><button type="button" className="photo-zoom-fit" onClick={()=>changeZoom(1)}>{Math.round(zoom*100)}%</button><button type="button" className="icon-button" aria-label={t('Увеличить')} disabled={zoom>=4} onClick={()=>changeZoom(zoom+.25)}><Icon name="zoom-in"/></button></div>}{!photo&&<><button type="button" className="icon-button" aria-label={t(playing?'Пауза':'Воспроизвести')} disabled={loading} onClick={()=>void toggle()}><Icon name={playing?'pause':'play'}/></button><span className="video-time">{voiceTime(time)} / {voiceTime(duration)}</span><input className="video-timeline" type="range" min={0} max={duration||1} step="0.01" value={Math.min(time,duration||1)} disabled={!duration} aria-label={t('Позиция воспроизведения')} style={{'--media-progress':`${duration?time/duration*100:0}%`} as React.CSSProperties} onChange={event=>seek(Number(event.target.value))}/>

@@ -41,7 +41,7 @@ function EncryptedImage({ serverId, channelId, image, onRemove, removing,credits
   if (image.size !== undefined) {
     const file = { ...image, size: image.size, name: image.name ?? 'image.' + image.mime.split('/')[1] };
     return <div className="chat-image">
-      <VideoMessage serverId={serverId} channelId={channelId} files={[file]} {...credits}/>
+      <VideoMessage serverId={serverId} channelId={channelId} files={[file]} saveImageNatively {...credits}/>
       {onRemove && <button type="button" className="icon-button chat-image-remove" disabled={removing}
         title={t('Удалить вложение')} aria-label={t('Удалить вложение')} onClick={onRemove}><Icon name="trash" size={18}/></button>}
     </div>;

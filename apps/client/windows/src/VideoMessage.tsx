@@ -84,11 +84,11 @@ function Poster({serverId,channelId,file,enabled,protectedPosition}:{
  return <span ref={node} className="video-poster" title={error || undefined}>{url?<img src={url} decoding="async" alt=""
   onLoad={()=>record('media.preview.decoded')} onError={()=>record('media.preview.failed')}/>:<span className="video-poster-placeholder"><Icon name={file.mime.startsWith('image/')?'image':'video'} size={40}/></span>}</span>;
 }
-export function VideoMessage({serverId,channelId,files,group=files,pending=false,author,avatar,date,protectedPosition}:{
- serverId:string;channelId:string;files:ChatAttachment[];group?:ChatAttachment[];pending?:boolean;author?:string;avatar?:string;date?:number;protectedPosition?:number;
+export function VideoMessage({serverId,channelId,files,group=files,pending=false,author,avatar,date,protectedPosition,saveImageNatively=false}:{
+ serverId:string;channelId:string;files:ChatAttachment[];group?:ChatAttachment[];pending?:boolean;author?:string;avatar?:string;date?:number;protectedPosition?:number;saveImageNatively?:boolean;
 }){
  const [view,setView]=useState<number>(),[error,setError]=useState(''),[saving,setSaving]=useState('');
- const cache=useRef(new Map<string,Promise<string>>()),urls=useRef(new Set<string>()),alive=useRef(true);
+ const cache=useRef(new Map<string, Promise<{ url: string; blob: Blob }>>()),urls=useRef(new Set<string>()),alive=useRef(true);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;for(const url of urls.current)URL.revokeObjectURL(url);};},[]);
  function load(file:ChatAttachment|MediaVariant) {
   const cached = cache.current.get(file.id);
@@ -102,9 +102,10 @@ export function VideoMessage({serverId,channelId,files,group=files,pending=false
       const image = bytes.length === file.size ? inspectImage(bytes) : undefined;
       if (image?.mime !== file.mime || Math.max(image.width, image.height) > 2048) throw Error('Invalid media variant');
      }
-     const url = URL.createObjectURL(attachmentBlob(bytes, file.mime));
+     const blob = attachmentBlob(bytes, file.mime);
+     const url = URL.createObjectURL(blob);
      urls.current.add(url);
-     return url;
+     return { url, blob };
   };
   const request = (protectedPosition === undefined ? fetchFile() : withProtectedFileSlot(fetchFile))
     .catch(error => { cache.current.delete(file.id); throw error; });
@@ -112,8 +113,13 @@ export function VideoMessage({serverId,channelId,files,group=files,pending=false
   return request;
  }
  async function download(file:ChatAttachment) {
-  const url = await load(file);
+  const { url, blob } = await load(file);
   if (!alive.current) return;
+  if (saveImageNatively && imageMime(file.mime) && window.desktop?.saveChatImage) {
+   const bytes = new Uint8Array(await blob.arrayBuffer());
+   if (alive.current) return window.desktop.saveChatImage({ bytes, name: file.name });
+   return;
+  }
   const link = document.createElement('a');
   link.href = url;
   link.download = file.name;
@@ -138,8 +144,8 @@ export function VideoMessage({serverId,channelId,files,group=files,pending=false
   })}
   {error&&<p role="alert" className="text-error">{error}</p>}
   {view!==undefined&&<VideoViewer items={group.map(file=>({
-   id:file.id,name:file.name,image:file.mime.startsWith('image/'),load:()=>load(file.view ?? file),
-   ...(file.view && { downloadOriginal:()=>download(file) }),
+   id:file.id,name:file.name,image:file.mime.startsWith('image/'),load:async()=>(await load(file.view ?? file)).url,
+   ...((file.view || saveImageNatively) && { downloadOriginal:()=>download(file) }),
   }))} initial={view} author={author} avatar={avatar} date={date} onClose={()=>setView(undefined)}/>}
  </div>;
 }
