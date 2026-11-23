@@ -525,7 +525,7 @@ func standalone(args []string) error {
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-		return serveStandaloneMigration(ctx, migration.membershipStore, databasePath, certificate, false)
+		return serveStandaloneMigration(ctx, migration.membershipStore, databasePath, certificate)
 	}
 	store, err := openMembershipStore(databasePath)
 	if err != nil {

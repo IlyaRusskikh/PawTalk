@@ -28,6 +28,7 @@ Local sources are not automatically exact snapshots of public Release bodies. Th
 - [server-v0.12.0](server-v0.12.0.en.md) — release source
 - [server-v0.13.0](server-v0.13.0.en.md) — release source
 - [server-v0.14.0](server-v0.14.0.en.md)
+- [server-v0.14.1](server-v0.14.1.en.md)
 
 ## Manager
 
