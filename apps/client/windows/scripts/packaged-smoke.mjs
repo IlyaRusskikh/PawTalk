@@ -18,7 +18,7 @@ for (const [name,field] of [['pawtalk-api.exe','apiSha256'],['livekit-server.exe
 assert.deepEqual((await readdir(packagedServer)).sort(),['GO-LICENSE','LIVEKIT-LICENSE','bundled-server.json','livekit-server.exe','pawtalk-api.exe'].sort(),'only shared-core binaries and required receipts/licenses are packaged');
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE; delete env.PAWTALK_DEV_URL;
 const invite = `pawtalk://127.0.0.1:32443/${'a'.repeat(64)}`;
-const child = spawn(path.resolve(process.env.PAWTALK_PACKAGED_DIR || 'release/win-unpacked', 'PawTalk.exe'), ['--smoke', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=19337', `--user-data-dir=${profile}`, invite], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+const child = spawn(path.resolve(process.env.PAWTALK_PACKAGED_DIR || 'release/win-unpacked', 'PawTalk.exe'), ['--smoke', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', `--user-data-dir=${profile}`, invite], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
 let stderr = '';
 child.stderr.on('data', data => { stderr = (stderr + data.toString()).slice(-131072); });
 let socket;
@@ -39,8 +39,17 @@ async function evaluate(expression) {
 }
 try {
   let target;
-  for (let i = 0; i < 100; i++) {
-    try { const list = await (await fetch('http://127.0.0.1:19337/json/list')).json(); target = list.find(item => item.type === 'page' && item.url.startsWith('file:')); if (target) break; } catch {}
+  const launchDeadline = Date.now() + 60_000;
+  while (Date.now() < launchDeadline) {
+    if (child.exitCode !== null) throw new Error(`Packaged Client exited during startup (${child.exitCode})`);
+    try {
+      const activePort = await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8');
+      const port = Number(activePort.split(/\r?\n/, 1)[0]);
+      const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1500) });
+      const list = await response.json();
+      target = list.find(item => item.type === 'page' && item.url.startsWith('file:'));
+      if (target) break;
+    } catch {}
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   assert.ok(target, 'packaged window loads');
@@ -102,18 +111,21 @@ try {
   assert.equal(fields.get('server'), serverId);
   assert.match(fields.get('anchor'), /^[a-f0-9]{64}$/);
   const channelId = own.value.channels.find(channel => channel.kind === 'text').id;
-  const voiceChannelName = own.value.channels.find(channel => channel.kind === 'voice').name;
+  const voiceChannelId = own.value.channels.find(channel => channel.kind === 'voice').id;
+  await until("!!document.querySelector('.member-server-list button')", 'host registry');
+  await evaluate("document.querySelector('.member-server-list button').click()");
+  await until(`window.desktop.membership('protection.protected.read', ${JSON.stringify({ serverId, channelId })})
+    .then(result => result.value?.allowSend === true)`, 'verified text key');
   const text = 'Synthetic packaged encrypted chat';
   const sent = await membership('chat.protected.send', { channelId, operationId: randomBytes(16).toString('hex'), text });
   assert.equal(sent.error, undefined, JSON.stringify(sent.error));
-  await until("!!document.querySelector('.member-server-list button')", 'host registry');
-  await evaluate("document.querySelector('.member-server-list button').click()");
   await until(`document.querySelector('.protected-chat-stream')?.textContent.includes(${JSON.stringify(text)})`, 'decrypted protected chat');
   const certificate=await new Promise((resolve,reject)=>{const connection=tls.connect({host:'127.0.0.1',port:32443,rejectUnauthorized:false},()=>{const cert=connection.getPeerCertificate();connection.destroy();resolve(cert);});connection.once('error',reject);});
   for(const address of [hostStatus.localAddress,...hostStatus.invitations])assert.equal(tls.checkServerIdentity(new URL(address).hostname,certificate),undefined);
   const anonymous=await new Promise((resolve,reject)=>{const request=https.get({hostname:'127.0.0.1',port:32443,path:'/api/v3/state',rejectUnauthorized:false},response=>{response.resume();resolve(response.statusCode);});request.once('error',reject);});assert.equal(anonymous,401);
-  await evaluate(`[...document.querySelectorAll('.member-channel')]
-    .find(button => button.textContent.trim() === ${JSON.stringify(voiceChannelName)}).click()`);
+  const voiceButton = `document.querySelector(${JSON.stringify(`[data-reorder-id="${voiceChannelId}"] .member-channel`)})`;
+  await until(`${voiceButton}?.disabled === false`, 'voice channel ready');
+  await evaluate(`${voiceButton}.click()`);
   await until("!!document.querySelector('.member-audio-buttons .person-network')",'packaged E2EE voice with RNNoise');
   await evaluate('window.desktop.stopHost()');
   await until("!document.querySelector('.member-audio-buttons .person-network')",'packaged host shutdown releases voice');
