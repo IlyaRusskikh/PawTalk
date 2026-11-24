@@ -19,6 +19,7 @@ Local sources are not automatically exact snapshots of public Release bodies. Th
 - [client-v0.14.1](client-v0.14.1.en.md)
 - [client-v0.15.0](client-v0.15.0.en.md)
 - [client-v0.15.1](client-v0.15.1.en.md)
+- [client-v0.15.2](client-v0.15.2.en.md)
 
 ## Server
 
@@ -43,5 +44,6 @@ Local sources are not automatically exact snapshots of public Release bodies. Th
 - [manager-v0.5.1](manager-v0.5.1.en.md)
 - [manager-v0.6.0](manager-v0.6.0.en.md)
 - [manager-v0.7.0](manager-v0.7.0.en.md)
+- [manager-v0.7.1](manager-v0.7.1.en.md)
 
 [Published GitHub Releases](https://github.com/IlyaRusskikh/PawTalk/releases) determine which tag exists for users. Never pin one global `releases/latest` URL.

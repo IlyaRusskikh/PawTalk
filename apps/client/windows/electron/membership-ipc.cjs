@@ -246,7 +246,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     if (!shown) return;
     shownNotifications.delete(key);
     clearTimeout(shown.expiry);
-    try { shown.notification.close?.(); } catch {}
+    try { shown.notification?.close?.(); } catch {}
     if (update) updateNotificationCount();
   }
   function cancelNotificationBatch(key){const batch=notificationBatches.get(key);if(!batch)return;batch.cancelled=true;clearTimeout(batch.timer);batch.resolve(false);notificationBatches.delete(key);}
@@ -310,8 +310,6 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       try {
         if (shown.connection !== connection || !visible?.has(shown.channelId)) throw Error('PROTECTED_ACCESS_DENIED');
         if (shown.kind === 'message') {
-          if (!shown.recheck) continue;
-          shown.recheck = false;
           await shown.verify();
           continue;
         }
@@ -357,7 +355,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     };
     const eligible = () => !stopped && !!alert && alert.until > Date.now() && protectedConnections.get(serverId) === connection &&
       !!protectedNotificationChannels.get(connection)?.has(channelId) && !intentionalDepartures.has(serverId) &&
-      (!ordinary || !getWindow()?.isFocused?.() && !hasPriorityNotice()) &&
+      (!ordinary || !hasPriorityNotice()) &&
       (alert.kind === 'direct' || !protectedGroupMuted(connection, channelId)) &&
       ((ordinary ? notified.get(key) : inbox?.delivered.get(channelId)) || 0) < position && !alreadyRead(key, { last: position });
     if (!channel || !eligible()) return false;
@@ -368,7 +366,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     const channelTitle = `${cleanName(knownRecords.get(serverId)?.name) || 'PawTalk'} · #${cleanName(channel.name) || t('Сообщения')}`;
     const title = ordinary ? channelTitle : `${t('Упоминание')} · ${channelTitle}`;
     const preview = messagePreview(message.text, t('Спойлер')) || t('Вложения');
-    const supported = Notification?.isSupported();
+    const supported = Notification?.isSupported() && (!ordinary || !getWindow()?.isFocused?.());
     const author = supported ? await protectedNotificationAuthor(connection, channelId, message.authorProfileId) : undefined;
     if (!eligible()) return false;
     const authorName = cleanName(author?.name) || t('Участник');
@@ -392,8 +390,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     }
     notified.set(key, Math.max(notified.get(key) ?? 0, position));
     if (notified.size > 2048) notified.delete(notified.keys().next().value);
-    if (!supported) return true;
-    const notification = new Notification({ id: notificationID(key), groupId: notificationID(serverId), silent: true, title, body, ...appearance });
+    const notification = supported ? new Notification({ id: notificationID(key), groupId: notificationID(serverId), silent: true, title, body, ...appearance }) : undefined;
     const count = (shownNotifications.get(key)?.count ?? 0) + 1;
     closeNotification(key, false);
     if (shownNotifications.size >= 128) closeNotification(shownNotifications.keys().next().value);
@@ -401,16 +398,14 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       expiry: setTimeout(() => { if (shownNotifications.get(key) === shown) closeNotification(key); }, freshness.remaining) };
     shownNotifications.set(key, shown);
     updateNotificationCount();
-    notification.on('show', () => {
+    notification?.on('show', () => {
       if (shownNotifications.get(key) !== shown || stopped || protectedConnections.get(serverId) !== connection ||
-          (ordinary && getWindow()?.isFocused?.()) ||
           (alert.kind !== 'direct' && protectedGroupMuted(connection, channelId)) || alreadyRead(key, shown)) {
         if (shownNotifications.get(key) === shown) closeNotification(key);
         else notification.close?.();
       }
     });
-    notification.on('failed', () => { if (shownNotifications.get(key) === shown) closeNotification(key); });
-    notification.on('click', () => {
+    notification?.on('click', () => {
       if (shownNotifications.get(key) !== shown || protectedConnections.get(serverId) !== connection) return;
       void verify().then(() => {
         const win = getWindow();
@@ -418,7 +413,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
         win.show(); win.focus(); send('membership-open-channel', { serverId, channelId, protected: true });
       }).catch(() => { if (shownNotifications.get(key) === shown) closeNotification(key); });
     });
-    notification.show();
+    notification?.show();
     return true;
   }
   const protectedPolicyPreviews = new Map();
@@ -532,8 +527,6 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     if (event.type === 'chat') {
       const inbox = protectedMentionInboxes.get(connection);
       if (inbox) inbox.invalidated = true;
-      const shown = shownNotifications.get(`${event.serverId}:${event.channelId}`);
-      if (shown?.connection === connection && shown.kind === 'message') shown.recheck = true;
       let channels = pushedProtectedHistory.get(connection);
       if (!channels) pushedProtectedHistory.set(connection, channels = new Map());
       const previous = channels.get(event.channelId);
@@ -557,7 +550,11 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       protectedStatusReads.delete(connection);
       protectedRoleViewBasis.delete(connection);
     }
-    send('membership-protected-event', deliveries?.length ? { ...event, pushed: true } : event);
+    if (event.type === 'chat' && deliveries?.length) {
+      const first = deliveries.at(-1).window.first;
+      const removed = [...new Set(deliveries.flatMap(delivery => delivery.window.removed))];
+      send('membership-protected-event', { ...event, pushed: true, first, removed });
+    } else send('membership-protected-event', event);
   });
   const snapshotResult=(serverId,value)=>({...value,eventsLive:live.healthy(serverId)});
   const protectedRosterReads = new WeakMap();
@@ -1215,7 +1212,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       if (!message || message.own) return { position: last, incoming: false };
       const recent = Number.isSafeInteger(message.sentAt) && message.sentAt <= Date.now() && Date.now() - message.sentAt < 30_000;
       const notified = input.notify === true && recent &&
-        await showProtectedMention({ serverId, channelId, position: last }, message, window, delivered && deliveredBatch);
+        await showProtectedMention({ serverId, channelId, position: last }, message, window, delivered && deliveredBatch).catch(() => false);
       return { position: last, incoming: true, recent, notified };
     },
     async 'chat.protected.pins'(input) {
@@ -1244,10 +1241,14 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       const { position, expectedRevision } = input;
       const text = string(input.text, 12288);
       if (!Number.isSafeInteger(position) || position < 1 || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1 ||
-          !text.trim() || Buffer.byteLength(text) > 12288) fail('INVALID_INPUT');
+          Buffer.byteLength(text) > 12288) fail('INVALID_INPUT');
+      const removeAttachments = input.removeAttachments ?? [];
+      if (!Array.isArray(removeAttachments) || removeAttachments.length > 10 ||
+          new Set(removeAttachments).size !== removeAttachments.length) fail('INVALID_INPUT');
+      removeAttachments.forEach(attachmentId => id(attachmentId));
       const connection = protectedConnections.get(serverId);
       if (!connection) fail('NOT_CONNECTED');
-      return client.editProtectedChatMessage(connection, channelId, position, expectedRevision, operationId, text, input.checklist);
+      return client.editProtectedChatMessage(connection, channelId, position, expectedRevision, operationId, text, input.checklist, removeAttachments);
     },
     async 'chat.protected.delete'(input) {
       const serverId = id(input.serverId), channelId = id(input.channelId);
@@ -1685,7 +1686,9 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       const connection = protectedConnections.get(id(input.serverId));
       if (!connection) fail('NOT_CONNECTED');
       const { revision, snapshot, importedProfileNames, importedRoleNames } = await client.readProtectedManagementPolicy(connection);
+      const owner = snapshot.Members?.[snapshot.Owner];
       return { revision, profiles: protectedEditableProfiles(snapshot, importedProfileNames),
+        ...(owner?.Active && { owner: { id: snapshot.Owner, name: importedProfileNames?.[snapshot.Owner] ?? (snapshot.Owner === connection.profileId ? t('Вы') : undefined), roles: owner.Roles ?? [], readOnly: true } }),
         roles: (snapshot.Order ?? []).map(id => ({ id, name: protectedRoleName(snapshot, importedRoleNames, id) })) };
     },
     async 'member.protected.roles.preview'(input) {
@@ -1966,6 +1969,21 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     async 'control.accept'(input) { return links.transferAccept(id(input.serverId), string(input.text, 4096)); },
     async 'control.finish'(input) { const value=await links.transferFinish(id(input.serverId), string(input.text, 4096)); send('membership-changed', {}); return value; },
     async 'memory.status'(){return{low:!!getMemoryPressure()};},
+    async 'notify.reconcile'(input) {
+      const serverId = id(input.serverId), channelId = id(input.channelId);
+      const key = serverId + ':' + channelId;
+      const batch = notificationBatches.get(key), shown = shownNotifications.get(key);
+      const entries = [batch, shown].filter(entry => entry && !entry.connection && entry.previewId > 0);
+      if (!entries.length || !client.connections.has(serverId)) return;
+      const { removed } = input;
+      if (removed !== undefined && (!Array.isArray(removed) || removed.length > 4000 ||
+          removed.some(position => !Number.isSafeInteger(position) || position < 1))) fail('INVALID_INPUT');
+      const ids = [...new Set(entries.map(entry => entry.previewId))];
+      const missing = removed ?? await client.messages(serverId, channelId, { ids })
+        .then(page => ids.filter(id => !page.messages.some(message => message.id === id)));
+      if (batch && notificationBatches.get(key) === batch && missing.includes(batch.previewId)) cancelNotificationBatch(key);
+      if (shown && !shown.connection && shownNotifications.get(key) === shown && missing.includes(shown.previewId)) closeNotification(key);
+    },
     async 'notify.read'(input){
       const serverId=id(input.serverId),channelId=id(input.channelId),read=input.messageId;if(!Number.isSafeInteger(read)||read<0)fail('INVALID_INPUT');
       const key=serverId+':'+channelId;notificationReads.set(key,Math.max(notificationReads.get(key)||0,read));if(notificationReads.size>2048)notificationReads.delete(notificationReads.keys().next().value);
@@ -1974,7 +1992,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       return true;
     },
     async notify(input) {
-      const serverId = id(input.serverId), channelId=id(input.channelId); if (!client.connections.has(serverId) || (!input.mention&&(getWindow()?.isFocused())) || !Notification?.isSupported()) return false;
+      const serverId = id(input.serverId), channelId=id(input.channelId); if (!client.connections.has(serverId) || (!input.mention&&(getWindow()?.isFocused()))) return false;
       if(input.mention!==undefined&&typeof input.mention!=='boolean')fail('INVALID_INPUT');
       const notificationKey=serverId+':'+channelId;
       if(input.messageId!==undefined){if(!Number.isSafeInteger(input.messageId)||input.messageId<1)fail('INVALID_INPUT');}
@@ -2007,20 +2025,21 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
           // Reading, focus or leaving can change while registry I/O is pending.
           if(!eligible())return false;
           const title=`${record?.name||'PawTalk'} · #${channelName}`,body=(count>1?t('Новых сообщений: {0}',count)+' · ':'')+`${alertAuthor}: ${alertPreview}`;
-          const appearance=await notificationAppearance({avatar:alertAvatar,authorName:alertAuthor,title,body}).catch(()=>({}));
+          const appearance=Notification?.isSupported()
+            ? await notificationAppearance({avatar:alertAvatar,authorName:alertAuthor,title,body}).catch(()=>({})) : {};
           if(!eligible())return false;
           if(last){notified.set(notificationKey,last);if(notified.size>2048)notified.delete(notified.keys().next().value);}
-          const notification=new Notification({id:notificationID(notificationKey),groupId:notificationID(serverId),silent:true,title,body,...appearance});
+          const notification=Notification?.isSupported()
+            ? new Notification({id:notificationID(notificationKey),groupId:notificationID(serverId),silent:true,title,body,...appearance}) : undefined;
           const activeCount = (shownNotifications.get(notificationKey)?.count ?? 0) + count;
           closeNotification(notificationKey, false);if(shownNotifications.size>=128)closeNotification(shownNotifications.keys().next().value);
           shownNotifications.set(notificationKey,{notification,last,previewId,count:activeCount});
           updateNotificationCount();
           // Windows prepares toasts asynchronously after show() returns. A read
           // can arrive before the shell displays it, so dismiss that late show too.
-          notification.on('show',()=>{if(stopped||shownNotifications.get(notificationKey)?.notification!==notification||alreadyRead(notificationKey,{last,previewId})||!client.connections.has(serverId)||intentionalDepartures.has(serverId)||!alertMention&&getWindow()?.isFocused()){if(shownNotifications.get(notificationKey)?.notification===notification)closeNotification(notificationKey);else try{notification.close?.();}catch{}}});
+          notification?.on('show',()=>{if(stopped||shownNotifications.get(notificationKey)?.notification!==notification||alreadyRead(notificationKey,{last,previewId})||!client.connections.has(serverId)||intentionalDepartures.has(serverId)||!alertMention&&getWindow()?.isFocused()){if(shownNotifications.get(notificationKey)?.notification===notification)closeNotification(notificationKey);else try{notification.close?.();}catch{}}});
           // Keep the object after native timeout: it can still be in Action Center.
-          notification.on('failed',()=>{if(shownNotifications.get(notificationKey)?.notification===notification)closeNotification(notificationKey);});
-          notification.on('click',()=>{const win=getWindow();if(win&&!win.isDestroyed()){win.show();win.focus();send('membership-open-channel',{serverId,channelId});}});notification.show();return true;
+          notification?.on('click',()=>{const win=getWindow();if(win&&!win.isDestroyed()){win.show();win.focus();send('membership-open-channel',{serverId,channelId});}});notification?.show();return true;
         })().then(resolve,()=>resolve(false)).finally(()=>{if(notificationBatches.get(notificationKey)===batch)notificationBatches.delete(notificationKey);});},Math.max(0,Math.min(250,first+1000-Date.now())));
         notificationBatches.set(notificationKey,batch);
       });

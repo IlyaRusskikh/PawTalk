@@ -13,7 +13,10 @@ const args=process.argv.slice(1),option=name=>{const i=args.indexOf(name);return
 const root=path.resolve(option('--root')||path.join(process.env.ProgramData||'C:\\ProgramData','PawTalk'));
 const rootKey=createHash('sha256').update(root.toLowerCase()).digest('hex').slice(0,16);
 app.setPath('userData',!app.isPackaged&&option('--review-user-data')?path.resolve(option('--review-user-data')):path.join(app.getPath('appData'),'PawTalk Server Manager',rootKey));
-const install=app.isPackaged?path.resolve(process.resourcesPath,'../../../..'):option('--review-host-dir')?path.resolve(option('--review-host-dir')):path.resolve(__dirname,'../../../../release/manager/windows');
+// The installer puts the desktop executable one directory below the host programs.
+const install=app.isPackaged
+  ? path.dirname(path.dirname(app.getPath('exe')))
+  : path.resolve(option('--review-host-dir') ?? path.join(__dirname,'../../../../release/manager/windows'));
 const host=path.join(install,'pawtalkctl.exe');
 const broker=new Broker(path.join(install,'pawtalk-server-tray.exe'),root);
 let refreshing=false,showWindow;

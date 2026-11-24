@@ -104,12 +104,18 @@ app.whenReady().then(async()=>{
   await until("document.querySelector('.photo-viewer .video-counter')?.textContent==='3 / 4'");
   await win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Right' });
   await until("document.querySelector('.photo-viewer .video-counter')?.textContent==='4 / 4'");
-  await run("document.querySelector('.photo-viewer .video-viewer-footer > button:last-child').click()");
-  await until("!!document.fullscreenElement");
+  win.webContents.sendInputEvent({type:'keyDown',keyCode:'F'});
+  win.webContents.sendInputEvent({type:'keyUp',keyCode:'F'});
+  await until("document.fullscreenElement && document.activeElement === document.fullscreenElement");
+  win.webContents.sendInputEvent({type:'keyDown',keyCode:'Left'});
+  win.webContents.sendInputEvent({type:'keyUp',keyCode:'Left'});
+  await until("document.querySelector('.photo-viewer .video-counter')?.textContent==='3 / 4'");
   assert.ok(await run("(()=>{const image=document.querySelector('.photo-viewer-image'),r=image.getBoundingClientRect(),v=document.fullscreenElement.getBoundingClientRect();return Math.abs(r.top+r.height/2-v.top-v.height/2)<1&&Math.abs(r.left+r.width/2-v.left-v.width/2)<1&&Math.abs(r.height-v.height)<1&&getComputedStyle(image).objectFit==='contain'})()"),'fullscreen photo fills a centered contain box instead of inheriting auto height');
   await fs.writeFile(path.join(os.tmpdir(),'pawtalk-photo-centered-'+lang+'.png'),(await win.capturePage()).toPNG());
 
-  await run("document.exitFullscreen()");
+  win.webContents.sendInputEvent({type:'keyDown',keyCode:'F'});
+  win.webContents.sendInputEvent({type:'keyUp',keyCode:'F'});
+  await until("!document.fullscreenElement");
   await run(`document.querySelector('.photo-viewer .video-viewer-header button[aria-label="${lang === 'en' ? 'Close' : 'Закрыть'}"]').click()`);
   await until("!document.querySelector('.video-dialog')");
   await run("document.querySelector('.chat-video-open').click()");
@@ -122,10 +128,16 @@ app.whenReady().then(async()=>{
   await run("(()=>{const i=document.querySelector('.video-volume input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'1.6');i.dispatchEvent(new Event('input',{bubbles:true}));})()");
   await run("document.querySelector('.video-next').click()");
   await until("document.querySelector('.video-counter').textContent==='2 / 4'&&!document.querySelector('.video-viewer video').paused");
-  await run("document.querySelector('.video-viewer-footer > button:last-child').click()");
-  await until("document.fullscreenElement?.classList.contains('video-viewer')");
+  await run("document.querySelector('.video-viewer video').loop=true; document.querySelector('.video-viewer-footer > button:last-child').click()");
+  await until("document.fullscreenElement?.classList.contains('video-viewer') && document.activeElement === document.fullscreenElement");
   assert.equal(win.isFullScreen(),true,'Fullscreen API enters actual native window fullscreen');
-  await until("document.querySelector('.video-viewer video').currentTime>.5");
+  await until("!document.querySelector('.video-viewer video').paused && document.querySelector('.video-viewer video').currentTime > .15");
+  win.webContents.sendInputEvent({type:'keyDown',keyCode:'Space'});
+  win.webContents.sendInputEvent({type:'keyUp',keyCode:'Space'});
+  await until("document.querySelector('.video-viewer video').paused");
+  win.webContents.sendInputEvent({type:'keyDown',keyCode:'Space'});
+  win.webContents.sendInputEvent({type:'keyUp',keyCode:'Space'});
+  await until("!document.querySelector('.video-viewer video').paused");
   await fs.writeFile(path.join(os.tmpdir(),'pawtalk-video-fullscreen-'+lang+'.png'),(await win.capturePage()).toPNG());
   win.webContents.sendInputEvent({type:'keyDown',keyCode:'Escape'});win.webContents.sendInputEvent({type:'keyUp',keyCode:'Escape'});
   await until("!document.fullscreenElement&&!!document.querySelector('.video-dialog[open]')");
@@ -184,6 +196,13 @@ app.whenReady().then(async()=>{
  await until("document.querySelectorAll('.attachment-thumbnail img').length===2&&!document.querySelector('.attachment-preparing')");
  await run("document.querySelector('.member-composer').requestSubmit()");
  await until("document.querySelectorAll('.chat-photo-card .video-poster img').length===2 && [...document.querySelectorAll('.chat-photo-card .video-poster img')].every(img=>img.naturalWidth>0)");
+  assert.ok(await run(`(() => {
+    const card = [...document.querySelectorAll('.chat-photo-card')].find(item => item.querySelector('img')?.naturalWidth === 1);
+    const photo = card.querySelector('img');
+    const rect = photo.getBoundingClientRect(), frame = card.getBoundingClientRect();
+    return rect.width === 1 && rect.height === 1 && rect.left === frame.left && rect.top === frame.top &&
+      getComputedStyle(card).backgroundColor === 'rgba(0, 0, 0, 0)';
+  })()`), 'Tiny chat images keep their size and sit at the upper left without a dark frame');
  const [photo,gif] = await run('window.sendRequests.at(-1).content.files');
  assert.equal(photo.size,originalSize);
  assert.equal(photo.preview.mime,'image/webp');

@@ -16,8 +16,8 @@ async function checkProtectedPinScope({ fetcher, createClient, host, owner, chan
   const limitedRoles = { '@everyone': { Allow: null, Deny: ['history.full'] } };
   await setACL({ Roles: limitedRoles, Profiles: null });
 
-  const send = (policy, text, { checklist, poll, mentions } = {}) =>
-    host.sendProtectedRuntimeText(owner, channelId, text, operationId(), policy, undefined, checklist, poll, undefined, mentions);
+  const send = (policy, text, { checklist, poll, mentions, operation = operationId(), attachments } = {}) =>
+    host.sendProtectedRuntimeText(owner, channelId, text, operation, policy, undefined, checklist, poll, attachments, mentions);
   const sendCurrent = (text, content) => host.withCurrentProtectedChatPolicy(owner, policy => send(policy, text, content));
   const pin = (position, pinned = true) => host.setProtectedMessagePin(owner, channelId, position, pinned);
   const ownerPins = () => host.readProtectedPins(owner, channelId);
@@ -25,8 +25,12 @@ async function checkProtectedPinScope({ fetcher, createClient, host, owner, chan
 
   const checklist = { everyone: true, items: [{ id: operationId(), text: 'Synthetic task' }] };
   const poll = { duration: 3600, anonymous: false, multiple: false, intermediate: true, options: ['First', 'Second'] };
+  const mediaOperation = operationId();
+  const attachment = await host.stageProtectedAttachment(owner, channelId, mediaOperation, 0, {
+    name: 'attachment.txt', mime: 'application/octet-stream', bytes: Buffer.from('synthetic attachment'),
+  });
   const [plainPosition, listPosition, pollPosition] = await host.withCurrentProtectedChatPolicy(owner, async policy => [
-    (await send(policy, 'Synthetic original text')).Position,
+    (await send(policy, 'Synthetic original text', { operation: mediaOperation, attachments: [attachment] })).Position,
     (await send(policy, 'Synthetic checklist', { checklist })).Position,
     (await send(policy, 'Synthetic poll', { poll })).Position,
   ]);
@@ -35,10 +39,18 @@ async function checkProtectedPinScope({ fetcher, createClient, host, owner, chan
   assert.deepEqual((await ownerOriginal(listPosition)).checklist, checklist);
   assert.deepEqual((await ownerOriginal(pollPosition)).poll, poll);
 
-  await host.editProtectedChatMessage(owner, channelId, plainPosition, 1, operationId(), 'Synthetic revised text');
+  assert.equal((await ownerOriginal(plainPosition)).files?.[0]?.id, attachment);
+  const removalOperation = operationId();
+  const removeAttachment = () => host.editProtectedChatMessage(owner, channelId, plainPosition, 1,
+    removalOperation, 'Synthetic revised text', undefined, [attachment]);
+  assert.equal((await removeAttachment()).revision, 2);
+  assert.equal((await removeAttachment()).existing, true);
   assert.equal((await ownerPins()).items.find(pin => pin.position === plainPosition).revision, 2);
   const edited = await ownerOriginal(plainPosition);
   assert.deepEqual([edited.position, edited.revision, edited.text], [plainPosition, 2, 'Synthetic revised text']);
+  assert.equal(edited.files?.length ?? 0, 0);
+  await host.editProtectedChatMessage(owner, channelId, plainPosition, 2, operationId(), 'Synthetic further edit');
+  assert.equal((await ownerOriginal(plainPosition)).files?.length ?? 0, 0, 'Later text edits preserve attachment removal');
   await host.deleteProtectedMessage(owner, channelId, listPosition);
   assert.deepEqual((await ownerPins()).items.map(pin => pin.position), [pollPosition, plainPosition]);
   assert.equal(await ownerOriginal(listPosition), undefined);

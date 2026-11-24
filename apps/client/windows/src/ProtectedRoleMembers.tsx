@@ -7,8 +7,8 @@ import { Modal } from './Modal';
 import { ProtectedRoleAccessImpact, type RoleAccessImpact } from './ProtectedAccessImpact';
 import { Button } from './ui/Button';
 
-type Profile = { id: string; name?: string; roles: string[] };
-type Policy = { revision: number; profiles: Profile[] };
+type Profile = { id: string; name?: string; roles: string[]; readOnly?: boolean };
+type Policy = { revision: number; profiles: Profile[]; owner?: Profile };
 const nameOf = (profile: Profile) => profile.name ?? t('Участник · {0}', profile.id.slice(0, 8));
 
 export function ProtectedRoleMembers({ serverId, roleId, changed }: {
@@ -33,6 +33,7 @@ export function ProtectedRoleMembers({ serverId, roleId, changed }: {
 
   const matches = (profile: Profile, query: string) => nameOf(profile).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   const members = policy?.profiles.filter(profile => profile.roles.includes(roleId)) ?? [];
+  if (policy?.owner?.roles.includes(roleId)) members.unshift(policy.owner);
   const candidates = policy?.profiles.filter(profile => !profile.roles.includes(roleId) && matches(profile, candidateSearch)) ?? [];
   const close = () => {
     if (busy) return;
@@ -71,8 +72,8 @@ export function ProtectedRoleMembers({ serverId, roleId, changed }: {
     {policy && !members.length && <p>{t('У роли пока нет участников.')}</p>}
     <ul className="protected-role-member-list">{members.filter(profile => matches(profile, search)).map(profile =>
       <li key={profile.id}><Avatar name={nameOf(profile)}/><span>{nameOf(profile)}</span>
-        <button type="button" className="icon-button" aria-label={t('Снять роль')} title={t('Снять роль')}
-          onClick={() => setRemoval(profile)}><Icon name="close" size={16}/></button></li>)}</ul>
+        {!profile.readOnly && <button type="button" className="icon-button" aria-label={t('Снять роль')} title={t('Снять роль')}
+          onClick={() => setRemoval(profile)}><Icon name="close" size={16}/></button>}</li>)}</ul>
     {(selection || removal) && <Modal title={t(removal ? 'Снять роль' : 'Добавить участников')} onClose={close} error={error}>
       {removal && <p>{nameOf(removal)}</p>}
       {preview?.impact && <ProtectedRoleAccessImpact impact={preview.impact}/>}

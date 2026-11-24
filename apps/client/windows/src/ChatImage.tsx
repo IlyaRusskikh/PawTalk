@@ -5,7 +5,7 @@ import {VideoViewer} from './VideoViewer';
 import { Icon } from './Controls';
 import { t } from './i18n';
 
-export function ChatImage({ image: inputImage, load, onRemove, removing = false,credits }: { image: Image; load(): Promise<Blob>; onRemove?(): void; removing?: boolean;credits?:{author?:string;avatar?:string;date?:number} }) {
+export function ChatImage({ image: inputImage, load, credits }: { image: Image; load(): Promise<Blob>; credits?:{author?:string;avatar?:string;date?:number} }) {
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>();
   const image = { ...inputImage, ...dimensions };
   const previewScale = Math.min(1, 420 / image.width, 320 / image.height);
@@ -89,7 +89,6 @@ export function ChatImage({ image: inputImage, load, onRemove, removing = false,
     {url ? <button type="button" className="chat-image-open" aria-label={t("Открыть изображение {0}", image.name)} onContextMenu={showMenu} onClick={() => setOpen(true)}><img src={url} width={image.width} height={image.height} alt={image.name} decoding="async"/></button>
       : failed ? <button type="button" className="image-retry" onClick={() => setAttempt(value => value + 1)}><Icon name="image"/>{t("Не удалось загрузить. Повторить")}</button>
       : <span className="image-placeholder"><Icon name="image"/>{visible ? t("Загружаем изображение…") : t("Изображение")}</span>}
-    {onRemove && <button type="button" className="chat-image-remove" title={t('Удалить вложение')} aria-label={t('Удалить вложение')} disabled={removing} onClick={onRemove}><Icon name="trash" size={18}/></button>}
     {actionStatus && !open && <span className="image-action-toast" role="status">{actionStatus}</span>}
     {open && url && <VideoViewer items={[{id:image.id,name:image.name,image:true,load:async()=>url}]} {...credits} onClose={() => setOpen(false)}
       photoStatus={actionStatus} photoCopy={{ action: () => void imageAction('copy'), disabled: working }} photoContent={<>

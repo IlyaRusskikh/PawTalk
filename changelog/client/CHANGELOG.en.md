@@ -4,6 +4,12 @@
 
 Client releases and early combined Voicecord/PawTalk tags.
 
+## client-v0.15.2
+
+Notification delivery, fullscreen controls, inline attachment removal and chat fixes.
+
+[Release details](../../releases/client-v0.15.2.en.md)
+
 ## Release source: client-v0.15.1
 
 [Release details](../../releases/client-v0.15.1.en.md)

@@ -803,7 +803,7 @@ test('protected member assignments and personal channel rules preview only the s
   const owner = 'a'.repeat(64), reader = 'd'.repeat(64), other = 'f'.repeat(64);
   const connection = { address: 'https://127.0.0.1', policyTrust: {} };
   let snapshot = { Owner: owner, Roles: { '@everyone': { Grants: ['channel.view'] }, archive: { Grants: ['history.full'] } },
-    Order: ['archive'], Members: { [owner]: { ID: owner, Active: true }, [reader]: { ID: reader, Active: true },
+    Order: ['archive'], Members: { [owner]: { ID: owner, Active: true, Roles: ['archive'] }, [reader]: { ID: reader, Active: true },
       [other]: { ID: other, Active: true, Roles: ['archive'] } },
     Channels: { [channelId]: { Kind: 'text', ACL: { Roles: {}, Profiles: { [other]: { Allow: ['message.send'] } } } } },
     Categories: { private: { Profiles: { [reader]: { Deny: ['channel.view'] } } } },
@@ -829,8 +829,10 @@ test('protected member assignments and personal channel rules preview only the s
   const input = { serverId, channelId, profileId: reader, revision: 4 };
   try {
     await f.call('connect', { serverId });
-    const profiles = (await f.call('member.protected.roles', { serverId })).value.profiles;
+    const rolePolicy = (await f.call('member.protected.roles', { serverId })).value;
+    const { profiles } = rolePolicy;
     assert.deepEqual(profiles.map(profile => profile.id), [reader, other]);
+    assert.deepEqual(rolePolicy.owner, { id: owner, name: undefined, roles: ['archive'], readOnly: true });
     assert.equal(profiles[0].name, 'Reader');
     const explain = { ...input, profileId: other, permission: 'message.send' };
     await assert.rejects(f.unauthorized('channel.protected.explain', explain), /Unauthorized/);
@@ -1121,20 +1123,25 @@ test('protected notifications honor group mute and verify the original immediate
 });
 
 test('protected ordinary activity uses authenticated recent messages, and reading or muting dismisses its toast', async () => {
-  const appearances = [];
-  const f = nativeAlerts({ notificationAppearance: async meta => { appearances.push(meta); return {}; } });
+  const appearances = [], counts = [];
+  let focused = false, deleted = false;
+  const f = nativeAlerts({
+    notificationAppearance: async meta => { appearances.push(meta); return {}; },
+    getWindow: () => ({ isFocused: () => focused }), onNotificationCount: count => counts.push(count),
+  });
   const profileId = 'd'.repeat(64);
   const authorId = 'f'.repeat(64), avatar = 'synthetic-avatar';
   const position = 2;
   const secondChannel = 'e'.repeat(32);
   const staleChannel = 'c'.repeat(32);
+  const focusedChannel = '6'.repeat(32);
   const cursor = '7'.repeat(32);
   f.client.loadProtectedRuntimeTrust = async () => ({ serverId });
   f.client.openStoredProtectedRuntime = async () => ({ serverId, profileId, address: 'https://127.0.0.1' });
   f.client.readProtectedRuntimeState = async () => ({ apiProtocolVersion: 3, serverId, profileId,
-    channels: [channelId, secondChannel, staleChannel].map(id => ({ id, kind: 'text', name: 'Protected' })) });
+    channels: [channelId, secondChannel, staleChannel, focusedChannel].map(id => ({ id, kind: 'text', name: 'Protected' })) });
   f.client.readProtectedHistoryWindow = async (_connection, id, after) => ({
-    first: 1, last: position, removed: [], cursor,
+    first: 1, last: position, removed: deleted && id === focusedChannel ? [position] : [], cursor,
     edits: id === staleChannel && after === cursor ? [{ position, revision: 2 }] : [],
   });
   f.client.readProtectedChatReference = async (_connection, _channel, requested, window) => {
@@ -1172,10 +1179,40 @@ test('protected ordinary activity uses authenticated recent messages, and readin
     assert.equal((await activity(1, secondChannel)).value.notified, true);
     await mute([secondChannel]);
     assert.equal(f.shown[2].closed, 1);
-    assert.equal((await activity(1, staleChannel)).error.code, 'PROTECTED_ACCESS_DENIED');
+    assert.equal((await activity(1, staleChannel)).value.notified, false);
     assert.equal(f.shown.length, 3, 'an edit during toast preparation invalidates the preview');
+    focused = true;
+    assert.equal((await activity(1, focusedChannel)).value.notified, true);
+    assert.equal(f.shown.length, 3, 'an unseen chat can update the taskbar without a native toast while the window has focus');
+    assert.equal(counts.at(-1), 1);
+    deleted = true;
+    await f.call('chat.protected.mentions', { serverId, mutedChannels: [], serverMuted: false });
+    assert.equal(counts.at(-1), 0, 'a deleted protected message clears its taskbar count');
     const other = await f.call('chat.protected.activity', { serverId, channelId: '8'.repeat(32), notify: true });
     assert.equal(other.value, undefined);
+  } finally { f.service.stop(); }
+});
+
+test('the taskbar count works without native toasts and clears after the message is deleted', async () => {
+  const counts = [];
+  const f = fixture({ onNotificationCount: count => counts.push(count) });
+  const present = new Set([10, 11]);
+  f.client.messages = async (_server, _channel, { ids }) => ({
+    messages: ids.filter(id => present.has(id)).map(id => ({ id })),
+  });
+  const notify = (id, channel) => f.call('notify', {
+    serverId, channelId: channel, channelName: 'General', messageId: id, text: 'Message',
+  });
+  try {
+    const other = 'c'.repeat(32);
+    assert.equal((await notify(10, channelId)).value, true);
+    assert.equal((await notify(11, other)).value, true);
+    assert.equal(counts.at(-1), 2);
+    present.delete(10);
+    await f.call('notify.reconcile', { serverId, channelId });
+    assert.equal(counts.at(-1), 1);
+    await f.call('notify.read', { serverId, channelId: other, messageId: 11 });
+    assert.equal(counts.at(-1), 0);
   } finally { f.service.stop(); }
 });
 

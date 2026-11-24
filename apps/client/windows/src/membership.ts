@@ -7,7 +7,7 @@ export interface Channel { id: string; name: string; kind: 'text'|'voice'; prote
 export interface TimeoutStatus { deadline: number; reason?: string; canSet: boolean; canLift: boolean }
 export type ComposerActivity = 'typing' | 'recording' | 'idle';
 export type ProtectedServerEvent = { serverId: string } & (
-  { type: 'state' | 'resync' } | { type: 'chat'; channelId: string; pushed?: boolean } |
+  { type: 'state' | 'resync' } | { type: 'chat'; channelId: string; pushed?: boolean; first?: number; removed?: number[] } |
   { type: 'composer'; channelId: string; profileId: string; activity: ComposerActivity } |
   { type: 'voice'; channelId: string } | { type: 'status'; live: boolean });
 export interface ProtectedServerState {

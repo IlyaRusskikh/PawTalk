@@ -57,7 +57,7 @@ export type ProtectedChatCache = Map<string, {
 }>;
 type DeferredText = { basis: DeferredPolicy; replyTo?: number };
 export type ProtectedDraft = { text: string; operationId: string; mentions?: ProtectedMention[]; deferred?: DeferredText };
-type EditDraft = ProtectedDraft & { position: number; expectedRevision: number; originalText: string };
+type EditDraft = ProtectedDraft & { position: number; expectedRevision: number; originalText: string; attachmentIds: string[]; removeAttachments: string[] };
 type EditChecklist = ChecklistContent & { position: number; expectedRevision: number };
 
 type ProtectedChatProps = {
@@ -82,6 +82,8 @@ type ProtectedChatProps = {
   protection?: ProtectionStatus;
   changeDraft: (text: string, mentions?: ProtectedMention[]) => void;
   onRead?: (position: number) => void;
+  onViewport?: (latest: boolean) => void;
+  onHistoryPruned?: (first: number, removed: number[]) => void;
   clearDraft: (operationId: string) => void;
   setDeferred: (operationId: string, deferred?: DeferredText) => void;
 };
@@ -164,7 +166,7 @@ export function ProtectedChatPreview({ channelName, canSend, canAttach }: {
   </ProtectedChatFrame>;
 }
 
-export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKey, authorNames, roleColors, authorRosterCursor, ownProfileId, ownAvatar, draft, timedOut, eventsLive, composerEvents, mediaVariants = false, offline = false, keysPending = false, pauseSending, protection, changeDraft, clearDraft, setDeferred, onRead }: ProtectedChatProps) {
+export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKey, authorNames, roleColors, authorRosterCursor, ownProfileId, ownAvatar, draft, timedOut, eventsLive, composerEvents, mediaVariants = false, offline = false, keysPending = false, pauseSending, protection, changeDraft, clearDraft, setDeferred, onRead, onViewport, onHistoryPruned }: ProtectedChatProps) {
   const [cached] = useState(() => {
     const entry = cache.get(cacheKey);
     return !offline && !keysPending && entry && entry.until > Date.now() ? entry : undefined;
@@ -306,6 +308,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     highlight(row);
   };
   function rememberRead() {
+    onViewport?.(following.current);
     const list = history.current;
     if (!list || readOnly || !document.hasFocus() || document.hidden || document.querySelector('dialog[open]')) return;
     const bounds = list.getBoundingClientRect();
@@ -431,6 +434,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     setMessages(messages => messages.map(message => message.position === position && !message.locked ?
       { ...message, completedPoll: true, dedicatedDeletion: true } : message));
   }, []);
+  const historyPruned = useEffectEvent((first: number, removed: number[]) => onHistoryPruned?.(first, removed));
   const applyWindow = useCallback((window: HistoryWindow) => {
     if (window.last !== undefined) setNewestPosition(window.last);
     const { first: nextFirst } = window;
@@ -445,6 +449,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     setCanCreatePoll(window.canCreatePoll === true);
     setPins(window.pins);
     const removed = new Set(window.removed);
+    if (removed.size || first.current !== nextFirst) historyPruned(nextFirst, window.removed);
     if (removed.size) {
       for (const position of removed) {
         locallyRemoved.current.delete(position);
@@ -962,6 +967,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
       setMessages(previous => pruneHistory(previous, first.current ?? 1, new Set([position])));
       setReplyTo(selected => selected === position ? undefined : selected);
       setDeleting(undefined);
+      setEditing(draft => draft?.position === position ? undefined : draft);
       await load(true);
     } catch (failure) {
       if (mounted.current) setDeleteError((failure as Error).message);
@@ -969,15 +975,24 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
       if (mounted.current) setMutating(false);
     }
   }
+  const canSaveEdit = !!editing && !mutating && canSend && !timedOut &&
+    (editing.text.trim() !== editing.originalText.trim() || editing.removeAttachments.length > 0);
   async function edit() {
-    if (mutating || !canSend || timedOut || !editing?.text.trim() || editing.text === editing.originalText) return;
+    if (!editing || !canSaveEdit) return;
+    const { position, expectedRevision, operationId, attachmentIds, removeAttachments } = editing;
+    const { text } = trimMessage(editing.text);
+    if (!text && attachmentIds.length === removeAttachments.length) {
+      beginDelete(position);
+      return;
+    }
     setMutating(true);
     setEditError('');
     try {
-      const { originalText, ...draft } = editing;
-      const result = await membership<{ revision: number }>('chat.protected.edit', { serverId, channelId, ...draft, text: trimMessage(draft.text).text });
+      const result = await membership<{ revision: number }>('chat.protected.edit', {
+        serverId, channelId, position, expectedRevision, operationId, text, removeAttachments,
+      });
       if (!mounted.current) return;
-      pendingEdits.current.set(draft.position, result.revision);
+      pendingEdits.current.set(position, result.revision);
       setEditing(undefined);
       await load(true);
     } catch (failure) {
@@ -1022,7 +1037,8 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     }
     setEditError('');
     setEditing({ position: message.position, expectedRevision: message.revision ?? 1, text: message.text, originalText: message.text,
-      operationId: crypto.randomUUID().replaceAll('-', '') });
+      attachmentIds: [...(message.image ? [message.image.id] : []), ...(message.files ?? []).map(file => file.id)],
+      removeAttachments: [], operationId: crypto.randomUUID().replaceAll('-', '') });
   }
   function beginDelete(position: number) {
     setDeleteError('');
@@ -1166,6 +1182,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
           scrollTop.current = node.scrollTop;
           const bottom = node.scrollHeight - node.clientHeight - node.scrollTop;
           following.current = !hasMoreRef.current && bottom < 36;
+          onViewport?.(following.current);
           setAboveLatest(bottom >= 36);
           rememberResizePosition(node);
           rememberRead();
@@ -1237,12 +1254,35 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
                           {t('Просмотреть опрос')}
                         </button>}
                     </div> :
+                  editing?.position === message.position && !readOnly ?
+                    <form className="chat-inline-edit" aria-label={t('Редактировать сообщение')} onSubmit={event => { event.preventDefault(); void edit(); }}>
+                      <FormattingTextarea autoFocus rows={1} maxLength={4096} value={editing.text} readOnly={mutating}
+                        aria-label={t('Сообщение')} onEscape={() => { if (!mutating) setEditing(undefined); }}
+                        onKeyDown={event => {
+                          if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+                          event.preventDefault();
+                          if (!event.repeat) void edit();
+                        }}
+                        onChange={event => setEditing({ ...editing, text: event.target.value, operationId: crypto.randomUUID().replaceAll('-', '') })}/>
+                      {!message.locked && [message.image, ...(message.files ?? [])].filter(file => file !== undefined).map(file => {
+                        const removed = editing.removeAttachments.includes(file.id);
+                        return <div key={file.id} className="chat-edit-attachment">
+                          <span>{file.name ?? t('Изображение')}</span>
+                          <button type="button" disabled={mutating} aria-pressed={removed}
+                            onClick={() => setEditing({ ...editing, removeAttachments: removed
+                              ? editing.removeAttachments.filter(id => id !== file.id) : [...editing.removeAttachments, file.id],
+                            operationId: crypto.randomUUID().replaceAll('-', '') })}>{t(removed ? 'Вложение будет удалено' : 'Удалить вложение')}</button>
+                        </div>;
+                      })}
+                      <div className="chat-edit-hint"><span>{t('Esc для')}</span> <button type="button" disabled={mutating} onClick={() => setEditing(undefined)}>{t('отмены')}</button><span> · {t('Enter чтобы')}</span> <button type="submit" disabled={!canSaveEdit}>{t('сохранить')}</button></div>
+                      {editError && <p role="alert" className="text-error">{editError}</p>}
+                    </form> :
                   <div className="member-message-text" style={flightActive && outgoing?.position === message.position ? { visibility: 'hidden' } : undefined}>{message.locked ? t('Нет ключа для этого сообщения.') :
                     <MessageText text={message.text} verifiedMentions={message.mentions} roleColors={roleColors} allowRemotePreview={!offline}/>}
                     {!message.locked && message.editedAt !== undefined && <small className="chat-edited"
                       title={new Date(message.editedAt).toLocaleString()}>{t('Изменено')}</small>}
                   </div>}
-                {!message.locked && (message.image || !!message.files?.length) && <div className="chat-message-attachments"
+                {editing?.position !== message.position && !message.locked && (message.image || !!message.files?.length) && <div className="chat-message-attachments"
                   data-multiple={(message.files?.length ?? 0) + Number(!!message.image) > 1}>
                   {message.image && <ChatFile serverId={serverId} channelId={channelId} protectedPosition={message.position}
                     file={{ ...message.image, name: message.image.name ?? t('Изображение'), size: message.image.size ?? 0 }}/>}
@@ -1253,7 +1293,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
               </div>
               {pinned && !message.locked && <span className="chat-message-pin" role="img"
                 aria-label={t('Закреплённое сообщение')} title={t('Закреплённое сообщение')}><Icon name="pin" size={14}/></span>}
-              {!readOnly && (mayReply(message) || mayRemove(message) || mayEdit(message) || (!message.locked && pins?.canPin)) && <div className="member-message-actions">
+              {editing?.position !== message.position && !readOnly && (mayReply(message) || mayRemove(message) || mayEdit(message) || (!message.locked && pins?.canPin)) && <div className="member-message-actions">
                 {mayReply(message) && <button type="button" className="icon-button" title={t('Ответить')}
                   aria-label={t('Ответить')} onClick={() => selectReply(message.position)}><Icon name="reply" size={16}/></button>}
                 {!message.locked && pins?.canPin && (() => {
@@ -1438,18 +1478,6 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
           if (mounted.current) pendingEdits.current.set(position, result.revision);
         }}
         onClose={() => setEditingChecklist(undefined)} onPosted={() => void load(true)}/>}
-      {!readOnly && editing && <Modal className="chat-edit-modal" title={t('Редактировать сообщение')} onClose={() => { if (!mutating) setEditing(undefined); }} error={editError}>
-        <form className="form-fields" onSubmit={event => { event.preventDefault(); void edit(); }}>
-          <label>{t('Сообщение')}<FormattingTextarea autoFocus rows={1} maxLength={4096} value={editing.text} disabled={mutating}
-            onChange={event => setEditing({ ...editing, text: event.target.value, operationId: crypto.randomUUID().replaceAll('-', '') })}/></label>
-          <div className="modal-actions">
-            <button type="button" disabled={mutating} onClick={() => setEditing(undefined)}>{t('Отмена')}</button>
-            <button type="submit" className="primary" disabled={mutating || !canSend || timedOut || !editing.text.trim() || editing.text === editing.originalText}>
-              {t('Сохранить')}
-            </button>
-          </div>
-        </form>
-      </Modal>}
       {deletionTarget &&
         <Modal title={deletionTitle(deletingPoll)} onClose={() => { if (!mutating) setDeleting(undefined); }} error={deleteError}>
           <p>{t(deletingPoll ? 'Опрос и его результат будут удалены для всех участников.' : 'Сообщение будет удалено для всех участников.')}</p>

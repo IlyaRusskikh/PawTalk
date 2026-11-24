@@ -21,3 +21,8 @@
 
 - [Client 0.15.1](releases/client-v0.15.1.ru.md)
 - [Server 0.14.2](releases/server-v0.14.2.ru.md)
+
+Источники выпусков с исправлениями Client и Windows Manager
+
+- [Client 0.15.2](releases/client-v0.15.2.ru.md)
+- [Manager 0.7.1](releases/manager-v0.7.1.ru.md)
