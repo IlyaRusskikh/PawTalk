@@ -38,6 +38,8 @@ The optional checklist-events-v1 capability pushes versioned check snapshots thr
 
 ## Protected access (API 3)
 
+Updated Clients use the optional `roleColors` field in the protected channel roster to color verified role mentions. Upgrade Server to expose these colors. Older peers continue to use the default mention style.
+
 Managed migration through the Client requires Server 0.14.1. On Server 0.14.0, the migration dialog cannot read a Manager-prepared checkpoint. If a room is already in maintenance on that version, roll back in Manager before updating Server and preparing again.
 
 Client 0.15.0 creates new temporary rooms with API 3 and can still join API 2 permanent servers. Clients through 0.14.1 require API 2. Permanent Server 0.14.0 keeps an existing API 2 room on API 2 until the owner explicitly activates a prepared migration. Use Manager 0.7.0 for the host migration workflow. The migration workflow freezes the API 2 source. Active API 2 bans still apply to the effective profile after cutover and can be lifted through API 3 by a moderator with the ban permission. The lift is recorded in the signed API 3 policy. Readmission requires a valid invitation.

@@ -7,6 +7,11 @@ export const visualMime=(mime:string)=>imageMime(mime)||videoMime(mime)||mime===
 export function hasGalleryPreview(file: { mime: string; preview?: unknown }) {
  return visualMime(file.mime) && (file.mime !== 'image/gif' || !!file.preview);
 }
+const maxMediaSourceSize = 128 * 1024 * 1024;
+const maxCompressionDuration = 120;
+export const largeAttachmentLimit = 50 * 1024 * 1024;
+const compressedDurations = new WeakMap<File, number>();
+
 export const mediaVariantsCapability = 'media-variants-v1';
 export function createMediaDraft(file: File): MediaDraft {
  return { id: crypto.randomUUID(), file, url: URL.createObjectURL(file) };
@@ -35,7 +40,7 @@ function imageCanvas(source: ImageBitmap, maxSide: number) {
 
 export async function fitChatImage(file: File): Promise<File> {
  if (!imageMime(file.type) || file.size <= chatImageLimit) return file;
- if (file.size > 64 * 1024 * 1024 || inspectImage(new Uint8Array(await file.arrayBuffer()))?.mime !== file.type) {
+ if (file.size > maxMediaSourceSize || inspectImage(new Uint8Array(await file.arrayBuffer()))?.mime !== file.type) {
   throw Error('Invalid image');
  }
  const bitmap = await createImageBitmap(file);
@@ -52,6 +57,94 @@ export async function fitChatImage(file: File): Promise<File> {
   throw Error('Image exceeds the attachment limit');
  } finally {
   bitmap.close();
+ }
+}
+
+export function canPrepareAttachment(file: File, limit: number) {
+ return file.size > 0 && file.size <= (imageMime(file.type) || videoMime(file.type) ? maxMediaSourceSize : limit);
+}
+
+export async function fitChatAttachment(file: File, limit: number, signal: AbortSignal) {
+ signal.throwIfAborted();
+ if (imageMime(file.type)) return fitChatImage(file);
+ if (file.size <= limit) return file;
+ if (!videoMime(file.type) || file.size > maxMediaSourceSize) throw Error('Attachment exceeds the size limit');
+
+ const video = document.createElement('video') as HTMLVideoElement & { captureStream(): MediaStream };
+ const url = URL.createObjectURL(file);
+ const loading = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
+ let stream: MediaStream | undefined;
+ let recorder: MediaRecorder | undefined;
+ try {
+  await new Promise<void>((resolve, reject) => {
+   loading.throwIfAborted();
+   const abort = () => finish(loading.reason);
+   function finish(error?: unknown) {
+    loading.removeEventListener('abort', abort);
+    video.onloadeddata = video.onerror = null;
+    if (error) reject(error); else resolve();
+   }
+   loading.addEventListener('abort', abort, { once: true });
+   video.onloadeddata = () => finish();
+   video.onerror = () => finish(Error('Could not decode video'));
+   video.muted = true;
+   video.preload = 'auto';
+   video.src = url;
+  });
+
+  const durationBudget = Number.isFinite(video.duration) ? video.duration : maxCompressionDuration;
+  const audioBitsPerSecond = 96_000;
+  const videoBitsPerSecond = Math.floor(Math.min(4_000_000, limit * 8 * 0.85 / durationBudget - audioBitsPerSecond));
+  if (!(video.duration > 0) || durationBudget > maxCompressionDuration || videoBitsPerSecond < 100_000) {
+   throw Error('Video cannot be compressed within the attachment limit');
+  }
+  const recording = AbortSignal.any([signal, AbortSignal.timeout(Math.ceil(durationBudget * 1000) + 15_000)]);
+  stream = video.captureStream();
+  if (!stream.getVideoTracks().length) throw Error('Could not capture video');
+  const capture = new MediaRecorder(stream, { mimeType: 'video/webm', videoBitsPerSecond, audioBitsPerSecond });
+  recorder = capture;
+  const parts: Blob[] = [];
+  const result = await new Promise<File>((resolve, reject) => {
+   recording.throwIfAborted();
+   let total = 0;
+   const abort = () => finish(recording.reason);
+   function finish(error?: unknown) {
+    recording.removeEventListener('abort', abort);
+    video.onended = video.onerror = video.ontimeupdate = null;
+    capture.ondataavailable = capture.onstop = capture.onerror = null;
+    if (error) reject(error);
+    else if (!total) reject(Error('Empty recording'));
+    else resolve(new File(parts, (file.name.replace(/\.[^.]+$/, '') || 'video') + '.webm', {
+     type: 'video/webm', lastModified: file.lastModified,
+    }));
+   }
+   recording.addEventListener('abort', abort, { once: true });
+   capture.ondataavailable = ({ data }) => {
+    total += data.size;
+    if (total > limit) finish(Error('Compressed video exceeds the attachment limit'));
+    else if (data.size) parts.push(data);
+   };
+   capture.onerror = () => finish(Error('Could not encode video'));
+   capture.onstop = () => finish(video.ended && video.currentTime <= maxCompressionDuration ? undefined : Error('Incomplete video'));
+   video.ontimeupdate = () => { if (video.currentTime > maxCompressionDuration) finish(Error('Video exceeds the duration limit')); };
+   video.onerror = () => finish(Error('Could not decode video'));
+   video.onended = () => { if (capture.state !== 'inactive') capture.stop(); };
+   try {
+    capture.start(500);
+    void video.play().catch(finish);
+   } catch (error) {
+    finish(error);
+   }
+  });
+  compressedDurations.set(result, video.currentTime);
+  return result;
+ } finally {
+  if (recorder && recorder.state !== 'inactive') recorder.stop();
+  stream?.getTracks().forEach(track => track.stop());
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
+  URL.revokeObjectURL(url);
  }
 }
 
@@ -89,6 +182,7 @@ export function allocateMediaViews(drafts: readonly (Pick<MediaDraft, 'poster' |
 
 export async function prepareDraft(file:File, variants = false):Promise<MediaDraft>{
  const draft = createMediaDraft(file);
+ draft.duration = compressedDurations.get(file);
  if(!videoMime(file.type)){
   if (variants && visualMime(file.type)) {
    try { await prepareImage(draft); } catch { /* Unsupported media remains available as an original. */ }
@@ -104,12 +198,12 @@ export async function prepareDraft(file:File, variants = false):Promise<MediaDra
   if(controller.signal.aborted)return fail();video.addEventListener(event,done,{once:true});video.addEventListener('error',fail,{once:true});controller.signal.addEventListener('abort',fail,{once:true});
  });
  try{
-  await wait('loadeddata');if(!video.videoWidth)throw Error('video');if(Number.isFinite(video.duration))draft.duration=video.duration;
+  await wait('loadeddata');if(!video.videoWidth)throw Error('video');if(Number.isFinite(video.duration))draft.duration??=video.duration;
   const width = variants ? 480 : 640;
   const canvas=document.createElement('canvas'),ratio=Math.min(1,width/video.videoWidth,480/video.videoHeight);canvas.width=Math.max(1,Math.round(video.videoWidth*ratio));canvas.height=Math.max(1,Math.round(video.videoHeight*ratio));
   const context=canvas.getContext('2d',{willReadFrequently:true})!;
   for(const time of [0,.1,.3,.7,1.5,3]){
-   const seek=Math.min(time,Math.max(0,video.duration-.02));if(Math.abs(seek-video.currentTime)>.001){const ready=wait('seeked');video.currentTime=seek;await ready;}
+   const seek=Math.min(time,Math.max(0,(draft.duration??video.duration)-.02));if(Math.abs(seek-video.currentTime)>.001){const ready=wait('seeked');video.currentTime=seek;await ready;}
    context.drawImage(video,0,0,canvas.width,canvas.height);
    const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;let light=0,count=0;
    for(let i=0;i<pixels.length;i+=64){light+=Math.max(pixels[i],pixels[i+1],pixels[i+2]);count++;}

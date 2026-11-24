@@ -144,7 +144,7 @@ export function VideoMessage({serverId,channelId,files,group=files,pending=false
   })}
   {error&&<p role="alert" className="text-error">{error}</p>}
   {view!==undefined&&<VideoViewer items={group.map(file=>({
-   id:file.id,name:file.name,image:file.mime.startsWith('image/'),load:async()=>(await load(file.view ?? file)).url,
+   id:file.id,name:file.name,duration:file.duration,image:file.mime.startsWith('image/'),load:async()=>(await load(file.view ?? file)).url,
    ...((file.view || saveImageNatively) && { downloadOriginal:()=>download(file) }),
   }))} initial={view} author={author} avatar={avatar} date={date} onClose={()=>setView(undefined)}/>}
  </div>;

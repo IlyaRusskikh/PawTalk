@@ -21,14 +21,51 @@ app.whenReady().then(async()=>{
    const done=new Promise(resolve=>recorder.onstop=resolve);recorder.ondataavailable=e=>chunks.push(e.data);
    const started=performance.now(),paint=()=>{ctx.fillStyle=performance.now()-started<300?'black':'#35ba72';ctx.fillRect(0,0,320,180);if(performance.now()-started<300)return;ctx.fillStyle='white';ctx.fillRect(30+(performance.now()-started)%200,50,40,80);};
    ctx.fillStyle='black';ctx.fillRect(0,0,320,180);recorder.start();const interval=setInterval(paint,50);await new Promise(resolve=>setTimeout(resolve,3000));recorder.stop();await done;clearInterval(interval);stream.getTracks().forEach(t=>t.stop());
-   const data=new Uint8Array(await new Blob(chunks).arrayBuffer());let bytes=data;
+   window.addFixtureDuration=(data,milliseconds)=>{let bytes=data;
    for(let i=0;i<data.length-12;i++)if(data[i]===0x15&&data[i+1]===0x49&&data[i+2]===0xa9&&data[i+3]===0x66){
     const start=i+4;let sizeBytes=1,mask=128;while(!(data[start]&mask)){sizeBytes++;mask>>=1;}let size=data[start]&(mask-1);for(let j=1;j<sizeBytes;j++)size=size*256+data[start+j];
-    const end=start+sizeBytes+size,duration=new Uint8Array(11);duration.set([0x44,0x89,0x88]);new DataView(duration.buffer).setFloat64(3,3000,false);
+    const end=start+sizeBytes+size,duration=new Uint8Array(11);duration.set([0x44,0x89,0x88]);new DataView(duration.buffer).setFloat64(3,milliseconds,false);
     bytes=new Uint8Array(data.length+11);bytes.set(data.subarray(0,end));bytes.set(duration,end);bytes.set(data.subarray(end),end+11);let n=size+11;for(let j=sizeBytes-1;j>=0;j--){bytes[start+j]=n&255;n=Math.floor(n/256);}bytes[start]|=mask;break;
    }
+   return bytes;};
+   const bytes=window.addFixtureDuration(new Uint8Array(await new Blob(chunks).arrayBuffer()),3000);
    window.videoFixture=bytes;const input=document.querySelector('.chat-compose input[type=file]'),transfer=new DataTransfer();transfer.items.add(new File([bytes],'First.webm',{type:'video/webm'}));transfer.items.add(new File([bytes],'Second.webm',{type:'video/webm'}));const photo=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));transfer.items.add(new File([photo],'Photo.png',{type:'image/png'}));transfer.items.add(new File([photo],'Other.png',{type:'image/png'}));input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));
   })()`);
+  if (lang === 'en') {
+    const result = await run(`(async()=>{
+      const {fitChatAttachment}=await import('/src/mediaDraft.ts');
+      const canvas=document.createElement('canvas');canvas.width=160;canvas.height=90;
+      const ctx=canvas.getContext('2d'), stream=canvas.captureStream(15);
+      const context=new AudioContext(), audio=context.createMediaStreamDestination(), oscillator=context.createOscillator();
+      oscillator.connect(audio);oscillator.start();await context.resume();
+      stream.addTrack(audio.stream.getAudioTracks()[0]);
+      const recorder=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp8,opus'}), chunks=[];
+      recorder.ondataavailable=event=>chunks.push(event.data);
+      const stopped=new Promise(resolve=>{recorder.onstop=resolve;});
+      recorder.start();
+      const start=performance.now(), timer=setInterval(()=>{
+        ctx.fillStyle='green';ctx.fillRect(0,0,160,90);
+        ctx.fillStyle='white';ctx.fillRect((performance.now()-start)%100,20,20,20);
+      },50);
+      await new Promise(resolve=>setTimeout(resolve,1200));
+      recorder.stop();await stopped;clearInterval(timer);
+      stream.getTracks().forEach(track=>track.stop());await context.close();
+      const bytes=window.addFixtureDuration(new Uint8Array(await new Blob(chunks).arrayBuffer()),1200);
+      const source=new File([bytes,Uint8Array.of(0xec,0x24,0,0),new Uint8Array(262144)],'Oversized.webm',{type:'video/webm'});
+      const limit=128*1024;
+      const compressed=await fitChatAttachment(source,limit,new AbortController().signal);
+      const video=document.createElement('video'), url=URL.createObjectURL(compressed);
+      try {
+        await new Promise((resolve,reject)=>{video.onloadeddata=resolve;video.onerror=reject;video.src=url;});
+        const compressedStream=video.captureStream();
+        const result={size:compressed.size,name:compressed.name,video:compressedStream.getVideoTracks().length,audio:compressedStream.getAudioTracks().length};
+        compressedStream.getTracks().forEach(track=>track.stop());
+        return result;
+      } finally {URL.revokeObjectURL(url);}
+    })()`);
+    assert.ok(result.size > 0 && result.size <= 128 * 1024);
+    assert.deepEqual({ name: result.name, video: result.video, audio: result.audio }, { name: 'Oversized.webm', video: 1, audio: 1 });
+  }
   await until("document.querySelectorAll('.attachment-thumbnail img').length===4&&!document.querySelector('.attachment-preparing')");
   assert.equal(await run("document.querySelectorAll('.chat-attachment-card').length"),4);
   assert.equal(await run("document.querySelectorAll('.attachment-card-actions button').length"),12);
@@ -63,6 +100,10 @@ app.whenReady().then(async()=>{
   await until("!!document.querySelector('.photo-viewer-image')");
   await run("document.querySelector('.photo-viewer .video-next').click()");
   await until("document.querySelector('.photo-viewer .video-counter').textContent==='4 / 4'");
+  await win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Left' });
+  await until("document.querySelector('.photo-viewer .video-counter')?.textContent==='3 / 4'");
+  await win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Right' });
+  await until("document.querySelector('.photo-viewer .video-counter')?.textContent==='4 / 4'");
   await run("document.querySelector('.photo-viewer .video-viewer-footer > button:last-child').click()");
   await until("!!document.fullscreenElement");
   assert.ok(await run("(()=>{const image=document.querySelector('.photo-viewer-image'),r=image.getBoundingClientRect(),v=document.fullscreenElement.getBoundingClientRect();return Math.abs(r.top+r.height/2-v.top-v.height/2)<1&&Math.abs(r.left+r.width/2-v.left-v.width/2)<1&&Math.abs(r.height-v.height)<1&&getComputedStyle(image).objectFit==='contain'})()"),'fullscreen photo fills a centered contain box instead of inheriting auto height');

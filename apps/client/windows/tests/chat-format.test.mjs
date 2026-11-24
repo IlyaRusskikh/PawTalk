@@ -1,6 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { trimMessage } from '../src/trimMessage.ts';
 import { inlineMarkdown, messageMarkdown, messagePreview } from '../../../../shared/chat-format.mjs';
+
+test('outgoing messages trim outer whitespace and keep at most three consecutive line breaks', () => {
+  const source = '\n й\n\n\n\n@First\n\n\n\n\n@Second\n ';
+  const mentions = ['@First', '@Second'].map(label => ({label, start: source.indexOf(label), end: source.indexOf(label) + label.length}));
+  const result = trimMessage(source, mentions);
+  assert.equal(result.text, 'й\n\n\n@First\n\n\n@Second');
+  assert.deepEqual(result.mentions.map(({start, end}) => result.text.slice(start, end)), ['@First', '@Second']);
+  assert.equal(trimMessage('x\n\ny\n\n\nz').text, 'x\n\ny\n\n\nz');
+});
 
 test('numbered markers survive independently of bullets; tables and rules stay HTML-free',()=>{
   assert.deepEqual(messageMarkdown('1. first\n2. second\n- third').map(node=>node.marker),['1.','2.','-']);
@@ -34,10 +44,10 @@ test('verified mention offsets survive rich text without styling duplicates or c
   const boldMention = text.indexOf('@Friend', text.indexOf('**'));
   const linkMention = text.indexOf('@Friend', text.indexOf('['));
   const [heading, table] = messageMarkdown(text, [
-    { start: boldMention, end: boldMention + 7 },
+    { start: boldMention, end: boldMention + 7, color: '#5a89bc' },
     { start: linkMention, end: linkMention + 7 },
   ]);
-  assert.deepEqual(heading.children, ['@Friend ', { type: 'bold', children: [{ type: 'mention', text: '@Friend' }] }]);
+  assert.deepEqual(heading.children, ['@Friend ', { type: 'bold', children: [{ type: 'mention', text: '@Friend', color: '#5a89bc' }] }]);
   assert.deepEqual(table.children[0].children[0].children,
     [{ type: 'link', url: 'https://example.test/@Friend', children: [{ type: 'mention', text: '@Friend' }] }]);
 });

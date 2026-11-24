@@ -8,8 +8,8 @@ import {t} from './i18n';
 import {hasGalleryPreview} from './mediaDraft';
 import {attachmentBlob,withProtectedFileSlot} from './chatImages';
 
-export function ChatFile({serverId,channelId,file,pending=false,protectedPosition}:{
-  serverId:string;channelId:string;file:NonNullable<Message['content']['file']>;pending?:boolean;protectedPosition?:number;
+export function ChatFile({serverId,channelId,file,group,pending=false,protectedPosition,author,avatar,date}:{
+  serverId:string;channelId:string;file:NonNullable<Message['content']['file']>;group?:NonNullable<Message['content']['file']>[];author?:string;avatar?:string;date?:number;pending?:boolean;protectedPosition?:number;
 }){
   const [saving,setSaving]=useState<{x:number;y:number}>();
   const [viewing,setViewing]=useState(false);
@@ -77,7 +77,7 @@ export function ChatFile({serverId,channelId,file,pending=false,protectedPositio
   },[gifCandidate,pending,serverId,channelId,file.id,protectedPosition]);
 
   if(hasGalleryPreview(file) || file.mime.startsWith('video/'))
-    return <VideoMessage serverId={serverId} channelId={channelId} files={[file]} pending={pending} protectedPosition={protectedPosition}/>;
+    return <VideoMessage serverId={serverId} channelId={channelId} files={[file]} group={group} pending={pending} protectedPosition={protectedPosition} author={author} avatar={avatar} date={date}/>;
   if(file.mime.startsWith('audio/'))return <div className="chat-voice" onContextMenu={event=>{event.preventDefault();if(pending)return;event.stopPropagation();setSaving({x:Math.min(event.clientX,innerWidth-190),y:Math.min(event.clientY,innerHeight-50)});}}><VoicePlayer disabled={pending} key={file.id} load={load} duration={file.voice?.duration} waveform={file.voice?.waveform}/>{saving&&<div className="chat-message-menu voice-save-menu" style={{left:saving.x,top:saving.y}} role="menu" onMouseLeave={()=>setSaving(undefined)}><button type="button" role="menuitem" onClick={()=>{setSaving(undefined);void load().then(value=>{const link=document.createElement('a');link.href=value;link.download=file.name;link.click();}).catch(()=>{});}}>{t('Сохранить файл')}</button></div>}</div>;
   return <div className="chat-file" ref={element}>
     {!asset?<button type="button" disabled={busy||pending} onClick={()=>void load().catch(()=>{})}>{busy?t('Загрузка…'):file.name} · {Math.ceil(file.size/1024)} {t('КБ')}</button>:<>

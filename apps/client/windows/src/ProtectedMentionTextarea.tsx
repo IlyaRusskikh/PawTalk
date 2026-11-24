@@ -1,12 +1,14 @@
 import { useEffect, useEffectEvent, useId, useRef, useState, type RefObject } from 'react';
 import { shiftMentions, type ProtectedMention, type ProtectedMentionTarget } from '../../../../shared/mentions.mjs';
+import { roleMentionStyle } from './MessageText';
+import { FormattingTextarea } from './FormattingTextarea';
 import { membership } from './membership';
 import { t } from './i18n';
 
 type Member = { id: string; name?: string; roles: { id: string; name?: string }[] };
-type Roster = { members: Member[]; revision: number; next?: string; mentions: { available: boolean; mass: boolean; roles: string[] } };
+type Roster = { members: Member[]; revision: number; next?: string; roleColors?: Record<string, string>; mentions: { available: boolean; mass: boolean; roles: string[] } };
 type Query = { start: number; end: number; text: string };
-type Candidate = { target: ProtectedMentionTarget; label: string; detail: string };
+type Candidate = { target: ProtectedMentionTarget; label: string; detail: string; color?: string };
 
 function candidatesFor(page: Roster, query: string) {
   const needle = query.normalize('NFC').toLowerCase();
@@ -23,7 +25,7 @@ function candidatesFor(page: Roster, query: string) {
     for (const role of member.roles) {
       if (!roles.delete(role.id)) continue;
       const label = role.name ?? role.id;
-      if (matches(label) || matches(role.id)) candidates.push({ target: { kind: 'role', id: role.id }, label, detail: t('Роль') });
+      if (matches(label) || matches(role.id)) candidates.push({ target: { kind: 'role', id: role.id }, label, detail: t('Роль'), color: Object.hasOwn(page.roleColors ?? {}, role.id) ? page.roleColors?.[role.id] : undefined });
     }
   }
   for (const { id, name } of page.members) {
@@ -126,7 +128,7 @@ export function ProtectedMentionTextarea({ serverId, channelId, input, value, me
   }
 
   return <div className="mention-input protected-mention-input">
-    <textarea ref={input} aria-label={t('Сообщение')} placeholder={placeholder} maxLength={4096} rows={1} value={value}
+    <FormattingTextarea ref={input} aria-label={t('Сообщение')} placeholder={placeholder} maxLength={4096} rows={1} value={value}
       disabled={disabled} aria-autocomplete="list" aria-expanded={show} aria-controls={show ? id : undefined}
       aria-activedescendant={candidates.length ? `${id}-${index % candidates.length}` : undefined}
       onChange={event => {
@@ -152,7 +154,7 @@ export function ProtectedMentionTextarea({ serverId, channelId, input, value, me
       <div id={id} role="listbox" aria-label={t('Упомянуть участника')}>
         {candidates.map((candidate, i) => <button key={JSON.stringify(candidate.target)} id={`${id}-${i}`} type="button"
           role="option" aria-selected={i === index % candidates.length} onMouseDown={event => event.preventDefault()}
-          onClick={() => choose(candidate)}><span>@{candidate.label}</span><small>{candidate.detail}</small></button>)}
+          onClick={() => choose(candidate)}><span className={candidate.color ? 'chat-mention' : undefined} style={roleMentionStyle(candidate.color)}>@{candidate.label}</span><small>{candidate.detail}</small></button>)}
       </div>
       {roster?.next && <button type="button" disabled={pending} onMouseDown={event => event.preventDefault()}
         onClick={() => void load(roster)}>{t('Загрузить ещё')}</button>}

@@ -14,11 +14,11 @@ type Role = { id: string; name?: string; icon?: string };
 type Presence = 'online' | 'away' | 'offline';
 type Member = { id: string; name?: string; avatar?: string; owner?: boolean; color?: string; groupId?: string; groupRank?: number; roles: Role[];
   presence?: Presence; canKick?: boolean; canBan?: boolean; canAssignRoles?: boolean; canEditNickname?: boolean };
-type RosterPage = { revision: number; nicknameDigest?: string; next?: string; members: Member[] };
+type RosterPage = { revision: number; nicknameDigest?: string; next?: string; members: Member[]; roleColors?: Record<string, string> };
 type Group = { id: string; rank: number; role?: Role; members: Member[] };
 export type ChatAuthorProfile = { name: string; avatar?: string; color?: string };
 export type ChatAuthorRoster = { serverId: string; channelId?: string; names: ReadonlyMap<string, ChatAuthorProfile>;
-  cursor?: { after: string; revision: number } };
+  roleColors: ReadonlyMap<string, string>; cursor?: { after: string; revision: number } };
 
 const nameOf = (member: Member) => member.name ?? t('Участник · {0}', member.id.slice(0, 8));
 const roleName = (role: Role) => role.name ?? (role.id === '@everyone' ? t('Все участники') : role.id);
@@ -142,10 +142,11 @@ export function ProtectedRoster({ serverId, channelId, profileId, ownAvatar, eve
   useEffect(() => {
     if (!onProfiles) return;
     const names = new Map<string, ChatAuthorProfile>();
+    const roleColors = new Map(Object.entries(page?.roleColors ?? {}));
     for (const member of page?.members ?? []) {
       names.set(member.id, { name: nameOf(member), avatar: member.avatar, color: member.color });
     }
-    onProfiles({ serverId, channelId, names, cursor: page?.next ? { after: page.next, revision: page.revision } : undefined });
+    onProfiles({ serverId, channelId, names, roleColors, cursor: page?.next ? { after: page.next, revision: page.revision } : undefined });
   }, [onProfiles, serverId, channelId, page]);
 
   function applyNickname(id: string, name: string) {

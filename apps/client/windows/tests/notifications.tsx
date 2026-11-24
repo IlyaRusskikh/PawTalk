@@ -501,12 +501,13 @@ test.desktop={
     if(protectedMode==='formatted-chat'){
       test.protectedHistoryReads.push(input.channelId);
       if (input.channelId !== cid) return {value:{...windowState(),messages:[]}};
-      const text = '@Friend **@Friend** [Example](https://example.test/)';
+      const text = '@Friend **@Friend** [Example](https://example.test/) @Crew';
       const start = text.lastIndexOf('@Friend');
-      return {value:{...windowState(),messages:input.after ? [] : [
-        {position:1,own:false,authorProfileId:friend,sentAt:123456,text,mentions:[{kind:'profile',id:friend,start,end:start+7}]},
+      return {value:{...windowState(),messages:[
+        {position:1,own:false,authorProfileId:friend,sentAt:123456,text,mentions:[{kind:'profile',id:friend,start,end:start+7}, {kind:'role',id:'crew',start:text.length-5,end:text.length}]},
         {position:2,own:false,authorProfileId:friend,sentAt:123457,text:'https://giphy.com/gifs/synthetic-preview'},
-      ]}};
+        ...(test.deliverFormattedSend ? [{position:3,own:true,authorProfileId:me,sentAt:123458,canEdit:true,text:test.protectedSends[0].text}] : []),
+      ].filter(message=>message.position>input.after)}};
     }
     if(protectedMode==='poll-result-window'){
       const original = test.historyFirst===1;
@@ -525,7 +526,7 @@ test.desktop={
         poster: { id: 'f'.repeat(32), mime: 'image/png' } };
       const messages = [
         { position: 1, own: false, sentAt: 123456, text: 'Mixed media',
-          files: [photo, clip, { ...photo, id: 'c'.repeat(32), name: 'Second.png' }] },
+          files: [photo, { ...photo, id: 'c'.repeat(32), name: 'Second.png' }, clip] },
         { position: 2, own: false, sentAt: 123457, text: 'Single photo',
           files: [{ ...photo, id: 'd'.repeat(32) }] },
         { position: 3, own: false, sentAt: 123458, text: 'Voice history', files: [
@@ -702,7 +703,7 @@ test.desktop={
     const members=Array.from({length:64},(_,i)=>({id:i.toString(16).padStart(64,'0'),name:'Member '+i,roles}));
     return{value:{revision:1,channelId:input.channelId,nicknameDigest,members,next:members[63].id}};
   }
-  if(action==='roster.protected.read')return{value:{revision:1,channelId:input.channelId,members:[
+  if(action==='roster.protected.read')return{value:{revision:1,channelId:input.channelId,roleColors:{crew:'#5a89bc'},members:[
     {id:me,name:fixtureNicknames.get(me)?.name,roles:[{id:'@everyone'}],canEditNickname:channelManagerFixture,
       ...(protectedMode === 'membership-moderator' && { presence: 'online' })},
     {id:friend,name:protectedMode === 'public-poll' ? 'Visible voter' : fixtureNicknames.get(friend)?.name,

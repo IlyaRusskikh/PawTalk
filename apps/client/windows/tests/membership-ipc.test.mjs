@@ -1189,13 +1189,15 @@ test('reading cancels queued and shown alerts, rejects late events and preserves
 });
 
 test('each chat replaces its native toast with stable Windows tag/group; timeout does not lose cleanup',async()=>{
- const f=nativeAlerts();try{
+ const counts=[];
+ const f=nativeAlerts({onNotificationCount:count=>counts.push(count)});try{
   await f.notify(1);await f.notify(2);assert.equal(f.shown[0].closed,1,'old native toast is explicitly closed');assert.equal(f.shown[1].closed,0);
   const a=f.shown[0].options,b=f.shown[1].options;assert.equal(a.id,b.id);assert.equal(a.groupId,b.groupId);assert.match(a.id,/^[a-f0-9]{16}$/);assert.match(a.groupId,/^[a-f0-9]{16}$/);
   const other='c'.repeat(32);await f.notify(3,{channelId:other});assert.notEqual(f.shown[2].options.id,b.id);assert.equal(f.shown[2].options.groupId,b.groupId);
   f.shown[1].emit('close');await f.read(2);assert.equal(f.shown[1].closed,1,'timed-out toast can still be removed from Action Center');assert.equal(f.shown[2].closed,0,'another unread chat is retained');
  }finally{f.service.stop();}
  assert.equal(f.shown.at(-1).closed,1,'shutdown closes native alerts too');
+ assert.deepEqual(counts,[1,2,3,1,0],'taskbar count covers active messages across grouped alerts');
 });
 
 test('reading during asynchronous notification preparation cancels the pending IPC and prevents resurrection',async()=>{

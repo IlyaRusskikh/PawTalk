@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -58,7 +59,7 @@ func TestRosterScopesMembersAndRanksRolesAcrossPages(t *testing.T) {
 		"junior":   {Color: "#486020", Hoist: true},
 		"reader":   {Color: "#5a89bc", Hoist: true},
 		"featured": {Name: "Featured", Hoist: true},
-		"other":    {Name: "Hidden group", Hoist: true},
+		"other":    {Name: "Hidden group", Color: "#ff0000", Hoist: true},
 	}
 	for n := 0; n < protectedRosterPageSize; n++ {
 		id := fmt.Sprintf("%064x", n)
@@ -69,6 +70,9 @@ func TestRosterScopesMembersAndRanksRolesAcrossPages(t *testing.T) {
 	page := state.roster("secret", "")
 	if len(page.Members) != protectedRosterPageSize || page.Next != fmt.Sprintf("%064x", protectedRosterPageSize-1) {
 		t.Fatalf("first page count = %d, next = %q", len(page.Members), page.Next)
+	}
+	if !maps.Equal(page.RoleColors, map[string]string{"reader": "#5a89bc", "junior": "#486020"}) {
+		t.Fatalf("visible role colors = %v", page.RoleColors)
 	}
 	for n, member := range page.Members {
 		if member.ID != fmt.Sprintf("%064x", n) || member.GroupID != "featured" || member.GroupRank != 1 ||
