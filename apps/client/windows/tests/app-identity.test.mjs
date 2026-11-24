@@ -8,4 +8,8 @@ test('running Client and installed shortcuts share Windows taskbar identity',()=
  const executable='C:\\Program Files\\PawTalk\\PawTalk.exe';
  assert.deepEqual(windowIdentity(executable),{appId,appIconPath:executable,appIconIndex:0,relaunchCommand:'"'+executable+'"',relaunchDisplayName:'PawTalk'});
  assert.ok(!windowIdentity(executable).relaunchCommand.includes('--start-in-tray'));
+ const entry='C:\\PawTalk review\\review.cjs';
+ const icon='C:\\PawTalk review\\pawtalk.ico';
+ assert.deepEqual(windowIdentity(executable,icon,entry),{appId,appIconPath:icon,appIconIndex:0,
+  relaunchCommand:`"${executable}" "${entry}"`,relaunchDisplayName:'PawTalk'});
 });

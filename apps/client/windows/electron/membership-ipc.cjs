@@ -235,10 +235,20 @@ function protectedEditableProfiles(snapshot, names) {
     ? [{ id, name: names?.[id], roles: profile.Roles ?? [] }] : []);
 }
 
-function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, getIdleSeconds = () => 0, getMemoryPressure=()=>{const os=require('node:os');return os.freemem()<Math.max(256*1024*1024,os.totalmem()*.05);}, getHost, stopHost, notificationAppearance=async()=>({}), setVoiceEndpoint = () => {} }) {
+function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, send, getWindow, Notification, onNotificationCount = () => {}, getIdleSeconds = () => 0, getMemoryPressure=()=>{const os=require('node:os');return os.freemem()<Math.max(256*1024*1024,os.totalmem()*.05);}, getHost, stopHost, notificationAppearance=async()=>({}), setVoiceEndpoint = () => {} }) {
   const linkAlerts=new Set(),notified=new Map(),notificationBatches=new Map(),notificationReads=new Map(),shownNotifications=new Map();
   const notificationID=key=>createHash('sha256').update(key).digest('hex').slice(0,16);
-  function closeNotification(key){const shown=shownNotifications.get(key);shownNotifications.delete(key);clearTimeout(shown?.expiry);try{shown?.notification.close?.();}catch{}}
+  function updateNotificationCount() {
+    onNotificationCount([...shownNotifications.values()].reduce((total, shown) => total + shown.count, 0));
+  }
+  function closeNotification(key, update = true) {
+    const shown = shownNotifications.get(key);
+    if (!shown) return;
+    shownNotifications.delete(key);
+    clearTimeout(shown.expiry);
+    try { shown.notification.close?.(); } catch {}
+    if (update) updateNotificationCount();
+  }
   function cancelNotificationBatch(key){const batch=notificationBatches.get(key);if(!batch)return;batch.cancelled=true;clearTimeout(batch.timer);batch.resolve(false);notificationBatches.delete(key);}
   function clearNotifications(serverId){for(const key of notificationBatches.keys())if(!serverId||key.startsWith(serverId+':'))cancelNotificationBatch(key);for(const key of shownNotifications.keys())if(!serverId||key.startsWith(serverId+':'))closeNotification(key);}
   const alreadyRead=(key,batch)=>{const read=notificationReads.get(key)||0;return read>0&&(!batch.last||read>=batch.last||batch.previewId>0&&read>=batch.previewId);};
@@ -361,8 +371,9 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     const supported = Notification?.isSupported();
     const author = supported ? await protectedNotificationAuthor(connection, channelId, message.authorProfileId) : undefined;
     if (!eligible()) return false;
-    const body = Array.from(`${cleanName(author?.name) || t('Участник')}: ${preview}`).slice(0, 240).join('');
-    const appearance = supported ? await notificationAppearance({ avatar: author?.avatar, title, body }).catch(() => ({})) : {};
+    const authorName = cleanName(author?.name) || t('Участник');
+    const body = Array.from(`${authorName}: ${preview}`).slice(0, 240).join('');
+    const appearance = supported ? await notificationAppearance({ avatar: author?.avatar, authorName, title, body }).catch(() => ({})) : {};
     if (!eligible() || protectedNotificationChannels.get(connection)?.get(channelId)?.name !== channel.name) return false;
     const verify = async (allowSocket = false) => {
       if (!ordinary) return client.verifyProtectedMention(connection, channelId, position);
@@ -383,11 +394,13 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     if (notified.size > 2048) notified.delete(notified.keys().next().value);
     if (!supported) return true;
     const notification = new Notification({ id: notificationID(key), groupId: notificationID(serverId), silent: true, title, body, ...appearance });
-    closeNotification(key);
+    const count = (shownNotifications.get(key)?.count ?? 0) + 1;
+    closeNotification(key, false);
     if (shownNotifications.size >= 128) closeNotification(shownNotifications.keys().next().value);
-    const shown = { notification, connection, channelId, kind: alert.kind, revision: freshness.revision, last: position, previewId: position, verify,
+    const shown = { notification, count, connection, channelId, kind: alert.kind, revision: freshness.revision, last: position, previewId: position, verify,
       expiry: setTimeout(() => { if (shownNotifications.get(key) === shown) closeNotification(key); }, freshness.remaining) };
     shownNotifications.set(key, shown);
+    updateNotificationCount();
     notification.on('show', () => {
       if (shownNotifications.get(key) !== shown || stopped || protectedConnections.get(serverId) !== connection ||
           (ordinary && getWindow()?.isFocused?.()) ||
@@ -1994,17 +2007,19 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
           // Reading, focus or leaving can change while registry I/O is pending.
           if(!eligible())return false;
           const title=`${record?.name||'PawTalk'} · #${channelName}`,body=(count>1?t('Новых сообщений: {0}',count)+' · ':'')+`${alertAuthor}: ${alertPreview}`;
-          const appearance=await notificationAppearance({avatar:alertAvatar,title,body}).catch(()=>({}));
+          const appearance=await notificationAppearance({avatar:alertAvatar,authorName:alertAuthor,title,body}).catch(()=>({}));
           if(!eligible())return false;
           if(last){notified.set(notificationKey,last);if(notified.size>2048)notified.delete(notified.keys().next().value);}
           const notification=new Notification({id:notificationID(notificationKey),groupId:notificationID(serverId),silent:true,title,body,...appearance});
-          closeNotification(notificationKey);if(shownNotifications.size>=128)closeNotification(shownNotifications.keys().next().value);
-          shownNotifications.set(notificationKey,{notification,last,previewId});
+          const activeCount = (shownNotifications.get(notificationKey)?.count ?? 0) + count;
+          closeNotification(notificationKey, false);if(shownNotifications.size>=128)closeNotification(shownNotifications.keys().next().value);
+          shownNotifications.set(notificationKey,{notification,last,previewId,count:activeCount});
+          updateNotificationCount();
           // Windows prepares toasts asynchronously after show() returns. A read
           // can arrive before the shell displays it, so dismiss that late show too.
-          notification.on('show',()=>{if(stopped||shownNotifications.get(notificationKey)?.notification!==notification||alreadyRead(notificationKey,{last,previewId})||!client.connections.has(serverId)||intentionalDepartures.has(serverId)||!alertMention&&getWindow()?.isFocused()){if(shownNotifications.get(notificationKey)?.notification===notification)shownNotifications.delete(notificationKey);try{notification.close?.();}catch{}}});
+          notification.on('show',()=>{if(stopped||shownNotifications.get(notificationKey)?.notification!==notification||alreadyRead(notificationKey,{last,previewId})||!client.connections.has(serverId)||intentionalDepartures.has(serverId)||!alertMention&&getWindow()?.isFocused()){if(shownNotifications.get(notificationKey)?.notification===notification)closeNotification(notificationKey);else try{notification.close?.();}catch{}}});
           // Keep the object after native timeout: it can still be in Action Center.
-          notification.on('failed',()=>{if(shownNotifications.get(notificationKey)?.notification===notification)shownNotifications.delete(notificationKey);});
+          notification.on('failed',()=>{if(shownNotifications.get(notificationKey)?.notification===notification)closeNotification(notificationKey);});
           notification.on('click',()=>{const win=getWindow();if(win&&!win.isDestroyed()){win.show();win.focus();send('membership-open-channel',{serverId,channelId});}});notification.show();return true;
         })().then(resolve,()=>resolve(false)).finally(()=>{if(notificationBatches.get(notificationKey)===batch)notificationBatches.delete(notificationKey);});},Math.max(0,Math.min(250,first+1000-Date.now())));
         notificationBatches.set(notificationKey,batch);

@@ -253,8 +253,16 @@ button:hover:not(:disabled) { filter:none; }
 .chat-format-toolbar button:hover, .chat-format-toolbar button:focus-visible { background: var(--raised); color: var(--text); }
 .chat-message-row.chat-message-editing { background: var(--raised); }
 .chat-message-editing .chat-message-body { flex: 1; }
+.chat-edit-modal { max-height: min(72dvh, calc(100dvh - 32px)); }
+dialog.chat-edit-modal .form-fields textarea, .chat-inline-edit textarea {
+  field-sizing: content;
+  min-height: 56px;
+  max-height: min(40dvh, 320px);
+  overflow-y: auto;
+  resize: none;
+}
 .chat-inline-edit { margin-top: 8px; }
-.chat-inline-edit textarea { display: block; width: 100%; min-height: 56px; max-height: 45vh; resize: none; box-sizing: border-box; border: 1px solid var(--line); border-radius: calc(var(--ui-radius) * .67); padding: 16px; background: var(--chat-bg); color: var(--text); font: inherit; line-height: 1.5; overflow-y: auto; }
+.chat-inline-edit textarea { display: block; width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: calc(var(--ui-radius) * .67); padding: 16px; background: var(--chat-bg); color: var(--text); font: inherit; line-height: 1.5; overflow-y: auto; }
 .chat-edit-hint { margin-top: 6px; font-size: 11px; color: var(--muted); }
 .chat-edit-hint button { display: inline; margin: 0; padding: 0; background: transparent; color: var(--accent); font: inherit; }
 .chat-delete-modal { width: min(474px, calc(100vw - 32px)); padding: 20px; }

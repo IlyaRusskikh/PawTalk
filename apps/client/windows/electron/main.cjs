@@ -1,5 +1,6 @@
 const { t } = require('../../../../shared/i18n.cjs');
 const { app, BrowserWindow, ipcMain, session, Tray, Menu, nativeImage, powerMonitor, globalShortcut, net, safeStorage, clipboard, dialog, shell, Notification } = require('electron');
+const { taskbarBadge } = require('./taskbar-badge.cjs');
 const { appId, windowIdentity } = require('./app-identity.cjs');
 if (process.platform === 'win32') app.setAppUserModelId(appId);
 const { MembershipClient } = require('./membership-client.cjs');
@@ -23,6 +24,13 @@ const { confirmUpdateStarted } = require('./update-progress.cjs');
 const { StartupSettings } = require('./startup.cjs');
 const fs = require('node:fs');
 const { setLanguage } = require('../../../../shared/i18n.cjs');
+let notificationCount = 0;
+function updateTaskbarBadge(count = notificationCount) {
+  notificationCount = count;
+  if (process.platform === 'win32' && win && !win.isDestroyed() && win.isVisible()) {
+    win.setOverlayIcon(taskbarBadge(nativeImage, count), count ? t('Новых сообщений: {0}', count) : '');
+  }
+}
 let updater;
 let updatePreferences;
 let updateRooms;
@@ -74,7 +82,7 @@ function authorized(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Unauthorized IPC');
 }
 function registerIPC() {
-  membershipIPC=require('./membership-ipc.cjs').registerMembershipIPC({ipcMain,authorized,client:membershipClient,links:membershipLinks,getIdleSeconds:()=>powerMonitor.getSystemIdleTime(),clipboard,send,getWindow:()=>win,Notification,notificationAppearance:require('./notification-appearance.cjs').notificationAppearance({directory:path.join(app.getPath('userData'),'notification-avatars'),nativeImage}),getHost:()=>hosting?.status(),stopHost:()=>hosting.stop(),setVoiceEndpoint:(address,pin)=>address?voiceSignal.open(address,pin):voiceSignal.close()});
+  membershipIPC=require('./membership-ipc.cjs').registerMembershipIPC({ipcMain,authorized,client:membershipClient,links:membershipLinks,getIdleSeconds:()=>powerMonitor.getSystemIdleTime(),clipboard,send,getWindow:()=>win,Notification,onNotificationCount:updateTaskbarBadge,notificationAppearance:require('./notification-appearance.cjs').notificationAppearance({directory:path.join(app.getPath('userData'),'notification-avatars'),nativeImage,BrowserWindow}),getHost:()=>hosting?.status(),stopHost:()=>hosting.stop(),setVoiceEndpoint:(address,pin)=>address?voiceSignal.open(address,pin):voiceSignal.close()});
   ipcMain.handle('chat-text-copy', (event, text) => {
     authorized(event);
     if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > 12000) throw new Error('Invalid chat text');
@@ -276,17 +284,26 @@ else {
       callback(contents === win?.webContents && (permission === 'fullscreen' || permission === 'media' && details.mediaTypes?.every(type => type === 'audio')));
     });
     session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) => contents === win?.webContents && (permission === 'fullscreen' || permission === 'media' && details.mediaType === 'audio'));
-    win = new BrowserWindow({ show: !process.argv.includes('--smoke') && !(process.argv.includes('--start-in-tray') && !pendingInvitation), width: 1240, height: 820, minWidth: 940, minHeight: 650, backgroundColor: '#191b22', title: 'PawTalk', icon: path.join(__dirname, '../assets/pawtalk.ico'),
+    const windowIcon = nativeImage.createFromPath(path.join(__dirname, '../assets/pawtalk.png'));
+    const showOnLaunch = !process.argv.includes('--smoke') && !(process.argv.includes('--start-in-tray') && !pendingInvitation);
+    win = new BrowserWindow({ show: false, width: 1240, height: 820, minWidth: 940, minHeight: 650, backgroundColor: '#191b22', title: 'PawTalk', icon: windowIcon,
       webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false, offscreen: process.argv.includes('--offscreen-smoke') },
     });
     win.removeMenu();
-    if (process.platform === 'win32' && app.isPackaged) win.setAppDetails(windowIdentity(app.getPath('exe')));
+    if (process.platform === 'win32') {
+      const executable = app.getPath('exe');
+      win.setAppDetails(app.isPackaged ? windowIdentity(executable) : windowIdentity(executable,
+        path.join(__dirname, '../assets/pawtalk.ico'), path.resolve(process.argv[1] ?? app.getAppPath())));
+      win.on('show', () => updateTaskbarBadge());
+      win.on('restore', () => updateTaskbarBadge());
+    }
     for (const event of ['show', 'hide', 'minimize', 'restore', 'focus', 'blur']) win.on(event, () => send('window-active-changed', win.isVisible() && !win.isMinimized() && win.isFocused()));
     win.webContents.setWindowOpenHandler(externalLinkHandler(url => shell.openExternal(url)));
     win.webContents.on('will-navigate', event => event.preventDefault());
     win.webContents.on('render-process-gone', restoreAudio);
     win.on('close', event => { if (!quitting) { event.preventDefault(); win.hide(); } });
     registerIPC();
+    if (showOnLaunch) win.show();
     membershipIPC.start();
     if (native) {
       try { native.startPtt(down => send('ptt', down)); }

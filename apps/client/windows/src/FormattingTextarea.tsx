@@ -80,6 +80,9 @@ export function FormattingTextarea({ ref, onEscape, ...props }: ComponentPropsWi
         input.current?.focus(); setPosition(undefined);
       }
     };
+    const field = input.current;
+    field?.addEventListener('selectionchange', update);
+    field?.addEventListener('select', update);
     document.addEventListener('selectionchange', update);
     document.addEventListener('focusin', update);
     document.addEventListener('pointerdown', dismiss);
@@ -90,6 +93,8 @@ export function FormattingTextarea({ ref, onEscape, ...props }: ComponentPropsWi
     window.addEventListener('blur', blur);
     document.addEventListener('scroll', update, true);
     return () => {
+      field?.removeEventListener('selectionchange', update);
+      field?.removeEventListener('select', update);
       document.removeEventListener('selectionchange', update);
       document.removeEventListener('focusin', update);
       document.removeEventListener('pointerdown', dismiss);

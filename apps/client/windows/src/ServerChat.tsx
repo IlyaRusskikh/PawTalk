@@ -1,7 +1,7 @@
 import {VideoMessage} from './VideoMessage';
 import {AttachmentDrafts} from './AttachmentDrafts';
 import {ChatFileDrop} from './ChatFileDrop';
-import {allocateMediaViews,prepareDraft,disposeDraft,fitChatImage,hasGalleryPreview,imageMime,mediaVariantsCapability,videoMime,type MediaDraft} from './mediaDraft';
+import {allocateMediaViews,prepareDraft,disposeDraft,canPrepareAttachment,fitChatAttachment,hasGalleryPreview,largeAttachmentLimit,imageMime,mediaVariantsCapability,videoMime,type MediaDraft} from './mediaDraft';
 import {ChecklistDialog,ChecklistCard} from './Checklist';
 import {ChatFile} from './ChatFile';
 import {ChatEmptyState} from './ChatEmptyState';
@@ -11,6 +11,8 @@ import {dropMemberMention,memberDragType} from './memberMention';
 import {PollCard} from './PollCard';
 import {PollDialog} from './PollDialog';
 import {MentionTextarea} from './MentionTextarea';
+import { animateSendFlight, composerTextOrigin } from './sendFlight';
+import { trimMessage } from './trimMessage';
 import type {Mention} from '../../../../shared/mentions.mjs';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -54,7 +56,8 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const [messages,setMessages]=useState<Message[]>([]),rows=useRef<Message[]>([]),predecessor=useRef<Message|undefined>(undefined);
   const history=useRef(new ChatHistory()),olderEdge=useRef<HTMLDivElement>(null),newerEdge=useRef<HTMLDivElement>(null);
   const [text,setText]=useState(()=>drafts.get(key)?.text||''),[media,setMedia]=useState<MediaDraft[]>(()=>drafts.get(key)?.media||[]),[reply,setReply]=useState<Message|undefined>(()=>drafts.get(key)?.reply);
-  const file=media[0]?.file;const [preparing,setPreparing]=useState(false);
+  const file=media[0]?.file;const [preparing,setPreparing]=useState(false),preparation=useRef<AbortController>(undefined);
+  useEffect(()=>()=>preparation.current?.abort(),[]);
   const [checklistDialog,setChecklistDialog]=useState<Message | true>();
   const [recordingVoice,setRecordingVoice]=useState(false);
   const [creatingPoll,setCreatingPoll]=useState(false),[showPreview,setShowPreview]=useState(false);
@@ -273,17 +276,16 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     }
     else if(position?.anchor)restoreAnchor(position.anchor);
     else if(position?.target){const row=list.querySelector<HTMLElement>(`[data-message-row="${position.target}"]`);if(row){list.scrollTop+=row.getBoundingClientRect().top-list.getBoundingClientRect().top-list.clientHeight/2+row.offsetHeight/2;highlight(row);follow.current=!hasNewer&&list.scrollHeight-list.scrollTop-list.clientHeight<12;setAway(!follow.current);}else setNotice(t('Исходное сообщение уже недоступно.'));}
-    const sent=arrival.current;if(sent){const row=list.querySelector<HTMLElement>('.chat-message-pending .member-message-text');if(row){arrival.current=undefined;if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
-      // A transformed descendant changes scrollable overflow. Paint the flight
-      // outside the history so following the bottom cannot move older rows.
-      const r=row.getBoundingClientRect(),viewport=list.getBoundingClientRect(),layer=document.createElement('div'),body=document.createElement('div'),copy=row.cloneNode(true) as HTMLElement;
-      layer.className='member-message chat-message chat-message-pending chat-send-flight';layer.inert=true;layer.setAttribute('aria-hidden','true');
-      Object.assign(layer.style,{position:'fixed',left:viewport.left+'px',top:viewport.top+'px',width:viewport.width+'px',height:viewport.height+'px',padding:'0',margin:'0',overflow:'clip',pointerEvents:'none',zIndex:'30'});
-      body.className='member-message-content chat-message-body';Object.assign(body.style,{position:'absolute',left:r.left-viewport.left+'px',top:r.top-viewport.top+'px',width:r.width+'px'});body.append(copy);layer.append(body);document.body.append(layer);
-      setFlightActive(true);let finished=false;
-      const finish=(update=true)=>{if(finished)return;finished=true;layer.remove();flightCleanup.current=undefined;if(update){setFlightActive(false);clearConfirmedOutgoing();}};
-      flightCleanup.current=finish;const animation=copy.animate([{transform:`translate(${sent.x-r.left}px,${sent.y-r.top}px)`,opacity:.5},{transform:'none',opacity:1}],{duration:220,easing:'ease-out'});void animation.finished.then(()=>finish(),()=>finish());
-    }}}
+    else if(follow.current)list.scrollTop=list.scrollHeight;
+    const sent=arrival.current;
+    const row=sent&&list.querySelector<HTMLElement>('.chat-message-pending .member-message-text');
+    if(sent&&row){
+      arrival.current=undefined;
+      flightCleanup.current=animateSendFlight(list,row,sent,()=>{
+        flightCleanup.current=undefined;setFlightActive(false);clearConfirmedOutgoing();
+      });
+      if(flightCleanup.current)setFlightActive(true);
+    }
     if(!hasNewer&&list.scrollHeight-list.scrollTop-list.clientHeight<12){follow.current=true;setAway(false);}
     lastScroll.current=list.scrollTop;remember();current.current.onViewport?.(follow.current);
   },[messages,hasNewer,outgoing]);
@@ -296,7 +298,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     const observer=new IntersectionObserver(entries=>{if(!current.current.focused)return;for(const entry of entries)if(entry.isIntersecting)markRead(Number((entry.target as HTMLElement).dataset.readId));},{root:list,threshold:1});
     for(const row of list.querySelectorAll('[data-read-id]'))observer.observe(row);return()=>observer.disconnect();
   },[messages,focused,ready,creatingPoll]);
-  useLayoutEffect(()=>{const field=editInput.current;if(!editing||!field)return;field.style.height='auto';field.style.height=`${field.scrollHeight}px`;field.focus({preventScroll:true});field.closest('.chat-inline-edit')?.scrollIntoView({block:'nearest'});},[editing?.id,editText]);
+  useLayoutEffect(()=>{const field=editInput.current;if(!editing||!field)return;field.focus({preventScroll:true});field.closest('.chat-inline-edit')?.scrollIntoView({block:'nearest'});},[editing?.id]);
   useEffect(()=>{const field=composer.current;if(field){field.style.height='auto';field.style.height=`${Math.min(180,field.scrollHeight)}px`;}},[text]);
   useEffect(()=>{
     if(!menu)return;const element=menuRef.current!;const r=element.getBoundingClientRect();element.style.left=`${Math.max(8,Math.min(menu.x,innerWidth-r.width-8))}px`;element.style.top=`${Math.max(8,Math.min(menu.y,innerHeight-r.height-8))}px`;element.querySelector<HTMLButtonElement>('button')?.focus();
@@ -315,15 +317,17 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     }else await navigate('around',id);
   }
   async function selectFile(...next:File[]){
-    if(!next.length||sendingRef.current||preparing)return;
+    if(!next.length||sendingRef.current||preparation.current)return;
     if(media.length+next.length>10){onError(t('Можно прикрепить до 10 файлов.'));return;}
     if(media.length+next.length>1&&!state.capabilities?.includes('media-gallery-v1')){onError(t('Для этой функции обновите сервер.'));return;}
-    for(const item of next)if(!item.size||!imageMime(item.type)&&item.size>(state.capabilities?.includes('media-files-v1')?50:2)*1024*1024){onError(t('Изображения — до 2 МБ, другие файлы — до 50 МБ (на старом сервере — до 2 МБ).'));return;}
+    const limit=state.capabilities?.includes('media-files-v1')?largeAttachmentLimit:2*1024*1024;
+    if(next.some(file=>!canPrepareAttachment(file,limit))){onError(t('Файл пуст или превышает допустимый размер.'));return;}
+    const controller=new AbortController();preparation.current=controller;
     setPreparing(true);setAttachmentMenu(false);const generation=epoch.current;
     const prepared: MediaDraft[] = [];
     try{
       for (const file of next) {
-        prepared.push(await prepareDraft(await fitChatImage(file), state.capabilities?.includes(mediaVariantsCapability)));
+        prepared.push(await prepareDraft(await fitChatAttachment(file,limit,controller.signal), state.capabilities?.includes(mediaVariantsCapability)));
         if(generation!==epoch.current){prepared.forEach(disposeDraft);return;}
       }
       setMedia(previous=>[...previous,...prepared]);
@@ -331,18 +335,19 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     } catch {
       prepared.forEach(disposeDraft);
       if(generation===epoch.current)onError(t('Файл пуст или превышает допустимый размер.'));
-    } finally{if(generation===epoch.current){setPreparing(false);focusInput();}}
+    } finally{preparation.current=undefined;if(generation===epoch.current){setPreparing(false);focusInput();}}
   }
   function removeDraft(id:string){setMedia(previous=>{const item=previous.find(i=>i.id===id);if(item){disposeDraft(item);uploaded.current.delete(item.file);}return previous.filter(i=>i.id!==id);});focusInput();}
   function renameDraft(id:string,name:string){setMedia(previous=>previous.map(item=>{if(item.id!==id)return item;const renamed=new File([item.file],name,{type:item.file.type,lastModified:item.file.lastModified}),cached=uploaded.current.get(item.file);if(cached){uploaded.current.delete(item.file);uploaded.current.set(renamed,{...cached,name});}return{...item,file:renamed};}));}
   async function send(voice?:VoiceDraft){
     const file=voice?.file||media[0]?.file;const selected=voice?[]:media;
-    const value=voice?'':text.trim();if(sendingRef.current||preparing||(!value&&!file)||new TextEncoder().encode(value).length>4096)return;
+    const trimmed=trimMessage(voice?'':text,voice?[]:mentions),value=trimmed.text;if(sendingRef.current||preparing||(!value&&!file)||new TextEncoder().encode(value).length>4096)return;
     sendTimes.current=sendTimes.current.filter(time=>Date.now()-time<1000);if(sendTimes.current.length>=3){setSendError(t('Слишком много сообщений. Подождите секунду.'));return;}
-    sendingRef.current=true;setSending(true);setSendError('');const generation=epoch.current,origin=composer.current?.getBoundingClientRect();
+    sendingRef.current=true;setSending(true);setSendError('');const generation=epoch.current,origin=composerTextOrigin(composer.current);
     const latestReply=reply&&quote(reply.id,{id:reply.id,author:profileFor(state,reply.authorProfileId)?.nickname||t('Участник'),text:reply.content.text});
-    const content:Message['content']={text:value,mentions:(voice?[]:mentions).map(m=>({...m,start:m.start-(text.length-text.trimStart().length),end:m.end-(text.length-text.trimStart().length)})),...(reply?{reply:{id:reply.id,author:latestReply?.source?latestReply.author:profileFor(state,reply.authorProfileId)?.nickname||t('Участник'),text:latestReply?.source?latestReply.source.content.text:reply.content.text}}:{})};
-    if(origin)arrival.current={x:origin.left+14,y:origin.top+12};
+    const content:Message['content']={...trimmed,...(reply?{reply:{id:reply.id,author:latestReply?.source?latestReply.author:profileFor(state,reply.authorProfileId)?.nickname||t('Участник'),text:latestReply?.source?latestReply.source.content.text:reply.content.text}}:{})};
+    flightCleanup.current?.();
+    arrival.current=origin;
     const variants = state.capabilities?.includes(mediaVariantsCapability);
     const pendingPreview = file && imageMime(file.type) ? selected[0]?.poster ?? (!variants ? file : undefined) : undefined;
     showOutgoing({message:{id:-1,channelId,authorProfileId:state.self.profileId,requestId:crypto.randomUUID().replaceAll('-',''),sentAt:Date.now(),content},preview:pendingPreview?URL.createObjectURL(pendingPreview):undefined,confirmed:false});follow.current=true;setAway(false);pendingPosition.current={bottom:true};
@@ -393,13 +398,13 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
       let result:{id:number};
       try{result=await membership<{id:number}>('send',{serverId,channelId,content:body,requestId:pendingSend.current.id});}
       catch(error){if(!outgoingRef.current?.confirmed)throw error;result={id:outgoingRef.current.message.id};}
-      if(generation!==epoch.current)return;showOutgoing({...outgoingRef.current!,message:{...outgoingRef.current!.message,id:result.id},confirmed:true});pendingSend.current=undefined;uploaded.current.clear();sendTimes.current.push(Date.now());setHasSent(true);if(!voice){setMentions([]);setText('');setReply(undefined);media.forEach(disposeDraft);setMedia([]);}setRecordingVoice(false);follow.current=true;setAway(false);if(result?.id){markRead(result.id);}if(!current.current.state.eventsLive)await load('latest');if(generation===epoch.current)clearConfirmedOutgoing();
+      if(generation!==epoch.current)return;showOutgoing({...outgoingRef.current!,message:{...outgoingRef.current!.message,id:result.id},confirmed:true});pendingSend.current=undefined;uploaded.current.clear();sendTimes.current.push(Date.now());setHasSent(true);if(!voice){setMentions([]);setText('');setReply(undefined);media.forEach(disposeDraft);setMedia([]);}setRecordingVoice(false);follow.current=true;setAway(false);if(result?.id){markRead(result.id);}if(!current.current.state.eventsLive||hasNewer)await load('latest');if(generation===epoch.current)clearConfirmedOutgoing();
     }catch(error){if(generation===epoch.current){flightCleanup.current?.();outgoingRef.current=undefined;setOutgoing(undefined);setSendError((error as Error).message);}}
     finally{sendingRef.current=false;if(generation===epoch.current){setSending(false);clearConfirmedOutgoing();requestAnimationFrame(()=>{if(generation===epoch.current&&!sendingRef.current)focusInput();});}}
   }
   async function mutate(message:Message,value?:string){
-    if(mutationRef.current)return;const content={...message.content,text:value?.trim()||'',mentions:editMentions.map(m=>({...m,start:m.start-(editText.length-editText.trimStart().length),end:m.end-(editText.length-editText.trimStart().length)}))};if(value!==undefined&&removeImage)delete content.image;if(value!==undefined&&content.gif?.source!==content.text)delete content.gif;if(value!==undefined&&new TextEncoder().encode(content.text).length>4096)return;if(value!==undefined&&!content.text&&!content.image&&!content.file&&!content.files?.length)value=undefined;
-    if(value!==undefined&&value.trim()===message.content.text.trim()&&!removeImage&&JSON.stringify(content.mentions)===JSON.stringify(message.content.mentions||[])){cancelEdit();return;}
+    if(mutationRef.current)return;const content={...message.content,...trimMessage(value??'',editMentions)};if(value!==undefined&&removeImage)delete content.image;if(value!==undefined&&content.gif?.source!==content.text)delete content.gif;if(value!==undefined&&new TextEncoder().encode(content.text).length>4096)return;if(value!==undefined&&!content.text&&!content.image&&!content.file&&!content.files?.length)value=undefined;
+    if(value!==undefined&&content.text===message.content.text&&!removeImage&&JSON.stringify(content.mentions)===JSON.stringify(message.content.mentions||[])){cancelEdit();return;}
     mutationRef.current=true;setMutating(true);setMutationError('');const generation=epoch.current;
     try{
       if(value===undefined)await membership('message.delete',{serverId,messageId:message.id});
@@ -416,7 +421,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     finally{mutationRef.current=false;if(generation===epoch.current){setMutating(false);focusInput();}}
   }
   function requestDelete(message:Message,skip=false){if(message.locked||message.systemKind)return;setMenu(undefined);setMutationError('');if(skip)void mutate(message);else setDeleting(message);}
-  const tooLong=new TextEncoder().encode(text.trim()).length>4096;
+  const tooLong=new TextEncoder().encode(trimMessage(text).text).length>4096;
   const displayed=outgoing&&!messages.some(m=>m.requestId===outgoing.message.requestId&&effectiveProfile(state,m.authorProfileId)===state.self.effectiveProfileId)?[...messages,outgoing.message]:messages;
   return <section className="member-chat room-chat" aria-label={channel.name} onDragOver={event=>{if(event.dataTransfer.types.includes(memberDragType)){event.preventDefault();event.dataTransfer.dropEffect='copy';}}} onDrop={event=>{const raw=event.dataTransfer.getData(memberDragType);if(!raw)return;event.preventDefault();if(sendingRef.current)return;const field=composer.current,next=dropMemberMention(raw,state,text,mentions,field?.selectionStart??text.length,field?.selectionEnd??text.length);if(!next)return;setText(next.text);setMentions(next.mentions);requestAnimationFrame(()=>{field?.focus();field?.setSelectionRange(next.caret,next.caret);});}}>
     <div className="chat-feed"><div ref={pane} className="member-history chat-stream" tabIndex={0} role="log" aria-label={t('Сообщения чата')} aria-live="polite" aria-busy={loading} onLoadCapture={()=>{const list=pane.current;if(list){if(follow.current)list.scrollTop=list.scrollHeight;else restoreAnchor(lastAnchor.current);lastScroll.current=list.scrollTop;remember();}}} onScroll={()=>{

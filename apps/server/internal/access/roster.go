@@ -44,6 +44,7 @@ type RosterPage struct {
 	Members        []RosterMember        `json:"members"`
 	Next           string                `json:"next,omitempty"`
 	Mentions       *RosterMentionOptions `json:"mentions,omitempty"`
+	RoleColors     map[string]string     `json:"roleColors,omitempty"`
 }
 
 type RosterMentionOptions struct {
@@ -195,6 +196,7 @@ func (s *Store) dispatchRoster(ctx context.Context, resolve ResolveSession, chan
 			if !page.Mentions.Available {
 				page.Members = []RosterMember{}
 				page.Next = ""
+				page.RoleColors = nil
 			}
 		}
 		if err := ctx.Err(); err != nil {
@@ -235,6 +237,9 @@ func (s State) roster(channel, after string) RosterPage {
 		roleRanks[role] = index
 	}
 	groups := make(map[string]bool)
+	if channel != "" {
+		page.RoleColors = make(map[string]string)
+	}
 	for _, profile := range slices.Sorted(maps.Keys(s.Members)) {
 		subject := s.Members[profile]
 		if !subject.Active || (channel != "" && !s.CanDeliver(profile, channel, 0)) {
@@ -242,6 +247,13 @@ func (s State) roster(channel, after string) RosterPage {
 		}
 		assigned := grantSet(subject.Roles)
 		assigned[Everyone] = true
+		if page.RoleColors != nil {
+			for id := range assigned {
+				if color := s.RolePresentation[id].Color; color != "" {
+					page.RoleColors[id] = color
+				}
+			}
+		}
 		ids := slices.Collect(maps.Keys(assigned))
 		slices.SortFunc(ids, func(a, b string) int { return roleRanks[a] - roleRanks[b] })
 		appendMember := profile > after && len(page.Members) < protectedRosterPageSize

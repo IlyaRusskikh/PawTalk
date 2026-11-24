@@ -1,7 +1,8 @@
 // Opt-in Windows shell check: creates synthetic, silent notifications.
-const {app,Notification,nativeImage}=require('electron'),assert=require('node:assert/strict');
+const {app,Notification,nativeImage,BrowserWindow}=require('electron'),assert=require('node:assert/strict');
 const {promisify}=require('node:util'),execute=promisify(require('node:child_process').execFile);
 const {registerMembershipIPC}=require('../electron/membership-ipc.cjs');
+app.on('window-all-closed', () => {});
 app.setPath('userData',require('node:path').join(require('node:os').tmpdir(),'pawtalk-native-notifications-'+process.pid));
 if(process.platform==='win32')app.setAppUserModelId('local.pawtalk.desktop');
 app.whenReady().then(async()=>{
@@ -11,7 +12,20 @@ app.whenReady().then(async()=>{
  const history=async()=>{const n=native.at(-1).notification,script="[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] > $null; @([Windows.UI.Notifications.ToastNotificationManager]::History.GetHistory('local.pawtalk.desktop') | Where-Object { $_.Tag -eq '"+n.id+"' -and $_.Group -eq '"+n.groupId+"' }).Count";return Number((await execute('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true,timeout:10000})).stdout.trim());};
  class ObservedNotification{static isSupported(){return Notification.isSupported();}constructor(options){assert.match(options.toastXml,/placement="appLogoOverride" hint-crop="circle"/);const notification=new Notification(options),entry={notification,options,shown:false,closed:false};native.push(entry);notification.on('show',()=>entry.shown=true);notification.on('close',()=>entry.closed=true);notification.on('failed',(_event,error)=>entry.failed=error||true);return notification;}}
  try{
-  const avatar=nativeImage.createFromBitmap(Buffer.alloc(16*16*4,200),{width:16,height:16}).toDataURL();
+  const fixture = new BrowserWindow({show:false, webPreferences:{sandbox:true,offscreen:true}});
+  let avatar;
+  try {
+   await fixture.loadURL('data:text/html,<title>Avatar fixture</title>');
+   avatar = await fixture.webContents.executeJavaScript(`(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#20d040';
+    ctx.fillRect(0,0,128,128);
+    return canvas.toDataURL('image/webp');
+   })()`);
+  } finally { fixture.destroy(); }
+  assert.match(avatar, /^data:image\/webp;base64,/);
   const profileId='a'.repeat(64),authorId='b'.repeat(64),address='https://127.0.0.1';
   const client={
     connections:new Map([[serverId,{}]]),
@@ -23,7 +37,7 @@ app.whenReady().then(async()=>{
     readProtectedChatReference:async()=>({position:4,authorProfileId:authorId,sentAt:Date.now(),text:'Protected preview'}),
     readProtectedRuntimeRoster:async()=>({members:[{id:authorId,name:'Alice',avatar}]}),
   };
-  service=registerMembershipIPC({ipcMain:{handle(_name,value){handler=value;}},authorized(){},client,links:{},send(){},getWindow:()=>undefined,Notification:ObservedNotification,notificationAppearance:require('../electron/notification-appearance.cjs').notificationAppearance({directory:require('node:path').join(app.getPath('userData'),'avatars'),nativeImage})});
+  service=registerMembershipIPC({ipcMain:{handle(_name,value){handler=value;}},authorized(){},client,links:{},send(){},getWindow:()=>undefined,Notification:ObservedNotification,notificationAppearance:require('../electron/notification-appearance.cjs').notificationAppearance({directory:require('node:path').join(app.getPath('userData'),'avatars'),nativeImage,BrowserWindow})});
   const call=(action,input)=>handler({},action,{serverId,channelId,...input}),notify=id=>call('notify',{messageId:id,channelName:'Synthetic QA',authorName:'PawTalk',authorAvatar:avatar,text:'Temporary notification lifecycle check'});
   assert.equal((await notify(1)).value,true);await until(()=>native[0].shown,'Windows accepts first toast');
   assert.equal(await history(),1,'synthetic toast exists in Windows Action Center');
@@ -36,6 +50,8 @@ app.whenReady().then(async()=>{
   assert.equal((await call('chat.protected.activity',{after:3,notify:true})).value.notified,true);
   await until(()=>native[2].shown,'Windows accepts the protected toast');
   assert.match(native[2].options.toastXml,/Alice: Protected preview/);
+  const pixel = native[2].options.icon.toBitmap();
+  assert.ok(pixel[1] > 170 && pixel[2] < 64, 'The supplied WebP photo appears in the native image');
   assert.equal(await history(),1);
   await call('notify.read',{messageId:4});
   assert.equal(await history(),0);

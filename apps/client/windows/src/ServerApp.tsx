@@ -1461,7 +1461,7 @@ export function ServerApp() {
         <ProtectedChat key={protectedDraftKey} serverId={selected} channelId={visibleProtectedText.id}
           cache={protectedChatCache.current} cacheKey={protectedDraftKey}
           channelName={visibleProtectedText.name ?? visibleProtectedText.id} draft={protectedDrafts[protectedDraftKey]} timedOut={!!selfTimeout} eventsLive={protectedState.eventsLive}
-          authorNames={channelProfiles} authorRosterCursor={channelRoster?.cursor}
+          authorNames={channelProfiles} roleColors={channelRoster?.roleColors} authorRosterCursor={channelRoster?.cursor}
           ownProfileId={protectedState.profileId} ownAvatar={ownAvatar} composerEvents={protectedState.composerEvents}
           onRead={position => clearProtectedUnread(selected, visibleProtectedText.id, position)}
           offline={protectedOffline} pauseSending={textProtection?.state === 'red'} protection={textProtection}

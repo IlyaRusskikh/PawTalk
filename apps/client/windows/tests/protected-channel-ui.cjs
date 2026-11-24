@@ -276,7 +276,8 @@ app.whenReady().then(async () => {
       await until('window.protectedHistoryReads.length === 3', 'The event invalidates cached history and the rate-limited request retries');
       await until("!document.querySelector('.protected-chat-cooldown')", 'An accepted response clears the cooldown notice');
       assert.deepEqual(await run("[...document.querySelectorAll('.member-history .chat-mention')].map(node => [node.textContent, node.parentElement.tagName])"),
-        [['@Friend', 'STRONG']]);
+        [['@Friend', 'STRONG'], ['@Crew', 'SPAN']]);
+      await until("[...document.querySelectorAll('.chat-mention')].some(node => node.textContent === '@Crew' && getComputedStyle(node).backgroundColor === 'rgb(90, 137, 188)')", 'Verified role mentions use their role color');
       await until("document.querySelector('.member-history img.chat-link-gif')?.naturalWidth === 1", 'Protected link preview displays the resolved GIF');
       const composerHeight = () => run("document.querySelector('.protected-chat-input-shell').getBoundingClientRect().height");
       const emptyHeight = await composerHeight();
@@ -284,6 +285,8 @@ app.whenReady().then(async () => {
       assert.equal(await composerHeight(), emptyHeight, 'Empty preview preserves composer height');
       await click('', '.member-composer .chat-preview-toggle');
       await enter('.member-composer textarea', '**Previewed** [Draft](https://example.test/draft)');
+      await run("document.querySelector('.member-composer textarea').focus(); document.querySelector('.member-composer textarea').select()");
+      await until("!!document.querySelector('.chat-format-toolbar')", 'Selection opens formatting in the protected composer');
       const draftHeight = await composerHeight();
       await click('', '.member-composer .chat-preview-toggle');
       await until("document.querySelector('.chat-compose-preview strong')?.textContent === 'Previewed'", 'Protected composer previews formatted drafts');
@@ -293,7 +296,21 @@ app.whenReady().then(async () => {
       await until("document.activeElement === document.querySelector('.member-composer textarea')", 'Closing the preview returns focus to the draft');
       assert.equal(await run("document.querySelector('.member-composer textarea')?.value"), '**Previewed** [Draft](https://example.test/draft)');
       assert.equal(await run('window.protectedSends.length'), 0);
-      await run("window.holdProtectedSend = true; document.querySelector('.member-composer button[type=submit]').click()");
+      await enter('.member-composer textarea', '  \n**Previewed** [Draft](https://example.test/draft)\n\n\n\n\nMore\n  ');
+      await run(`(() => {
+        window.observedSendFlight = false;
+        const observer = new MutationObserver(records => {
+          for (const { addedNodes } of records) {
+            const layer = [...addedNodes].find(node => node.classList?.contains('chat-send-flight'));
+            if (!layer) continue;
+            window.observedSendFlight = layer.parentElement === document.body && layer.getAnimations({ subtree: true }).length > 0;
+            observer.disconnect();
+          }
+        });
+        observer.observe(document.body, { childList: true });
+        window.holdProtectedSend = true;
+        document.querySelector('.member-composer button[type=submit]').click();
+      })()`);
       await until("typeof window.releaseProtectedSend === 'function' && document.querySelector('.chat-message-pending')?.textContent.includes('Previewed')", 'Sending displays an outgoing row');
       assert.equal(await run(`(() => {
         const pendingText = document.querySelector('.chat-message-pending .member-message-text strong');
@@ -306,8 +323,13 @@ app.whenReady().then(async () => {
         swatch.remove();
         return pending === muted && pending !== getComputedStyle(confirmedText).color;
       })()`), true, 'Unconfirmed text uses the muted theme color until receipt');
+      await until('window.observedSendFlight', 'The protected send animates outside the scrolling history');
+      assert.equal(await run('window.protectedSends[0].text'), '**Previewed** [Draft](https://example.test/draft)\n\n\nMore');
       await run('window.releaseProtectedSend()');
-      await until("!document.querySelector('.chat-message-pending') && !document.querySelector('.member-composer textarea').value", 'Acknowledgement clears the outgoing row and draft');
+      await until("!document.querySelector('.chat-message-pending') && !document.querySelector('.member-composer textarea').value", 'Acknowledgement clears the pending state and draft');
+      assert.equal(await run("document.querySelectorAll('.member-history .member-message-text strong').length"), 2, 'Acknowledged text remains visible while history catches up');
+      await run('window.deliverFormattedSend = true; window.invalidateGeneralChat()');
+      await until("document.querySelector('.member-message:has(.member-message-actions button:nth-child(2)) .member-message-text')?.textContent.includes('Previewed')", 'History replaces the acknowledged row');
       await enter('.member-composer textarea', '@Fri');
       await until(`!!document.querySelector('.protected-mention-input [role=option]')`, 'Protected mention choices open above the composer');
       assert.equal(await run(`(() => {
@@ -364,10 +386,19 @@ app.whenReady().then(async () => {
         await until("!!document.querySelector('.member-message-actions button[aria-label=\"Edit message\"]')", 'Own ordinary message can be edited');
         const originalTime = await run("document.querySelector('.member-message:has(button[aria-label=\"Edit message\"]) time').textContent");
         await run("document.querySelector('.member-message-actions button[aria-label=\"Edit message\"]').click()");
-        await enter('dialog textarea', 'Edited in place');
+        const editHeight = await run("document.querySelector('dialog textarea').getBoundingClientRect().height");
+        await enter('dialog textarea', 'Line\n'.repeat(120));
+        const expanded = await run(`(() => {
+          const field = document.querySelector('dialog textarea');
+          return { height: field.getBoundingClientRect().height, content: field.scrollHeight,
+            dialog: field.closest('dialog').getBoundingClientRect().height, viewport: innerHeight };
+        })()`);
+        assert.ok(expanded.height > editHeight && expanded.height < expanded.content && expanded.dialog < expanded.viewport);
+        await enter('dialog textarea', '  \nEdited in place\n  ');
         await click('Save', 'dialog .modal-actions button');
         await until("document.querySelector('.member-history').textContent.includes('Edited in place')", 'Edition updates the existing message');
         assert.equal(await run('window.protectedEdits[0].expectedRevision'), 1);
+        assert.equal(await run('window.protectedEdits[0].text'), 'Edited in place');
         assert.equal(await run("document.querySelector('.member-message:has(button[aria-label=\"Edit message\"]) time').textContent"), originalTime);
         await until("document.querySelectorAll('.member-message-actions button[aria-label=\"Delete message\"]').length === 2", 'Reader can only remove their own ordinary messages');
         const otherMessageMenu = () => run(`[...document.querySelectorAll('.member-history article')].find(row =>
@@ -626,6 +657,13 @@ app.whenReady().then(async () => {
           third.top >= first.bottom && Math.abs(first.left - third.left) < 1 &&
           getComputedStyle(single).gridTemplateColumns.split(' ').length === 1;
       })()`), 'Combined photos and videos fill two columns, while a single photo keeps its own layout');
+      await run("document.querySelector('.chat-photo-card .chat-video-open').click()");
+      await until("document.querySelector('.video-counter')?.textContent === '1 / 3'", 'Protected photo opens the entire message gallery');
+      await run("document.querySelector('.video-viewer').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))");
+      await until("document.querySelector('.video-counter')?.textContent === '2 / 3' && document.querySelector('.photo-viewer-image')?.alt === 'Second.png'", 'Keyboard arrows open the next protected photo');
+      await run("document.querySelector('.video-previous').click()");
+      await until("document.querySelector('.photo-viewer-image')?.alt === 'Photo.png'", 'Gallery button returns to the previous protected photo');
+      await run("document.querySelector('.video-viewer-actions button:last-child').click()");
       await until("document.querySelector('.voice-wave use') && [...document.querySelectorAll('.voice-wave g rect')].some(bar => Number(bar.getAttribute('height')) > 2)",
         'Saved recordings render their waveforms immediately');
       await run(`(() => {

@@ -1,8 +1,9 @@
 // Parse a bounded, HTML-free subset of Discord Markdown. Never interpret HTML.
 function mentionAt(text, mentions, start, offset) {
-  const end = mentions?.get(offset + start);
+  const span = mentions?.get(offset + start);
+  const end = span?.end;
   if (end > offset + start && end <= offset + text.length) {
-    return { type: 'mention', text: text.slice(start, end - offset) };
+    return { type: 'mention', text: text.slice(start, end - offset), ...(span.color && { color: span.color }) };
   }
 }
 
@@ -63,7 +64,7 @@ export function inlineMarkdown(text, depth = 0, mentions, offset = 0) {
 
 export function messageMarkdown(text, verifiedMentions) {
   const lines = text.split('\n'), nodes = [];
-  const mentions = verifiedMentions?.length ? new Map(verifiedMentions.map(({ start, end }) => [start, end])) : undefined;
+  const mentions = verifiedMentions?.length ? new Map(verifiedMentions.map(span => [span.start, span])) : undefined;
   let cursor = 0;
   const offsets = lines.map(line => {
     const offset = cursor;

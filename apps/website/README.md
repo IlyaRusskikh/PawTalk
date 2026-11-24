@@ -18,12 +18,11 @@ manual release publication, or manual dispatch. GITHUB_TOKEN-triggered release
 events alone cannot be relied on to chain Actions. No full CI runs on main push,
 no generated catalog commits. See [owner settings](../../agents/rules/github.md).
 For offline checks run node tooling/ci/check-website.mjs and the fixture-based tests.
-Keep RU/EN presentation aligned with README and the published API 2 guides; technical content is in docs/, architecture/ and SECURITY.md.
+Keep RU/EN presentation aligned with the README and the client and server guides. Technical content lives in docs/, architecture/ and SECURITY.md.
 
 ## Screenshots
 
-The PNGs show the prepared Client 0.14.0 source interface, not proof of a published
-release. Download versions still come from the live release catalog. The project
+The PNGs show the current Client source interface. Download versions come from the live release catalog. The project
 icon comes from the existing assets/pawtalk.svg.
 
 After building the shared Server and Client UI, run:

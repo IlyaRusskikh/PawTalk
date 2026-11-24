@@ -16,6 +16,9 @@ import { MessageText } from './MessageText';
 import { MessageTime } from './MessageTime';
 import { dropProtectedMemberMention, memberDragType } from './memberMention';
 import { membership, type ChatAttachment, type ChatImageAttachment } from './membership';
+import { FormattingTextarea } from './FormattingTextarea';
+import { animateSendFlight, composerTextOrigin } from './sendFlight';
+import { trimMessage } from './trimMessage';
 import { Modal } from './Modal';
 import { ProtectedChecklist } from './ProtectedChecklist';
 import { ProtectedMentionTextarea } from './ProtectedMentionTextarea';
@@ -25,7 +28,7 @@ import { ProtectedPoll, type ProtectedPollDefinition } from './ProtectedPoll';
 import type { DeferredPolicy, ProtectionStatus } from './ProtectedTextStatus';
 import { PollDialog } from './PollDialog';
 import { Button } from './ui/Button';
-import { allocateMediaViews, createMediaDraft, disposeDraft, fitChatImage, imageMime, prepareDraft, videoMime, visualMime, type MediaDraft } from './mediaDraft';
+import { allocateMediaViews, createMediaDraft, disposeDraft, canPrepareAttachment, fitChatAttachment, hasGalleryPreview, largeAttachmentLimit, imageMime, prepareDraft, videoMime, visualMime, type MediaDraft } from './mediaDraft';
 import { VoiceComposer, type VoiceDraft } from './VoiceComposer';
 
 type ReadableMessage = { locked?: false; sentAt: number; editedAt?: number; own: boolean; authorProfileId?: string; canEdit?: boolean;
@@ -33,6 +36,13 @@ type ReadableMessage = { locked?: false; sentAt: number; editedAt?: number; own:
   mentions?: ProtectedMention[];
   checklist?: { everyone: boolean; items: { id: string; text: string }[] }; poll?: ProtectedPollDefinition;
   pollResult?: { winners: string[] }; files?: ChatAttachment[]; image?: ChatImageAttachment };
+function continuesMessage(message: ReadableMessage, previous?: ReadableMessage) {
+  return !!previous && !message.poll && !previous.poll && !message.pollResult && !previous.pollResult &&
+    message.replyTo === undefined && (message.authorProfileId ? message.authorProfileId === previous.authorProfileId : message.own && previous.own) &&
+    message.sentAt >= previous.sentAt && message.sentAt - previous.sentAt <= 300_000 &&
+    new Date(message.sentAt).toDateString() === new Date(previous.sentAt).toDateString();
+}
+
 type ProtectedMessage = { position: number; revision?: number; originalPollPosition?: number } & ({ locked: true } | ReadableMessage);
 type HistoryWindow = { first: number; last?: number; cursor: string; canDeleteOther: boolean; canDeletePoll?: boolean;
   canCreateList?: boolean; canCreatePoll?: boolean; canSend: boolean; canAttach?: boolean; canSendVoice?: boolean;
@@ -57,6 +67,7 @@ type ProtectedChatProps = {
   cache: ProtectedChatCache;
   cacheKey: string;
   authorNames?: ReadonlyMap<string, { name: string; avatar?: string; color?: string }>;
+  roleColors?: ReadonlyMap<string, string>;
   authorRosterCursor?: { after: string; revision: number };
   ownProfileId: string;
   ownAvatar?: string;
@@ -153,7 +164,7 @@ export function ProtectedChatPreview({ channelName, canSend, canAttach }: {
   </ProtectedChatFrame>;
 }
 
-export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKey, authorNames, authorRosterCursor, ownProfileId, ownAvatar, draft, timedOut, eventsLive, composerEvents, mediaVariants = false, offline = false, keysPending = false, pauseSending, protection, changeDraft, clearDraft, setDeferred, onRead }: ProtectedChatProps) {
+export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKey, authorNames, roleColors, authorRosterCursor, ownProfileId, ownAvatar, draft, timedOut, eventsLive, composerEvents, mediaVariants = false, offline = false, keysPending = false, pauseSending, protection, changeDraft, clearDraft, setDeferred, onRead }: ProtectedChatProps) {
   const [cached] = useState(() => {
     const entry = cache.get(cacheKey);
     return !offline && !keysPending && entry && entry.until > Date.now() ? entry : undefined;
@@ -170,8 +181,11 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
   const [readError, setReadError] = useState('');
   const [retryMessage, setRetryMessage] = useState('');
   const [sending, setSending] = useState(false);
-  const [outgoing, setOutgoing] = useState<{ text: string; origin: DOMRect; position?: number }>();
-  const outgoingRow = useRef<HTMLDivElement>(null);
+  const [outgoing, setOutgoing] = useState<ReadableMessage & { position?: number }>();
+  const flightOrigin = useRef<ReturnType<typeof composerTextOrigin>>(undefined);
+  const flightTarget = useRef<HTMLDivElement>(null);
+  const flightCleanup = useRef<ReturnType<typeof animateSendFlight>>(undefined);
+  const [flightActive, setFlightActive] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [attachmentMenu, setAttachmentMenu] = useState(false);
   const attachmentButton = useRef<HTMLButtonElement>(null);
@@ -197,7 +211,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
   const [canSendVoice, setCanSendVoice] = useState(cached?.window.canSendVoice ?? false);
   const [attachments, setAttachments] = useState<MediaDraft[]>([]);
   const attachmentDrafts = useRef<MediaDraft[]>([]);
-  const fittingFiles = useRef(false);
+  const fittingFiles = useRef<AbortController>(undefined);
   const canAttachFiles = useRef(false);
   const [fitting, setFitting] = useState(false);
   const [fileOperation, setFileOperation] = useState(newOperation);
@@ -330,6 +344,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
         initialUnread.current = undefined;
       }
     } else if (following.current) list.scrollTop = list.scrollHeight;
+    scrollTop.current = list.scrollTop;
     setAboveLatest(list.scrollHeight - list.clientHeight - list.scrollTop >= 36);
   };
   useLayoutEffect(followHistory, [messages, historyConfirmed, outgoing, unreadMarker]);
@@ -373,19 +388,19 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     window.addEventListener('focus', record);
     return () => window.removeEventListener('focus', record);
   }, [messages, historyConfirmed, offline, readKey]);
-  const flightOrigin = outgoing?.origin;
+  const confirmedOutgoing = outgoing?.position !== undefined && last.current >= outgoing.position;
   useLayoutEffect(() => {
-    const row = outgoingRow.current;
-    if (!flightOrigin || !row || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const target = row.getBoundingClientRect();
-    const dx = flightOrigin.left - target.left;
-    const dy = flightOrigin.top - target.top;
-    const animation = row.animate([
-      { transform: `translate(${dx}px, ${dy}px)`, opacity: 0.8 },
-      { transform: 'translate(0, 0)', opacity: 1 },
-    ], { duration: 220, easing: 'ease-out' });
-    return () => animation.cancel();
-  }, [flightOrigin]);
+    if (confirmedOutgoing && !flightCleanup.current) setOutgoing(undefined);
+    const origin = flightOrigin.current;
+    if (!outgoing || !origin || !flightTarget.current || !history.current) return;
+    flightOrigin.current = undefined;
+    flightCleanup.current = animateSendFlight(history.current, flightTarget.current, origin, () => {
+      flightCleanup.current = undefined;
+      setFlightActive(false);
+    });
+    if (flightCleanup.current) setFlightActive(true);
+  }, [confirmedOutgoing, outgoing, flightActive]);
+  useEffect(() => () => flightCleanup.current?.(false), []);
   useLayoutEffect(() => {
     if (history.current && historyConfirmed && restoreScroll.current) {
       restoreScroll.current = false;
@@ -540,6 +555,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
       setDeleting(undefined);
       setEditing(undefined);
       setEditingChecklist(undefined);
+      setOutgoing(undefined);
       last.current = 0;
       olderBoundary.current = undefined;
       setMessages([]);
@@ -747,6 +763,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     return () => clearInterval(timer);
   }, [load, eventsLive, offline]);
   useEffect(() => () => {
+    fittingFiles.current?.abort();
     attachmentDrafts.current.forEach(disposeDraft);
     attachmentDrafts.current = [];
     preparedMedia.current.clear();
@@ -765,19 +782,20 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
       setError(t('Можно прикрепить до 10 файлов.'));
       return;
     }
-    if (next.some(file => file.size === 0 || !imageMime(file.type) && file.size > 50 * 1024 * 1024)) {
+    if (next.some(file => !canPrepareAttachment(file, largeAttachmentLimit))) {
       setError(t('Файл пуст или превышает допустимый размер.'));
       return;
     }
     setError('');
     setAttachmentMenu(false);
-    if (next.some(file => imageMime(file.type) && file.size > chatImageLimit)) {
-      fittingFiles.current = true;
+    if (next.some(file => file.size > (imageMime(file.type) ? chatImageLimit : largeAttachmentLimit))) {
+      const controller = new AbortController();
+      fittingFiles.current = controller;
       setFitting(true);
       try {
         const fitted: File[] = [];
         for (const file of next) {
-          fitted.push(await fitChatImage(file));
+          fitted.push(await fitChatAttachment(file, largeAttachmentLimit, controller.signal));
           if (!mounted.current || !canAttachFiles.current) return;
         }
         next = fitted;
@@ -785,7 +803,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
         if (mounted.current) setError(t('Файл пуст или превышает допустимый размер.'));
         return;
       } finally {
-        fittingFiles.current = false;
+        fittingFiles.current = undefined;
         if (mounted.current) setFitting(false);
       }
     }
@@ -830,7 +848,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
 
   async function send(voice?: VoiceDraft, resume = false) {
     const selected = voice ? [{ file: voice.file }] : resume ? [] : attachmentDrafts.current;
-    const text = voice ? '' : draft?.text ?? '';
+    const { text, mentions } = trimMessage(voice ? '' : draft?.text ?? '', voice ? [] : draft?.mentions);
     const queued = resume ? deferred : undefined;
     const reply = queued ? queued.replyTo : replyTo;
     if (activeSend.current || fittingFiles.current || timedOut || (!text.trim() && !selected.length) || (!resume && !voice && deferred) ||
@@ -851,13 +869,13 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     setSending(true);
     setError('');
     const field = composer.current;
-    if (!resume && !voice && text.trim() && field) {
-      const bounds = field.getBoundingClientRect();
-      const style = getComputedStyle(field);
-      const origin = new DOMRect(bounds.left + parseFloat(style.paddingLeft), bounds.top + parseFloat(style.paddingTop));
-      following.current = true;
-      setOutgoing({ text, origin });
-    }
+    flightCleanup.current?.();
+    flightOrigin.current = !resume && text ? composerTextOrigin(field) : undefined;
+    following.current = true;
+    initialUnread.current = undefined;
+    preservedScroll.current = undefined;
+    if (text) setOutgoing({ text, mentions, own: true, authorProfileId: ownProfileId, sentAt: Date.now(), replyTo: reply });
+    let confirmed = false;
     try {
       const renditions = [];
       for (const item of selected) {
@@ -884,10 +902,11 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
       if (!mounted.current || sendingPaused.current) return;
       const receipt = await membership<{ Position?: number }>('chat.protected.send', { serverId, channelId, text, operationId, replyTo: reply,
         ...(queued && { deferred: queued.basis }), ...(fileIds.length && { fileIds }),
-        ...(!voice && draft?.mentions?.length && { mentions: draft.mentions }) });
+        ...(mentions.length > 0 && { mentions }) });
       if (!voice && draft) clearDraft(draft.operationId);
       if (!mounted.current) return;
-      if (typeof receipt?.Position === 'number') setOutgoing(value => value && { ...value, position: receipt.Position });
+      confirmed = typeof receipt?.Position === 'number';
+      if (confirmed) setOutgoing(value => value && { ...value, position: receipt.Position });
       if (voice) {
         setRecording(false);
         voiceOperation.current = undefined;
@@ -898,7 +917,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
         setFileOperation(newOperation());
       }
       setReplyTo(undefined);
-      void load();
+      void load(false, false, hasMoreRef.current && following.current ? 'latest' : undefined);
     } catch (failure) {
       const code = (failure as { code?: string }).code;
       if (code === 'PROTECTED_KEY_PENDING' && !voice && !selected.length && draft && deferredBasis) {
@@ -910,7 +929,11 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     } finally {
       activeSend.current = false;
       if (mounted.current) {
-        setOutgoing(undefined);
+        if (!confirmed) {
+          flightOrigin.current = undefined;
+          flightCleanup.current?.();
+          setOutgoing(undefined);
+        }
         setSending(false);
         if (!resume) requestAnimationFrame(() => {
           const focused = document.activeElement;
@@ -952,7 +975,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     setEditError('');
     try {
       const { originalText, ...draft } = editing;
-      const result = await membership<{ revision: number }>('chat.protected.edit', { serverId, channelId, ...draft });
+      const result = await membership<{ revision: number }>('chat.protected.edit', { serverId, channelId, ...draft, text: trimMessage(draft.text).text });
       if (!mounted.current) return;
       pendingEdits.current.set(draft.position, result.revision);
       setEditing(undefined);
@@ -1062,6 +1085,8 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
   }, [needsPinPreview, pinPosition, pinRevision, serverId, channelId]);
   const pinText = currentPinMessage ? pinnedMessagePreview(currentPinMessage) :
     pinPreview && pinPreview.position === pinPosition && pinPreview.revision === pinRevision ? pinPreview.text : t('Сообщение');
+  const lastMessage = messages.at(-1);
+  const outgoingContinues = outgoing && continuesMessage(outgoing, lastMessage?.locked ? undefined : lastMessage);
   const unreadBelow = messages.filter(message => message.position > seenPosition && !message.locked && !message.own).length;
   const moreUnread = hasMore && newestPosition > Math.max(seenPosition, messages.at(-1)?.position ?? 0);
   const hasUnreadBelow = unreadBelow > 0 || moreUnread;
@@ -1161,12 +1186,9 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
         {(!loadingHistory && (offline || historyConfirmed) ? messages : []).map((message, index) => {
           const previous = messages[index - 1];
           const firstUnread = unreadMarker?.position === message.position;
-          const joinsPrevious = !message.locked && previous && !previous.locked && !message.poll && !previous.poll &&
-            !message.pollResult && !previous.pollResult && message.replyTo === undefined &&
-            (message.authorProfileId ? message.authorProfileId === previous.authorProfileId : message.own && previous.own) &&
-            message.sentAt >= previous.sentAt && message.sentAt - previous.sentAt <= 300_000 &&
-            new Date(message.sentAt).toDateString() === new Date(previous.sentAt).toDateString();
+          const joinsPrevious = !message.locked && continuesMessage(message, previous?.locked ? undefined : previous);
           const name = message.locked ? t('Участник') : authorName(message);
+          const gallery = message.locked ? undefined : message.files?.filter(hasGalleryPreview);
           const pinned = pinnedPositions.has(message.position);
           const continuation = joinsPrevious && !firstUnread;
           const groupBoundary = joinsPrevious && firstUnread;
@@ -1215,8 +1237,8 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
                           {t('Просмотреть опрос')}
                         </button>}
                     </div> :
-                  <div className="member-message-text">{message.locked ? t('Нет ключа для этого сообщения.') :
-                    <MessageText text={message.text} verifiedMentions={message.mentions} allowRemotePreview={!offline}/>}
+                  <div className="member-message-text" style={flightActive && outgoing?.position === message.position ? { visibility: 'hidden' } : undefined}>{message.locked ? t('Нет ключа для этого сообщения.') :
+                    <MessageText text={message.text} verifiedMentions={message.mentions} roleColors={roleColors} allowRemotePreview={!offline}/>}
                     {!message.locked && message.editedAt !== undefined && <small className="chat-edited"
                       title={new Date(message.editedAt).toLocaleString()}>{t('Изменено')}</small>}
                   </div>}
@@ -1225,7 +1247,8 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
                   {message.image && <ChatFile serverId={serverId} channelId={channelId} protectedPosition={message.position}
                     file={{ ...message.image, name: message.image.name ?? t('Изображение'), size: message.image.size ?? 0 }}/>}
                   {message.files?.map(file => <ChatFile key={file.id} serverId={serverId} channelId={channelId}
-                    file={file} protectedPosition={message.position}/>)}
+                    file={file} group={gallery} protectedPosition={message.position} author={name}
+                    avatar={(message.own ? ownAvatar : undefined) ?? authorProfile(message)?.avatar} date={message.sentAt}/>)}
                 </div>}
               </div>
               {pinned && !message.locked && <span className="chat-message-pin" role="img"
@@ -1248,12 +1271,17 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
           </article>
           </Fragment>;
         })}
-        {outgoing && !readOnly && !messages.some(message => message.position === outgoing.position) &&
-          <article className="member-message chat-message chat-message-pending" aria-busy="true">
+        {outgoing && !readOnly && !confirmedOutgoing &&
+          <article className={`member-message chat-message${outgoingContinues ? ' chat-message-continuation' : ''}${outgoing.position === undefined ? ' chat-message-pending' : ''}`} aria-busy={outgoing.position === undefined || undefined}>
           <div className="chat-message-row">
-            <span className="chat-continuation-time" aria-hidden="true"/>
+            {outgoingContinues ? <span className="chat-continuation-time"><MessageTime sent={outgoing.sentAt} compact/></span> :
+              <Avatar className="chat-avatar" name={authorName(outgoing)} image={ownAvatar ?? authorProfile(outgoing)?.avatar}/>}
             <div className="member-message-content chat-message-body">
-              <div className="member-message-text" ref={outgoingRow}><MessageText text={outgoing.text} preview/></div>
+              {!outgoingContinues && <div className="member-message-heading chat-meta">
+                <strong style={{ color: authorProfile(outgoing)?.color }}>{authorName(outgoing)}</strong><MessageTime sent={outgoing.sentAt}/>
+              </div>}
+              {outgoing.replyTo !== undefined && renderReply(outgoing.replyTo)}
+              <div className="member-message-text" ref={flightTarget} style={flightActive ? { visibility: 'hidden' } : undefined}><MessageText text={outgoing.text} preview verifiedMentions={outgoing.mentions} roleColors={roleColors}/></div>
             </div>
           </div>
         </article>}
@@ -1366,7 +1394,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
               if (showPreview) requestAnimationFrame(() => composer.current?.focus());
             }}><Icon name="eye" size={18}/></button>
           {showPreview && <div className="chat-compose-preview member-message-text" tabIndex={0} role="region" aria-label={t('Предпросмотр')}>
-            <MessageText text={draft?.text ?? ''} verifiedMentions={draft?.mentions} allowRemotePreview={!offline}/>
+            <MessageText text={draft?.text ?? ''} verifiedMentions={draft?.mentions} roleColors={roleColors} allowRemotePreview={!offline}/>
           </div>}
           <ProtectedMentionTextarea input={composer} serverId={serverId} channelId={channelId} value={draft?.text ?? ''}
             placeholder={t('Написать в «{0}»', channelName)}
@@ -1410,9 +1438,9 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
           if (mounted.current) pendingEdits.current.set(position, result.revision);
         }}
         onClose={() => setEditingChecklist(undefined)} onPosted={() => void load(true)}/>}
-      {!readOnly && editing && <Modal title={t('Редактировать сообщение')} onClose={() => { if (!mutating) setEditing(undefined); }} error={editError}>
+      {!readOnly && editing && <Modal className="chat-edit-modal" title={t('Редактировать сообщение')} onClose={() => { if (!mutating) setEditing(undefined); }} error={editError}>
         <form className="form-fields" onSubmit={event => { event.preventDefault(); void edit(); }}>
-          <label>{t('Сообщение')}<textarea autoFocus maxLength={4096} value={editing.text} disabled={mutating}
+          <label>{t('Сообщение')}<FormattingTextarea autoFocus rows={1} maxLength={4096} value={editing.text} disabled={mutating}
             onChange={event => setEditing({ ...editing, text: event.target.value, operationId: crypto.randomUUID().replaceAll('-', '') })}/></label>
           <div className="modal-actions">
             <button type="button" disabled={mutating} onClick={() => setEditing(undefined)}>{t('Отмена')}</button>

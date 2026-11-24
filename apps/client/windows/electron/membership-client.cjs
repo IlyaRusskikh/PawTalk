@@ -2570,6 +2570,11 @@ class MembershipClient {
       if (!ids.has('@everyone') || (member.groupId === undefined ? member.groupRank !== undefined :
         !ids.has(member.groupId) || !Number.isSafeInteger(member.groupRank) || member.groupRank < 1)) throw failure('INVALID_API_RESPONSE');
     }
+    const roleColors = page.roleColors;
+    if (roleColors !== undefined && (!roleColors || typeof roleColors !== 'object' || Array.isArray(roleColors) ||
+        Object.entries(roleColors).some(([role, color]) => !label(role, 256) || typeof color !== 'string' || !/^#[0-9a-f]{6}$/.test(color)))) {
+      throw failure('INVALID_API_RESPONSE');
+    }
     let mentions;
     if (forMentions) {
       const options = page.mentions;
@@ -2583,7 +2588,7 @@ class MembershipClient {
     }
     return { revision: page.revision, channelId: page.channelId, next: page.next,
       ...(page.nicknameDigest !== undefined && { nicknameDigest: page.nicknameDigest }),
-      ...(mentions && { mentions }), members: await Promise.all(page.members.map(async member => {
+      ...(mentions && { mentions }), ...(roleColors && { roleColors }), members: await Promise.all(page.members.map(async member => {
         const avatar = forMentions ? undefined : await this.#readRosterAvatar(connection, member, avatarKey);
         return {
           id: member.id, name: member.name, owner: member.owner, color: member.color, groupId: member.groupId,
