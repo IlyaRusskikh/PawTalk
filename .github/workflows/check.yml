@@ -203,6 +203,19 @@ jobs:
         with:
           name: *windows-server-artifact
           path: release/server
+      - name: Extract packaged LiveKit for native Go tests
+        if: steps.scope.outputs.server == 'true'
+        run: |
+          $version = (Get-Content apps/server/VERSION -Raw).Trim()
+          New-Item -ItemType Directory -Force resources/server | Out-Null
+          tar.exe -xf "release/server/PawTalk.Server.$version.windows-x64.zip" -C resources/server livekit-server.exe
+      - name: Verify shared Go core on native Windows
+        if: steps.scope.outputs.server == 'true'
+        working-directory: apps/server
+        run: &windows-go-core-tests |
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
       - name: Verify native Manager host safeguards
         if: steps.scope.outputs.host == 'true'
         working-directory: apps/manager/windows/service
@@ -316,12 +329,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Verify shared Go core on native Windows
-        if: steps.scope.outputs.client == 'true' || steps.scope.outputs.server == 'true'
+        if: steps.scope.outputs.component == 'client'
         working-directory: apps/server
-        run: |
-          go test ./...
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          go vet ./...
+        run: *windows-go-core-tests
       - name: Download Windows Server package
         if: steps.scope.outputs.server == 'true' && steps.scope.outputs.client == 'true'
         uses: actions/download-artifact@v7
