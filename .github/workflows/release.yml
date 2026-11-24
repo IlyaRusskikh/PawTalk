@@ -147,6 +147,11 @@ jobs:
     steps:
       - run: echo 'Release verification complete'
   prepare-client:
+    # Reused PR artifacts skip verify, so gate on the successful verified job.
+    if: >-
+      !cancelled() && needs.plan.result == 'success' && needs['reuse-pr'].result == 'success' &&
+      needs.verified.result == 'success' && needs.infrastructure.result == 'success' &&
+      contains(fromJSON(needs.plan.outputs.components), 'client')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -182,7 +187,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           path: release/client/*
-    if: contains(fromJSON(needs.plan.outputs.components), 'client')
     needs:
       - plan
       - reuse-pr
@@ -193,7 +197,10 @@ jobs:
     outputs:
       digest: ${{ steps.seal.outputs.digest }}
   prepare-server:
-    if: contains(fromJSON(needs.plan.outputs.components), 'server')
+    if: >-
+      !cancelled() && needs.plan.result == 'success' && needs['reuse-pr'].result == 'success' &&
+      needs.verified.result == 'success' && needs.infrastructure.result == 'success' &&
+      contains(fromJSON(needs.plan.outputs.components), 'server')
     needs:
       - plan
       - reuse-pr
@@ -326,6 +333,14 @@ jobs:
         { "client": "${{ needs.prepare-client.outputs.digest }}", "server": "${{ needs.prepare-server.outputs.digest }}", "manager": "${{
         needs.prepare-manager.outputs.digest }}" }
     steps:
+      - name: Require all selected packages to be prepared
+        if: >-
+          (contains(fromJSON(needs.plan.outputs.components), 'client') && needs['prepare-client'].result != 'success') ||
+          (contains(fromJSON(needs.plan.outputs.components), 'server') && needs['prepare-server'].result != 'success') ||
+          (contains(fromJSON(needs.plan.outputs.components), 'manager') && needs['prepare-manager'].result != 'success')
+        run: |
+          echo '::error::At least one selected component did not complete package preparation. See the preparation jobs.'
+          exit 1
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
