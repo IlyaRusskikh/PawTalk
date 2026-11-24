@@ -113,8 +113,10 @@ function prFixture() {
     run_attempt:1,status:'completed',conclusion:'success',repository:{id:7,full_name:'IlyaRusskikh/PawTalk'},head_repository:{id:7,full_name:'IlyaRusskikh/PawTalk'}};
   const jobs=verificationNames.map(name=>({name,status:'completed',conclusion:'success',run_id:123,run_attempt:1,head_sha:head,
     started_at:'2026-01-01T00:00:00Z',completed_at:'2026-01-01T01:00:00Z'}));
+  jobs.find(job=>job.name==='Windows Server package (windows-2025)').completed_at='2026-01-01T00:20:00Z';
+  jobs.find(job=>job.name==='Windows Client and core (windows-2025)').started_at='2026-01-01T00:20:00Z';
   const artifacts=['pawtalk-pr-build','pawtalk-server-windows'].map((name,i)=>({id:i+1,name,digest:'sha256:'+tree+'0'.repeat(24),expired:false,
-    expires_at:'2099-01-01T00:00:00Z',created_at:'2026-01-01T00:30:00Z',workflow_run:{id:123,head_branch:'work/client',head_sha:head,repository_id:7,head_repository_id:7}}));
+    expires_at:'2099-01-01T00:00:00Z',created_at:i===0?'2026-01-01T00:30:00Z':'2026-01-01T00:10:00Z',workflow_run:{id:123,head_branch:'work/client',head_sha:head,repository_id:7,head_repository_id:7}}));
   const proof={schema:1,pr:20,checkout};
   const pr={number:20,merged:true,merge_commit_sha:sha,base:{ref:'main',repo:{id:7}},head:{ref:source.head_branch,sha:head,repo:{id:7}}};
   const checked={sha:checkout,parents:[{sha:parent},{sha:head}],tree:{sha:tree}};
@@ -137,9 +139,13 @@ test('PR reuse requires the successful workflow, exact tested squash tree, attem
   const evidence=await inspectPR(first.request,'123',sha,async()=>first.proof);
   assert.equal(evidence.tree,first.main.tree.sha);
   assert.equal(evidence.artifact('pawtalk-server-windows').id,2);
+  const wrongJob=prFixture();
+  wrongJob.artifacts[1].created_at=wrongJob.artifacts[0].created_at;
+  const wrongEvidence=await inspectPR(wrongJob.request,'123',sha,async()=>wrongJob.proof);
+  assert.throws(()=>wrongEvidence.artifact('pawtalk-server-windows'),/foreign-attempt artifact/);
   for (const change of [
     f=>f.source.event='workflow_dispatch', f=>f.source.workflow_id=43, f=>f.source.head_repository.id=8,
-    f=>f.source.conclusion='failure', f=>f.jobs[0].conclusion='skipped', f=>f.jobs[1].run_attempt=2, f=>f.jobs.pop(),
+    f=>f.source.conclusion='failure', f=>f.jobs[0].conclusion='skipped', f=>f.jobs.find(j=>j.name==='Windows Manager and SCM (windows-2022)').conclusion='failure', f=>f.jobs[1].run_attempt=2, f=>f.jobs.pop(),
     f=>f.pr.merged=false, f=>f.pr.merge_commit_sha=f.proof.checkout, f=>f.pr.base.ref='feature',
     f=>f.checked.tree.sha='8'.repeat(40), f=>f.checked.parents[0].sha='8'.repeat(40), f=>f.checked.parents.pop(),
     f=>f.artifacts[0].expired=true, f=>f.artifacts[0].workflow_run.id=99, f=>f.artifacts.push(clone(f.artifacts[0])),

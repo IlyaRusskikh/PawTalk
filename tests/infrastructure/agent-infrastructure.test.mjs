@@ -37,7 +37,7 @@ test('development CI runs only on PR/manual/reuse; full main/push CI is absent',
   assert.deepEqual(check.jobs.server.strategy.matrix.runner, ['ubuntu-24.04', 'ubuntu-24.04-arm']);
   assert.deepEqual(check.jobs.windows.strategy.matrix.runner, ['windows-2022', 'windows-2025']);
   assert.ok(check.jobs.server.steps.some(step => step.run?.includes('apps/manager/tests/compose_integration.py')));
-  assert.ok(check.jobs.windows.steps.some(step => step.run?.includes('apps/client/windows/scripts/packaged-smoke.mjs')));
+  assert.ok(check.jobs['windows-client'].steps.some(step => step.run?.includes('apps/client/windows/scripts/packaged-smoke.mjs')));
 });
 test('publication gates follow verification and prepared artifacts', async () => {
   const release = await workflow('release');
