@@ -4,6 +4,12 @@
 
 One Manager tag covers Windows and Linux. The platforms below are documentation sections, **not distinct release versions**.
 
+## manager-v0.7.1
+
+Shared Manager release for the Windows GUI fix.
+
+[Release details](../../../releases/manager-v0.7.1.en.md)
+
 ## manager-v0.6.0
 
 [Release details](../../../releases/manager-v0.6.0.en.md)
