@@ -73,6 +73,24 @@ for (const component of ['all', 'client', 'server', 'manager']) {
       const commands = steps.map(step => step.run || '').join('\n');
       const scope = ciScope(component);
       assert.equal(commands.includes('npm run package'), scope.client);
+      const hostSteps = managerWindows.steps.filter(step => enabled(step, component, runner));
+      const clientSteps = clientWindows.steps.filter(step => enabled(step, component, runner));
+      const coreTest = step => step.name === 'Verify shared Go core on native Windows';
+      const hostCoreTest = hostSteps.findIndex(coreTest);
+      const clientCoreTest = clientSteps.findIndex(coreTest);
+      assert.equal(hostCoreTest >= 0, scope.server);
+      assert.equal(clientCoreTest >= 0, component === 'client');
+      if (scope.server) {
+        const download = hostSteps.findIndex(step => step.name === 'Download Windows Server package');
+        const livekit = hostSteps.findIndex(step => step.name === 'Extract packaged LiveKit for native Go tests');
+        const electron = hostSteps.findIndex(step => step.name === 'Install Electron with retries');
+        assert.ok(download >= 0 && download < livekit && livekit < hostCoreTest);
+        assert.ok(electron >= 0 && electron < hostCoreTest);
+      }
+      if (component === 'client') {
+        const media = clientSteps.findIndex(step => step.run === 'npm run server:prepare');
+        assert.ok(media >= 0 && media < clientCoreTest);
+      }
       assert.equal(steps.some(step=>step.run==='node apps/server/scripts/build-windows-server.mjs'), scope.host);
       const managerBuilds = steps.filter(step => step.run?.startsWith('node apps/manager/windows/scripts/build-manager-windows.mjs'));
       assert.deepEqual(managerBuilds.map(step => step.run), [
@@ -84,7 +102,6 @@ for (const component of ['all', 'client', 'server', 'manager']) {
       ]);
       assert.equal(commands.includes('apps/manager/windows/scripts/windows-manager-smoke.mjs'), scope.host);
       assert.equal(commands.includes('npm run native:build'), scope.client);
-      const hostSteps = managerWindows.steps.filter(step => enabled(step, component, runner));
       const renderer = hostSteps.findIndex(step => step.run === 'npm run build');
       const lifecycle = hostSteps.findIndex(step => step.run?.includes('apps/manager/windows/scripts/windows-manager-smoke.mjs'));
       const tuiBootstrap = hostSteps.findIndex(step => step.run?.includes('windows-tui/pawtalkctl.exe --self-test'));
