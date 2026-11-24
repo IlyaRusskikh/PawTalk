@@ -34,7 +34,7 @@ type Draft = { text: string; mentions?:Mention[]; media?: MediaDraft[]; reply?: 
 type Outgoing = {message:Message;preview?:string;confirmed:boolean};
 const drafts = new Map<string,Draft>();
 function readPosition(key:string):Position|undefined { try {const p=JSON.parse(localStorage.getItem(key)||'null');return p&&Number.isSafeInteger(p.id)&&p.id>0&&Number.isFinite(p.offset)&&typeof p.follow==='boolean'?p:undefined;}catch{return undefined;} }
-function EncryptedImage({ serverId, channelId, image, onRemove, removing,credits }: { serverId: string; channelId: string; image: NonNullable<Message['content']['image']>; onRemove?():void; removing?:boolean;credits?:{author?:string;avatar?:string;date?:number} }) {
+function EncryptedImage({ serverId, channelId, image, credits }: { serverId: string; channelId: string; image: NonNullable<Message['content']['image']>; credits?:{author?:string;avatar?:string;date?:number} }) {
   const load = useCallback(async () => {
     const value = await membership<string>('image', { serverId, channelId, attachmentId: image.id, mime: image.mime });
     const raw = atob(value.slice(value.indexOf(',') + 1));
@@ -44,11 +44,9 @@ function EncryptedImage({ serverId, channelId, image, onRemove, removing,credits
     const file = { ...image, size: image.size, name: image.name ?? 'image.' + image.mime.split('/')[1] };
     return <div className="chat-image">
       <VideoMessage serverId={serverId} channelId={channelId} files={[file]} saveImageNatively {...credits}/>
-      {onRemove && <button type="button" className="icon-button chat-image-remove" disabled={removing}
-        title={t('Удалить вложение')} aria-label={t('Удалить вложение')} onClick={onRemove}><Icon name="trash" size={18}/></button>}
     </div>;
   }
-  return <ChatImage image={{ ...image, mime: image.mime as 'image/png'|'image/jpeg'|'image/webp', name: image.name || 'image.' + image.mime.split('/')[1], size: 0, width: 320, height: 200 }} load={load} credits={credits} onRemove={onRemove} removing={removing}/>;
+  return <ChatImage image={{ ...image, mime: image.mime as 'image/png'|'image/jpeg'|'image/webp', name: image.name || 'image.' + image.mime.split('/')[1], size: 0, width: 320, height: 200 }} load={load} credits={credits}/>;
 }
 
 export function ServerChat({ state, channel, focused, onRead, onError, onViewport }: { state: ServerState; channel: Channel; focused: boolean; onRead(last: number): void; onError(error: string): void; onViewport?(latest:boolean):void }) {
@@ -64,7 +62,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const scrollTimer=useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(()=>()=>clearTimeout(scrollTimer.current),[]);
   const [mentions,setMentions]=useState<Mention[]>(()=>drafts.get(key)?.mentions||[]),[editMentions,setEditMentions]=useState<Mention[]>([]);
-  const [editing,setEditing]=useState<Message>(),[editText,setEditText]=useState(''),[removeImage,setRemoveImage]=useState(false),[deleting,setDeleting]=useState<Message>();
+  const [editing,setEditing]=useState<Message>(),[editText,setEditText]=useState(''),[removedFiles,setRemovedFiles]=useState<string[]>([]),[deleting,setDeleting]=useState<Message>();
   const [sending,setSending]=useState(false),[mutating,setMutating]=useState(false),[loading,setLoading]=useState(true),[ready,setReady]=useState(false);
   const [outgoing,setOutgoing]=useState<Outgoing>(),outgoingRef=useRef<Outgoing|undefined>(undefined);
   const [flightActive,setFlightActive]=useState(false),flightCleanup=useRef<((update?:boolean)=>void)|undefined>(undefined);
@@ -306,7 +304,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   },[menu]);
   function quote(id:number,fallback?:Message['content']['reply']){const source=messages.find(m=>m.id===id)??quotes.get(id);return {source,author:source?source.systemKind?t('Система'):profileFor(state,source.authorProfileId)?.nickname||t('Участник'):t('Участник'),text:source===null?t('Исходное сообщение уже недоступно.'):source?.unreadable?t('Не удалось расшифровать сообщение.'):source?(source.content.text||t('Изображение')):t('Загрузка истории…')};}
   function beginReply(message:Message){setReply(message);setMenu(undefined);focusInput();void refreshQuotes(rows.current,epoch.current).catch(()=>{});}
-  function beginEdit(message:Message){if(mutationRef.current||message.content.poll)return;setEditMentions(message.content.mentions||[]);setEditing(message);setRemoveImage(false);setEditText(message.content.text);setMutationError('');setMenu(undefined);}
+  function beginEdit(message:Message){if(mutationRef.current||message.content.poll)return;setEditMentions(message.content.mentions||[]);setEditing(message);setRemovedFiles([]);setEditText(message.content.text);setMutationError('');setMenu(undefined);}
   function cancelEdit(){if(mutationRef.current)return;setEditing(undefined);setMutationError('');focusInput();}
   async function jump(id:number){
     const list=pane.current,row=list?.querySelector<HTMLElement>(`[data-message-row="${id}"]`);
@@ -403,8 +401,17 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     finally{sendingRef.current=false;if(generation===epoch.current){setSending(false);clearConfirmedOutgoing();requestAnimationFrame(()=>{if(generation===epoch.current&&!sendingRef.current)focusInput();});}}
   }
   async function mutate(message:Message,value?:string){
-    if(mutationRef.current)return;const content={...message.content,...trimMessage(value??'',editMentions)};if(value!==undefined&&removeImage)delete content.image;if(value!==undefined&&content.gif?.source!==content.text)delete content.gif;if(value!==undefined&&new TextEncoder().encode(content.text).length>4096)return;if(value!==undefined&&!content.text&&!content.image&&!content.file&&!content.files?.length)value=undefined;
-    if(value!==undefined&&content.text===message.content.text&&!removeImage&&JSON.stringify(content.mentions)===JSON.stringify(message.content.mentions||[])){cancelEdit();return;}
+    if(mutationRef.current)return;
+    const content={...message.content,...trimMessage(value??'',editMentions)};
+    if(value!==undefined){
+      if(content.image && removedFiles.includes(content.image.id))delete content.image;
+      if(content.file && removedFiles.includes(content.file.id))delete content.file;
+      if(content.files){content.files=content.files.filter(file=>!removedFiles.includes(file.id));if(!content.files.length)delete content.files;}
+      if(content.gif?.source!==content.text)delete content.gif;
+      if(new TextEncoder().encode(content.text).length>4096)return;
+      if(!content.text&&!content.image&&!content.file&&!content.files?.length){requestDelete(message);return;}
+    }
+    if(value!==undefined&&content.text===message.content.text&&!removedFiles.length&&JSON.stringify(content.mentions)===JSON.stringify(message.content.mentions||[])){cancelEdit();return;}
     mutationRef.current=true;setMutating(true);setMutationError('');const generation=epoch.current;
     try{
       if(value===undefined)await membership('message.delete',{serverId,messageId:message.id});
@@ -444,11 +451,15 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
             <div className="member-message-content chat-message-body">
               {!continuation&&<div className="member-message-heading chat-meta"><strong>{system?t('Система'):author?.nickname||t('Участник')}</strong><MessageTime sent={message.sentAt}/></div>}
               {reference&&<button type="button" className="member-reply chat-reply-quote" onClick={()=>{if(reference.source===null)setNotice(t('Исходное сообщение уже недоступно.'));else void jump(message.content.reply!.id);}}><Icon name="reply" size={13}/><strong>{reference.author}</strong><span className="chat-reply-text"><MessageText text={reference.text.slice(0,240)} preview/></span></button>}
-              {message.content.checklist?<ChecklistCard message={message} state={state} onEdit={()=>setChecklistDialog(message)}/>:message.content.poll?<PollCard message={message} state={state} onJump={id=>void jump(id)} onClosed={()=>{if(!message.locked){rows.current=history.current.update([{...message,locked:true}]);setMessages(rows.current);}}}/>:isEditing?<form className="chat-inline-edit" aria-label={t('Редактировать сообщение')} onSubmit={event=>{event.preventDefault();void mutate(message,editText);}}><MentionTextarea state={state} mentions={editMentions} onValue={(value,mentions)=>{setEditText(value);setEditMentions(mentions);}} ref={editInput} rows={1} value={editText} maxLength={4096} readOnly={mutating} aria-label={t('Сообщение')} onEscape={cancelEdit} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();cancelEdit();}else if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229){event.preventDefault();if(!event.repeat)void mutate(message,editText);}}}/>{removeImage&&<small className="chat-edit-removed">{t('Вложение будет удалено')}</small>}<div className="chat-edit-hint"><span>{t('Esc для')}</span> <button type="button" disabled={mutating} onClick={cancelEdit}>{t('отмены')}</button><span> · {t('Enter чтобы')}</span> <button type="submit" disabled={mutating}>{t('сохранить')}</button></div>{mutationError&&<p role="alert" className="text-error">{mutationError}</p>}</form>:<div className="member-message-text" style={flightActive&&(local||own&&message.requestId===outgoing?.message.requestId)?{visibility:'hidden'}:undefined}>{message.unreadable?<em>{t('Не удалось расшифровать сообщение.')}</em>:<MessageText text={message.content.text} mentions={message.content.mentions} gif={message.content.gif}/>}{!!message.editedAt&&<small className="chat-edited">{t('изменено')}</small>}</div>}
-              <div className="chat-message-attachments" data-multiple={(message.content.files?.length||0)>1}>
+              {message.content.checklist?<ChecklistCard message={message} state={state} onEdit={()=>setChecklistDialog(message)}/>:message.content.poll?<PollCard message={message} state={state} onJump={id=>void jump(id)} onClosed={()=>{if(!message.locked){rows.current=history.current.update([{...message,locked:true}]);setMessages(rows.current);}}}/>:isEditing?<form className="chat-inline-edit" aria-label={t('Редактировать сообщение')} onSubmit={event=>{event.preventDefault();void mutate(message,editText);}}><MentionTextarea state={state} mentions={editMentions} onValue={(value,mentions)=>{setEditText(value);setEditMentions(mentions);}} ref={editInput} rows={1} value={editText} maxLength={4096} readOnly={mutating} aria-label={t('Сообщение')} onEscape={cancelEdit} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();cancelEdit();}else if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229){event.preventDefault();if(!event.repeat)void mutate(message,editText);}}}/>{[message.content.image, message.content.file, ...(message.content.files ?? [])].filter(file=>file!==undefined).map(file=>{
+                const removed=removedFiles.includes(file.id);
+                return <div key={file.id} className="chat-edit-attachment"><span>{file.name??t('Изображение')}</span>
+                  <button type="button" disabled={mutating} aria-pressed={removed} onClick={()=>setRemovedFiles(ids=>removed?ids.filter(id=>id!==file.id):[...ids,file.id])}>{t(removed?'Вложение будет удалено':'Удалить вложение')}</button></div>;
+              })}<div className="chat-edit-hint"><span>{t('Esc для')}</span> <button type="button" disabled={mutating} onClick={cancelEdit}>{t('отмены')}</button><span> · {t('Enter чтобы')}</span> <button type="submit" disabled={mutating}>{t('сохранить')}</button></div>{mutationError&&<p role="alert" className="text-error">{mutationError}</p>}</form>:<div className="member-message-text" style={flightActive&&(local||own&&message.requestId===outgoing?.message.requestId)?{visibility:'hidden'}:undefined}>{message.unreadable?<em>{t('Не удалось расшифровать сообщение.')}</em>:<MessageText text={message.content.text} mentions={message.content.mentions} gif={message.content.gif}/>}{!!message.editedAt&&<small className="chat-edited">{t('изменено')}</small>}</div>}
+              {!isEditing&&<div className="chat-message-attachments" data-multiple={(message.content.files?.length||0)>1}>
               {(message.content.files|| (message.content.file?[message.content.file]:[])).map(f=>hasGalleryPreview(f)?<VideoMessage key={f.id} serverId={serverId} channelId={channelId} pending={local} files={[f]} group={(message.content.files||[f]).filter(hasGalleryPreview)} author={author?.nickname||t('Участник')} avatar={author?.avatar} date={message.sentAt}/>:<ChatFile key={f.id} serverId={serverId} channelId={channelId} pending={local} file={f}/>)}
-              </div>
-              {local&&outgoing?.preview?<img className="member-chat-image chat-pending-image" src={outgoing.preview} alt={t('Изображение')}/>:message.content.image&&!(isEditing&&removeImage)&&<EncryptedImage serverId={serverId} channelId={channelId} image={message.content.image} credits={{author:author?.nickname,avatar:author?.avatar,date:message.sentAt}} onRemove={isEditing?()=>setRemoveImage(true):undefined} removing={mutating}/>}
+              </div>}
+              {local&&outgoing?.preview?<img className="member-chat-image chat-pending-image" src={outgoing.preview} alt={t('Изображение')}/>:message.content.image&&!isEditing&&<EncryptedImage serverId={serverId} channelId={channelId} image={message.content.image} credits={{author:author?.nickname,avatar:author?.avatar,date:message.sentAt}}/>}
             </div>
             {!local&&!system&&!message.unreadable&&!isEditing&&<div className="member-message-actions"><button type="button" className="icon-button" title={t('Ответить')} aria-label={t('Ответить')} onClick={()=>beginReply(message)}><Icon name="reply" size={16}/></button>{own&&!message.locked&&<>{!message.content.poll&&!message.content.checklist&&<button type="button" className="icon-button" title={t('Редактировать')} aria-label={t('Редактировать')} onClick={()=>beginEdit(message)}><Icon name="edit" size={16}/></button>}<button type="button" className="icon-button" title={t('Удалить сообщение')} aria-label={t('Удалить сообщение')} onClick={event=>requestDelete(message,event.shiftKey)}><Icon name="trash" size={16}/></button></>}</div>}
           </div><div className="chat-read-end" data-read-id={local?undefined:message.id}/>

@@ -70,6 +70,7 @@ const { sealProtectedText, openProtectedText, protectedReplyFields, openProtecte
 const { encodeProtectedMentions, decodeProtectedMentions } = require('./protected-mentions.cjs');
 const { attachmentBlockSize, attachmentMaxSize, newAttachmentSecret, validateAttachmentSecret, sealAttachment, openAttachmentAsync } =
   require('./protected-attachment.cjs');
+const attachmentRevisionPrefix = '\u0000pawtalk-attachment-edit-v1\n';
 const { sealProtectedRevision, openProtectedRevisionForArchive, openProtectedRevisionForDevice } = require('./protected-text-revision.cjs');
 const { verifyVoiceKeyBasis, createVoiceKeyOffer, openVoiceKeyPackage } = require('./protected-voice-keys.cjs');
 const { signatureFrame, apiProtocolVersion } = require('../../../../shared/membership.cjs');
@@ -4440,6 +4441,24 @@ class MembershipClient {
       multiple: descriptor.Multiple, anonymous: descriptor.Anonymous, intermediate: descriptor.Intermediate });
     return { text, poll: definition };
   }
+  #applyProtectedRevision(original, clear, descriptor) {
+    const { mentions, ...content } = original;
+    if (descriptor !== undefined || !clear.startsWith(attachmentRevisionPrefix)) {
+      return { ...content, ...this.#decodeProtectedContent(clear, descriptor) };
+    }
+    let change;
+    try { change = JSON.parse(clear.slice(attachmentRevisionPrefix.length)); } catch { throw failure('INVALID_PROTECTED_REVISION'); }
+    const ids = change?.removed;
+    const originals = [content.image?.id, ...(content.files ?? []).map(file => file.id)];
+    if (typeof change?.text !== 'string' || !Array.isArray(ids) || ids.length > 10 ||
+        new Set(ids).size !== ids.length || ids.some(id => !hexID(id, 32) || !originals.includes(id))) {
+      throw failure('INVALID_PROTECTED_REVISION');
+    }
+    const image = ids.includes(content.image?.id) ? undefined : content.image;
+    const files = content.files?.filter(file => !ids.includes(file.id));
+    if (!change.text.trim() && !image && !files?.length) throw failure('INVALID_PROTECTED_REVISION');
+    return { ...content, text: change.text, image, files, removedAttachmentIds: ids };
+  }
   #decodeProtectedContent(clear, descriptor) {
     if (descriptor === undefined) return { text: clear };
     let decoded;
@@ -4627,8 +4646,7 @@ class MembershipClient {
         secret.fill(0);
       }
     }
-    const { mentions, ...originalContent } = original;
-    return { ...originalContent, ...this.#decodeProtectedContent(text, remote.packet.checklist),
+    return { ...this.#applyProtectedRevision(original, text, remote.packet.checklist),
       revision: remote.revision, editedAt: remote.editedAt, revisionDigest: delivery.digest };
   }
   async #openTimelineRevision(connection, channelId, original, options) {
@@ -4685,13 +4703,12 @@ class MembershipClient {
         secret.fill(0);
       }
     }
-    const { mentions, ...originalContent } = original;
-    return { ...originalContent, ...this.#decodeProtectedContent(text, remote.packet.checklist),
+    return { ...this.#applyProtectedRevision(original, text, remote.packet.checklist),
       revision: remote.revision, editedAt: remote.editedAt, revisionDigest: delivery.digest };
   }
   #displayProtectedMessage(message, window, removed) {
     const { originalDigest, originalAuthorProfileId, originalAuthorDeviceId, imported, revisionDigest, attachmentParts,
-      importedAttachmentSource, ...visible } = message;
+      importedAttachmentSource, removedAttachmentIds, ...visible } = message;
     if (!visible.locked && !visible.pollResult && originalAuthorProfileId) visible.authorProfileId = originalAuthorProfileId;
     if (visible.replyTo != null && (visible.replyTo < window.first || removed.has(visible.replyTo))) visible.replyTo = null;
     return visible;
@@ -4727,14 +4744,17 @@ class MembershipClient {
     }
     return this.#displayProtectedMessage(selected, window, new Set(window.removed));
   }
-  async editProtectedChatMessage(connection, channelId, position, expectedRevision, operationId, text, checklist) {
+  async editProtectedChatMessage(connection, channelId, position, expectedRevision, operationId, text, checklist, removeAttachments = []) {
     if (!hexID(channelId, 32) || !Number.isSafeInteger(position) || position < 1 || !hexID(operationId, 32) ||
         !Number.isSafeInteger(expectedRevision) || expectedRevision < 1 ||
-        typeof text !== 'string' || !text.trim() || Buffer.byteLength(text) > 12288) throw failure('INVALID_PROTECTED_REVISION');
+        typeof text !== 'string' || Buffer.byteLength(text) > 12288 ||
+        !Array.isArray(removeAttachments) || removeAttachments.length > 10 ||
+        new Set(removeAttachments).size !== removeAttachments.length || removeAttachments.some(id => !hexID(id, 32)) ||
+        checklist !== undefined && removeAttachments.length) throw failure('INVALID_PROTECTED_REVISION');
     this.protectedRevisionAttempts ??= new Map();
     const key = `${connection.serverId}:${connection.profileId}:${connection.deviceId}:${operationId}`;
     const encoded = checklist === undefined ? undefined : this.#encodeProtectedChecklist(text, checklist);
-    const inputDigest = hash(JSON.stringify({ channelId, position, expectedRevision, text, encoded }));
+    const inputDigest = hash(JSON.stringify({ channelId, position, expectedRevision, text, encoded, removeAttachments }));
     let attempt = this.protectedRevisionAttempts.get(key);
     if (attempt && attempt.inputDigest !== inputDigest) throw failure('PROTECTED_REVISION_CHANGED');
     if (!attempt) {
@@ -4747,8 +4767,16 @@ class MembershipClient {
       const body = await this.withCurrentProtectedChatPolicy(connection, async options => {
         const remote = await this.#protectedRevisionRequest(connection, channelId, position, '/basis', undefined, scoped);
         if (remote?.position !== position || remote.revision !== expectedRevision + 1) throw failure('PROTECTED_REVISION_CHANGED');
-        const previous = original.revision === undefined ? original.originalDigest :
-          (await this.#openTimelineRevision(connection, channelId, original, options)).revisionDigest;
+        const current = original.revision === undefined ? original :
+          await this.#openTimelineRevision(connection, channelId, original, options);
+        const previous = original.revision === undefined ? original.originalDigest : current.revisionDigest;
+        const available = [current.image?.id, ...(current.files ?? []).map(file => file.id)].filter(Boolean);
+        if (removeAttachments.some(id => !available.includes(id)) ||
+            !text.trim() && !available.some(id => !removeAttachments.includes(id))) throw failure('INVALID_PROTECTED_REVISION');
+        const removed = [...(current.removedAttachmentIds ?? []), ...removeAttachments];
+        const payload = encoded?.payload ?? (removed.length || text.startsWith(attachmentRevisionPrefix)
+          ? attachmentRevisionPrefix + JSON.stringify({ text, removed }) : text);
+        if (Buffer.byteLength(payload) > 12288) throw failure('MESSAGE_TOO_LARGE');
         if (!previous || previous !== remote.previousDigest) throw failure('PROTECTED_REVISION_CHANGED');
         const identity = await this.identity();
         const author = { ProfileID: connection.profileId, DeviceID: identity.deviceId };
@@ -4769,7 +4797,7 @@ class MembershipClient {
         const context = this.#protectedRevisionContext(connection, channelId, original, remote, operationId, author);
         const { revision, previousDigest, policyRevision, policyDigest, archiveDigest } = remote;
         return { revision, previousDigest, policyRevision, policyDigest, archiveDigest, operationId,
-          ...sealProtectedRevision(context, encoded?.payload ?? text, recipients, identity.device, encoded?.descriptor) };
+          ...sealProtectedRevision(context, payload, recipients, identity.device, encoded?.descriptor) };
       });
       // Concurrent retries share the first ciphertext associated with this operation.
       attempt = this.protectedRevisionAttempts.get(key);
@@ -6162,7 +6190,10 @@ class MembershipClient {
         !connection.config?.capabilities?.includes('media-variants-v1')) throw failure('UNSUPPORTED_FEATURE');
     if(content.checklist&&!connection.config?.capabilities?.includes('checklists-v1'))throw failure('UNSUPPORTED_FEATURE');
     if(content.poll&&(!connection.config?.capabilities?.includes('polls-v1')||original||content.pollResult))throw failure('UNSUPPORTED_FEATURE');
-    if(original?.content?.image&&!content.image&&!connection.config?.capabilities?.includes('attachment-removal-v1'))throw failure('UNSUPPORTED_FEATURE');
+    const hadAttachments = !!(original?.content?.image || original?.content?.file || original?.content?.files?.length);
+    const hasAttachments = !!(content.image || content.file || content.files?.length);
+    const canRemoveAttachments = connection.config?.capabilities?.includes('attachment-removal-v1');
+    if(original?.content?.image && !content.image && !hasAttachments && !canRemoveAttachments)throw failure('UNSUPPORTED_FEATURE');
     if(clientRequestId!==undefined&&!hexID(clientRequestId,32))throw failure('INVALID_MESSAGE');
     const identity = await this.identity(), resourceId = original?.requestId || clientRequestId || requestID(), author = original?.authorProfileId || identity.profileId;
     if (!hexID(resourceId, 32) || !hexID(author, 64) || (original && (!Number.isSafeInteger(original.id) || original.id < 1))) throw failure('INVALID_MESSAGE');
@@ -6180,7 +6211,7 @@ class MembershipClient {
     }
     const attachmentIds = [content.image, content.file, ...(content.files ?? [])].filter(Boolean)
       .flatMap(file => mediaAttachmentParts(file).map(part => part.id));
-    const result=await this.request(serverId,path,original?'PATCH':'POST',{requestId:original?(clientRequestId||requestID()):resourceId,keyId:packet.keyId,nonce:packet.nonce,ciphertext:packet.ciphertext,attachmentIds:original?[]:attachmentIds,...(cached.poll?{poll:cached.poll}:{}),...(content.checklist?{checklist:{everyone:content.checklist.everyone,items:content.checklist.items.map(item=>item.id)}}:{}),...(original?.content?.image&&!content.image?{removeAttachment:true}:{})});
+    const result=await this.request(serverId,path,original?'PATCH':'POST',{requestId:original?(clientRequestId||requestID()):resourceId,keyId:packet.keyId,nonce:packet.nonce,ciphertext:packet.ciphertext,attachmentIds:original?[]:attachmentIds,...(cached.poll?{poll:cached.poll}:{}),...(content.checklist?{checklist:{everyone:content.checklist.everyone,items:content.checklist.items.map(item=>item.id)}}:{}),...(hadAttachments&&!hasAttachments&&canRemoveAttachments?{removeAttachment:true}:{})});
     if(cacheKey)this.pendingMessages.delete(cacheKey);return result;
   }
 

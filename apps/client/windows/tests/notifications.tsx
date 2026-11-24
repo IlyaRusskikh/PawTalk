@@ -527,13 +527,13 @@ test.desktop={
       const messages = [
         { position: 1, own: false, sentAt: 123456, text: 'Mixed media',
           files: [photo, { ...photo, id: 'c'.repeat(32), name: 'Second.png' }, clip] },
-        { position: 2, own: false, sentAt: 123457, text: 'Single photo',
+        { position: 2, own: true, canEdit: true, sentAt: 123457, text: '',
           files: [{ ...photo, id: 'd'.repeat(32) }] },
         { position: 3, own: false, sentAt: 123458, text: 'Voice history', files: [
           { id: 'e'.repeat(32), name: 'Voice.webm', mime: 'audio/webm', size: 200, voice: { duration: 1, waveform: [0.2, 0.8] } },
         ] },
       ];
-      return { value: { ...windowState(), messages: messages.filter(message => message.position > input.after) } };
+      return { value: { ...windowState(), messages: messages.filter(message => message.position > input.after && !test.protectedRemoved.includes(message.position)) } };
     }
     if(protectedMode==='poll-voting'||protectedMode==='public-poll')return{value:{...windowState(),messages:input.after ? [] : [
       {position:1,own:false,sentAt:123456,text:'Imported poll',poll:{options:['First option','Second option'],

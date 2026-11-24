@@ -450,9 +450,22 @@ export function ServerApp() {
     setMentionIDs(previous => !previous[key]?.length ? previous :
       { ...previous, [key]: previous[key].filter(seen => seen > position) });
   }
+  function pruneProtectedUnread(serverId: string, channelId: string, first: number, removed: number[]) {
+    const key = `${serverId}:${channelId}`;
+    const survives = (position: number) => position >= first && !removed.includes(position);
+    const positions = protectedUnread.current.get(key);
+    if (positions) {
+      const before = positions.size;
+      for (const position of positions) if (!survives(position)) positions.delete(position);
+      if (!positions.size) protectedUnread.current.delete(key);
+      if (positions.size !== before) setUnread(values => ({ ...values, [key]: positions.size }));
+    }
+    setMentionIDs(values => values[key]?.some(position => !survives(position))
+      ? { ...values, [key]: values[key].filter(survives) } : values);
+  }
   function protectedChannelInView(state: ProtectedServerState, channelId: string) {
     const now = current.current;
-    if (now.selected !== state.serverId || !now.focused) return false;
+    if (now.selected !== state.serverId || !now.focused || viewports.current.get(`${state.serverId}:${channelId}`) === false) return false;
     const lastText = localStorage.getItem(`pawtalk.v3.last-text.${state.serverId}:${state.profileId}`);
     const channels = state.channels.filter(channel => channel.kind === 'text');
     return (channels.find(channel => channel.id === now.protectedChannelIds[state.serverId]) ??
@@ -593,8 +606,14 @@ export function ServerApp() {
                 let count=read>=previous!.last?0:knownUnread.current.get(key)||0;const byId=new Map((mentionCache.current.get(key)||[]).filter(m=>m.id>read).map(m=>[m.id,m]));
                 const incoming=(m:{authorProfileId:string;systemKind?:string})=>!!m.systemKind||effectiveProfile(next,m.authorProfileId)!==next.self.effectiveProfileId,newRows=new Map<number,Message>(),removed=new Set<number>();
                 for(const packet of queued){for(const m of packet.messages||[]){if(m.id>previous!.last){if(!newRows.has(m.id)&&m.id>read&&incoming(m))count++;newRows.set(m.id,m);removed.delete(m.id);}byId.delete(m.id);if(m.id>read&&incoming(m)&&m.content.mentions?.some(mention=>effectiveProfile(next,mention.profileId)===next.self.effectiveProfileId))byId.set(m.id,m);}for(const d of packet.deleted||[]){byId.delete(d.id);newRows.delete(d.id);if(!removed.has(d.id)&&d.id>read&&incoming(d))count--;removed.add(d.id);}}
+                if (removed.size) void membership('notify.reconcile', {
+                  serverId: next.serverId, channelId: channel.id, removed: [...removed],
+                }).catch(() => {});
                 arrivals=[...newRows.values()];mentions=[...byId.values()];page={messages:[],first:queued.at(-1)!.first||0,last:queued.at(-1)!.last!,unread:Math.max(0,count),hasOlder:false,hasNewer:false};cursor=scanThrough=page.last;
               }else{
+                if (previous?.revision !== channel.messageRevision) void membership('notify.reconcile', {
+                  serverId: next.serverId, channelId: channel.id,
+                }).catch(() => {});
                 page=await membership<MessagePage>('messages',{serverId:next.serverId,channelId:channel.id,options:{limit:1,readAfter:read}});
                 mentions=fullScan?[]:(mentionCache.current.get(key)||[]).filter(m=>m.id>read);cursor=fullScan?read:Math.max(read,previous?.last||0);scanThrough=Math.max(channel.lastMessageId,page.last);
                 while(cursor<scanThrough){const batch=await membership<MessagePage>('messages',{serverId:next.serverId,channelId:channel.id,options:{limit:500,...(cursor?{after:cursor}:{around:1})}});arrivals.push(...batch.messages);for(const message of batch.messages)if(message.id>read&&effectiveProfile(next,message.authorProfileId)!==next.self.effectiveProfileId&&message.content.mentions?.some(mention=>effectiveProfile(next,mention.profileId)===next.self.effectiveProfileId))mentions.push(message);const last=batch.messages.at(-1)?.id||cursor;if(last<=cursor||last>=scanThrough){cursor=last;break;}cursor=last;}
@@ -674,6 +693,7 @@ export function ServerApp() {
             (event.type !== 'status' || !event.live)) protectedChatCache.current.delete(key);
       }
       if (event.type === 'chat') {
+        if (event.first !== undefined) pruneProtectedUnread(serverId, event.channelId, event.first, event.removed ?? []);
         if (!current.current.protectedStates[serverId]?.channels.some(channel => channel.kind === 'text' && channel.id === event.channelId)) return;
         const channels = activityChannels.get(serverId) ?? new Set<string>();
         channels.add(event.channelId);
@@ -1464,6 +1484,8 @@ export function ServerApp() {
           authorNames={channelProfiles} roleColors={channelRoster?.roleColors} authorRosterCursor={channelRoster?.cursor}
           ownProfileId={protectedState.profileId} ownAvatar={ownAvatar} composerEvents={protectedState.composerEvents}
           onRead={position => clearProtectedUnread(selected, visibleProtectedText.id, position)}
+          onViewport={latest => viewports.current.set(`${selected}:${visibleProtectedText.id}`, latest)}
+          onHistoryPruned={(first, removed) => pruneProtectedUnread(selected, visibleProtectedText.id, first, removed)}
           offline={protectedOffline} pauseSending={textProtection?.state === 'red'} protection={textProtection}
           keysPending={visibleProtectedText.keysPending}
           mediaVariants={protectedState.mediaVariants}

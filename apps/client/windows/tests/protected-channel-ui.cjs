@@ -386,16 +386,16 @@ app.whenReady().then(async () => {
         await until("!!document.querySelector('.member-message-actions button[aria-label=\"Edit message\"]')", 'Own ordinary message can be edited');
         const originalTime = await run("document.querySelector('.member-message:has(button[aria-label=\"Edit message\"]) time').textContent");
         await run("document.querySelector('.member-message-actions button[aria-label=\"Edit message\"]').click()");
-        const editHeight = await run("document.querySelector('dialog textarea').getBoundingClientRect().height");
-        await enter('dialog textarea', 'Line\n'.repeat(120));
+        const editHeight = await run("document.querySelector('.chat-inline-edit textarea').getBoundingClientRect().height");
+        await enter('.chat-inline-edit textarea', 'Line\n'.repeat(120));
         const expanded = await run(`(() => {
-          const field = document.querySelector('dialog textarea');
+          const field = document.querySelector('.chat-inline-edit textarea');
           return { height: field.getBoundingClientRect().height, content: field.scrollHeight,
-            dialog: field.closest('dialog').getBoundingClientRect().height, viewport: innerHeight };
+            history: field.closest('.member-history').getBoundingClientRect().height };
         })()`);
-        assert.ok(expanded.height > editHeight && expanded.height < expanded.content && expanded.dialog < expanded.viewport);
-        await enter('dialog textarea', '  \nEdited in place\n  ');
-        await click('Save', 'dialog .modal-actions button');
+        assert.ok(expanded.height > editHeight && expanded.height < expanded.content && expanded.height < expanded.history);
+        await enter('.chat-inline-edit textarea', '  \nEdited in place\n  ');
+        await click('save', '.chat-inline-edit button');
         await until("document.querySelector('.member-history').textContent.includes('Edited in place')", 'Edition updates the existing message');
         assert.equal(await run('window.protectedEdits[0].expectedRevision'), 1);
         assert.equal(await run('window.protectedEdits[0].text'), 'Edited in place');
@@ -693,6 +693,18 @@ app.whenReady().then(async () => {
       await until("window.clientPerformance.some(entry => entry.stage === 'media.preview.decoded')", 'The renderer logs the time to decode a thumbnail');
       await run('window.releaseFullVideo()');
       await until('window.fullVideoSaved === true', 'Full video finishes independently of previews');
+      if (english) {
+        await run("document.querySelector('.member-message-actions button[aria-label=\"Edit message\"]').click()");
+        await click('Remove attachment', '.chat-inline-edit button');
+        await click('save', '.chat-inline-edit button');
+        await until("document.querySelector('dialog[open]')?.textContent.includes('will be deleted for everyone')", 'Removing the last attachment prompts for deletion');
+        assert.deepEqual(await run('window.protectedRemoved'), []);
+        await click('Cancel', 'dialog .modal-actions button');
+        await until("!document.querySelector('dialog[open]') && !!document.querySelector('.chat-inline-edit')", 'Cancelling preserves the draft');
+        await click('save', '.chat-inline-edit button');
+        await click('Delete', 'dialog .modal-actions button');
+        await until('window.protectedRemoved.includes(2) && !document.querySelector(".chat-inline-edit")', 'Confirming deletes the attachment-only message');
+      }
       await load('poll-result-window');
       await until("document.querySelector('.chat-reply-quote')?.textContent.includes('Protected poll result')", 'Result and quote are initially visible');
       assert.match(await run("document.querySelector('.poll-result').textContent"), /Winning option/);

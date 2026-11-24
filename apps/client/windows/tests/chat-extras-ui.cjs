@@ -77,11 +77,20 @@ app.whenReady().then(async()=>{
  }
  assert.ok(Math.abs(photoGeometry.initial.height-320)<1,'tall photo fits within the inline height limit');
  assert.ok(Math.abs(photoGeometry.narrow.width-160)<1,'photo fits a narrower chat');
- await run("document.querySelector("+JSON.stringify('[data-message-row="'+imageID+'"] button[title="'+(language==='en'?'Edit':'Редактировать')+'"]')+").click()");await until("!!document.querySelector('.chat-image-remove')",'edit photo trash');
- win.webContents.sendInputEvent({type:'mouseMove',x:5,y:5});await wait(50);
- assert.equal(await run("getComputedStyle(document.querySelector('.chat-image-remove')).opacity"),'0','trash hidden without hover');
- const trash=await run("(()=>{const b=document.querySelector('.chat-image-remove').getBoundingClientRect();return {x:Math.round(b.left+b.width/2),y:Math.round(b.top+b.height/2)}})()");win.webContents.sendInputEvent({type:'mouseMove',...trash});await until("getComputedStyle(document.querySelector('.chat-image-remove')).opacity==='1'",'trash shown on photo hover');
- await run("document.querySelector('.chat-image-remove').click()");await run("document.querySelector('.chat-inline-edit').requestSubmit()");await until("!document.querySelector('.chat-inline-edit')&&!document.querySelector('[data-message-row=\""+imageID+"\"] .chat-image')",'photo removal persisted');
+ const photoRow='[data-message-row="'+imageID+'"]';
+ await run(`document.querySelector(${JSON.stringify(photoRow+' button[title="'+(language==='en'?'Edit':'Редактировать')+'"]')}).click()`);
+ await until("!!document.querySelector('.chat-inline-edit .chat-edit-attachment button')",'attachment removal is in the inline editor');
+ await set('.chat-inline-edit textarea','');
+ await run("document.querySelector('.chat-edit-attachment button').click()");
+ await until("document.querySelector('.chat-edit-attachment button').getAttribute('aria-pressed')==='true'",'attachment marked for removal');
+ await run("document.querySelector('.chat-inline-edit').requestSubmit()");
+ await until("!!document.querySelector('.chat-delete-modal[open]')",'removing the last attachment asks for confirmation');
+ await run("document.querySelector('.chat-delete-modal .modal-actions button').click()");
+ await set('.chat-inline-edit textarea','Keep this text');
+ await run("document.querySelector('.chat-inline-edit').requestSubmit()");
+ await until(`!document.querySelector('.chat-inline-edit') &&
+   document.querySelector(${JSON.stringify(photoRow)})?.textContent.includes('Keep this text') &&
+   !document.querySelector(${JSON.stringify(photoRow+' .chat-image')})`,'photo removal persists and keeps the message');
  console.log('PASS chat extras '+language+': mention selection/identity, poll form geometry, durations, hidden results, voting, withdrawal, early close and reply');
  }
  assert.deepEqual(errors,[]);clearTimeout(timer);win.destroy();app.exit(0);
