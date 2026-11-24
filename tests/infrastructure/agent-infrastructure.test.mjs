@@ -1,12 +1,60 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
 import { checkAgents } from '../../tooling/ci/check-agents.mjs';
 import { testPlan } from '../../tooling/ci/test-plan.mjs';
 const require = createRequire(import.meta.url);
 const yaml = createRequire(require.resolve('app-builder-lib/package.json'))('js-yaml');
 const workflow = async name => yaml.load(await readFile(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
+
+test('publication guard checks staged blobs and working files independently', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-public-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const files = [
+    'tooling/ci/check-public.mjs', 'tooling/release/release-contract.mjs', 'shared/release.cjs',
+    'package-lock.json', 'apps/client/windows/package.json', 'apps/server/VERSION',
+    'apps/manager/VERSION', 'apps/manager/windows/desktop/package.json',
+    'LICENSE', 'README.md', 'README.ru.md', 'CHANGELOG.md', 'CONTRIBUTING.md',
+  ];
+  for (const name of files) {
+    const target = path.join(root, name);
+    await mkdir(path.dirname(target), { recursive: true });
+    await copyFile(new URL(`../../${name}`, import.meta.url), target);
+  }
+  const git = (...args) => execFileSync('git', args, { cwd: root, windowsHide: true });
+  const check = () => spawnSync(process.execPath, ['tooling/ci/check-public.mjs'], {
+    cwd: root, windowsHide: true, encoding: 'utf8',
+    env: { ...process.env, GITHUB_REF_TYPE: 'branch' },
+  });
+  const stagedName = process.platform === 'win32' ? 'staged пример.txt' : 'staged\nпример.txt';
+  const marker = '-----BEGIN ' + 'PRIVATE KEY-----';
+  git('init', '-q');
+  git('config', 'core.autocrlf', 'false');
+  await writeFile(path.join(root, 'binary.dat'), Buffer.from([0, 10, 0, 255]));
+  await writeFile(path.join(root, 'empty.txt'), '');
+  await writeFile(path.join(root, stagedName), 'clean\n');
+  await writeFile(path.join(root, 'worktree.txt'), 'clean\n');
+  git('add', '.');
+  const clean = check();
+  assert.equal(clean.status, 0, clean.stderr);
+
+  await writeFile(path.join(root, stagedName), 'x'.repeat(128 * 1024) + '\n' + marker);
+  git('add', '--', stagedName);
+  await writeFile(path.join(root, stagedName), 'clean\n');
+  await writeFile(path.join(root, 'worktree.txt'), marker);
+  const rejected = check();
+  assert.equal(rejected.status, 1, rejected.stderr);
+  assert.ok(rejected.stderr.includes(stagedName + ' (index): possible private key'));
+  assert.ok(rejected.stderr.includes('worktree.txt (worktree): possible private key'));
+  assert.ok(!rejected.stderr.includes(stagedName + ' (worktree):'));
+  assert.ok(!rejected.stderr.includes('worktree.txt (index):'));
+  assert.ok(!rejected.stderr.includes(marker));
+});
+
 test('agent index and native adapters resolve without duplicated knowledge files', async () => {
   await checkAgents();
   for (const name of ['CLAUDE.md', 'GEMINI.md']) assert.equal((await readFile(new URL(`../../${name}`, import.meta.url), 'utf8')).trim(), '@AGENTS.md');
