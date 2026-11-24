@@ -207,9 +207,9 @@ test('actual workflow enforces preflight before tags and separate publication ap
   assert.equal(w.jobs.tag.environment,'release-tag');
   assert.ok(w.jobs.tag.needs.includes('preflight'));
   assert.match(w.jobs.tag.if,/inputs.promote/);
-  const evaluate = (expression, needs, github = {ref:'refs/heads/main'}) => Function('needs','github','inputs','always','cancelled','contains',
+  const evaluate = (expression, needs, github = {ref:'refs/heads/main'}, cancelled = false) => Function('needs','github','inputs','always','cancelled','contains','fromJSON',
     `return Boolean(${expression.replaceAll('needs.*.result','Object.values(needs).map(job=>job.result)')});`)(
-    needs,github,{promote:true},()=>true,()=>false,(values,value)=>values.includes(value));
+    needs,github,{promote:true},()=>true,()=>cancelled,(values,value)=>values.includes(value),JSON.parse);
   const reuse = w.jobs['reuse-pr'];
   assert.deepEqual(reuse.permissions,{actions:'read',contents:'read','pull-requests':'read'});
   assert.doesNotMatch(JSON.stringify(reuse),/secrets|PRIVATE_KEY|contents.*write/);
@@ -230,10 +230,41 @@ test('actual workflow enforces preflight before tags and separate publication ap
     needs['reuse-pr'].result='failure';
     assert.equal(evaluate(w.jobs.verified.if,needs),false);
   }
+  for (const component of ['client','server']) {
+    const prepare = w.jobs['prepare-'+component];
+    // A status function removes implicit success(), which otherwise propagates the verify skip.
+    assert.match(prepare.if,/!cancelled\(\)/);
+    const needs = {
+      plan:{result:'success',outputs:{components:'["client","server"]'}},
+      'reuse-pr':{result:'success',outputs:{reused:'true'}},
+      verified:{result:'success'},
+      infrastructure:{result:'success'},
+    };
+    assert.deepEqual([...prepare.needs].sort(),Object.keys(needs).sort());
+    assert.equal(evaluate(prepare.if,needs),true,`${component} prepares imported packages`);
+    needs['reuse-pr'].outputs.reused='';
+    assert.equal(evaluate(prepare.if,needs),true,`${component} also prepares rebuilt packages`);
+    assert.equal(evaluate(prepare.if,needs,undefined,true),false);
+    for (const stage of prepare.needs) for (const result of ['skipped','failure','cancelled']) {
+      assert.equal(evaluate(prepare.if,{...needs,[stage]:{...needs[stage],result}}),false,`${stage} ${result} blocks ${component} preparation`);
+    }
+    needs.plan.outputs.components='["manager"]';
+    assert.equal(evaluate(prepare.if,needs),false,`unselected ${component} is skipped`);
+  }
   const success=Object.fromEntries(w.jobs.preflight.needs.map(name=>[name,{result:'success'}]));
   assert.equal(evaluate(w.jobs.preflight.if,success),true);
   for (const stage of w.jobs.preflight.needs) for (const result of ['failure','cancelled']) {
     assert.equal(evaluate(w.jobs.preflight.if,{...success,[stage]:{result}}),false,`${stage} ${result} prevents preflight`);
+  }
+  const requirePrepared = w.jobs.preflight.steps[0];
+  assert.match(requirePrepared.run,/exit 1/);
+  for (const component of ['client','server','manager']) {
+    const needs = {...success,plan:{...success.plan,outputs:{components:JSON.stringify([component])}}};
+    const missing = {...needs,['prepare-'+component]:{result:'skipped'}};
+    assert.equal(evaluate(requirePrepared.if,needs),false);
+    assert.equal(evaluate(requirePrepared.if,missing),true,`missing selected ${component} fails before artifact downloads`);
+    needs.plan.outputs.components='[]';
+    assert.equal(evaluate(requirePrepared.if,missing),false,`unselected ${component} may be skipped`);
   }
   for (const result of ['failure','cancelled','skipped']) assert.equal(evaluate(w.jobs.tag.if,{plan:{result:'success'},preflight:{result}}),false);
   assert.equal(evaluate(w.jobs.tag.if,{plan:{result:'success'},preflight:{result:'success'}},{ref:'refs/heads/untrusted'}),false);
