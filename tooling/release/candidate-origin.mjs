@@ -12,10 +12,20 @@ export const repository = 'IlyaRusskikh/PawTalk';
 const workflowPath = '.github/workflows/release.yml';
 const families = ['client', 'server', 'manager'];
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
+export const windowsArtifactJobs = Object.freeze({
+  client: 'Windows Client and core (windows-2025)',
+  server: 'Windows Server package (windows-2025)',
+});
 export const verificationJobs = Object.freeze([
   'infrastructure',
   'Server + Manager / Linux (ubuntu-24.04)',
   'Server + Manager / Linux (ubuntu-24.04-arm)',
+  'Windows Server package (windows-2022)',
+  windowsArtifactJobs.server,
+  'Windows Manager and SCM (windows-2022)',
+  'Windows Manager and SCM (windows-2025)',
+  'Windows Client and core (windows-2022)',
+  windowsArtifactJobs.client,
   'Client + Server + Manager / Windows (windows-2022)',
   'Client + Server + Manager / Windows (windows-2025)',
 ]);

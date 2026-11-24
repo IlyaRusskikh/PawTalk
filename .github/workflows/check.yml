@@ -116,15 +116,53 @@ jobs:
         env:
           PAWTALK_TEST_IMAGE: ghcr.io/ilyarusskikh/pawtalk-server@sha256:601bd68f577c63a98b3dfec040b01379467576dfc6d16c15f2bf7501ac86b8f0
         run: node apps/server/scripts/server-smoke.mjs --legacy-rejection
-  windows:
-    name: Client + Server + Manager / Windows (${{ matrix.runner }})
-    defaults:
+  windows-server:
+    name: Windows Server package (${{ matrix.runner }})
+    defaults: &windows-defaults
       run:
         shell: pwsh
-    strategy:
+    strategy: &windows-strategy
       fail-fast: false
       matrix:
         runner: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+      - &windows-scope
+        name: Select verification scope
+        id: scope
+        env:
+          PAWTALK_CI_COMPONENT: ${{ inputs.component || 'all' }}
+        run: node tooling/ci/ci-scope.mjs
+      - uses: actions/setup-go@v6
+        if: steps.scope.outputs.host == 'true'
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Prepare LiveKit for Windows Server
+        if: steps.scope.outputs.host == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tooling/build/prepare-server.mjs --livekit-only
+      - name: Build Windows Server package
+        if: steps.scope.outputs.host == 'true'
+        run: node apps/server/scripts/build-windows-server.mjs
+      - name: Upload Windows Server package
+        if: steps.scope.outputs.host == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: &windows-server-artifact ${{ steps.scope.outputs.manager == 'true' && steps.scope.outputs.server != 'true' && format('pawtalk-server-fixture-{0}', matrix.runner) || (matrix.runner == 'windows-2025' && 'pawtalk-server-windows' || 'pawtalk-server-windows-2022') }}
+          if-no-files-found: error
+          compression-level: 0
+          path: release/server/PawTalk.Server.*.windows-x64.zip
+  windows-manager:
+    name: Windows Manager and SCM (${{ matrix.runner }})
+    needs: windows-server
+    defaults: *windows-defaults
+    strategy: *windows-strategy
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
@@ -134,11 +172,106 @@ jobs:
         with:
           node-version: '24.22.1'
           cache: npm
-      - name: Select verification scope
-        id: scope
+      - *windows-scope
+      - uses: actions/setup-python@v6
+        if: steps.scope.outputs.host == 'true'
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-go@v6
+        if: steps.scope.outputs.host == 'true'
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - run: npm ci
+        if: steps.scope.outputs.host == 'true'
+      - name: Cache Electron binary
+        if: steps.scope.outputs.host == 'true'
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}\electron-cache
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            electron-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install Electron with retries
+        if: steps.scope.outputs.host == 'true'
         env:
-          PAWTALK_CI_COMPONENT: ${{ inputs.component || 'all' }}
-        run: node tooling/ci/ci-scope.mjs
+          electron_config_cache: ${{ runner.temp }}\electron-cache
+        run: node apps/client/windows/scripts/install-electron.mjs
+      - name: Download Windows Server package
+        if: steps.scope.outputs.host == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: *windows-server-artifact
+          path: release/server
+      - name: Verify native Manager host safeguards
+        if: steps.scope.outputs.host == 'true'
+        working-directory: apps/manager/windows/service
+        run: |
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
+      - name: Verify Windows handoff completion and read-only cleanup
+        if: steps.scope.outputs.host == 'true'
+        run: python -m unittest discover -s apps/manager/tests -p windows_handoff_test.py
+      - name: Build Client renderer for host integration
+        if: steps.scope.outputs.host == 'true'
+        run: npm run build
+      - name: Build Windows Manager installer
+        if: steps.scope.outputs.manager == 'true'
+        run: node apps/manager/windows/scripts/build-manager-windows.mjs
+      - name: Build Windows Manager TUI installer
+        if: steps.scope.outputs.manager == 'true'
+        run: node apps/manager/windows/scripts/build-manager-windows.mjs --tui-only
+      - name: Verify standalone Manager TUI bootstrap
+        if: steps.scope.outputs.manager == 'true'
+        run: |
+          $result = & ./release/manager/windows-tui/pawtalkctl.exe --self-test
+          if ($LASTEXITCODE -ne 0 -or $result -cne 'PawTalk manager protocol 1 OK') {
+            throw 'Standalone Manager controller self-test failed'
+          }
+      - name: Verify Manager desktop UI and native tray
+        if: steps.scope.outputs.manager == 'true'
+        run: node apps/manager/windows/scripts/manager-desktop-smoke.mjs
+      - name: Packaged Manager hidden startup
+        if: steps.scope.outputs.manager == 'true'
+        run: node apps/manager/windows/scripts/manager-packaged-smoke.mjs
+      - name: Prepare Manager test host without an installer
+        if: steps.scope.outputs.host == 'true' && steps.scope.outputs.manager != 'true'
+        run: node apps/manager/windows/scripts/build-manager-windows.mjs --runtime-only
+      - name: Verify native Windows lifecycle with actual SCM services
+        if: steps.scope.outputs.host == 'true'
+        run: node apps/manager/windows/scripts/windows-manager-smoke.mjs --scm ${{ steps.scope.outputs.manager == 'true' && '--installer' || '' }}
+      - name: Verify protected migration and rollback with Windows SCM
+        if: steps.scope.outputs.host == 'true'
+        run: |
+          node apps/manager/windows/scripts/windows-manager-smoke.mjs --scm --protected-migration-prepare
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node apps/manager/windows/scripts/windows-manager-smoke.mjs --scm --protected-migration
+        timeout-minutes: 25
+      - name: Upload Windows Manager installer
+        if: steps.scope.outputs.manager == 'true' && matrix.runner == 'windows-2025'
+        uses: actions/upload-artifact@v6
+        with:
+          name: pawtalk-manager-windows
+          if-no-files-found: error
+          path: |
+            release/manager/PawTalk.Server.Manager.Setup.*.exe
+            release/manager/PawTalk.Server.Manager.TUI.Setup.*.exe
+  windows-client:
+    name: Windows Client and core (${{ matrix.runner }})
+    needs: windows-server
+    defaults: *windows-defaults
+    strategy: *windows-strategy
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+          cache: npm
+      - *windows-scope
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
@@ -168,8 +301,8 @@ jobs:
         if: steps.scope.outputs.client == 'true'
       - run: node apps/client/windows/scripts/native-smoke.cjs
         if: steps.scope.outputs.client == 'true'
-      - name: Build Client renderer for Client and host integration
-        if: steps.scope.outputs.client == 'true' || steps.scope.outputs.host == 'true'
+      - name: Build Client renderer
+        if: steps.scope.outputs.client == 'true'
         run: npm run build
       - run: npm run test:sounds
         if: steps.scope.outputs.client == 'true'
@@ -189,27 +322,12 @@ jobs:
           go test ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go vet ./...
-      - name: Verify native Manager host safeguards
-        if: steps.scope.outputs.host == 'true'
-        working-directory: apps/manager/windows/service
-        run: |
-          go test ./...
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          go vet ./...
-      - name: Verify Windows handoff completion and read-only cleanup
-        if: steps.scope.outputs.host == 'true'
-        run: python -m unittest discover -s apps/manager/tests -p windows_handoff_test.py
-      - name: Prepare host test audio assets
-        if: steps.scope.outputs.host == 'true' && steps.scope.outputs.client != 'true'
-        run: node apps/client/windows/scripts/prepare-rnnoise.mjs
-      - name: Prepare LiveKit without the bundled Client API
-        if: steps.scope.outputs.host == 'true' && steps.scope.outputs.client != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node tooling/build/prepare-server.mjs --livekit-only
-      - name: Build permanent Windows Server
-        if: steps.scope.outputs.server == 'true'
-        run: node apps/server/scripts/build-windows-server.mjs
+      - name: Download Windows Server package
+        if: steps.scope.outputs.server == 'true' && steps.scope.outputs.client == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: *windows-server-artifact
+          path: release/server
       - name: Verify identical Client and permanent Server cores
         if: steps.scope.outputs.server == 'true' && steps.scope.outputs.client == 'true'
         run: node tooling/build/check-server-core.mjs
@@ -225,68 +343,6 @@ jobs:
           node apps/client/windows/scripts/server-chat-ui-smoke.mjs apps/client/windows/tests/protected-channel-ui.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node apps/client/windows/scripts/protected-selfhost-smoke.mjs --protected-channel-lifecycle
-      - name: Build Windows Manager installer
-        if: steps.scope.outputs.manager == 'true'
-        run: node apps/manager/windows/scripts/build-manager-windows.mjs
-      - name: Build Windows Manager TUI installer
-        if: steps.scope.outputs.manager == 'true'
-        run: node apps/manager/windows/scripts/build-manager-windows.mjs --tui-only
-      - name: Verify standalone Manager TUI bootstrap
-        if: steps.scope.outputs.manager == 'true'
-        run: |
-          $result = & ./release/manager/windows-tui/pawtalkctl.exe --self-test
-          if ($LASTEXITCODE -ne 0 -or $result -cne 'PawTalk manager protocol 1 OK') {
-            throw 'Standalone Manager controller self-test failed'
-          }
-      - name: Verify Manager desktop UI and native tray
-        if: steps.scope.outputs.manager == 'true'
-        run: node apps/manager/windows/scripts/manager-desktop-smoke.mjs
-      - name: Packaged Manager hidden startup
-        if: steps.scope.outputs.manager == 'true'
-        run: node apps/manager/windows/scripts/manager-packaged-smoke.mjs
-      - name: Prepare Manager test host without an installer
-        if: steps.scope.outputs.host == 'true' && steps.scope.outputs.manager != 'true'
-        run: node apps/manager/windows/scripts/build-manager-windows.mjs --runtime-only
-      - name: Build current API 2 Windows Server test dependency
-        if: steps.scope.outputs.manager == 'true' && steps.scope.outputs.server != 'true'
-        id: api2fixture
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          node apps/server/scripts/build-windows-server.mjs --output-dir release/qa/api2-server
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $version = (Get-Content apps/server/VERSION -Raw).Trim()
-          "zip=release/qa/api2-server/PawTalk.Server.$version.windows-x64.zip" >> $env:GITHUB_OUTPUT
-      - name: Verify native Windows lifecycle with actual SCM services
-        if: steps.scope.outputs.host == 'true'
-        env:
-          PAWTALK_WINDOWS_SERVER_ZIP: ${{ steps.api2fixture.outputs.zip }}
-        run: node apps/manager/windows/scripts/windows-manager-smoke.mjs --scm ${{ steps.scope.outputs.manager == 'true' && '--installer' || '' }}
-      - name: Verify protected migration and rollback with Windows SCM
-        if: steps.scope.outputs.host == 'true'
-        env:
-          PAWTALK_WINDOWS_SERVER_ZIP: ${{ steps.api2fixture.outputs.zip }}
-        run: |
-          node apps/manager/windows/scripts/windows-manager-smoke.mjs --scm --protected-migration-prepare
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node apps/manager/windows/scripts/windows-manager-smoke.mjs --scm --protected-migration
-        timeout-minutes: 25
-      - name: Upload Windows Server package
-        if: steps.scope.outputs.server == 'true' && matrix.runner == 'windows-2025'
-        uses: actions/upload-artifact@v6
-        with:
-          name: pawtalk-server-windows
-          if-no-files-found: error
-          path: release/server/PawTalk.Server.*.windows-x64.zip
-      - name: Upload Windows Manager installer
-        if: steps.scope.outputs.manager == 'true' && matrix.runner == 'windows-2025'
-        uses: actions/upload-artifact@v6
-        with:
-          name: pawtalk-manager-windows
-          if-no-files-found: error
-          path: |
-            release/manager/PawTalk.Server.Manager.Setup.*.exe
-            release/manager/PawTalk.Server.Manager.TUI.Setup.*.exe
       - run: npm run smoke
         if: steps.scope.outputs.client == 'true'
       - run: npm run test:connection-ui
@@ -364,3 +420,20 @@ jobs:
           name: pawtalk-pr-build
           if-no-files-found: error
           path: release/pr-build/source.json
+  # Preserve the required Windows check names while gating every Windows job.
+  windows:
+    name: Client + Server + Manager / Windows (${{ matrix.runner }})
+    needs: [windows-server, windows-client, windows-manager]
+    if: ${{ always() }}
+    strategy: *windows-strategy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all Windows jobs to pass
+        env:
+          SERVER_RESULT: ${{ needs.windows-server.result }}
+          CLIENT_RESULT: ${{ needs.windows-client.result }}
+          MANAGER_RESULT: ${{ needs.windows-manager.result }}
+        run: |
+          test "$SERVER_RESULT" = success
+          test "$CLIENT_RESULT" = success
+          test "$MANAGER_RESULT" = success

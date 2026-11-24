@@ -27,6 +27,12 @@ async function promoteFixture(directory, env, index) {
     'infrastructure',
     'Server + Manager / Linux (ubuntu-24.04)',
     'Server + Manager / Linux (ubuntu-24.04-arm)',
+    'Windows Server package (windows-2022)',
+    'Windows Server package (windows-2025)',
+    'Windows Manager and SCM (windows-2022)',
+    'Windows Manager and SCM (windows-2025)',
+    'Windows Client and core (windows-2022)',
+    'Windows Client and core (windows-2025)',
     'Client + Server + Manager / Windows (windows-2022)',
     'Client + Server + Manager / Windows (windows-2025)',
   ]) add('verify (client) / '+name,name==='infrastructure'?'skipped':'success');

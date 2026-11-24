@@ -7,11 +7,10 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { api, assetNames, checkCoreReceipt, compareWindowsCores, selection, trusted } from './release-candidate.mjs';
 import { versions } from './release-contract.mjs';
-import { downloadArtifact, jobFor, list, oneArtifact, repository, sourceRunId, verificationJobs } from './candidate-origin.mjs';
+import { downloadArtifact, jobFor, list, oneArtifact, repository, sourceRunId, verificationJobs, windowsArtifactJobs } from './candidate-origin.mjs';
 
 const workflowPath = '.github/workflows/check.yml';
 const proofName = 'pawtalk-pr-build';
-const windowsJob = verificationJobs.at(-1);
 const shaPattern = /^[a-f0-9]{40}$/;
 
 function checkRun(source, workflow, id) {
@@ -37,8 +36,9 @@ export async function inspectPR(request, runId, mainSha, readProof) {
   ]);
   if (jobs.length !== verificationJobs.length) throw Error('Incomplete PR verification matrix');
   for (const name of verificationJobs) jobFor(jobs, name, source);
-  const packageJob = jobFor(jobs, windowsJob, source);
-  const proofArtifact = oneArtifact(artifacts, proofName, source, packageJob);
+  const clientJob = jobFor(jobs, windowsArtifactJobs.client, source);
+  const serverJob = jobFor(jobs, windowsArtifactJobs.server, source);
+  const proofArtifact = oneArtifact(artifacts, proofName, source, clientJob);
   const proof = await readProof(proofArtifact);
   if (proof?.schema !== 1 || !Number.isSafeInteger(proof.pr) || proof.pr < 1 || !shaPattern.test(proof.checkout ?? '')) throw Error('Invalid PR checkout evidence');
   const [pr, checkout] = await Promise.all([request(`pulls/${proof.pr}`), request(`git/commits/${proof.checkout}`)]);
@@ -48,7 +48,8 @@ export async function inspectPR(request, runId, mainSha, readProof) {
       checkout?.sha !== proof.checkout || checkout.parents?.length !== 2 || checkout.parents[1].sha !== source.head_sha ||
       main?.sha !== mainSha || main.parents?.length !== 1 || checkout.parents[0].sha !== main.parents[0].sha ||
       !shaPattern.test(main.tree?.sha ?? '') || checkout.tree?.sha !== main.tree.sha) throw Error('PR checkout does not match the exact main merge tree');
-  return { source, proof, tree: main.tree.sha, proofArtifact, artifact: name => oneArtifact(artifacts, name, source, packageJob) };
+  const artifact = name => oneArtifact(artifacts, name, source, name === 'pawtalk-server-windows' ? serverJob : clientJob);
+  return { source, proof, tree: main.tree.sha, proofArtifact, artifact };
 }
 
 async function sha256(file) {
