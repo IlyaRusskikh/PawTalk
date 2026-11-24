@@ -38,7 +38,7 @@ The optional checklist-events-v1 capability pushes versioned check snapshots thr
 
 ## Protected access (API 3)
 
-Updated Clients use the optional `roleColors` field in the protected channel roster to color verified role mentions. Upgrade Server to expose these colors. Older peers continue to use the default mention style.
+Client 0.15.1 uses the optional `roleColors` field in the protected channel roster to color verified role mentions. Server 0.14.2 provides this field in permanent rooms. Temporary rooms created with Client 0.15.1 include support. Older peers use the default mention style.
 
 Managed migration through the Client requires Server 0.14.1. On Server 0.14.0, the migration dialog cannot read a Manager-prepared checkpoint. If a room is already in maintenance on that version, roll back in Manager before updating Server and preparing again.
 

@@ -4,6 +4,10 @@
 
 Релизы Client и ранние общие теги Voicecord/PawTalk.
 
+## Источник выпуска: client-v0.15.1
+
+[Описание выпуска](../../releases/client-v0.15.1.ru.md)
+
 ## Источник выпуска: client-v0.14.1
 
 [Описание выпуска](../../releases/client-v0.14.1.ru.md)
