@@ -25,6 +25,7 @@ class MemoryRoom:
         self.data = b'original SQLite snapshot'
         self.fail_start = False
         self.crash = False
+        self.fault_version = '0.9.1'
         self.backup_error = False
         self.starts = []
         self.running = True
@@ -40,7 +41,7 @@ class MemoryRoom:
     def start(self,state,config):
         self.starts.append(state['image'])
         self.running = True
-        if state['version'] == '0.9.1' and (self.fail_start or self.crash):
+        if state['version'] == self.fault_version and (self.fail_start or self.crash):
             self.data = b'changed by failed rollout'
             if self.crash:
                 raise PowerLoss()
@@ -155,6 +156,62 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Unsupported server data/protocol transition'):
             self.c.update_server({**self.manifest,'version':'0.9.1'})
         self.assertTrue(self.room.running)
+
+    def activate_protected_room_at_0_14_1(self):
+        save(self.c.state_file,{**self.c.state(),'version':'0.14.1'})
+        self.install_cutover_fixture()
+        self.c.activate_protected_migration(io.BytesIO(b'{"test":"synthetic signed approval"}'))
+        return {
+            **self.manifest,
+            'version':'0.15.0',
+            'digest':'sha256:29d57e9ea010945c4127da433a2309a5a19482f9ef37eb55e990ffa61d6fc7f9',
+            'windows': {
+                'name':'PawTalk.Server.0.15.0.windows-x64.zip',
+                'sha256':'744c388a15dd574bb2b097f6b188a41dba1c3f36c0da7d0342400ae78c856aeb',
+                'size':32731842,
+            },
+        }
+
+    def test_protected_update_preserves_active_cutover_and_data(self):
+        manifest = self.activate_protected_room_at_0_14_1()
+        previous = self.c.state()
+        previous_data = self.room.data
+        for changed in ({'version':'0.15.1'}, {'digest':'sha256:'+'c'*64},
+                        {'windows':{**manifest['windows'],'sha256':'c'*64}}):
+            with self.subTest(changed=changed), patch.object(self.room,'pull') as pull:
+                with self.assertRaisesRegex(ValueError,'Unsupported server data/protocol transition'):
+                    self.c.update_server({**manifest,**changed})
+                pull.assert_not_called()
+        self.room.running = False
+        with self.assertRaisesRegex(ValueError,'Start the protected room'):
+            self.c.update_server(manifest)
+        self.room.running = True
+
+        self.assertTrue(self.c.update_server(manifest))
+        current = self.c.state()
+        self.assertEqual(current['version'],'0.15.0')
+        self.assertEqual(current['image'],release.IMAGE+'@'+manifest['digest'])
+        for key in ('protectedRuntime','identity','volume','dataSchema'):
+            self.assertEqual(current[key],previous[key])
+        self.assertEqual(self.room.data,previous_data)
+        self.assertTrue(self.room.running)
+
+    def test_protected_update_failure_restores_previous_image_and_active_data(self):
+        manifest = self.activate_protected_room_at_0_14_1()
+        previous = self.c.state()
+        previous_data = self.room.data
+        self.room.fault_version = manifest['version']
+        self.room.fail_start = True
+
+        with self.assertRaisesRegex(RuntimeError,'previous image/data restored and verified'):
+            self.c.update_server(manifest)
+        restored = self.c.state()
+        self.assertNotEqual(restored['volume'],previous['volume'])
+        self.assertEqual(restored,{**previous,'volume':restored['volume']})
+        self.assertEqual(self.room.starts[-2:],[release.IMAGE+'@'+manifest['digest'],previous['image']])
+        self.assertEqual(self.room.data,previous_data)
+        self.assertTrue(self.room.running)
+        self.assertFalse(self.c.journal.exists())
 
     def test_protected_activation_resumes_without_restoring_pre_cutover_data(self):
         prepared = self.install_cutover_fixture()

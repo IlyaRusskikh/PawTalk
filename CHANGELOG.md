@@ -36,3 +36,5 @@ Release sources for screen sharing
 
 - [Client 0.16.0](releases/client-v0.16.0.en.md)
 - [Server 0.15.0](releases/server-v0.15.0.en.md)
+
+[Manager 0.7.2](releases/manager-v0.7.2.en.md) enables the signed upgrade from Server 0.14.1 to 0.15.0 for running API 3 rooms.

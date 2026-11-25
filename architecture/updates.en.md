@@ -8,6 +8,8 @@ The Client updater validates an Ed25519-signed update manifest, file hash/size a
 
 All update paths must fail closed on invalid signing roots, signatures, hashes, stale/untrusted manifest, repository, incompatible schema or wrong component. The host controller performs a transaction with backup/rollback where required. No keys or signature validation may be disabled to force install.
 
+The legacy Server manifest's API and data fields describe a fresh installation. For an active API 3 room using data schema 4, Manager also requires a known compatible release and its exact OCI digest and Windows package hash. Server 0.15.0 uses its original signed manifest. Manager backs up the running room before starting the candidate, verifies the protected cutover and TLS identity before committing, and restores the previous artifact and data together on failure.
+
 An existing Manager update **does not automatically update Server** unless a separately enabled/confirmed Server update acts. Linux auto-discovery includes published prereleases. [Release process](releasing.en.md) · [Version compatibility](../docs/server/compatibility.en.md).
 
 

@@ -36,3 +36,5 @@
 
 - [Client 0.16.0](releases/client-v0.16.0.ru.md)
 - [Server 0.15.0](releases/server-v0.15.0.ru.md)
+
+[Manager 0.7.2](releases/manager-v0.7.2.ru.md) позволяет обновить работающую комнату API 3 с Server 0.14.1 до подписанного Server 0.15.0.

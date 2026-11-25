@@ -4,6 +4,12 @@
 
 One Manager tag covers Windows and Linux. The platforms below are documentation sections, **not distinct release versions**.
 
+## manager-v0.7.2
+
+Manager can update a running API 3 room from Server 0.14.1 to the signed Server 0.15.0 release. If the candidate fails, Manager restores the previous Server artifact and room data together.
+
+[Release details](../../../releases/manager-v0.7.2.en.md)
+
 ## manager-v0.7.1
 
 Shared Manager release for the Windows GUI fix.

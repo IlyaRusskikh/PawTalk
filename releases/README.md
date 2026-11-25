@@ -49,5 +49,6 @@ Local sources are not automatically exact snapshots of public Release bodies. Th
 - [manager-v0.6.0](manager-v0.6.0.en.md)
 - [manager-v0.7.0](manager-v0.7.0.en.md)
 - [manager-v0.7.1](manager-v0.7.1.en.md)
+- [manager-v0.7.2](manager-v0.7.2.en.md)
 
 [Published GitHub Releases](https://github.com/IlyaRusskikh/PawTalk/releases) determine which tag exists for users. Never pin one global `releases/latest` URL.
