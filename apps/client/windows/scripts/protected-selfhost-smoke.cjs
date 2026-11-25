@@ -85,14 +85,16 @@ async function publishSyntheticAudio() {
   if (!publication?.trackSid) throw new Error('The synthetic microphone was not published');
 }
 
-async function waitForDecodedAudio(remoteId) {
+async function waitForDecodedAudio(input) {
   const { room, audio } = window.smokePeer;
+  const { remoteId, source } = typeof input === 'string'
+    ? { remoteId: input, source: LivekitClient.Track.Source.Microphone } : input;
   await audio.resume();
   const until = Date.now() + 6000;
   let remoteTrack, inbound, baseline;
   while (Date.now() < until) {
     const remote = room.remoteParticipants.get(remoteId);
-    const track = remote?.getTrackPublication(LivekitClient.Track.Source.Microphone)?.track;
+    const track = remote?.getTrackPublication(source)?.track;
     if (track && !remoteTrack) {
       remoteTrack = track;
       const element = document.createElement('audio');
@@ -119,9 +121,73 @@ async function waitForDecodedAudio(remoteId) {
   }));
 }
 
+async function publishProtectedScreen() {
+  const { room, audio } = window.smokePeer;
+  await audio.resume();
+  const canvas = document.createElement('canvas');
+  canvas.width = 320;
+  canvas.height = 180;
+  const context = canvas.getContext('2d');
+  const timer = setInterval(() => {
+    context.fillStyle = Math.floor(performance.now() / 100) % 2 ? '#ff7700' : '#3455dd';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }, 75);
+  const video = canvas.captureStream(15).getVideoTracks()[0];
+  const output = audio.createMediaStreamDestination();
+  const tone = audio.createOscillator();
+  tone.connect(output);
+  tone.start();
+  const sound = output.stream.getAudioTracks()[0];
+  const peer = room.localParticipant;
+  window.smokePeer.stopScreen = async () => {
+    clearInterval(timer);
+    tone.stop();
+    await Promise.all([peer.unpublishTrack(video, true), peer.unpublishTrack(sound, true)]);
+  };
+  await peer.publishTrack(video, { source: LivekitClient.Track.Source.ScreenShare });
+  await peer.publishTrack(sound, { source: LivekitClient.Track.Source.ScreenShareAudio });
+}
+
+async function waitForProtectedScreen(remoteId) {
+  const { room } = window.smokePeer;
+  const deadline = performance.now() + 8000;
+  const video = document.createElement('video');
+  video.autoplay = true;
+  video.muted = true;
+  document.body.append(video);
+  let current;
+  try {
+    while (performance.now() < deadline) {
+      const track = room.remoteParticipants.get(remoteId)?.getTrackPublication(LivekitClient.Track.Source.ScreenShare)?.track;
+      if (track && !current) {
+        current = track;
+        current.attach(video);
+      }
+      if (video.videoWidth === 320 && video.videoHeight === 180 && video.readyState >= 2) return;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error('The remote encrypted screen did not produce decoded video');
+  } finally {
+    current?.detach(video);
+    video.remove();
+  }
+}
+
+async function checkProtectedScreenPause({ id, paused }) {
+  const { room } = window.smokePeer;
+  const deadline = performance.now() + 6000;
+  while (performance.now() < deadline) {
+    const track = room.remoteParticipants.get(id)?.getTrackPublication(LivekitClient.Track.Source.ScreenShare);
+    if (track?.isMuted === paused) return track.trackSid;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  throw new Error(`Protected viewer did not receive the screen ${paused ? 'pause' : 'resume'}`);
+}
+
 async function stopMediaPeer() {
   const peer = window.smokePeer;
   if (!peer) return;
+  await peer.stopScreen?.();
   await peer.room.disconnect();
   peer.worker.terminate();
   await peer.audio.close();
@@ -521,6 +587,27 @@ async function checkMedia(host, owner, guest, visitor, channelId, checkBadProof,
       await runPeer(windows[receiver], waitForDecodedAudio, connections[sender].sessionId);
     }
     if (moderate) {
+      await runPeer(windows[0], publishProtectedScreen);
+      await Promise.all([
+        runPeer(windows[1], waitForProtectedScreen, owner.sessionId),
+        runPeer(windows[1], waitForDecodedAudio, { remoteId: owner.sessionId, source: 'screen_share_audio' }),
+      ]);
+      const trackSid = await runPeer(windows[1], id => window.smokePeer.room.remoteParticipants.get(id)
+        .getTrackPublication(LivekitClient.Track.Source.ScreenShare).trackSid, owner.sessionId);
+      for (const paused of [true, false]) {
+        await runPeer(windows[0], async value => {
+          const screen = window.smokePeer.room.localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShare);
+          if (value) await screen.pauseUpstream(); else await screen.resumeUpstream();
+        }, paused);
+        const observed = await runPeer(windows[1], checkProtectedScreenPause, { id: owner.sessionId, paused });
+        assert.equal(observed, trackSid);
+      }
+      console.log('PASS API 3 viewer receives screen pause and resume on the same video publication with data publishing disabled');
+      await runPeer(windows[0], async () => {
+        await window.smokePeer.stopScreen();
+        window.smokePeer.stopScreen = undefined;
+      });
+      console.log('PASS API 3 encrypted screen frames and screen audio reach a second client alongside its microphone track');
       await checkVoiceModerationKeyContinuity(host, owner, guest, visitor, channelId, ownerGrant.epoch.epochId,
         (receive, publish) => runPeer(windows[1], waitForVoiceDeafen, { receive, publish, remoteId: owner.sessionId }));
       await checkVoiceDeafen(host, owner, guest, visitor, channelId, windows[1]);
@@ -1160,7 +1247,7 @@ async function checkVoiceProtectionStatus(host, owner, guest, channelId, setTamp
     }, 'held voice worker challenge');
     assert.equal(current.connection, 'connected');
     assert.equal(current.encrypted, true);
-    assert.equal(current.states.at(-1)?.state, 'yellow');
+    await waitForState('yellow');
   };
   const scope = { serverId: owner.serverId, channelId };
   let visitor;
@@ -1183,6 +1270,12 @@ async function checkVoiceProtectionStatus(host, owner, guest, channelId, setTamp
     assert.equal(verified.encrypted, true);
     assert.deepEqual({ serverId: verified.states.at(-1).serverId, channelId: verified.states.at(-1).channelId }, scope);
 
+    await call('shareScreen');
+    const beforeScreen = await call('read');
+    assert.ok(beforeScreen.screenPublications.every(Boolean));
+    assert.equal(beforeScreen.screenTracks.length, 2);
+    assert.ok(beforeScreen.screenTracks.every(track => track.enabled && track.state === 'live'));
+
     const { link } = await host.createProtectedInvite(owner);
     await guest.redeemProtectedInvite(link, 'Synthetic roster successor');
     visitor = await guest.openStoredProtectedRuntime(owner.serverId);
@@ -1193,10 +1286,16 @@ async function checkVoiceProtectionStatus(host, owner, guest, channelId, setTamp
     await call('holdWorkerProof');
     await call('rotate', next);
     await checkWorkerPending();
+    const pausedScreen = await call('read');
+    assert.deepEqual(pausedScreen.screenPublications, beforeScreen.screenPublications);
+    assert.ok(pausedScreen.screenTracks.every(track => !track.enabled && track.state === 'live'));
     await call('releaseWorkerProof');
     verified = await waitForState('green', previousStates);
     assert.ok(verified.states.slice(previousStates, -1).some(status => status?.state === 'yellow'));
     assert.equal(verified.encrypted, true);
+    assert.deepEqual(verified.screenPublications, beforeScreen.screenPublications);
+    assert.ok(verified.screenTracks.every(track => track.enabled && track.state === 'live'));
+    console.log('PASS protected screen video and audio pause until worker proof, then resume with the same publications');
     console.log('PASS VoiceSession reports yellow while joining and rotating, and green with the real LiveKit E2EE worker');
 
     let proofError;
@@ -1211,6 +1310,10 @@ async function checkVoiceProtectionStatus(host, owner, guest, channelId, setTamp
     await call('rejectRefresh', proofError);
     const failed = await waitForState('red');
     assert.equal(failed.states.at(-1).reason, 'VOICE_KEY_INVALID');
+    await waitFor(async () => {
+      const current = await call('read');
+      return current.screenTracks.every(track => track.state === 'ended') && !current.screenPublications.some(Boolean);
+    }, 'screen capture teardown after failed voice key proof');
     await call('disconnect');
     await waitForState('red');
     console.log('PASS VoiceSession stops after a confirmed key failure and retains red through disconnect');

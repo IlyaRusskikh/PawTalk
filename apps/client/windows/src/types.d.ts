@@ -21,6 +21,13 @@ interface Window {
     copyChatImage?(input: { bytes: Uint8Array; name: string }): Promise<void>;
     saveChatImage?(input: { bytes: Uint8Array; name: string }): Promise<boolean>;
     windowActive?(): Promise<boolean>;
+    screenCaptureSources?(kind: 'window' | 'screen'): Promise<{ id: string; name: string; thumbnail: string; icon?: string; maxHeight?: number; available: boolean; minimized: boolean; applicationAudio?: boolean }[]>;
+    readApplicationAudio?(): Promise<Uint8Array<ArrayBuffer> | undefined | null>;
+    screenCaptureWindowStatus?(): Promise<boolean | undefined>;
+    releaseScreenCapture?(): Promise<void>;
+    recordScreenShareDiagnostic?(stage: string, data: object): void;
+    selectScreenCapture?(id: string, audio: boolean, applicationAudio?: boolean): Promise<void>;
+    clearScreenCapture?(): Promise<void>;
     onWindowActive?(callback: (active: boolean) => void): () => void;
     getStartInTray?(): Promise<boolean>;
     setStartInTray?(value: boolean): Promise<boolean>;

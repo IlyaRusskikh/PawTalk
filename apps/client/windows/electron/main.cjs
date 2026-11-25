@@ -82,6 +82,42 @@ function authorized(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Unauthorized IPC');
 }
 function registerIPC() {
+  require('./screen-capture.cjs').registerScreenCapture({ ipcMain, session: session.defaultSession, authorized, getWindow: () => win, native });
+  if (!app.isPackaged) {
+    const directory = path.join(app.getPath('userData'), 'diagnostics');
+    const file = path.join(directory, 'screen-share.jsonl');
+    const events = new Set(['request', 'captured', 'video-published', 'audio-published', 'start-failed', 'start-cancelled',
+      'capture-video-ended', 'capture-video-muted', 'capture-video-unmuted', 'capture-audio-ended', 'publish-gate-closed',
+      'sdk-video-unpublished', 'sdk-audio-unpublished', 'manual-stop', 'picker-closed', 'voice-state', 'permissions-changed',
+      'transport-disconnected', 'encryption-failed', 'server-voice-lost', 'voice-reset', 'voice-reconnect',
+      'remote-video-subscribed', 'remote-video-unsubscribed', 'remote-video-muted', 'remote-video-unmuted', 'key-paused', 'key-resumed']);
+    const flags = ['connected', 'encrypted', 'protectedReady', 'publishAllowed', 'videoAllowed', 'audioAllowed',
+      'videoLive', 'videoMuted', 'audioLive', 'pending', 'keyPending', 'keyUpdating', 'transportUnverified'];
+    const errors = new Set(['AbortError', 'NotAllowedError', 'NotFoundError', 'NotReadableError', 'OverconstrainedError',
+      'SecurityError', 'InvalidStateError', 'TrackInvalidError', 'PublishTrackError', 'ConnectionError', 'Error']);
+    const states = new Set(['connecting', 'connected', 'reconnecting', 'signalReconnecting', 'disconnected']);
+    let limitStart = 0, count = 0;
+    ipcMain.handle('screen-share-diagnostic', (event, stage, data) => {
+      authorized(event);
+      if (!events.has(stage) || !data || typeof data !== 'object') return;
+      const now = Date.now();
+      if (now - limitStart >= 10_000) { limitStart = now; count = 0; }
+      if (++count > 120) return;
+      const entry = { time: new Date(now).toISOString(), event: stage };
+      for (const key of flags) if (typeof data[key] === 'boolean') entry[key] = data[key];
+      if (states.has(data.state)) entry.state = data.state;
+      if (errors.has(data.error)) entry.error = data.error;
+      if (Number.isInteger(data.reason) && data.reason >= 0 && data.reason <= 255) entry.reason = data.reason;
+      if (data.source === 'window' || data.source === 'screen') entry.source = data.source;
+      if (typeof data.requestedAudio === 'boolean') entry.requestedAudio = data.requestedAudio;
+      fs.mkdirSync(directory, { recursive: true });
+      if ((fs.statSync(file, { throwIfNoEntry: false })?.size || 0) >= 256 * 1024) {
+        fs.renameSync(file, file + '.previous');
+      }
+      fs.appendFileSync(file, JSON.stringify(entry) + '\n');
+    });
+    console.info('Screen sharing diagnostics:', file);
+  }
   membershipIPC=require('./membership-ipc.cjs').registerMembershipIPC({ipcMain,authorized,client:membershipClient,links:membershipLinks,getIdleSeconds:()=>powerMonitor.getSystemIdleTime(),clipboard,send,getWindow:()=>win,Notification,onNotificationCount:updateTaskbarBadge,notificationAppearance:require('./notification-appearance.cjs').notificationAppearance({directory:path.join(app.getPath('userData'),'notification-avatars'),nativeImage,BrowserWindow}),getHost:()=>hosting?.status(),stopHost:()=>hosting.stop(),setVoiceEndpoint:(address,pin)=>address?voiceSignal.open(address,pin):voiceSignal.close()});
   ipcMain.handle('chat-text-copy', (event, text) => {
     authorized(event);
@@ -281,9 +317,13 @@ else {
       protectedOnly: process.env.PAWTALK_REVIEW_API3_ONLY === 'true'});
     membershipLinks=new MembershipLinks(membershipClient);
     session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
-      callback(contents === win?.webContents && (permission === 'fullscreen' || permission === 'media' && details.mediaTypes?.every(type => type === 'audio')));
+      callback(contents === win?.webContents && (permission === 'fullscreen' ||
+        permission === 'display-capture' && details.isMainFrame === true ||
+        permission === 'media' && details.mediaTypes?.every(type => type === 'audio')));
     });
-    session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) => contents === win?.webContents && (permission === 'fullscreen' || permission === 'media' && details.mediaType === 'audio'));
+    session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) => contents === win?.webContents &&
+      (permission === 'fullscreen' || permission === 'display-capture' && details.isMainFrame === true ||
+        permission === 'media' && details.mediaType === 'audio'));
     const windowIcon = nativeImage.createFromPath(path.join(__dirname, '../assets/pawtalk.png'));
     const showOnLaunch = !process.argv.includes('--smoke') && !(process.argv.includes('--start-in-tray') && !pendingInvitation);
     win = new BrowserWindow({ show: false, width: 1240, height: 820, minWidth: 940, minHeight: 650, backgroundColor: '#191b22', title: 'PawTalk', icon: windowIcon,

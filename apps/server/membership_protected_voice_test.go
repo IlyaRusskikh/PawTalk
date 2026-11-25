@@ -108,7 +108,8 @@ func TestProtectedVoiceAdmissionAndGrant(t *testing.T) {
 			len(claims.RoomConfig) != 0 {
 			t.Fatalf("incorrect LiveKit claims: %+v", claims)
 		}
-		if speak && (len(claims.Video.Sources) != 1 || claims.Video.Sources[0] != "microphone") ||
+		if speak && (len(claims.Video.Sources) != 3 || claims.Video.Sources[0] != "microphone" ||
+			claims.Video.Sources[1] != "screen_share" || claims.Video.Sources[2] != "screen_share_audio") ||
 			!speak && len(claims.Video.Sources) != 0 {
 			t.Fatalf("incorrect publication sources: %v", claims.Video.Sources)
 		}

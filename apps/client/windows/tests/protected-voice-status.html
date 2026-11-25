@@ -18,6 +18,7 @@ const sendWorkerMessage = Worker.prototype.postMessage;
 let heldWorkerMessages;
 let participantUI;
 let participantRender = 0;
+let screenFixture;
 const moveCalls = [];
 Worker.prototype.postMessage = function (message, ...args) {
   if (heldWorkerMessages && message?.kind === 'encryptDataRequest') {
@@ -68,6 +69,15 @@ window.protectedVoiceStatusFixture = {
     else pending.resolve(result);
   },
   rotate(key) { nextKey = key; },
+  async shareScreen() {
+    const canvas = document.createElement('canvas');
+    canvas.getContext('2d').fillRect(0, 0, 40, 40);
+    const stream = canvas.captureStream(15);
+    const output = voice.playback.createMediaStreamDestination();
+    stream.addTrack(output.stream.getAudioTracks()[0]);
+    screenFixture = stream;
+    await voice.shareScreen(() => Promise.resolve(stream));
+  },
   rejectRefresh(code) { refreshFailure = code; },
   resumeMove(access) { reconnect.resolve(access); reconnect = undefined; },
   setLocalAudio({ muted, ptt }) { voice.setMute(muted, false); voice.setPtt(ptt); },
@@ -96,6 +106,9 @@ window.protectedVoiceStatusFixture = {
     encrypted: voice.room?.isE2EEEnabled === true, connection: voice.room?.state, reconnect: Boolean(reconnect), movedChannel,
     heartbeatEpoch: pendingHeartbeat?.epochId, heartbeatPending: Boolean(pendingHeartbeat), checkpointEpoch: voice.protectedEpoch?.epochId,
     remoteTracks: voice.mixers.size,
+    screenTracks: screenFixture?.getTracks().map(track => ({ kind: track.kind, enabled: track.enabled, state: track.readyState })),
+    screenPublications: [LivekitClient.Track.Source.ScreenShare, LivekitClient.Track.Source.ScreenShareAudio]
+      .map(source => voice.room?.localParticipant.getTrackPublication(source)?.trackSid),
     muted: voice.muted, ptt: voice.ptt, microphone: Boolean(voice.localTrack),
     canPublish: voice.room?.localParticipant.permissions?.canPublish, canSubscribe: voice.room?.localParticipant.permissions?.canSubscribe }),
 };

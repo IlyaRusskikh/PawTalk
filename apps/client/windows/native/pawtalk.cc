@@ -1,5 +1,6 @@
 #include <napi.h>
 #include <windows.h>
+#include <dwmapi.h>
 #include <mmdeviceapi.h>
 #include <audiopolicy.h>
 #include <tlhelp32.h>
@@ -160,7 +161,57 @@ public:
 };
 static Ducking* ducking = nullptr;
 
+struct CaptureWindowList {
+  Napi::Env env;
+  Napi::Array windows;
+  uint32_t count = 0;
+};
+
+static BOOL CALLBACK ListCaptureWindow(HWND window, LPARAM context) {
+  auto& list = *reinterpret_cast<CaptureWindowList*>(context);
+  const auto style = GetWindowLongPtrW(window, GWL_EXSTYLE);
+  if (!IsWindowVisible(window) || (style & WS_EX_TOOLWINDOW) ||
+      (GetWindow(window, GW_OWNER) && !(style & WS_EX_APPWINDOW))) return TRUE;
+  DWORD cloaked = 0, affinity = 0;
+  if ((SUCCEEDED(DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) ||
+      (GetWindowDisplayAffinity(window, &affinity) && affinity)) return TRUE;
+  wchar_t title[512];
+  const int length = GetWindowTextW(window, title, 512);
+  if (!length) return TRUE;
+  DWORD process = 0;
+  GetWindowThreadProcessId(window, &process);
+  RECT bounds{};
+  DwmGetWindowAttribute(window, DWMWA_EXTENDED_FRAME_BOUNDS, &bounds, sizeof(bounds));
+  MONITORINFO monitor{sizeof(MONITORINFO)};
+  GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor);
+  auto entry = Napi::Object::New(list.env);
+  entry.Set("handle", std::to_string(reinterpret_cast<uintptr_t>(window)));
+  entry.Set("process", process);
+  entry.Set("title", Napi::String::New(list.env, reinterpret_cast<const char16_t*>(title), length));
+  entry.Set("minimized", IsIconic(window) != FALSE);
+  entry.Set("height", bounds.bottom - bounds.top);
+  entry.Set("monitorHeight", monitor.rcMonitor.bottom - monitor.rcMonitor.top);
+  list.windows.Set(list.count++, entry);
+  return list.count < 256;
+}
+
+void RegisterApplicationAudio(Napi::Env env, Napi::Object exports);
+
 static Napi::Object Init(Napi::Env env, Napi::Object exports) {
+  RegisterApplicationAudio(env, exports);
+  exports.Set("listCaptureWindows", Napi::Function::New(env, [](const Napi::CallbackInfo& info) {
+    CaptureWindowList list{info.Env(), Napi::Array::New(info.Env())};
+    EnumWindows(ListCaptureWindow, reinterpret_cast<LPARAM>(&list));
+    return list.windows;
+  }));
+  exports.Set("captureWindowMinimized", Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+    auto env = info.Env();
+    if (info.Length() != 2 || !info[0].IsNumber() || !info[1].IsNumber()) return env.Undefined();
+    const HWND window = reinterpret_cast<HWND>(static_cast<intptr_t>(info[0].As<Napi::Number>().Int64Value()));
+    DWORD process = 0;
+    if (!GetWindowThreadProcessId(window, &process) || process != info[1].As<Napi::Number>().Uint32Value()) return env.Undefined();
+    return Napi::Boolean::New(env, IsIconic(window) != FALSE);
+  }));
   exports.Set("startPtt", Napi::Function::New(env, [](const Napi::CallbackInfo& info) {
     auto env = info.Env();
     if (info.Length() != 1 || !info[0].IsFunction()) { Napi::TypeError::New(env,"Expected callback").ThrowAsJavaScriptException(); return; }

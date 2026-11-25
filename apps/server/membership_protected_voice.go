@@ -76,7 +76,7 @@ func (s *membershipStore) joinProtectedVoiceWithKey(ctx context.Context, token, 
 	video := map[string]any{"roomJoin": true, "room": room,
 		"canPublish": admission.CanSpeak, "canSubscribe": admission.CanReceive, "canPublishData": false, "canUpdateOwnMetadata": false}
 	if admission.CanSpeak {
-		video["canPublishSources"] = []string{"microphone"}
+		video["canPublishSources"] = []string{"microphone", "screen_share", "screen_share_audio"}
 	}
 	grantID, err := randomHex(16)
 	if err != nil {
@@ -142,7 +142,7 @@ func (s *membershipStore) reconcileProtectedVoice(ctx context.Context, cfg confi
 		permission := map[string]any{"canPublish": admission.CanSpeak, "canSubscribe": admission.CanReceive,
 			"canPublishData": false, "canUpdateMetadata": false}
 		if admission.CanSpeak {
-			permission["canPublishSources"] = []string{"MICROPHONE"}
+			permission["canPublishSources"] = []string{"MICROPHONE", "SCREEN_SHARE", "SCREEN_SHARE_AUDIO"}
 		}
 		body["permission"] = permission
 		return callRoomService(ctx, cfg, now, room, "UpdateParticipant", body)

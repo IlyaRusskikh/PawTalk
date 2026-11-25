@@ -46,6 +46,7 @@ Desktop.ini
 
 # Application-local generated files
 /apps/client/windows/src/generated/
+/apps/client/windows/src/dev-streams/
 /apps/client/windows/dist/
 /apps/client/windows/native/build/
 /apps/manager/generated/
