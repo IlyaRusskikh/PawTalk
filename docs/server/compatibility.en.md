@@ -40,6 +40,8 @@ Screen sharing requires Client 0.16.0 and Server 0.15.0 for a permanent room. Cl
 
 ## Protected access (API 3)
 
+Manager 0.7.1 rejects Server updates after an API 3 cutover. Manager 0.7.2 supports updating a running, already migrated room from Server 0.14.1 to the published Server 0.15.0 through the normal update menu. This path requires the signed 0.15.0 release and preserves the active API 3 cutover. See the [Manager 0.7.2 release notes](../../releases/manager-v0.7.2.en.md).
+
 Server 0.14.3 and temporary rooms hosted by Client 0.15.3 expose the same Client update relay in API 3 as in API 2. Older API 3 servers can accept chat connections while returning HTTP 404 for `/api/updates/`. Existing Clients with relay support can use the relay once the server host is updated.
 
 Client 0.15.2 inline attachment removal uses the existing encrypted message revision endpoint. Update all Clients in the room to display attachment-removal revisions. The encrypted original remains part of protected history, and recipients may already have saved it.

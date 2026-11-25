@@ -18,6 +18,20 @@ IMAGE = "ghcr.io/ilyarusskikh/pawtalk-server"
 VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?\Z")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
+# The legacy signed manifest describes a fresh API 2 install. These exact
+# published artifacts also support an already activated API 3/data schema 4 room.
+PROTECTED_SERVER_ARTIFACTS = {
+    '0.15.0': (
+        'sha256:29d57e9ea010945c4127da433a2309a5a19482f9ef37eb55e990ffa61d6fc7f9',
+        '744c388a15dd574bb2b097f6b188a41dba1c3f36c0da7d0342400ae78c856aeb',
+    ),
+}
+
+
+def supports_protected_server(manifest):
+    windows_sha256 = manifest.get('windows', {}).get('sha256')
+    return PROTECTED_SERVER_ARTIFACTS.get(manifest['version']) == (manifest['digest'], windows_sha256)
+
 
 def semver(value):
     m = VERSION.fullmatch(value) if isinstance(value, str) else None

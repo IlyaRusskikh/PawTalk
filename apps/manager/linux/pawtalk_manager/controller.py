@@ -12,7 +12,7 @@ import time
 import uuid
 from pathlib import Path
 from .config import atomic, read_config, remove, save, validate, write_config
-from .release import IMAGE, semver
+from .release import IMAGE, semver, supports_protected_server
 from .runtime import Runtime, run
 from .platforms import WINDOWS, secure, sync_directory
 
@@ -446,9 +446,16 @@ class Controller:
             raise ValueError('Published Windows Server version was replaced')
         if not replacing_local and semver(manifest['version']) <= semver(state['version']):
             return False
-        runtime = state.get('protectedRuntime',{'dataSchema':state['dataSchema'],'apiProtocol':2})
-        if manifest['dataSchema'] != runtime['dataSchema'] or manifest['apiProtocol'] != runtime['apiProtocol']:
+        if manifest['dataSchema'] != state['dataSchema'] or manifest['apiProtocol'] != 2:
             raise ValueError('Unsupported server data/protocol transition')
+        protected = state.get('protectedRuntime')
+        if protected is not None:
+            if (local or (protected.get('apiProtocol'),protected.get('dataSchema')) != (3,4)
+                    or not supports_protected_server(manifest)):
+                raise ValueError('Unsupported server data/protocol transition')
+        was_running = bool(self.runtime.container(state,config)['State'].get('Running')) if WINDOWS or protected is not None else True
+        if protected is not None and not was_running:
+            raise ValueError('Start the protected room before installing a Server update')
         candidate = {**state,'version':manifest['version'],'image':IMAGE+'@'+manifest['digest'],'serverManifest':manifest['_signed']}
         candidate.pop('localPackage',None)
         if local: candidate['localPackage']=manifest['windows']['sha256']
@@ -456,13 +463,12 @@ class Controller:
             candidate['windows'] = manifest['windows']
         elif WINDOWS:
             raise ValueError('Server release has no Windows artifact')
-        if not WINDOWS and candidate['image'] == state['image']:
+        if protected is None and not WINDOWS and candidate['image'] == state['image']:
             save(self.state_file,candidate)
             return False
         self.runtime.pull(candidate)
         # Validate old digest is still locally usable before stopping anything.
         self.runtime.verify_image(state)
-        was_running = bool(self.runtime.container(state,config)['State'].get('Running')) if WINDOWS else True
         entry = self.transaction(state,config,'server-update')
         entry['resume'] = was_running
         save(self.journal,entry)

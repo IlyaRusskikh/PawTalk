@@ -49,5 +49,6 @@
 - [manager-v0.6.0](manager-v0.6.0.ru.md)
 - [manager-v0.7.0](manager-v0.7.0.ru.md)
 - [manager-v0.7.1](manager-v0.7.1.ru.md)
+- [manager-v0.7.2](manager-v0.7.2.ru.md)
 
 [Опубликованные GitHub Releases](https://github.com/IlyaRusskikh/PawTalk/releases) определяют доступность тегов. Не используйте один общий `releases/latest`.
