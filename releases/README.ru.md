@@ -22,6 +22,7 @@
 - [client-v0.15.2](client-v0.15.2.ru.md)
 - [client-v0.15.3](client-v0.15.3.ru.md)
 - [client-v0.16.0](client-v0.16.0.ru.md)
+- [client-v0.16.1](client-v0.16.1.ru.md)
 
 ## Server
 

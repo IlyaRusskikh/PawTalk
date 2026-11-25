@@ -29,7 +29,9 @@ contextBridge.exposeInMainWorld('desktop', {
   clearScreenCapture: () => ipcRenderer.invoke('screen-capture-clear'),
   screenCaptureWindowStatus: () => ipcRenderer.invoke('screen-capture-window-status'),
   releaseScreenCapture: () => ipcRenderer.invoke('screen-capture-release'),
-  recordScreenShareDiagnostic: (stage, data) => { void ipcRenderer.invoke('screen-share-diagnostic', stage, data).catch(() => {}); },
+  ...(process.argv.includes('--pawtalk-screen-diagnostics') && {
+    recordScreenShareDiagnostic: (stage, data) => { void ipcRenderer.invoke('screen-share-diagnostic', stage, data).catch(() => {}); },
+  }),
   onWindowActive: (fn) => listen('window-active-changed', fn),
   getStartInTray: () => ipcRenderer.invoke('start-in-tray-get'),
   setStartInTray: (value) => ipcRenderer.invoke('start-in-tray-set', value),

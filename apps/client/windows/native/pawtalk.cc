@@ -212,6 +212,14 @@ static Napi::Object Init(Napi::Env env, Napi::Object exports) {
     if (!GetWindowThreadProcessId(window, &process) || process != info[1].As<Napi::Number>().Uint32Value()) return env.Undefined();
     return Napi::Boolean::New(env, IsIconic(window) != FALSE);
   }));
+  exports.Set("restoreCaptureWindow", Napi::Function::New(env, [](const Napi::CallbackInfo& info) {
+    auto env = info.Env();
+    if (info.Length() != 2 || !info[0].IsNumber() || !info[1].IsNumber()) return Napi::Boolean::New(env, false);
+    const HWND window = reinterpret_cast<HWND>(static_cast<intptr_t>(info[0].As<Napi::Number>().Int64Value()));
+    DWORD process = 0;
+    const bool valid = GetWindowThreadProcessId(window, &process) && process == info[1].As<Napi::Number>().Uint32Value();
+    return Napi::Boolean::New(env, valid && IsIconic(window) && ShowWindowAsync(window, SW_RESTORE));
+  }));
   exports.Set("startPtt", Napi::Function::New(env, [](const Napi::CallbackInfo& info) {
     auto env = info.Env();
     if (info.Length() != 1 || !info[0].IsFunction()) { Napi::TypeError::New(env,"Expected callback").ThrowAsJavaScriptException(); return; }

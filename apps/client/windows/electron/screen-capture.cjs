@@ -1,5 +1,6 @@
 const { desktopCapturer, screen } = require('electron');
 const { release } = require('node:os');
+const { setTimeout: delay } = require('node:timers/promises');
 
 const handleOf = id => /^window:(\d+):\d+$/.exec(id)?.[1];
 
@@ -8,6 +9,7 @@ function registerScreenCapture({ ipcMain, session, authorized, getWindow, native
   let selection;
   let capturedWindow;
   let audioLease;
+  let releaseCount = 0;
   const supportsApplicationAudio = process.platform === 'win32' && Number(release().split('.')[2]) >= 20348 &&
     typeof native?.startApplicationAudio === 'function';
   const applicationAudioAllowed = window => supportsApplicationAudio && !!window?.process && window.process !== process.pid;
@@ -43,20 +45,29 @@ function registerScreenCapture({ ipcMain, session, authorized, getWindow, native
     // An unmatched monitor uses a conservative limit across connected displays.
     const fallbackHeight = Math.min(...displays.map(displayHeight));
     const cards = [];
+    function windowHeight(window) {
+      const height = !window?.minimized && window?.height > 0 ? window.height : Infinity;
+      return Math.min(height, window?.monitorHeight || fallbackHeight);
+    }
     for (const source of [...images, ...additional]) {
       if (listing.sources.has(source.id)) continue;
       const handle = handleOf(source.id);
       const window = windows.get(handle);
       windows.delete(handle);
       const display = kind === 'screen' ? displays.find(item => String(item.id) === source.display_id) : undefined;
-      const maxHeight = display ? displayHeight(display) : Math.min(window?.height > 0 ? window.height : Infinity, window?.monitorHeight || fallbackHeight);
+      const maxHeight = display ? displayHeight(display) : windowHeight(window);
       listing.sources.set(source.id, { source, window });
       cards.push({ id: source.id, name: source.name, thumbnail: source.thumbnail.isEmpty() ? '' : source.thumbnail.toDataURL(),
-        icon: source.appIcon?.toDataURL(), maxHeight, available: !window?.minimized, minimized: window?.minimized === true,
+        icon: source.appIcon?.toDataURL(), maxHeight, available: !window?.minimized || typeof native?.restoreCaptureWindow === 'function',
+        minimized: window?.minimized === true,
         applicationAudio: applicationAudioAllowed(window) });
     }
     for (const window of windows.values()) {
-      cards.push({ id: 'unavailable:' + window.handle, name: window.title, thumbnail: '', available: false, minimized: window.minimized });
+      const id = 'native-window:' + window.handle;
+      const available = window.minimized && typeof native?.restoreCaptureWindow === 'function';
+      if (available) listing.sources.set(id, { window });
+      cards.push({ id, name: window.title, thumbnail: '', available, minimized: window.minimized,
+        maxHeight: windowHeight(window), applicationAudio: available && applicationAudioAllowed(window) });
     }
     return cards;
   });
@@ -64,12 +75,13 @@ function registerScreenCapture({ ipcMain, session, authorized, getWindow, native
     authorized(event);
     selection = undefined;
     const entry = catalog?.frame === event.senderFrame && typeof id === 'string' && catalog.sources.get(id);
-    if (!entry || entry.window && windowMinimized(entry.window) !== false ||
+    const minimized = entry?.window && windowMinimized(entry.window);
+    if (!entry || entry.window && (minimized === undefined || minimized && typeof native?.restoreCaptureWindow !== 'function') ||
         typeof audio !== 'boolean' || audio && (catalog.kind !== 'screen' || process.platform !== 'win32') ||
         typeof applicationAudio !== 'boolean' || applicationAudio && (catalog.kind !== 'window' || !applicationAudioAllowed(entry.window))) {
       throw Error('Invalid capture selection');
     }
-    selection = { frame: event.senderFrame, ...entry, audio, applicationAudio, expires: performance.now() + 5000 };
+    selection = { catalog, ...entry, audio, applicationAudio, expires: performance.now() + 5000 };
   });
   ipcMain.handle('screen-capture-window-status', event => {
     authorized(event);
@@ -77,6 +89,7 @@ function registerScreenCapture({ ipcMain, session, authorized, getWindow, native
   });
   ipcMain.handle('screen-capture-release', event => {
     authorized(event);
+    releaseCount++;
     if (capturedWindow?.frame === event.senderFrame) {
       stopApplicationAudio();
       capturedWindow = undefined;
@@ -96,12 +109,39 @@ function registerScreenCapture({ ipcMain, session, authorized, getWindow, native
     catalog = undefined;
     selection = undefined;
   });
-  session.setDisplayMediaRequestHandler((request, callback) => {
+  async function resolveSource(chosen, current) {
+    const { window, source } = chosen;
+    if (!window) return source;
+    const minimized = windowMinimized(window);
+    if (minimized === undefined) return;
+    if (!minimized && source) return source;
+    if (minimized && !native.restoreCaptureWindow?.(Number(window.handle), window.process)) return;
+    // Chromium may omit iconic windows until Windows has processed the restore.
+    while (current()) {
+      const state = windowMinimized(window);
+      if (state === undefined) return;
+      if (!state) {
+        const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } });
+        const restored = sources.find(item => handleOf(item.id) === window.handle);
+        if (restored) return restored;
+      }
+      await delay(100);
+    }
+  }
+
+  session.setDisplayMediaRequestHandler(async (request, callback) => {
     const chosen = selection;
     selection = undefined;
-    if (!chosen || performance.now() > chosen.expires || !request.frame || request.frame !== chosen.frame ||
-        request.frame !== getWindow()?.webContents.mainFrame || !request.userGesture || !request.videoRequested ||
-        request.audioRequested !== chosen.audio || chosen.window && windowMinimized(chosen.window) !== false) {
+    const generation = releaseCount;
+    const current = () => catalog === chosen.catalog && releaseCount === generation && performance.now() <= chosen.expires &&
+      request.frame === getWindow()?.webContents.mainFrame;
+    if (!chosen || !request.frame || request.frame !== chosen.catalog.frame || !request.userGesture ||
+        !request.videoRequested || request.audioRequested !== chosen.audio || !current()) {
+      callback(null);
+      return;
+    }
+    const source = await resolveSource(chosen, current).catch(() => undefined);
+    if (!source || !current() || chosen.window && windowMinimized(chosen.window) !== false) {
       callback(null);
       return;
     }
@@ -112,8 +152,8 @@ function registerScreenCapture({ ipcMain, session, authorized, getWindow, native
       } catch { callback(null); return; }
       renewAudioLease();
     }
-    capturedWindow = chosen.window ? { frame: chosen.frame, window: chosen.window, applicationAudio: chosen.applicationAudio } : undefined;
-    callback({ video: chosen.source, ...(chosen.audio && { audio: 'loopback' }) });
+    capturedWindow = chosen.window ? { frame: request.frame, window: chosen.window, applicationAudio: chosen.applicationAudio } : undefined;
+    callback({ video: source, ...(chosen.audio && { audio: 'loopback' }) });
   });
 }
 

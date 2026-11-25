@@ -18,6 +18,10 @@ Per-participant listening volume and local mute are stored on this Client by Ser
 
 ## Screen sharing
 
-In a voice call, use the monitor icon to choose a window or monitor, resolution and frame rate. On supported Windows builds, enable **Share application audio** for a window or **Share system audio** for a monitor. Application capture can include audio from other windows using the same application process. The presenter's preview is silent.
+In a voice call, use the monitor icon to choose a window or monitor, resolution and frame rate. The **Monitors** tab selects the only monitor automatically. Choose **Original** to capture the source without a size limit from the picker. On supported Windows builds, enable **Share application audio** for a window or **Share system audio** for a monitor. Application capture can include audio from other windows using the same application process. The presenter's preview is silent.
 
-Open a tile to focus it, select another thumbnail to switch, or click the focused tile to return to the overview. Use the full-screen icon to expand the focused stream. Hover its speaker icon to adjust stream volume. The call chat can stay below the streams, dock to the right or hide. [Screen sharing requirements](../server/compatibility.en.md).
+When you confirm sharing a minimized window, PawTalk restores it for capture. For a game that Windows cannot capture as a window in exclusive fullscreen, try borderless windowed mode or share the monitor. To switch during a stream, open the arrow beside **Stop stream** and choose **Change source**. Viewers may see a brief interruption while the new source starts. PawTalk starts with a preference for detail, favors smooth motion under sustained load and returns to detail after recovery.
+
+Open a tile to focus it, select another thumbnail to switch, or click the focused tile to return to the overview. Use the full-screen icon to expand the focused stream. Full-screen view waits briefly for an interrupted stream and closes as soon as the server confirms its end. Hover its speaker icon to adjust stream volume. The call chat can stay below the streams, dock to the right or hide. [Screen sharing requirements](../server/compatibility.en.md).
+
+In the server sidebar, hover over **Streaming** next to a participant in your voice channel to see their stream preview. The preview is silent.

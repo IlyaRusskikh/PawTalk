@@ -1,5 +1,5 @@
 import { t } from './i18n';
-import { Room, RoomEvent, Track, LocalAudioTrack, AudioPresets, ConnectionState, ExternalE2EEKeyProvider, isE2EESupported, type Participant, type RemoteAudioTrack, type RemoteTrackPublication } from 'livekit-client';
+import { Room, RoomEvent, Track, LocalAudioTrack, LocalVideoTrack, AudioPresets, ConnectionState, ExternalE2EEKeyProvider, isE2EESupported, type Participant, type RemoteAudioTrack, type RemoteTrackPublication } from 'livekit-client';
 import E2EEWorker from 'livekit-client/e2ee-worker?worker';
 import { mediaKeyBytes, validMediaKey } from '../../../../shared/encryption.mjs';
 import { Microphone } from './audio';
@@ -19,8 +19,20 @@ const profileRequestTopic = 'pawtalk.profile-request.v1';
 export interface Person { id: string; name: string; avatar?: string; speaking: boolean; muted: boolean; deafened?: boolean;
   serverMuted?: boolean; serverDeafened?: boolean; local: boolean; rtt?: number; packetLoss?: number; diagnostics?: ConnectionHistory; }
 export type ScreenStream = { id: string; track?: Track; local: boolean; hasAudio: boolean; minimized?: boolean };
+type AutomaticScreenQuality = { track: LocalVideoTrack; samples: number; checking: boolean };
+function screenVideoStats(report: RTCStatsReport | undefined, local: boolean) {
+  return [...(report?.values() ?? [])].filter(stat =>
+    stat.type === (local ? 'outbound-rtp' : 'inbound-rtp') && stat.kind === 'video' && stat.active !== false)
+    .sort((a, b) => (b.encodingIndex ?? 0) - (a.encodingIndex ?? 0) || (b.frameWidth ?? 0) - (a.frameWidth ?? 0))[0];
+}
+type ScreenDiagnostic = {
+  source?: 'window' | 'screen'; requestedAudio?: boolean; reason?: number; error?: string;
+  width?: number; height?: number; fps?: number; captureFps?: number; framesDropped?: number;
+  freezeCount?: number; freezeMs?: number; packetsLost?: number; durationMs?: number; limitation?: string;
+  videoBytes?: number; videoFrames?: number; qpSum?: number; codec?: string; priority?: 'motion' | 'detail';
+};
 export interface Snapshot { state: string; people: Person[]; db: number; speaking: boolean; threshold?: number; rtt?: number; packetLoss?: number; e2ee?: boolean; voiceProtection?: ProtectedVoiceStatus;
-  screens?: ScreenStream[]; canShareScreen?: boolean; canShareScreenAudio?: boolean; screenPending?: boolean; }
+  screens?: ScreenStream[]; endedScreens?: ReadonlySet<string>; canShareScreen?: boolean; canShareScreenAudio?: boolean; screenPending?: boolean; }
 type ProtectedVoiceScope = { serverId: string; channelId: string };
 export type ProtectedVoiceStatus = ProtectedVoiceScope & { state: 'green' | 'yellow' | 'red' | 'grey';
   reason: 'VOICE_VERIFIED' | 'VOICE_KEY_PENDING' | 'VOICE_SERVER_DEAFENED' | 'VOICE_OFFLINE' | 'VOICE_KEY_INVALID' | 'VOICE_KEY_EXPIRED' | 'VOICE_ENCRYPTION_LOST' };
@@ -93,6 +105,8 @@ export class VoiceSession {
   private mixers = new Map<string, { track: RemoteAudioTrack; identity: string }>();
   private screenMixers = new Map<string, { identity: string; input: MediaStreamAudioSourceNode; gain: GainNode; track: MediaStreamTrack; reference?: Microphone }>();
   private screenCapture?: MediaStream;
+  private automaticScreenQuality?: AutomaticScreenQuality;
+  private endedScreens = new Set<string>();
   private screenCaptureDispose?: () => void;
   private screenPaused = false;
   private screenWindowMinimized?: boolean;
@@ -161,7 +175,7 @@ export class VoiceSession {
       this.screenDiagnostic(canPublish ? 'key-resumed' : 'key-paused');
     }
   }
-  private screenDiagnostic(stage: string, detail: { source?: 'window' | 'screen'; requestedAudio?: boolean; reason?: number; error?: string } = {}) {
+  private screenDiagnostic(stage: string, detail: ScreenDiagnostic = {}) {
     const room = this.room;
     const permissions = room?.localParticipant.permissions;
     const video = this.screenCapture?.getVideoTracks()[0];
@@ -194,37 +208,63 @@ export class VoiceSession {
       permissions.canPublishSources?.includes(Track.sourceToProto(source)) === true;
   }
 
-  async shareScreen(capture: () => Promise<MediaStream | { stream: MediaStream; dispose(): void; audioEnded: Promise<void> }>,
-    options?: { source: 'window' | 'screen'; requestedAudio: boolean }) {
+  async shareScreen(capture: (prepare: () => void) => Promise<MediaStream | { stream: MediaStream; dispose(): void; audioEnded: Promise<void> }>,
+    options?: { source: 'window' | 'screen'; requestedAudio: boolean; fps?: number; replace?: boolean; signal?: AbortSignal }) {
     const room = this.room;
-    if (!room || this.screenPending || this.screenCapture || !this.canPublishScreen(Track.Source.ScreenShare)) {
-      this.screenDiagnostic('start-failed', options);
+    const diagnostic = options && { source: options.source, requestedAudio: options.requestedAudio };
+    if (!room || this.screenPending || this.screenCapture && !options?.replace || !this.canPublishScreen(Track.Source.ScreenShare)) {
+      this.screenDiagnostic('start-failed', diagnostic);
       throw new Error('SCREEN_SHARE_UNAVAILABLE');
     }
     const request = ++this.screenRequest;
     this.screenPending = true;
-    this.screenDiagnostic('request', options);
+    this.screenDiagnostic('request', diagnostic);
     this.emit();
     let media: MediaStream | undefined;
     let resource: { dispose(): void; audioEnded: Promise<void> } | undefined;
-    const current = () => this.room === room && this.screenRequest === request && this.canPublishScreen(Track.Source.ScreenShare);
+    let cutover: Promise<void> | undefined;
+    let previousVideo: MediaStreamTrack | undefined;
+    const current = () => !options?.signal?.aborted && this.room === room &&
+      this.screenRequest === request && this.canPublishScreen(Track.Source.ScreenShare);
     try {
-      const result = await capture();
+      const result = await capture(() => {
+        if (!current()) throw new Error('SCREEN_SHARE_UNAVAILABLE');
+        if (this.screenCapture) {
+          // Stop the old capture and its audio before opening the next source.
+          // Keep its video publication until the SFU has announced the replacement.
+          [previousVideo] = this.screenCapture.getVideoTracks();
+          cutover = this.endScreenCapture(previousVideo);
+        }
+      });
       if (result instanceof MediaStream) media = result;
       else { media = result.stream; resource = result; }
+      await cutover;
       if (!current()) { this.screenDiagnostic('start-cancelled'); return; }
       const [video] = media.getVideoTracks();
-      if (!video || video.readyState !== 'live') throw new Error('SCREEN_CAPTURE_UNAVAILABLE');
+      if (this.screenCapture || !video || video.readyState !== 'live') throw new Error('SCREEN_CAPTURE_UNAVAILABLE');
       this.screenCapture = media;
       this.screenCaptureDispose = resource?.dispose;
-      this.screenDiagnostic('captured');
+      const fps = options?.fps;
+      video.contentHint = 'detail';
+      const { width = 1920, height = 1080, frameRate } = video.getSettings();
+      this.screenDiagnostic('captured', { ...diagnostic, width, height, fps: frameRate, priority: 'detail' });
       video.addEventListener('ended', () => {
         if (this.screenCapture === media) void this.stopScreenShare('capture-video-ended');
       }, { once: true });
       for (const event of ['mute', 'unmute'] as const) video.addEventListener(event, () => {
         if (this.screenCapture === media) this.screenDiagnostic(event === 'mute' ? 'capture-video-muted' : 'capture-video-unmuted');
       });
-      await room.localParticipant.publishTrack(video, { source: Track.Source.ScreenShare, simulcast: true });
+      // Allow roughly 4 Mbps for 720p60 and 8 Mbps for 1080p60; WebRTC can send less under congestion.
+      const maxBitrate = Math.round(Math.max(1_500_000, Math.min(16_000_000, width * height * (fps ?? 30) / 15)));
+      const publication = await room.localParticipant.publishTrack(video, {
+        source: Track.Source.ScreenShare, simulcast: true,
+        degradationPreference: 'maintain-resolution',
+        ...(fps && { screenShareEncoding: { maxFramerate: fps, maxBitrate } }),
+      });
+      if (previousVideo) {
+        await room.localParticipant.unpublishTrack(previousVideo).catch(() => {});
+        previousVideo = undefined;
+      }
       this.screenDiagnostic('video-published');
       const audio = media.getAudioTracks()[0];
       if (audio && current() && this.canPublishScreen(Track.Source.ScreenShareAudio)) {
@@ -244,30 +284,36 @@ export class VoiceSession {
         resource?.dispose();
       }
       if (!current()) {
-        if (this.screenCapture === media) await this.stopScreenShare('publish-gate-closed');
+        if (this.screenCapture === media) await this.stopScreenShare(options?.signal?.aborted ? 'picker-closed' : 'publish-gate-closed');
         else await this.disposeScreen(room, media);
+      } else {
+        if (options?.source === 'window') this.watchScreenWindow(media);
+        if (publication.track instanceof LocalVideoTrack) {
+          this.automaticScreenQuality = { track: publication.track, samples: 0, checking: false };
+        }
       }
-      else if (options?.source === 'window') this.watchScreenWindow(media);
     } catch (error) {
       this.screenDiagnostic('start-failed', { error: error instanceof Error || error instanceof DOMException ? error.name : undefined });
       if (this.screenCapture === media) { this.screenCapture = undefined; this.screenCaptureDispose = undefined; }
       if (media) await this.disposeScreen(room, media);
-      if (options) void window.desktop?.releaseScreenCapture?.().catch(() => {});
       if (current()) throw error;
     } finally {
+      await cutover;
+      if (previousVideo) await room.localParticipant.unpublishTrack(previousVideo).catch(() => {});
       if (media && this.screenCapture !== media) {
         resource?.dispose();
         media.getTracks().forEach(track => track.stop());
       }
+      if (options && !this.screenCapture) void window.desktop?.releaseScreenCapture?.().catch(() => {});
       this.screenPending = false;
       this.emit();
     }
   }
 
-  private async disposeScreen(room: Room | undefined, media: MediaStream) {
+  private async disposeScreen(room: Room | undefined, media: MediaStream, keepPublication?: MediaStreamTrack) {
     const tracks = media.getTracks();
     tracks.forEach(track => track.stop());
-    await Promise.allSettled(tracks.map(track => room?.localParticipant.unpublishTrack(track)));
+    await Promise.allSettled(tracks.filter(track => track !== keepPublication).map(track => room?.localParticipant.unpublishTrack(track)));
   }
 
   private watchScreenWindow(media: MediaStream) {
@@ -307,14 +353,19 @@ export class VoiceSession {
   async stopScreenShare(reason: 'manual-stop' | 'picker-closed' | 'publish-gate-closed' | 'capture-video-ended' | 'sdk-video-unpublished' = 'manual-stop') {
     if (this.screenPending || this.screenCapture) this.screenDiagnostic(reason);
     ++this.screenRequest;
+    await this.endScreenCapture();
+    this.emit();
+  }
+
+  private async endScreenCapture(keepPublication?: MediaStreamTrack) {
     const media = this.screenCapture;
     this.screenCapture = undefined;
+    this.automaticScreenQuality = undefined;
     this.screenCaptureDispose?.();
     this.screenCaptureDispose = undefined;
     this.screenPaused = false;
     this.clearScreenWindow();
-    if (media) await this.disposeScreen(this.room, media);
-    this.emit();
+    if (media) await this.disposeScreen(this.room, media, keepPublication);
   }
 
   setScreenListening(id: string | undefined, volume: number) {
@@ -397,7 +448,7 @@ export class VoiceSession {
           hasAudio: !local && audio?.isEncrypted === true });
       }
     }
-    this.onUpdate({ state: this.state, people, screens, canShareScreen: this.canPublishScreen(Track.Source.ScreenShare),
+    this.onUpdate({ state: this.state, people, screens, endedScreens: new Set(this.endedScreens), canShareScreen: this.canPublishScreen(Track.Source.ScreenShare),
       canShareScreenAudio: this.canPublishScreen(Track.Source.ScreenShareAudio), screenPending: this.screenPending,
       db: this.db, speaking: this.speaking, threshold: this.threshold, rtt: this.rtt, packetLoss: this.packetLoss,
       e2ee: this.encrypted, ...(this.voiceProtection && { voiceProtection: this.voiceProtection }) });
@@ -641,7 +692,9 @@ export class VoiceSession {
       if ((this.protectedEpoch || lifecycle?.serverDeafened) && participant && participant !== room.localParticipant &&
           /^(InvalidKey|MissingKey):/.test(error.message)) {
         if (lifecycle) {
-          lifecycle.peerPendingUntil = performance.now() + 1000;
+          const now = performance.now();
+          if ((lifecycle.peerPendingUntil ?? 0) <= now && this.hasScreenActivity()) this.screenDiagnostic('peer-key-pending');
+          lifecycle.peerPendingUntil = now + 1000;
           this.scheduleProtectedVoiceRefresh(lifecycle, true);
           this.updateProtectedVoiceStatus(lifecycle);
         }
@@ -654,8 +707,9 @@ export class VoiceSession {
         failEncryption(t('Ошибка E2EE. Подключение закрыто без отключения шифрования.'));
       }
     });
-    room.on(RoomEvent.TrackPublished, publication => {
+    room.on(RoomEvent.TrackPublished, (publication, participant) => {
       if (this.encrypted) subscribe(publication);
+      if (publication.source === Track.Source.ScreenShare) this.endedScreens.delete(participant.identity);
       if (publication.source === Track.Source.ScreenShare || publication.source === Track.Source.ScreenShareAudio) this.emit();
     });
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
@@ -678,12 +732,24 @@ export class VoiceSession {
       this.elements.delete(id);
       this.emit();
     });
-    room.on(RoomEvent.TrackUnpublished, publication => {
+    room.on(RoomEvent.TrackUnpublished, (publication, participant) => {
+      if (publication.source === Track.Source.ScreenShare && room.state === ConnectionState.Connected &&
+          !participant.getTrackPublication(Track.Source.ScreenShare)) {
+        this.endedScreens.add(participant.identity);
+      }
       if (publication.source === Track.Source.ScreenShare || publication.source === Track.Source.ScreenShareAudio) this.emit();
     });
-    room.on(RoomEvent.LocalTrackPublished, () => this.emit());
+    room.on(RoomEvent.LocalTrackPublished, publication => {
+      if (publication.source === Track.Source.ScreenShare) this.endedScreens.delete(room.localParticipant.identity);
+      this.emit();
+    });
     room.on(RoomEvent.LocalTrackUnpublished, publication => {
-      if (publication.source === Track.Source.ScreenShare && this.screenCapture) void this.stopScreenShare('sdk-video-unpublished');
+      if (publication.source === Track.Source.ScreenShare) {
+        if (!room.localParticipant.getTrackPublication(Track.Source.ScreenShare)) this.endedScreens.add(room.localParticipant.identity);
+        if (publication.track?.mediaStreamTrack === this.screenCapture?.getVideoTracks()[0] && this.screenCapture) {
+          void this.stopScreenShare('sdk-video-unpublished');
+        }
+      }
       if (publication.source === Track.Source.ScreenShareAudio && this.screenCapture) this.screenDiagnostic('sdk-audio-unpublished');
       this.emit();
     });
@@ -691,6 +757,7 @@ export class VoiceSession {
     room.on(RoomEvent.ParticipantConnected, p => { this.publishAudioState(); if (this.avatar) this.publishAvatar(p.identity); this.publishNickname(p.identity); this.playRoomCue(true); this.emit(); });
     const peerProfileRequests = new Map<string, number>();
     room.on(RoomEvent.ParticipantDisconnected, p => {
+      this.endedScreens.delete(p.identity);
       this.peerNetwork.delete(p.identity); this.peerDeafened.delete(p.identity); this.peerAvatars.delete(p.identity); this.peerNicknames.delete(p.identity);
       peerProfileRequests.delete(p.identity);
       if (lifecycle) this.scheduleProtectedVoiceRefresh(lifecycle, true);
@@ -827,7 +894,13 @@ export class VoiceSession {
         this.lastDuck = active;
         void window.desktop?.duck({ active, factor: 1 - this.settings.duckAmount / 100 }).catch(() => {});
         if (this.rtt !== undefined && this.rttMeter.value() === undefined && this.protectedSignalRtt() === undefined) this.emit();
-        if (++tick % 20 === 0) { void this.collectStats(); this.publishAudioState(); }
+        ++tick;
+        if (tick % 8 === 0 && this.automaticScreenQuality) void this.adjustScreenQuality();
+        if (tick % 20 === 0) {
+          void this.collectStats();
+          void this.collectScreenStats(room);
+          this.publishAudioState();
+        }
       }, 250);
       this.emit();
     } catch (error) { if (generation === this.generation && !lifecycle) await this.disconnect(); throw error; }
@@ -903,6 +976,8 @@ export class VoiceSession {
         ((!current || current.expiresAt <= Date.now()) && !active?.serverDeafened) || !validVoiceEpoch(next) ||
         next.epochId === previousEpoch) throw new Error('INVALID_PROTECTED_VOICE_KEY');
     this.protectedKeyUpdate = true;
+    const screenKeyUpdate = this.hasScreenActivity() ? performance.now() : undefined;
+    if (screenKeyUpdate !== undefined) this.screenDiagnostic('key-update-started');
     if (active) {
       this.protectedWorkerReady = false;
       active.keyPending = true;
@@ -928,6 +1003,7 @@ export class VoiceSession {
         active.serverDeafened = false;
         active.peerPendingUntil = undefined;
         this.updateProtectedVoiceStatus(active);
+        if (this.hasScreenActivity()) this.emit();
         if (!current) { this.publishAudioState(); this.syncProfile(); }
       }
     } catch (error) {
@@ -939,7 +1015,10 @@ export class VoiceSession {
       }
       throw error;
     } finally {
-      if (generation === this.generation) this.protectedKeyUpdate = false;
+      if (generation === this.generation) {
+        this.protectedKeyUpdate = false;
+        if (screenKeyUpdate !== undefined) this.screenDiagnostic('key-update-finished', { durationMs: performance.now() - screenKeyUpdate });
+      }
     }
   }
   private replaceMicrophone(generation: number, force = true) {
@@ -1098,6 +1177,64 @@ export class VoiceSession {
       });
   }
 
+  private async adjustScreenQuality() {
+    const automatic = this.automaticScreenQuality;
+    if (!automatic || automatic.checking) return;
+    const { track } = automatic;
+    const videoTrack = track.mediaStreamTrack;
+    const current = () => this.automaticScreenQuality === automatic && !!track.sender && videoTrack.enabled &&
+      videoTrack.readyState === 'live' && !videoTrack.muted && !track.isUpstreamPaused && !this.screenWindowMinimized &&
+      this.canPublishScreen(Track.Source.ScreenShare);
+    if (!current()) { automatic.samples = 0; return; }
+    automatic.checking = true;
+    try {
+      const report = await track.getRTCStatsReport().catch(() => undefined);
+      if (!current()) { automatic.samples = 0; return; }
+      const video = screenVideoStats(report, true);
+      const captureFps = report?.get(video?.mediaSourceId)?.framesPerSecond;
+      const fps = video?.framesPerSecond;
+      const limitation = video?.qualityLimitationReason;
+      const framesMeasured = Number.isFinite(fps) && fps >= 0 && Number.isFinite(captureFps) && captureFps > 0;
+      // Desktop capture may send only one frame per second on a static screen.
+      // Treat a low rate as pressure only if the encoder is falling behind the capture.
+      const fallingBehind = framesMeasured && captureFps >= 12 && fps < captureFps * 0.75;
+      const limited = limitation === 'cpu' || limitation === 'bandwidth' || fallingBehind;
+      const stable = framesMeasured && fps > 0 && limitation === 'none' && !fallingBehind;
+      const priority = limited ? 'motion' : stable ? 'detail' : undefined;
+      if (!priority || priority === videoTrack.contentHint) { automatic.samples = 0; return; }
+      if (++automatic.samples < (priority === 'motion' ? 2 : 4)) return;
+      automatic.samples = 0;
+      videoTrack.contentHint = priority;
+      await track.setDegradationPreference(priority === 'motion' ? 'maintain-framerate' : 'maintain-resolution');
+      if (current()) this.screenDiagnostic('video-priority-changed', { priority, fps, captureFps, limitation });
+    } finally {
+      automatic.checking = false;
+    }
+  }
+
+  private async collectScreenStats(room: Room) {
+    if (!window.desktop?.recordScreenShareDiagnostic || this.state !== 'connected' || !this.protectedMediaReady()) return;
+    for (const participant of [room.localParticipant, ...room.remoteParticipants.values()]) {
+      const track = participant.getTrackPublication(Track.Source.ScreenShare)?.track;
+      if (!track) continue;
+      const local = participant === room.localParticipant;
+      const report = await track.getRTCStatsReport().catch(() => undefined);
+      if (this.room !== room || this.state !== 'connected' || !this.protectedMediaReady()) return;
+      const video = screenVideoStats(report, local);
+      if (!video) continue;
+      this.screenDiagnostic(local ? 'sender-stats' : 'viewer-stats', {
+        width: video.frameWidth, height: video.frameHeight, fps: video.framesPerSecond,
+        captureFps: report?.get(video.mediaSourceId)?.framesPerSecond,
+        limitation: video.qualityLimitationReason, packetsLost: video.packetsLost,
+        framesDropped: video.framesDropped, freezeCount: video.freezeCount,
+        freezeMs: video.totalFreezesDuration === undefined ? undefined : video.totalFreezesDuration * 1000,
+        videoBytes: local ? video.bytesSent : video.bytesReceived,
+        videoFrames: local ? video.framesEncoded : video.framesDecoded,
+        qpSum: video.qpSum, codec: report?.get(video.codecId)?.mimeType,
+      });
+    }
+  }
+
   async collectStats() {
     if (this.collecting || this.state !== 'connected') return;
     this.collecting = true;
@@ -1157,11 +1294,13 @@ export class VoiceSession {
     ++this.screenRequest;
     this.screenCapture?.getTracks().forEach(track => track.stop());
     this.screenCapture = undefined;
+    this.automaticScreenQuality = undefined;
     this.screenCaptureDispose?.();
     this.screenCaptureDispose = undefined;
     this.screenPaused = false;
     this.clearScreenWindow();
     this.screenListening = undefined;
+    this.endedScreens.clear();
     this.protectedProofAbort?.abort();
     this.protectedProofAbort = undefined;
     this.protectedWorkerReady = false;
