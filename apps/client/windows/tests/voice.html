@@ -2,6 +2,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Participants } from '/src/Participants.tsx';
+import CallScreenView from '/src/screen-share/CallScreenView.tsx';
 import { applyTheme, defaultTheme } from '/src/theme.ts';
 applyTheme(defaultTheme);
 import '/src/style.css';
@@ -33,8 +34,39 @@ window.renderParticipants = () => {
  root().render(React.createElement(Demo));
 };
 window.snapshot = {};
-c.onUpdate = value => { window.snapshot = value; };
+let renderScreenCall;
+c.onUpdate = value => { window.snapshot = value; renderScreenCall?.(); };
+window.showScreenCall = visible => {
+ renderScreenCall = visible ? () => root().render(React.createElement('div', { style: { height: 340 } },
+  React.createElement(CallScreenView, { audioControls: null, deafened: c.deafened, onLeave() {},
+   participantProps: { people: window.snapshot.people, prefs: {}, onChange() {} }, live: { session: c, snapshot: window.snapshot } }))) : undefined;
+ if (renderScreenCall) renderScreenCall(); else root().render(null);
+};
 c.onError = message => { window.lastError = message; };
+window.startScreenFixture = async () => {
+ window.screenFixtureMinimized = false;
+ const desktop = window.desktop;
+ window.desktop = { duck: async () => {}, ...desktop, screenCaptureWindowStatus: async () => window.screenFixtureMinimized };
+ const canvas = document.createElement('canvas');
+ canvas.width = 480; canvas.height = 270;
+ const paint = canvas.getContext('2d');
+ let frame = 0;
+ const draw = () => { paint.fillStyle = frame++ % 2 ? '#16814b' : '#12a052'; paint.fillRect(0,0,480,270); };
+ draw();
+ const timer = setInterval(draw,70);
+ const audio = c.playback.createMediaStreamDestination();
+ const tone = c.playback.createOscillator();
+ tone.frequency.value = 440;
+ const gain = c.playback.createGain(); gain.gain.value = .12;
+ tone.connect(gain).connect(audio);
+ tone.start();
+ const stream = new MediaStream([...canvas.captureStream(15).getVideoTracks(), ...audio.stream.getAudioTracks()]);
+ window.stopScreenFixture = async () => {
+  try { await c.stopScreenShare(); } finally { clearInterval(timer); tone.stop(); window.desktop = desktop; }
+ };
+ try { await c.shareScreen(async () => stream, { source: 'window', requestedAudio: true }); }
+ catch (error) { await window.stopScreenFixture(); throw error; }
+};
 window.start = async data => {
  if (data.voiceEpoch) {
   window.nextVoiceKey = undefined;

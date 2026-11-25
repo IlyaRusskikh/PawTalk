@@ -23,21 +23,25 @@ function fitCards(count: number, width: number, height: number) {
  return { width: Math.max(1, Math.floor(cardWidth * scale)), height: Math.max(1, Math.floor(cardHeight * scale)) };
 }
 
-export function Participants({ people, prefs, onChange, moderation }: { people: Person[]; prefs: Record<string, { volume: number; muted: boolean }>;
-  onChange(id: string, volume: number, muted: boolean): void; moderation?: { serverId: string; sourceChannelId: string } }) {
+export function Participants({ people, prefs, onChange, moderation, compact = false, streaming }: {
+  people: Person[]; prefs: Record<string, { volume: number; muted: boolean }>;
+  onChange(id: string, volume: number, muted: boolean): void; moderation?: { serverId: string; sourceChannelId: string };
+  compact?: boolean; streaming?: ReadonlySet<string>;
+}) {
  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
  const grid = useRef<HTMLDivElement>(null);
  const popover = useRef<HTMLDivElement>(null);
  const menuAnchor = useRef<HTMLElement>(null);
  const [space, setSpace] = useState({ width: 0, height: 0 });
  useLayoutEffect(() => {
+  if (compact) return;
   const observer = new ResizeObserver(([entry]) => {
    const { width, height } = entry.contentRect;
    setSpace({ width, height });
   });
   observer.observe(grid.current!);
   return () => observer.disconnect();
- }, []);
+ }, [compact]);
  const card = fitCards(people.length, space.width, space.height);
  useEffect(() => {
   const close = (event: Event) => {
@@ -74,13 +78,13 @@ export function Participants({ people, prefs, onChange, moderation }: { people: 
   menuAnchor.current = element;
   setMenu({ id, x: x || rect.left, y: y || rect.top });
  };
- return <><div className="people-grid" ref={grid} style={{ gap: cardGap }}>{people.map(p => <article key={p.id} tabIndex={0} aria-label={p.local ? p.name : t("{0}. Настройки громкости: контекстное меню", p.name)} className={`person-card ${p.speaking && !p.muted ? 'speaking' : ''}`} style={card} onContextMenu={e => {
+ return <><div className="people-grid" ref={grid} style={{ gap: cardGap }}>{people.map(p => <article key={p.id} tabIndex={0} aria-label={p.local ? p.name : t("{0}. Настройки громкости: контекстное меню", p.name)} className={`person-card ${p.speaking && !p.muted ? 'speaking' : ''}`} style={compact ? undefined : card} onContextMenu={e => {
   if (p.local) return; e.preventDefault(); openMenu(p.id, e.currentTarget, e.clientX, e.clientY);
  }} onKeyDown={e => {
   if (p.local || e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return;
   e.preventDefault(); openMenu(p.id, e.currentTarget);
  }}>
-  <div className="person-visual">
+  <div className="person-visual" data-streaming={streaming?.has(p.id) || undefined}>
     <Avatar name={p.name} image={p.avatar}/>
     <AudioStatusIcons muted={p.muted} deafened={p.deafened}
       serverMuted={p.serverMuted} serverDeafened={p.serverDeafened}/>

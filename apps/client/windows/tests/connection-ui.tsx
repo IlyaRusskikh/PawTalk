@@ -1,5 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { Track } from 'livekit-client';
 import { ConnectionStatus } from '../src/ConnectionStatus';
 import { VoiceSession } from '../src/session';
 import { applyTheme, defaultTheme, themePresets } from '../src/theme';
@@ -12,7 +13,7 @@ applyTheme(defaultTheme);
 const session: any = new VoiceSession({} as any);
 let count = 0;
 let feedback = false;
-const local = { identity: 'self', name: 'Self', publishData: async () => {} };
+const local = { identity: 'self', name: 'Self', getTrackPublication: () => undefined, publishData: async () => {} };
 session.room = { localParticipant: local, remoteParticipants: new Map() };
 session.state = 'connected';
 session.diagnostics.reset('connected');
@@ -47,7 +48,8 @@ Object.assign(window, {
     protectedAudioState: async () => {
       const voice: any = new VoiceSession({} as any);
       const microphone = { isMuted: true };
-      const peer = { identity: 'other', name: 'Other', getTrackPublication: () => microphone };
+      const peer = { identity: 'other', name: 'Other',
+        getTrackPublication: (source: Track.Source) => source === Track.Source.Microphone ? microphone : undefined };
       voice.room = { localParticipant: local, remoteParticipants: new Map([[peer.identity, peer]]) };
       voice.state = 'connected';
       voice.peerDeafened.set(peer.identity, true);

@@ -31,3 +31,8 @@
 
 - [Client 0.15.3](releases/client-v0.15.3.ru.md)
 - [Server 0.14.3](releases/server-v0.14.3.ru.md)
+
+Источники выпусков с демонстрацией экрана
+
+- [Client 0.16.0](releases/client-v0.16.0.ru.md)
+- [Server 0.15.0](releases/server-v0.15.0.ru.md)

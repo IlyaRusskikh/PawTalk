@@ -4,7 +4,7 @@ const path = require('node:path');
 const { app, session, clipboard, ClipboardItem, dialog, powerMonitor } = require('electron');
 app.setPath('userData', path.join(process.env.PAWTALK_APP_TEST_DIR, 'profile'));
 app.commandLine.appendSwitch('use-fake-device-for-media-stream');
-app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+if (process.env.PAWTALK_TEST_SCREEN_CAPTURE !== '1') app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 delete process.env.PAWTALK_DEV_URL;
 const NativeWebSocket=global.WebSocket,chatSockets=[],memberReads=[];
 const {MembershipClient}=require('../electron/membership-client.cjs'),fetchJSON=MembershipClient.prototype.fetchJSON;
@@ -332,6 +332,77 @@ async function test(window) {
   const spacing=await run("(()=>{const pane=document.querySelector('.room-participants').getBoundingClientRect(),avatar=document.querySelector('.room-participants .person-visual').getBoundingClientRect(),buttons=document.querySelector('.member-call-controls').getBoundingClientRect();return {above:avatar.top-pane.top,below:buttons.top-avatar.bottom}})()");assert.ok(Math.abs(spacing.above-spacing.below)<2,'equal gaps above avatars and below avatars: '+JSON.stringify(spacing));
   assert.deepEqual(await audioFlags(),[false,false]);
   assert.equal(await run("(()=>{const call=document.querySelector('.member-call-controls').getBoundingClientRect(),pane=document.querySelector('.room-participants').getBoundingClientRect(),mic=document.querySelector('.member-call-controls button[title=\"Микрофон\"]').getBoundingClientRect();return Math.abs(call.left+call.width/2-pane.left-pane.width/2)<1&&mic.width===40&&mic.height===40&&!document.querySelector('.member-call-controls .person-network')})()"),true,'old call controls are centered, full-size and separate from user panel');
+  await run("window.chatBeforeDock=document.querySelector('.member-chat');document.querySelector('.room-divider').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',shiftKey:true,bubbles:true}));");
+  assert.equal(await run("window.chatBeforeDock===document.querySelector('.member-chat')&&document.querySelector('.room-divider').getAttribute('aria-orientation')==='vertical'"),true,'docking preserves the real chat');
+  await run("document.querySelector('.room-divider').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',shiftKey:true,bubbles:true}));");
+  await until("document.querySelector('.room-split-chat').hidden&&!!document.querySelector('.room-chat-restore')",'real chat can be collapsed');
+  await run("document.querySelector('.room-chat-restore').click()");
+  assert.equal(await run("window.chatBeforeDock===document.querySelector('.member-chat')&&!document.querySelector('.room-split-chat').hidden"),true,'restoring preserves the live chat');
+  await run("document.querySelector('.room-divider').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',shiftKey:true,bubbles:true}));");
+  if (process.env.PAWTALK_TEST_SCREEN_CAPTURE === '1') {
+    const { BrowserWindow } = require('electron');
+    const target = new BrowserWindow({ width: 480, height: 300, show: false, frame: false });
+    try {
+      await target.loadURL('data:text/html,' + encodeURIComponent('<title>PawTalk screen capture fixture</title><body style="background:#16a34a"></body>'));
+      target.showInactive();
+      await until("!!document.querySelector('.member-call-controls .dev-stream-share:not(:disabled)')",'screen publish allowed by the live lease');
+      assert.equal(await run('(async()=>{try {const stream=await navigator.mediaDevices.getDisplayMedia({video:true});stream.getTracks().forEach(t=>t.stop());return false;} catch{return true;}})()'),true,'capture requires a selected source');
+      target.minimize();
+      await run("document.querySelector('.member-call-controls .dev-stream-share').click()");
+      const source = ".dev-stream-picker .dev-stream-sources button[title='PawTalk screen capture fixture']";
+      await until('document.querySelector('+JSON.stringify(source)+')?.disabled === true','minimized fixture remains listed with capture disabled');
+      target.restore();
+      await run("window.dispatchEvent(new FocusEvent('focus'))");
+      await until('document.querySelector('+JSON.stringify(source)+')?.disabled === false','restored window becomes selectable');
+      await run('document.querySelector('+JSON.stringify(source)+').click()');
+      const heights = await run("[...document.querySelector('.dev-stream-picker .form-grid select').options].map(option=>Number(option.value))");
+      const physicalHeight = require('electron').screen.dipToScreenRect(target, target.getBounds()).height;
+      assert.ok(heights.length > 0 && heights.every(height => height <= physicalHeight + 2), `picker offers ${heights} for a ${physicalHeight}px window`);
+      if (physicalHeight < 358) assert.equal(await run("document.querySelector('.dev-stream-picker .form-grid select').selectedOptions[0].textContent"), 'Исходное');
+      await run("document.querySelector('.dev-stream-picker .modal-actions .primary').click()");
+      await until("document.querySelector('.dev-stream-picture video')?.videoWidth>0",'local screen video has frames');
+      await until("document.querySelector('.dev-stream-share[aria-pressed=true]')&&!document.querySelector('.dev-stream-picker')",'capture is published to LiveKit');
+      await until("(()=>{const v=document.querySelector('.dev-stream-picture video');if(!v?.videoWidth)return false;const c=document.createElement('canvas');c.width=c.height=1;const context=c.getContext('2d');context.drawImage(v,0,0,1,1);const p=context.getImageData(0,0,1,1).data;return p[1]>p[0]*1.7&&p[1]>p[2]*1.5;})()",'the selected green window is the source of the displayed frames');
+      assert.deepEqual(await audioFlags(),[false,false],'screen capture keeps both voice controls intact');
+      target.minimize();
+      await until("document.querySelector('[data-stream-status=minimized]')?.textContent === 'Автор свернул приложение'",'minimized window shows the illustrated status');
+      target.restore();
+      await until("!document.querySelector('[data-stream-status]') && !!document.querySelector('.dev-stream-share[aria-pressed=true]')",'restoring the window resumes the same capture');
+      await run("document.querySelector('.dev-stream-share[aria-pressed=true]').click()");
+      await until("!document.querySelector('.dev-stream-picture video')&&!document.querySelector('.dev-stream-share[aria-pressed=true]')",'screen share stops and the ordinary voice view returns');
+      const diagnosticFile = path.join(app.getPath('userData'), 'diagnostics', 'screen-share.jsonl');
+      const diagnostic = (await fs.readFile(diagnosticFile, 'utf8')).trim().split('\n').map(JSON.parse);
+      assert.deepEqual(diagnostic.filter(entry => ['request', 'captured', 'video-published', 'manual-stop'].includes(entry.event))
+        .map(entry => entry.event), ['request', 'captured', 'video-published', 'manual-stop']);
+      assert.equal(diagnostic.find(entry => entry.event === 'request').source, 'window');
+      assert.equal(diagnostic.find(entry => entry.event === 'manual-stop').videoLive, true);
+      assert.ok(!JSON.stringify(diagnostic).includes('PawTalk screen capture fixture'), 'capture titles stay out of diagnostics');
+      console.log('PASS Electron selected window transmits real screen frames over the LiveKit publisher');
+      const player = require('node:child_process').spawn(process.execPath,
+        [path.join(__dirname, 'application-audio-native.cjs'), '--tone', '460'], { stdio: 'ignore' });
+      try {
+        await until(`window.desktop.screenCaptureSources('window').then(sources => sources.some(item =>
+          item.name === 'PawTalk synthetic application audio 460' && item.applicationAudio))`, 'Windows process-audio source is ready');
+        await run("document.querySelector('.member-call-controls .dev-stream-share').click()");
+        const application = ".dev-stream-picker .dev-stream-sources button[title='PawTalk synthetic application audio 460']";
+        await until('document.querySelector('+JSON.stringify(application)+')?.disabled === false', 'application source is selectable');
+        await run('document.querySelector('+JSON.stringify(application)+').click()');
+        const checkbox = ".dev-stream-picker .screen-share-audio-option input";
+        assert.equal(await run(`document.querySelector('${checkbox}').checked`), false, 'application audio is opt-in');
+        await run(`document.querySelector('${checkbox}').click()`);
+        await run("document.querySelector('.dev-stream-picker .modal-actions .primary').click()");
+        await until("document.querySelector('.dev-stream-share[aria-pressed=true]') && !document.querySelector('.dev-stream-picker')", 'application capture starts over LiveKit');
+        const appCapture = (await fs.readFile(diagnosticFile, 'utf8')).trim().split('\n').map(JSON.parse).slice(diagnostic.length);
+        assert.ok(appCapture.some(entry => entry.event === 'audio-published' && entry.audioLive), 'selected application audio is published');
+        assert.equal(await run("!!document.querySelector('.dev-stream-volume-button')"), false, 'application audio remains silent in the author preview');
+        await run("document.querySelector('.dev-stream-share[aria-pressed=true]').click()");
+        await until("!document.querySelector('.dev-stream-share[aria-pressed=true]')", 'application capture stops');
+        console.log('PASS actual client publishes native application audio over LiveKit and keeps the presenter preview silent');
+      } finally { player.kill(); }
+    } finally {
+      target.destroy();
+    }
+  }
   await channelIconCount(0);
   await clickSound();assert.deepEqual(await audioFlags(),[true,true],'deafen mutes both');
   await channelIconCount(2);

@@ -87,7 +87,7 @@ func (s *membershipStore) joinVoice(ctx context.Context, token, channel string, 
 	}
 	room := "pt-" + serverID + "-" + channel
 	claims := map[string]any{"iss": cfg.APIKey, "sub": access.SessionID, "name": name, "nbf": s.now().Unix() - 5, "exp": s.now().Unix() + 60,
-		"video":      map[string]any{"roomJoin": true, "room": room, "canPublish": true, "canSubscribe": true, "canPublishData": true, "canPublishSources": []string{"microphone"}, "canUpdateOwnMetadata": false},
+		"video":      map[string]any{"roomJoin": true, "room": room, "canPublish": true, "canSubscribe": true, "canPublishData": true, "canPublishSources": []string{"microphone", "screen_share", "screen_share_audio"}, "canUpdateOwnMetadata": false},
 		"attributes": map[string]string{"pawtalk.e2ee": "required", "pawtalk.profile": access.ProfileID, "pawtalk.device": access.DeviceID}}
 	mediaToken, err := signedMediaClaims(cfg, claims)
 	if err != nil {

@@ -1022,10 +1022,11 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
   useEffect(() => {
     if (deferred && canSend && !timedOut && protection?.allowSend && protection.deferredBasis) resumeDeferred();
   }, [deferred, canSend, timedOut, protection]);
-  async function remove(position: number, completedPoll?: boolean) {
+  async function remove(position: number, completedPoll?: boolean, immediate = false) {
     if (readOnly || mutating) return;
     setMutating(true);
     setDeleteError('');
+    if (immediate) setError('');
     try {
       await membership('chat.protected.delete', { serverId, channelId, position, completedPoll });
       if (!mounted.current) return;
@@ -1038,7 +1039,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
       setEditing(draft => draft?.position === position ? undefined : draft);
       await load(true);
     } catch (failure) {
-      if (mounted.current) setDeleteError((failure as Error).message);
+      if (mounted.current) (immediate ? setError : setDeleteError)((failure as Error).message);
     } finally {
       if (mounted.current) setMutating(false);
     }
@@ -1112,6 +1113,11 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     setDeleteError('');
     setDeleting(position);
   }
+  function requestDelete(message: ProtectedMessage, shiftHeld: boolean) {
+    if (message.locked || !mayRemove(message) || mutating) return;
+    if (shiftHeld && !message.completedPoll) void remove(message.position, undefined, true);
+    else beginDelete(message.position);
+  }
   function messageActions(message: ProtectedMessage & ReadableMessage): MenuItem[] {
     const items: MenuItem[] = [];
     if (mayReply(message)) items.push({ icon: 'reply', label: t('Ответить'), action: () => selectReply(message.position) });
@@ -1125,7 +1131,8 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
         action: () => void pin(message.position, !pinned) });
     }
     if (mayRemove(message)) items.push({ icon: 'trash', label: deletionTitle(message.completedPoll),
-      danger: true, separatorBefore: items.length > 0, disabled: mutating, action: () => beginDelete(message.position) });
+      danger: true, separatorBefore: items.length > 0, disabled: mutating,
+      action: () => requestDelete(message, false), shiftAction: () => requestDelete(message, true) });
     return items;
   }
   const menuItems = menuMessage && !readOnly ? messageActions(menuMessage) : [];
@@ -1414,7 +1421,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
                   aria-label={t('Редактировать сообщение')} onClick={() => beginEdit(message)}><Icon name="edit" size={16}/></button>}
                 {!message.locked && mayRemove(message) && <button type="button" className="icon-button"
                   title={deletionTitle(message.completedPoll)} aria-label={deletionTitle(message.completedPoll)}
-                  onClick={() => beginDelete(message.position)}><Icon name="trash" size={16}/></button>}
+                  disabled={mutating} onClick={event => requestDelete(message, event.shiftKey)}><Icon name="trash" size={16}/></button>}
               </div>}
             </div>
           </article>
@@ -1591,6 +1598,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
       {deletionTarget &&
         <Modal title={deletionTitle(deletingPoll)} onClose={() => { if (!mutating) setDeleting(undefined); }} error={deleteError}>
           <p>{t(deletingPoll ? 'Опрос и его результат будут удалены для всех участников.' : 'Сообщение будет удалено для всех участников.')}</p>
+          {!deletingPoll && <p className="chat-delete-tip">{t('Чтобы полностью обойти это подтверждение, удерживайте Shift при нажатии на «Удалить сообщение».')}</p>}
           <div className="modal-actions">
             <button type="button" disabled={mutating} onClick={() => setDeleting(undefined)}>{t('Отмена')}</button>
             <button type="button" className="danger-button" disabled={mutating}

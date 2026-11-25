@@ -4,6 +4,12 @@
 
 Client releases and early combined Voicecord/PawTalk tags.
 
+## Release source: client-v0.16.0
+
+Screen sharing with application or system audio, multi-stream viewing, flexible call chat and Shift-delete in protected chats.
+
+[Release details](../../releases/client-v0.16.0.en.md)
+
 ## Release source: client-v0.15.3
 
 Protected-room notifications, scroll stability, preview sizing and encryption-key waiting state.

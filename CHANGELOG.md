@@ -31,3 +31,8 @@ Release sources for notification delivery and the protected-room update relay
 
 - [Client 0.15.3](releases/client-v0.15.3.en.md)
 - [Server 0.14.3](releases/server-v0.14.3.en.md)
+
+Release sources for screen sharing
+
+- [Client 0.16.0](releases/client-v0.16.0.en.md)
+- [Server 0.15.0](releases/server-v0.15.0.en.md)

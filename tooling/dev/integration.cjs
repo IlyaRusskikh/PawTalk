@@ -134,6 +134,71 @@ app.whenReady().then(async () => {
   const replacedBefore=await b.executeJavaScript('window.energy()');
   await until(async()=>(await b.executeJavaScript('window.energy()')).energy>replacedBefore.energy+0.000001,'audio after microphone replacement');
   record('PASS shared AudioContext survives mic stop/replacement and retains remote playback');
+  if (api2Fixture && await a.executeJavaScript('window.snapshot.canShareScreenAudio === true')) {
+    try {
+      await a.executeJavaScript('window.startScreenFixture()',true);
+      await until(() => b.executeJavaScript('window.voice.screenMixers.size && window.snapshot.screens.some(s => !s.local && s.track && s.hasAudio)'),
+        'second client receives encrypted screen video and audio');
+      await b.executeJavaScript(`(() => {
+        const screen=window.snapshot.screens.find(s=>!s.local);
+        const video=document.createElement('video');video.muted=true;video.autoplay=true;
+        screen.track.attach(video);document.body.append(video);window.screenFixtureVideo=video;
+      })()`);
+      await until(() => b.executeJavaScript('window.screenFixtureVideo.videoWidth === 480'), 'remote screen decodes frames');
+      await a.executeJavaScript('window.screenFixtureMinimized = true');
+      await until(() => b.executeJavaScript('window.snapshot.screens.some(s => !s.local && s.minimized)'), 'second client receives the minimized window state');
+      await a.executeJavaScript('window.screenFixtureMinimized = false');
+      await until(() => b.executeJavaScript('window.snapshot.screens.some(s => !s.local && !s.minimized)'), 'second client returns to the same video after restore');
+      const screenGain = () => b.executeJavaScript('[...window.voice.screenMixers.values()][0].gain.gain.value');
+      assert.equal(await screenGain(),0,'overview starts with screen audio muted');
+      await Promise.all([a, b].map(win => win.executeJavaScript('window.showScreenCall(true)')));
+      await until(() => b.executeJavaScript('!!document.querySelector(".dev-stream-volume-button")'), 'focused viewer has stream controls');
+      await until(() => a.executeJavaScript('!!document.querySelector(".dev-stream-picture video")'), 'presenter sees the own stream preview');
+      const ownAudio = await a.executeJavaScript(`(() => {
+        const voice = window.voice;
+        const local = voice.room.localParticipant;
+        voice.setScreenListening(local.identity, 2);
+        return [Boolean(local.getTrackPublication('screen_share_audio')), Boolean(voice.screenListening),
+          voice.screenMixers.size, document.querySelector('.dev-stream-picture video').muted,
+          Boolean(document.querySelector('.dev-stream-volume-button'))];
+      })()`);
+      assert.deepEqual(ownAudio, [true, false, 0, true, false], 'published system audio never loops into the presenter preview or output');
+      const button = '.dev-stream-volume-button';
+      const range = '.dev-stream-volume input';
+      assert.equal(await b.executeJavaScript(`getComputedStyle(document.querySelector('${range}')).visibility`), 'hidden');
+      b.debugger.attach();
+      try {
+        for (const selector of ['.dev-stream-picture', button]) {
+          const point = await b.executeJavaScript(`(() => { const rect = document.querySelector('${selector}').getBoundingClientRect();
+            return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) }; })()`);
+          await b.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+        }
+      } finally { b.debugger.detach(); }
+      await until(() => b.executeJavaScript(`getComputedStyle(document.querySelector('${range}')).visibility === 'visible'`), 'hovering the sound button reveals the slider');
+      await b.executeJavaScript(`(() => {
+        const slider = document.querySelector('${range}');
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(slider, '1.6');
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+      })()`);
+      await until(async () => Math.abs(await screenGain() - 1.6) < 0.001, 'focused stream slider controls its independent output');
+      await b.executeJavaScript(`document.querySelector('${button}').click()`);
+      await until(() => b.executeJavaScript(`document.querySelector('${range}').disabled && document.querySelector('${range}').value === '1.6'`), 'mute disables the slider and preserves its position');
+      assert.equal(await screenGain(),0,'muting the stream does not change voice gain');
+      await b.executeJavaScript(`document.querySelector('${button}').click()`);
+      await until(async () => Math.abs(await screenGain() - 1.6) < 0.001, 'unmute restores the saved volume');
+      await b.executeJavaScript('window.voice.setMute(false,true)');
+      assert.equal(await screenGain(),0,'deafen applies to screen audio');
+      await b.executeJavaScript('window.voice.setMute(false,false);window.showScreenCall(false)');
+      await until(async () => await screenGain() === 0, 'leaving the focused view silences the stream');
+      assert.ok(await b.executeJavaScript('[...window.voice.mixers.values()].some(m => m.track.getVolume()>0)'),
+        'screen focus leaves ordinary voice playback active');
+    } finally {
+      await Promise.all([a, b].map(win => win.executeJavaScript('window.showScreenCall(false)')));
+      await a.executeJavaScript('window.stopScreenFixture?.()');
+    }
+    await until(() => b.executeJavaScript('window.snapshot.screens.length === 0'), 'screen unpublication reaches the viewer');
+    record('PASS second Electron client plays encrypted stream audio through viewer controls and presenter preview stays silent');
+  }
   if (firstVoiceEpoch) {
     const next = { epochId: randomBytes(16).toString('hex'), key: randomBytes(32).toString('hex'), expiresAt: Date.now()+90000 };
     const rotate = `window.voice.rotateProtectedVoiceKey(${JSON.stringify(firstVoiceEpoch.epochId)},${JSON.stringify(next)})`;

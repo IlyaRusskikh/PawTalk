@@ -36,6 +36,8 @@ The optional checklist-events-v1 capability pushes versioned check snapshots thr
 
 `media-gallery-v1`: up to ten encrypted file entries and their saved video posters, with at most twenty unique attachment IDs per message. New Clients gate gallery sends on this capability; older single-file messages remain supported. Older Clients need an update to display galleries. No API/data version or Manager migration is required.
 
+Screen sharing requires Client 0.16.0 and Server 0.15.0 for a permanent room. Client 0.16.0 also supports sharing in temporary rooms it hosts. Screen sharing uses the encrypted LiveKit room in API 2 and API 3. The Client publishes when the voice grant allows the screen-share source. Older servers still support voice and chat. Update viewing Clients for multi-stream layouts and focus-based audio. System audio and application audio use the same screen-share audio source. Older Clients may treat it as ordinary call audio.
+
 ## Protected access (API 3)
 
 Server 0.14.3 and temporary rooms hosted by Client 0.15.3 expose the same Client update relay in API 3 as in API 2. Older API 3 servers can accept chat connections while returning HTTP 404 for `/api/updates/`. Existing Clients with relay support can use the relay once the server host is updated.
