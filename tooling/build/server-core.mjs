@@ -9,7 +9,7 @@ export const repositoryRoot = path.resolve(import.meta.dirname, '../..');
 
 export async function serverDefinition(root = repositoryRoot) {
   const dockerfile = await readFile(path.join(root, 'apps/server/deploy/standalone.Dockerfile'), 'utf8');
-  const goVersion = dockerfile.match(/^FROM golang:(\d+\.\d+\.\d+)-alpine AS build\r?$/m)?.[1];
+  const goVersion = dockerfile.match(/^FROM (?:--platform=\$BUILDPLATFORM )?golang:(\d+\.\d+\.\d+)-alpine AS build\r?$/m)?.[1];
   const livekitVersion = dockerfile.match(/^FROM livekit\/livekit-server:v(\d+\.\d+\.\d+) AS media\r?$/m)?.[1];
   const version = (await readFile(path.join(root, 'apps/server/VERSION'), 'utf8')).trim();
   if (!goVersion || !livekitVersion || !/^\d+\.\d+\.\d+$/.test(version)) throw Error('Invalid shared Server version/toolchain definition');

@@ -1,7 +1,11 @@
-FROM golang:1.27.3-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS build
 WORKDIR /src
 COPY apps/server/ ./
-RUN go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/pawtalk .
+# Test on the builder before the target-specific compile. CI also tests both Linux architectures natively.
+RUN go test ./...
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath -ldflags="-s -w" -o /out/pawtalk .
 
 FROM livekit/livekit-server:v1.13.11 AS media
 
