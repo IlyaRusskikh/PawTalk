@@ -86,6 +86,7 @@ func serveStandaloneRuntime(ctx context.Context, runtime *protectedRuntime, stat
 	}
 	defer media.shutdown()
 	cfg := standaloneMediaConfig(state)
+	cfg.UpdateCacheDir = filepath.Join(stateDir(), "update-cache")
 	target, err := url.Parse(cfg.PresenceURL)
 	if err != nil {
 		return err

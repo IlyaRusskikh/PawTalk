@@ -18,6 +18,7 @@ localStorage.removeItem('pawtalk.v2.read.'+sid+'.'+cid);localStorage.removeItem(
 const channel={id:cid,kind:'text',name:'General',protected:true,revision:1,messageRevision:1,lastMessageId:120};
 const state={serverId:sid,name:'Synthetic notification server',revision:1,controlRevision:1,self:{profileId:me,effectiveProfileId:me,deviceId:'c'.repeat(64),role:'member',permissions:[]},profiles:[{id:me,nickname:'Me',revision:1},{id:friend,nickname:'Friend',revision:1}],channels:[channel],members:[{profileId:me,online:true,role:'member'},{profileId:friend,online:true,role:'member'}],devices:[],voice:[],bindings:[]};
 const protectedMode = new URLSearchParams(location.search).get('protected');
+const sizedPhotoPreview = 'UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA';
 const scopedSettingsFixture = protectedMode === 'scoped-settings';
 const hiddenOriginalFixture = protectedMode === 'hidden-original';
 const originalChannel = '7'.repeat(32), originalPoster = '8'.repeat(32);
@@ -83,6 +84,16 @@ test.roleViewOperations = [];
 type FixtureProtectedEvent = { serverId: string } & ({ type: 'chat'; channelId: string } | { type: 'state' } |
   { type: 'composer'; channelId: string; profileId: string; activity: 'typing' | 'recording' | 'idle' });
 const protectedEventListeners = new Set<(event: FixtureProtectedEvent) => void>();
+if (new URLSearchParams(location.search).has('hold-photo-decode')) {
+  const decode = HTMLImageElement.prototype.decode;
+  const gate = new Promise<void>(resolve => { test.releasePhotoDecode = resolve; });
+  test.photoDecodes = 0;
+  HTMLImageElement.prototype.decode = async function () {
+    test.photoDecodes++;
+    await gate;
+    return decode.call(this);
+  };
+}
 test.composerCalls = [];
 test.emitComposerActivity = (activity: 'typing' | 'recording' | 'idle', channelId = cid, profileId = friend) =>
   protectedEventListeners.forEach(listener => listener({ serverId: sid, type: 'composer', channelId, profileId, activity }));
@@ -148,6 +159,7 @@ test.deniedOriginalReads = 0;
 const voiceProfileFixture = new URLSearchParams(location.search).has('voice-profile');
 const emptyChatFixture = new URLSearchParams(location.search).has('empty-chat');
 const pendingChatFixture = new URLSearchParams(location.search).has('pending-chat');
+const pendingKeyErrorFixture = new URLSearchParams(location.search).has('pending-key-error');
 let channelKeysPending = pendingChatFixture;
 test.finishChannelSync = () => {
   channelKeysPending = false;
@@ -387,7 +399,7 @@ test.desktop={
         .filter(channel=>(!test.protectedChatHidden || channel.kind!=='text') &&
         (!test.originalRevoked || channel.id!==originalChannel))
         .map(channel => channel.id === cid ? { ...channel,
-          ...(channelKeysPending && { keysPending: true }),
+          ...(channelKeysPending && !pendingKeyErrorFixture && { keysPending: true }),
           ...(test.allowChannelSettings && { canEditSettings: true }),
         } : channel.id === '3'.repeat(32) && test.voiceSidebarFixture ? { ...channel, ...test.voiceSidebarFixture } : channel)
     }:test.reorderMode?{...structuredClone(state),serverId:input.serverId}:structuredClone(state);
@@ -438,7 +450,8 @@ test.desktop={
     const last = Math.min(test.pagingChatLast, input.after + (input.limit ?? 32));
     const messages = Array.from({length:last-input.after}, (_, index) => {
       const position = input.after + index + 1;
-      const sentAt = position >= 95 ? 95 * 3600000 + (position - 95) * 60000 : position * 3600000;
+      const sentAt = position >= 95 ? 95 * 3600000 + (position - 95) * 60000 :
+        position === 64 ? 65 * 3600000 - 60000 : position * 3600000;
       return {position,own:false,authorProfileId:friend,sentAt,text:'Entry '+position};
     });
     return {value:{...windowState(),messages,...(last<test.pagingChatLast && {next:last})}};
@@ -466,6 +479,7 @@ test.desktop={
   if(action==='chat.protected.read'){
     if (pendingChatFixture) {
       test.protectedHistoryReads.push({ after: input.after });
+      if (pendingKeyErrorFixture && channelKeysPending) return { error: { code: 'PROTECTED_KEY_PENDING' } };
       const messages = channelKeysPending ? (test.readablePendingHistory
         ? [{ position: 1, own: false, authorProfileId: friend, sentAt: 123456, text: 'Previously verified history' }]
         : [{ position: 1, locked: true }]) : [
@@ -526,7 +540,8 @@ test.desktop={
         poster: { id: 'f'.repeat(32), mime: 'image/png' } };
       const messages = [
         { position: 1, own: false, sentAt: 123456, text: 'Mixed media',
-          files: [photo, { ...photo, id: 'c'.repeat(32), name: 'Second.png' }, clip] },
+          files: [photo, { ...photo, id: 'c'.repeat(32), name: 'Second.png',
+            preview: { id: '9'.repeat(32), mime: 'image/webp', size: atob(sizedPhotoPreview).length, width: 1, height: 1 } }, clip] },
         { position: 2, own: true, canEdit: true, sentAt: 123457, text: '',
           files: [{ ...photo, id: 'd'.repeat(32) }] },
         { position: 3, own: false, sentAt: 123458, text: 'Voice history', files: [
@@ -581,6 +596,9 @@ test.desktop={
     return {value: Uint8Array.from(png, letter => letter.charCodeAt(0))};
   }
   if (protectedMode === 'attachment-grid' && action === 'chat.protected.attachment') {
+    if (input.attachmentId === '9'.repeat(32)) {
+      return {value: Uint8Array.from(atob(sizedPhotoPreview), letter => letter.charCodeAt(0))};
+    }
     if (input.attachmentId === 'b'.repeat(32)) {
       await new Promise<void>(resolve => { test.releaseFullVideo = resolve; });
       return {value: new Uint8Array(8 * 1024 * 1024)};

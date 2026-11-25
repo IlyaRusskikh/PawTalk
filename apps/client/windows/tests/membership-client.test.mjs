@@ -437,7 +437,7 @@ test('API 2 single photo variants retain the legacy image entry and bind every o
  const requests = [];
  client.request = async (_server, _path, _method, body) => { requests.push(body); return { id: 123 }; };
  const image = { id: '1'.repeat(32), mime: 'image/jpeg', name: 'Original.jpg', size: 1200000,
-   preview: { id: '2'.repeat(32), mime: 'image/webp', size: 50000 },
+   preview: { id: '2'.repeat(32), mime: 'image/webp', size: 50000, width: 480, height: 320 },
    view: { id: '3'.repeat(32), mime: 'image/webp', size: 400000 } };
  await assert.rejects(client.send(sid, channelId, { text: 'Photo', image }), { code: 'UNSUPPORTED_FEATURE' });
  connection.config.capabilities.push('media-variants-v1');
@@ -451,6 +451,12 @@ test('API 2 single photo variants retain the legacy image entry and bind every o
  await client.send(sid, channelId, { text: 'Photo removed' }, message);
  assert.equal(requests[1].removeAttachment, true);
  assert.deepEqual(requests[1].attachmentIds, []);
+ const { width, height, ...legacyPreview } = image.preview;
+ for (const preview of [legacyPreview, { ...legacyPreview, width }, { ...legacyPreview, width: 481, height }]) {
+   await client.send(sid, channelId, { text: 'Photo', image: { ...image, preview } });
+   const [decoded] = await client.decodeMessages(sid, channelId, [{ ...requests.at(-1), id: 124, channelId, authorProfileId }]);
+   assert.deepEqual(decoded.content.image.preview, legacyPreview);
+ }
 });
 
 test('authenticated state updates saved server name without changing the signed config',async()=>{

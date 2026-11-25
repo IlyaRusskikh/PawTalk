@@ -26,3 +26,8 @@ Release sources for Client and Windows Manager fixes
 
 - [Client 0.15.2](releases/client-v0.15.2.en.md)
 - [Manager 0.7.1](releases/manager-v0.7.1.en.md)
+
+Release sources for notification delivery and the protected-room update relay
+
+- [Client 0.15.3](releases/client-v0.15.3.en.md)
+- [Server 0.14.3](releases/server-v0.14.3.en.md)

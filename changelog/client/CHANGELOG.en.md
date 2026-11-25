@@ -4,6 +4,12 @@
 
 Client releases and early combined Voicecord/PawTalk tags.
 
+## Release source: client-v0.15.3
+
+Protected-room notifications, scroll stability, preview sizing and encryption-key waiting state.
+
+[Release details](../../releases/client-v0.15.3.en.md)
+
 ## client-v0.15.2
 
 Notification delivery, fullscreen controls, inline attachment removal and chat fixes.

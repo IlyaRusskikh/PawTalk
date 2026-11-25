@@ -12,15 +12,19 @@ import {PollCard} from './PollCard';
 import {PollDialog} from './PollDialog';
 import {MentionTextarea} from './MentionTextarea';
 import { animateSendFlight, composerTextOrigin } from './sendFlight';
+import { useIncomingChatMotion } from './useIncomingChatMotion';
+import { captureChatReadingAnchor, chatScrollWasClamped, restoreChatReadingAnchor, type ChatReadingAnchor } from './chatReadingAnchor';
 import { trimMessage } from './trimMessage';
 import type {Mention} from '../../../../shared/mentions.mjs';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { Avatar } from './Avatar';
 import { Icon } from './Controls';
 import { MessageText } from './MessageText';
 import { Modal } from './Modal';
 import { ChatImage } from './ChatImage';
+import { inspectImage, rememberChatImageSize, rememberSentImageSize, chatImageSize } from './chatImages';
+import { messagePreview } from '../../../../shared/chat-format.mjs';
 import { MessageTime } from './MessageTime';
 import { loadChatWindow } from './ChatSettings';
 import { ChatHistory } from './chatHistory';
@@ -38,7 +42,10 @@ function EncryptedImage({ serverId, channelId, image, credits }: { serverId: str
   const load = useCallback(async () => {
     const value = await membership<string>('image', { serverId, channelId, attachmentId: image.id, mime: image.mime });
     const raw = atob(value.slice(value.indexOf(',') + 1));
-    return new Blob([Uint8Array.from(raw, character => character.charCodeAt(0))], { type: image.mime });
+    const bytes = Uint8Array.from(raw, character => character.charCodeAt(0));
+    const metadata = inspectImage(bytes);
+    if (metadata?.mime === image.mime) rememberChatImageSize(serverId, channelId, image.id, metadata);
+    return new Blob([bytes], { type: image.mime });
   }, [serverId, channelId, image.id, image.mime]);
   if (image.size !== undefined) {
     const file = { ...image, size: image.size, name: image.name ?? 'image.' + image.mime.split('/')[1] };
@@ -46,7 +53,7 @@ function EncryptedImage({ serverId, channelId, image, credits }: { serverId: str
       <VideoMessage serverId={serverId} channelId={channelId} files={[file]} saveImageNatively {...credits}/>
     </div>;
   }
-  return <ChatImage image={{ ...image, mime: image.mime as 'image/png'|'image/jpeg'|'image/webp', name: image.name || 'image.' + image.mime.split('/')[1], size: 0, width: 320, height: 200 }} load={load} credits={credits}/>;
+  return <ChatImage image={{ ...image, mime: image.mime as 'image/png'|'image/jpeg'|'image/webp', name: image.name || 'image.' + image.mime.split('/')[1], size: 0, width: 320, height: 200, ...chatImageSize(serverId, channelId, image.id) }} load={load} credits={credits}/>;
 }
 
 export function ServerChat({ state, channel, focused, onRead, onError, onViewport }: { state: ServerState; channel: Channel; focused: boolean; onRead(last: number): void; onError(error: string): void; onViewport?(latest:boolean):void }) {
@@ -66,6 +73,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const [sending,setSending]=useState(false),[mutating,setMutating]=useState(false),[loading,setLoading]=useState(true),[ready,setReady]=useState(false);
   const [outgoing,setOutgoing]=useState<Outgoing>(),outgoingRef=useRef<Outgoing|undefined>(undefined);
   const [flightActive,setFlightActive]=useState(false),flightCleanup=useRef<((update?:boolean)=>void)|undefined>(undefined);
+  const incomingMotion=useIncomingChatMotion(),incomingRows=useRef(new Set<number>());
   function showOutgoing(value:Outgoing){outgoingRef.current=value;setOutgoing(value);}
   useEffect(()=>()=>{if(outgoing?.preview)URL.revokeObjectURL(outgoing.preview);},[outgoing?.preview]);
   useEffect(()=>()=>flightCleanup.current?.(false),[]);
@@ -76,6 +84,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const pane=useRef<HTMLDivElement>(null),content=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null),editInput=useRef<HTMLTextAreaElement>(null),picker=useRef<HTMLInputElement>(null);
   const savedPosition=useRef(readPosition(positionKey)),follow=useRef(savedPosition.current?.follow!==false),epoch=useRef(0),queue=useRef(Promise.resolve()),navigation=useRef<LoadKind|undefined>(undefined),sendingRef=useRef(false),mutationRef=useRef(false);
   const pendingPosition=useRef<{bottom?:boolean;anchor?:Anchor;target?:number;unread?:boolean}|undefined>(undefined),lastAnchor=useRef<Anchor|undefined>(undefined),resizeAnchor=useRef<{id:number;offset:number;width:number;height:number}|undefined>(undefined),lastScroll=useRef(0);
+  const readingAnchor=useRef<ChatReadingAnchor|undefined>(undefined);
   const current=useRef({state,channel,focused,onRead,onViewport,reply,pageSize:limit});current.current={state,channel,focused,onRead,onViewport,reply,pageSize:limit};
   const read=useRef(Number(localStorage.getItem(cursorKey(serverId,channelId)))||0),entryRead=useRef(read.current),[hasSent,setHasSent]=useState(false);
   const entryUnread=useRef<number|undefined>(undefined),alignUnread=useRef(false);
@@ -99,11 +108,19 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     list.toggleAttribute('data-more-above',list.scrollTop>1);list.toggleAttribute('data-more-below',list.scrollHeight-list.clientHeight-list.scrollTop>1);
     if(resizeAnchor.current&&(resizeAnchor.current.width!==list.clientWidth||resizeAnchor.current.height!==list.clientHeight))return;
     lastAnchor.current=anchor();
+    readingAnchor.current=follow.current?undefined:captureChatReadingAnchor(list);
     const box=list.getBoundingClientRect(),last=[...list.querySelectorAll<HTMLElement>('[data-message-row]')].reverse().find(row=>{const r=row.getBoundingClientRect();return r.top<box.bottom&&r.bottom>box.top;});
     if(last)resizeAnchor.current={id:Number(last.dataset.messageRow),offset:last.getBoundingClientRect().bottom-box.bottom,width:list.clientWidth,height:list.clientHeight};
     if(lastAnchor.current)localStorage.setItem(positionKey,JSON.stringify({...lastAnchor.current,follow:follow.current}));
   }
-  function restoreAnchor(value?:Anchor){const list=pane.current,row=value&&list?.querySelector<HTMLElement>(`[data-message-row="${value.id}"]`);if(list&&row){const target=row.querySelector<HTMLElement>('.member-message-text')||row;list.scrollTop+=target.getBoundingClientRect().top-list.getBoundingClientRect().top+value!.offset;}}
+  function restoreAnchor(value?:Anchor){
+    const list=pane.current,row=value&&list?.querySelector<HTMLElement>(`[data-message-row="${value.id}"]`);
+    if(!list||!row)return;
+    const target=row.querySelector<HTMLElement>('.member-message-text')||row;
+    const correction=target.getBoundingClientRect().top-list.getBoundingClientRect().top+value!.offset;
+    if(Math.abs(correction)<1)return;
+    list.scrollTop+=correction;
+  }
   function markRead(last:number){if(last>=Math.max(boundsRef.current.last,current.current.channel.lastMessageId))setNewCount(0);if(last<=read.current)return;read.current=last;localStorage.setItem(cursorKey(serverId,channelId),String(last));current.current.onRead(last);}
   async function refreshQuotes(next:Message[],generation:number,incremental=false){
     const live=new Map(next.map(m=>[m.id,m])),ids=[...new Set([...next.map(m=>m.content.reply?.id),current.current.reply?.id].filter((id):id is number=>!!id))].filter(id=>!live.has(id));
@@ -123,6 +140,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
       const old=rows.current,saved=anchor(),deleted=new Set((event.deleted||[]).map(d=>d.id)),updates=event.messages||[],state=current.current.state,previousLast=boundsRef.current.last;
       confirmOutgoing(updates);
       const incoming=(m:{authorProfileId:string;systemKind?:string})=>!!m.systemKind||effectiveProfile(state,m.authorProfileId)!==state.self.effectiveProfileId;
+      if(follow.current)for(const message of updates)if(message.id>previousLast&&incoming(message))incomingRows.current.add(message.id);
       const countChange=updates.filter(m=>m.id>previousLast&&m.id>read.current&&incoming(m)).length-(event.deleted||[]).filter(d=>d.id>read.current&&incoming(d)).length;
       setNewCount(count=>Math.max(0,count+countChange));
       const next=history.current.update(updates,[...deleted],previousLast);
@@ -199,12 +217,17 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
         if(oldBefore>0)predecessor.current=existing[oldBefore-1];
         else if(oldBefore===0)predecessor.current=oldPredecessor;
         else if(next.length&&next[0].id>page.first){const preceding=await membership<MessagePage>('messages',{serverId,channelId,options:{before:next[0].id,limit:1}});if(generation!==epoch.current)return;predecessor.current=preceding.messages.at(-1);}
-        if(kind==='initial'&&entryUnread.current!==undefined||kind==='newer'&&alignUnread.current){follow.current=false;pendingPosition.current={unread:true};}
-        else if(kind==='latest'||(kind==='initial'&&(!saved||saved.follow))){follow.current=true;pendingPosition.current={bottom:true};}
-        else if(kind==='around'){follow.current=false;pendingPosition.current={target};}
-        else if(kind==='initial'&&saved){follow.current=false;pendingPosition.current={anchor:saved};}
-        else pendingPosition.current=follow.current?{bottom:true}:{anchor:anchor()||oldAnchor};
-        confirmOutgoing(page.messages);setNewCount(page.unread);rows.current=next;setMessages(next);boundsRef.current={first:page.first,last:page.last};setBounds(boundsRef.current);setAway(!follow.current);setReady(true);setFailure('');
+        const commitPage=()=>{
+          if(kind==='initial'&&entryUnread.current!==undefined||kind==='newer'&&alignUnread.current){follow.current=false;pendingPosition.current={unread:true};}
+          else if(kind==='latest'||(kind==='initial'&&(!saved||saved.follow))){follow.current=true;pendingPosition.current={bottom:true};}
+          else if(kind==='around'){follow.current=false;pendingPosition.current={target};}
+          else if(kind==='initial'&&saved){follow.current=false;pendingPosition.current={anchor:saved};}
+          else pendingPosition.current=follow.current?{bottom:true}:{anchor:anchor()||oldAnchor};
+          if(kind==='sync'&&follow.current)for(const message of next)if(message.id>boundsRef.current.last&&(message.systemKind||effectiveProfile(current.current.state,message.authorProfileId)!==current.current.state.self.effectiveProfileId))incomingRows.current.add(message.id);
+          confirmOutgoing(page.messages);setNewCount(page.unread);rows.current=next;setMessages(next);boundsRef.current={first:page.first,last:page.last};setBounds(boundsRef.current);setAway(!follow.current);setReady(true);setFailure('');
+        };
+        if(kind==='older'||kind==='newer')flushSync(commitPage);
+        else commitPage();
         loadedRevision.current=minimumRevision??page.revision??revision;clearConfirmedOutgoing();await refreshQuotes(next,generation,kind!=='sync'||!force);
       }catch(error){if(kind==='sync'&&force)fullSync.current=true;if(generation===epoch.current)setFailure((error as Error).message);}
       finally{if(generation===epoch.current)setLoading(false);}
@@ -263,7 +286,12 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   useEffect(()=>{if(focused&&!editing&&!menu){const timer=setTimeout(focusInput,0);return()=>clearTimeout(timer);}},[focused,key,editing?.id,!!menu,!!deleting]);
   useLayoutEffect(()=>{
     const list=pane.current;if(!list)return;const position=pendingPosition.current;pendingPosition.current=undefined;
-    if(position?.bottom)list.scrollTop=list.scrollHeight;
+    const arrivals=[...incomingRows.current].flatMap(id=>{const row=list.querySelector<HTMLElement>(`[data-message-row="${id}"]`);return row?[row]:[];});
+    incomingRows.current.clear();
+    const animating=follow.current&&(!position||position.bottom)&&incomingMotion.play(list,arrivals,()=>{lastScroll.current=list.scrollTop;if(!incomingMotion.frame.current)remember();});
+    const keepAnimating=animating||incomingMotion.frame.current&&follow.current&&(!position||position.bottom);
+    if(!keepAnimating)incomingMotion.cancel();
+    if(position?.bottom&&!keepAnimating)list.scrollTop=list.scrollHeight;
     else if(position?.unread){
       const divider=list.querySelector<HTMLElement>('.chat-divider'),top=list.getBoundingClientRect().top;
       if(divider)list.scrollTop+=divider.getBoundingClientRect().top-top;
@@ -274,7 +302,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     }
     else if(position?.anchor)restoreAnchor(position.anchor);
     else if(position?.target){const row=list.querySelector<HTMLElement>(`[data-message-row="${position.target}"]`);if(row){list.scrollTop+=row.getBoundingClientRect().top-list.getBoundingClientRect().top-list.clientHeight/2+row.offsetHeight/2;highlight(row);follow.current=!hasNewer&&list.scrollHeight-list.scrollTop-list.clientHeight<12;setAway(!follow.current);}else setNotice(t('Исходное сообщение уже недоступно.'));}
-    else if(follow.current)list.scrollTop=list.scrollHeight;
+    else if(follow.current&&!keepAnimating)list.scrollTop=list.scrollHeight;
     const sent=arrival.current;
     const row=sent&&list.querySelector<HTMLElement>('.chat-message-pending .member-message-text');
     if(sent&&row){
@@ -289,7 +317,19 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   },[messages,hasNewer,outgoing]);
   useEffect(()=>{
     const list=pane.current;if(!list)return;
-    const observer=new ResizeObserver(()=>{const saved=resizeAnchor.current;if(follow.current)list.scrollTop=list.scrollHeight;else if(saved&&(saved.width!==list.clientWidth||saved.height!==list.clientHeight)){const row=list.querySelector<HTMLElement>(`[data-message-row="${saved.id}"]`);if(row)list.scrollTop+=row.getBoundingClientRect().bottom-list.getBoundingClientRect().bottom-saved.offset;}lastScroll.current=list.scrollTop;resizeAnchor.current=undefined;remember();});observer.observe(list);if(content.current)observer.observe(content.current);return()=>observer.disconnect();
+    const observer=new ResizeObserver(()=>{
+      if(incomingMotion.frame.current)return;
+      const saved=resizeAnchor.current,reading=readingAnchor.current;
+      const viewportResized=saved&&(saved.width!==list.clientWidth||saved.height!==list.clientHeight);
+      const scrolling=Math.abs(list.scrollTop-lastScroll.current)>=1;
+      if(!viewportResized&&scrolling&&(!reading||reading.scrollHeight===list.scrollHeight))return;
+      if(follow.current)list.scrollTop=list.scrollHeight;
+      else if(viewportResized){
+        const row=list.querySelector<HTMLElement>(`[data-message-row="${saved.id}"]`);
+        if(row)list.scrollTop+=row.getBoundingClientRect().bottom-list.getBoundingClientRect().bottom-saved.offset;
+      }else if(!restoreChatReadingAnchor(list,reading)&&!scrolling)restoreAnchor(lastAnchor.current);
+      lastScroll.current=list.scrollTop;resizeAnchor.current=undefined;remember();
+    });observer.observe(list);if(content.current)observer.observe(content.current);return()=>observer.disconnect();
   },[]);
   useEffect(()=>{
     if(!focused||!ready||creatingPoll)return;const list=pane.current;if(!list)return;
@@ -347,7 +387,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     flightCleanup.current?.();
     arrival.current=origin;
     const variants = state.capabilities?.includes(mediaVariantsCapability);
-    const pendingPreview = file && imageMime(file.type) ? selected[0]?.poster ?? (!variants ? file : undefined) : undefined;
+    const pendingPreview = selected.length === 1 && file && imageMime(file.type) ? selected[0]?.poster ?? (!variants ? file : undefined) : undefined;
     showOutgoing({message:{id:-1,channelId,authorProfileId:state.self.profileId,requestId:crypto.randomUUID().replaceAll('-',''),sentAt:Date.now(),content},preview:pendingPreview?URL.createObjectURL(pendingPreview):undefined,confirmed:false});follow.current=true;setAway(false);pendingPosition.current={bottom:true};
     try{
       const gif=!file&&!voice&&/^https:\/\/\S+$/.test(value)?await membership<{url:string;mime?:'image/gif'|'video/mp4'|'video/webm'}|null>('gif.resolve',{url:value}).catch(()=>null):null;
@@ -360,15 +400,22 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
       for(const [index, item] of (voice?[{file:voice.file} as MediaDraft]:selected).entries()){
         const file=item.file;let attachment=uploaded.current.get(file);
         if(!attachment){const image=imageMime(file.type),mime=image?file.type:['image/gif','video/mp4','video/webm','audio/webm','audio/ogg'].includes(file.type)?file.type:'application/octet-stream';
-          const remote=await membership<{id:string;mime:string}>(image?'upload':'upload.file',{serverId,channelId,mime,bytes:new Uint8Array(await file.arrayBuffer())});
+          const bytes=new Uint8Array(await file.arrayBuffer());
+          const remote=await membership<{id:string;mime:string}>(image?'upload':'upload.file',{serverId,channelId,mime,bytes});
+          if(image||(mime==='image/gif'&&variants&&item.poster))rememberSentImageSize(serverId,channelId,remote.id,variants&&item.poster ? new Uint8Array(await item.poster.arrayBuffer()) : bytes);
           attachment={...remote,name:file.name,size:file.size};
           if(item.duration!==undefined)attachment.duration=item.duration;
           if(voice)attachment.voice={duration:voice.duration,waveform:voice.waveform};
           uploaded.current.set(file,attachment);
         }
         if (item.poster && variants && !videoMime(file.type) && !attachment.preview) {
-          const { id } = await uploadImage(item.poster);
-          attachment.preview = { id, mime: 'image/webp', size: item.poster.size };
+          const bytes = new Uint8Array(await item.poster.arrayBuffer());
+          const { id } = await membership<{ id: string }>('upload', { serverId, channelId, mime: item.poster.type, bytes });
+          const metadata = inspectImage(bytes);
+          const preview = { id, mime: 'image/webp' as const, size: bytes.length };
+          attachment.preview = metadata?.mime === 'image/webp'
+            ? { ...preview, width: metadata.width, height: metadata.height }
+            : preview;
         }
         if (item.poster && !attachment.preview && file.type.startsWith('video/') &&
             state.capabilities?.includes('media-gallery-v1') && !attachment.poster) {
@@ -431,8 +478,14 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
   const tooLong=new TextEncoder().encode(trimMessage(text).text).length>4096;
   const displayed=outgoing&&!messages.some(m=>m.requestId===outgoing.message.requestId&&effectiveProfile(state,m.authorProfileId)===state.self.effectiveProfileId)?[...messages,outgoing.message]:messages;
   return <section className="member-chat room-chat" aria-label={channel.name} onDragOver={event=>{if(event.dataTransfer.types.includes(memberDragType)){event.preventDefault();event.dataTransfer.dropEffect='copy';}}} onDrop={event=>{const raw=event.dataTransfer.getData(memberDragType);if(!raw)return;event.preventDefault();if(sendingRef.current)return;const field=composer.current,next=dropMemberMention(raw,state,text,mentions,field?.selectionStart??text.length,field?.selectionEnd??text.length);if(!next)return;setText(next.text);setMentions(next.mentions);requestAnimationFrame(()=>{field?.focus();field?.setSelectionRange(next.caret,next.caret);});}}>
-    <div className="chat-feed"><div ref={pane} className="member-history chat-stream" tabIndex={0} role="log" aria-label={t('Сообщения чата')} aria-live="polite" aria-busy={loading} onLoadCapture={()=>{const list=pane.current;if(list){if(follow.current)list.scrollTop=list.scrollHeight;else restoreAnchor(lastAnchor.current);lastScroll.current=list.scrollTop;remember();}}} onScroll={()=>{
-      const list=pane.current!;list.classList.add('is-scrolling');clearTimeout(scrollTimer.current);scrollTimer.current=setTimeout(()=>list.classList.remove('is-scrolling'),800);const delta=list.scrollTop-lastScroll.current;lastScroll.current=list.scrollTop;if(!delta||resizeAnchor.current&&(resizeAnchor.current.width!==list.clientWidth||resizeAnchor.current.height!==list.clientHeight))return;follow.current=list.scrollHeight-list.scrollTop-list.clientHeight<12&&(!hasNewer||follow.current);setAway(!follow.current);remember();current.current.onViewport?.(follow.current);if(delta<0&&list.scrollTop<100&&hasOlder)void navigate('older');else if(delta>0&&list.scrollHeight-list.scrollTop-list.clientHeight<100&&hasNewer)void navigate('newer');
+    <div className="chat-feed"><div ref={pane} className="member-history chat-stream" tabIndex={0} role="log" aria-label={t('Сообщения чата')} aria-live="polite" aria-busy={loading} onWheel={event=>{incomingMotion.cancel();if(event.deltaY<0)follow.current=false;}} onPointerDown={incomingMotion.cancel} onKeyDown={incomingMotion.cancel} onScroll={()=>{
+      const list=pane.current!;list.classList.add('is-scrolling');clearTimeout(scrollTimer.current);scrollTimer.current=setTimeout(()=>list.classList.remove('is-scrolling'),800);
+      const delta=list.scrollTop-lastScroll.current,clamped=chatScrollWasClamped(list,lastScroll.current);
+      lastScroll.current=list.scrollTop;
+      if(!delta||clamped||resizeAnchor.current&&(resizeAnchor.current.width!==list.clientWidth||resizeAnchor.current.height!==list.clientHeight))return;
+      follow.current=list.scrollHeight-list.scrollTop-list.clientHeight<12&&(!hasNewer||follow.current);setAway(!follow.current);
+      if(!readingAnchor.current||readingAnchor.current.scrollHeight===list.scrollHeight)remember();
+      current.current.onViewport?.(follow.current);if(delta<0&&list.scrollTop<100&&hasOlder)void navigate('older');else if(delta>0&&list.scrollHeight-list.scrollTop-list.clientHeight<100&&hasNewer)void navigate('newer');
     }}><div ref={content}>
       <div ref={olderEdge} className="chat-history-edge" aria-hidden="true"/>
       {!ready&&<p className="chat-empty" role="status">{t('Загрузка истории…')}</p>}
@@ -450,7 +503,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
             {system?<span className="chat-system-avatar" aria-hidden="true"><Icon name="paw" size={22}/></span>:continuation?<span className="chat-continuation-time"><MessageTime sent={message.sentAt} compact/></span>:<Avatar className="chat-avatar" name={author?.nickname||t('Участник')} image={author?.avatar}/>}
             <div className="member-message-content chat-message-body">
               {!continuation&&<div className="member-message-heading chat-meta"><strong>{system?t('Система'):author?.nickname||t('Участник')}</strong><MessageTime sent={message.sentAt}/></div>}
-              {reference&&<button type="button" className="member-reply chat-reply-quote" onClick={()=>{if(reference.source===null)setNotice(t('Исходное сообщение уже недоступно.'));else void jump(message.content.reply!.id);}}><Icon name="reply" size={13}/><strong>{reference.author}</strong><span className="chat-reply-text"><MessageText text={reference.text.slice(0,240)} preview/></span></button>}
+              {reference&&<button type="button" className="member-reply chat-reply-quote" aria-label={t('К исходному сообщению')} title={messagePreview(reference.text,t('Спойлер')).slice(0,240)} onClick={()=>{if(reference.source===null)setNotice(t('Исходное сообщение уже недоступно.'));else void jump(message.content.reply!.id);}}><Icon name="reply" size={13}/><span className="chat-reply-text">{messagePreview(reference.text,t('Спойлер'))}</span></button>}
               {message.content.checklist?<ChecklistCard message={message} state={state} onEdit={()=>setChecklistDialog(message)}/>:message.content.poll?<PollCard message={message} state={state} onJump={id=>void jump(id)} onClosed={()=>{if(!message.locked){rows.current=history.current.update([{...message,locked:true}]);setMessages(rows.current);}}}/>:isEditing?<form className="chat-inline-edit" aria-label={t('Редактировать сообщение')} onSubmit={event=>{event.preventDefault();void mutate(message,editText);}}><MentionTextarea state={state} mentions={editMentions} onValue={(value,mentions)=>{setEditText(value);setEditMentions(mentions);}} ref={editInput} rows={1} value={editText} maxLength={4096} readOnly={mutating} aria-label={t('Сообщение')} onEscape={cancelEdit} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();cancelEdit();}else if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229){event.preventDefault();if(!event.repeat)void mutate(message,editText);}}}/>{[message.content.image, message.content.file, ...(message.content.files ?? [])].filter(file=>file!==undefined).map(file=>{
                 const removed=removedFiles.includes(file.id);
                 return <div key={file.id} className="chat-edit-attachment"><span>{file.name??t('Изображение')}</span>
@@ -459,7 +512,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
               {!isEditing&&<div className="chat-message-attachments" data-multiple={(message.content.files?.length||0)>1}>
               {(message.content.files|| (message.content.file?[message.content.file]:[])).map(f=>hasGalleryPreview(f)?<VideoMessage key={f.id} serverId={serverId} channelId={channelId} pending={local} files={[f]} group={(message.content.files||[f]).filter(hasGalleryPreview)} author={author?.nickname||t('Участник')} avatar={author?.avatar} date={message.sentAt}/>:<ChatFile key={f.id} serverId={serverId} channelId={channelId} pending={local} file={f}/>)}
               </div>}
-              {local&&outgoing?.preview?<img className="member-chat-image chat-pending-image" src={outgoing.preview} alt={t('Изображение')}/>:message.content.image&&!isEditing&&<EncryptedImage serverId={serverId} channelId={channelId} image={message.content.image} credits={{author:author?.nickname,avatar:author?.avatar,date:message.sentAt}}/>}
+              {local&&outgoing?.preview?<img className="member-chat-image chat-pending-image" data-legacy-preview={!state.capabilities?.includes(mediaVariantsCapability)||undefined} src={outgoing.preview} alt={t('Изображение')}/>:message.content.image&&!isEditing&&<EncryptedImage serverId={serverId} channelId={channelId} image={message.content.image} credits={{author:author?.nickname,avatar:author?.avatar,date:message.sentAt}}/>}
             </div>
             {!local&&!system&&!message.unreadable&&!isEditing&&<div className="member-message-actions"><button type="button" className="icon-button" title={t('Ответить')} aria-label={t('Ответить')} onClick={()=>beginReply(message)}><Icon name="reply" size={16}/></button>{own&&!message.locked&&<>{!message.content.poll&&!message.content.checklist&&<button type="button" className="icon-button" title={t('Редактировать')} aria-label={t('Редактировать')} onClick={()=>beginEdit(message)}><Icon name="edit" size={16}/></button>}<button type="button" className="icon-button" title={t('Удалить сообщение')} aria-label={t('Удалить сообщение')} onClick={event=>requestDelete(message,event.shiftKey)}><Icon name="trash" size={16}/></button></>}</div>}
           </div><div className="chat-read-end" data-read-id={local?undefined:message.id}/>
@@ -473,7 +526,7 @@ export function ServerChat({ state, channel, focused, onRead, onError, onViewpor
     {tooLong&&<p className="text-error" role="status">{t('Сообщение слишком длинное.')}</p>}
     {notice&&<p className="chat-inline-notice" role="status">{notice}<button type="button" aria-label={t('Закрыть сообщение')} onClick={()=>setNotice('')}>×</button></p>}
     <form className="member-composer chat-composer" onSubmit={event=>{event.preventDefault();void send();}} onPaste={event=>{const next=[...event.clipboardData.files];if(next.length){event.preventDefault();void selectFile(...next);}}}>
-      {reply&&<div className="member-compose-context chat-reply-draft"><Icon name="reply" size={16}/><div><strong>{t('Ответ {0}',quote(reply.id,{id:reply.id,author:profileFor(state,reply.authorProfileId)?.nickname||t('Участник'),text:reply.content.text}).author)}</strong><span className="chat-reply-text"><MessageText text={quote(reply.id,{id:reply.id,author:'',text:reply.content.text}).text.slice(0,240)} preview/></span></div><button type="button" className="icon-button" aria-label={t('Отменить ответ')} disabled={sending} onClick={()=>{setReply(undefined);focusInput();}}>×</button></div>}
+      {reply&&<div className="member-compose-context chat-reply-draft"><Icon name="reply" size={16}/><div><span className="chat-reply-text"><MessageText text={quote(reply.id).text.slice(0,240)} preview/></span></div><button type="button" className="icon-button" aria-label={t('Отменить ответ')} disabled={sending} onClick={()=>{setReply(undefined);focusInput();}}>×</button></div>}
       {!!media.length&&<AttachmentDrafts items={media} busy={sending} onRemove={removeDraft} onRename={renameDraft}/>}
       {preparing&&<span role="status" className="attachment-preparing">{t('Подготовка вложений…')}</span>}
       <div className="chat-compose">{recordingVoice?<VoiceComposer busy={sending} onCancel={()=>setRecordingVoice(false)} onSend={value=>void send(value)}/>:<><input ref={picker} type="file" multiple hidden onChange={event=>{void selectFile(...(event.target.files||[]));event.target.value='';}}/>

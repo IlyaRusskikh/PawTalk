@@ -4,6 +4,12 @@
 
 Server-specific tags and early combined Voicecord/PawTalk history. Early tags do not imply an independently published Server installer.
 
+## Release source: server-v0.14.3
+
+Protected API 3 rooms can relay Client updates.
+
+[Release details](../../releases/server-v0.14.3.en.md)
+
 ## Release source: server-v0.14.2
 
 [Release details](../../releases/server-v0.14.2.en.md)

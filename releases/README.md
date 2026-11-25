@@ -20,6 +20,7 @@ Local sources are not automatically exact snapshots of public Release bodies. Th
 - [client-v0.15.0](client-v0.15.0.en.md)
 - [client-v0.15.1](client-v0.15.1.en.md)
 - [client-v0.15.2](client-v0.15.2.en.md)
+- [client-v0.15.3](client-v0.15.3.en.md)
 
 ## Server
 
@@ -32,6 +33,7 @@ Local sources are not automatically exact snapshots of public Release bodies. Th
 - [server-v0.14.0](server-v0.14.0.en.md)
 - [server-v0.14.1](server-v0.14.1.en.md)
 - [server-v0.14.2](server-v0.14.2.en.md)
+- [server-v0.14.3](server-v0.14.3.en.md)
 
 ## Manager
 

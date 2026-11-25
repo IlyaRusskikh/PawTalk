@@ -26,3 +26,8 @@
 
 - [Client 0.15.2](releases/client-v0.15.2.ru.md)
 - [Manager 0.7.1](releases/manager-v0.7.1.ru.md)
+
+Источники выпусков с исправлениями уведомлений и ретрансляцией обновлений в защищённых комнатах
+
+- [Client 0.15.3](releases/client-v0.15.3.ru.md)
+- [Server 0.14.3](releases/server-v0.14.3.ru.md)

@@ -57,7 +57,8 @@ export interface ServerState {
   voice: { profileId: string; deviceId: string; channelId: string; identity: string }[];
 }
 export interface MediaVariant { id: string; mime: 'image/webp'; size: number }
-export interface ChatAttachment {id:string;mime:string;name:string;size:number;poster?:{id:string;mime:string};preview?:MediaVariant;view?:MediaVariant;duration?:number;voice?:{duration:number;waveform:number[]}}
+export type MediaPreview = MediaVariant & ({ width: number; height: number } | { width?: never; height?: never });
+export interface ChatAttachment {id:string;mime:string;name:string;size:number;poster?:{id:string;mime:string};preview?:MediaPreview;view?:MediaVariant;duration?:number;voice?:{duration:number;waveform:number[]}}
 export type ChatImageAttachment = Pick<ChatAttachment, 'id' | 'mime'> & Partial<Pick<ChatAttachment, 'name' | 'size' | 'preview' | 'view'>>;
 export interface Message { systemKind?:'poll-result';locked?:boolean; id: number; channelId: string; authorProfileId: string; requestId: string; sentAt: number; editedAt?: number; unreadable?: boolean; content: { text: string; gif?:{source:string;url:string;mime?:'image/gif'|'video/mp4'|'video/webm'}; mentions?:Mention[];poll?:PollDefinition&{id:string};pollResult?:boolean; checklist?:{everyone:boolean;items:{id:string;text:string}[]}; files?:ChatAttachment[];file?:ChatAttachment; image?: ChatImageAttachment; reply?:{id:number;author:string;text:string} } }
 export interface ServerEvent {serverId:string;type:'chat'|'state'|'resync';checklists?:{messageId:number;revision:number;checked:Record<string,boolean>}[];channelId?:string;revision?:number;last?:number;rescan?:boolean;delivery?:boolean;previous?:number;first?:number;messages?:Message[];deleted?:{id:number;authorProfileId:string;systemKind?:string}[]}
@@ -69,6 +70,7 @@ const errors: Record<string, () => string> = {
   PROTECTED_REVOKE_SCOPE_SIGNER: () => t('Сначала передайте подпись подтверждений другому устройству в разделе «Доступ к серверу».'),
   PROFILE_AVATAR_CHANGED: () => t('Аватар профиля изменился. Откройте настройки заново.'),
   PROTECTED_ACCESS_DENIED: () => t('Недостаточно прав для этого действия.'),
+  PROTECTED_KEY_PENDING: () => t('Ждём ключ шифрования…'),
   VOICE_CHANNEL_CONTROL_UNAVAILABLE: () => t('Клиент участника пока не принимает команды звонка.'),
   PROTECTED_DEFERRED_ADMISSION_CHANGED: () => t('Доступ к каналу изменился. Черновик сохранён.'),
   PROTECTED_TIMED_OUT: () => t('Общение временно ограничено тайм-аутом.'),
