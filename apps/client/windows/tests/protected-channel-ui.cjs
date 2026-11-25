@@ -207,21 +207,31 @@ app.whenReady().then(async () => {
       await until(`!!${entry(49)} && !!${entry(80)}`, 'A previously read channel opens at the first unread message');
       assert.equal(await run(`!!${entry(48)}`), false);
       assert.equal(await run("document.querySelector('.chat-unread-divider').nextElementSibling.textContent.includes('Entry 49')"), true);
-      await run("document.querySelector('.protected-chat-jump').click()");
-      await until(`!!${entry(96)} && !document.querySelector('.protected-chat-jump')`, 'The jump loads the final page when history is behind');
-      await until("(()=>{const list=document.querySelector('.protected-chat-stream');return list.scrollHeight-list.clientHeight-list.scrollTop<2})()", 'Jump completes before the next arrival');
+      await run(`(() => {
+        const list = document.querySelector('.protected-chat-stream');
+        const scrollTo = list.scrollTo;
+        list.scrollTo = function(options) {
+          if (options.behavior !== 'smooth') return scrollTo.call(this, options);
+          delete list.scrollTo;
+          // Deliver the next message before the native scroll reaches its target.
+          window.latestScrollStarted = true;
+        };
+        document.querySelector('.protected-chat-jump').click();
+      })()`);
+      await until(`!!${entry(96)} && window.latestScrollStarted`, 'The jump loads the final page and starts scrolling');
       const incomingMotion = await run(`new Promise(resolve => {
         const list = document.querySelector('.protected-chat-stream');
         const start = list.scrollTop;
+        const deadline = performance.now() + 3000;
         window.pagingChatLast = 97;
         window.invalidateGeneralChat();
-        let faded = false, moved = false, frames = 0;
+        let faded = false, moved = false;
         function observe() {
           const row = ${entry(97)};
           const bottom = list.scrollHeight - list.clientHeight;
           if (row && Number(getComputedStyle(row).opacity) < 0.99) faded = true;
           if (list.scrollTop > start + 1 && list.scrollTop < bottom - 1) moved = true;
-          if (++frames < 50 && (!faded || !moved || bottom - list.scrollTop >= 2)) requestAnimationFrame(observe);
+          if (performance.now() < deadline && (!faded || !moved || bottom - list.scrollTop >= 2)) requestAnimationFrame(observe);
           else resolve({ faded, moved, atBottom: bottom - list.scrollTop < 2 });
         }
         requestAnimationFrame(observe);

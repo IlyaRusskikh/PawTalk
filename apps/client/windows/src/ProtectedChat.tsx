@@ -315,6 +315,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
   const preservedScroll = useRef<ReturnType<typeof visibleHistoryAnchor>>(undefined);
   const scrollTarget = useRef<number>(undefined);
   const scrollLatest = useRef(false);
+  const scrollingToLatest = useRef(false);
   const queuedJump = useRef<number | 'latest'>(undefined);
   const latestJump = useRef(0);
   const highlight = useMessageHighlight();
@@ -366,6 +367,10 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
           rememberRead();
         }
       });
+      if (animating && scrollingToLatest.current) {
+        scrollingToLatest.current = false;
+        list.scrollTo({ top: list.scrollTop, behavior: 'instant' });
+      }
       if (animating || incomingMotion.frame.current) return;
     } else incomingMotion.cancel();
     if (scrollTarget.current !== undefined) {
@@ -390,7 +395,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
         (marker?.classList.contains('chat-unread-divider') ? marker : row)?.scrollIntoView({ block: 'start' });
         initialUnread.current = undefined;
       }
-    } else if (following.current) list.scrollTop = list.scrollHeight;
+    } else if (following.current && !scrollingToLatest.current) list.scrollTop = list.scrollHeight;
     scrollTop.current = list.scrollTop;
     setAboveLatest(list.scrollHeight - list.clientHeight - list.scrollTop >= 36);
   };
@@ -401,7 +406,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     rememberResizePosition(list);
     const observer = new ResizeObserver(() => {
       const saved = resizePosition.current;
-      if (!saved || !list.clientWidth || !list.clientHeight || incomingMotion.frame.current) return;
+      if (!saved || !list.clientWidth || !list.clientHeight || incomingMotion.frame.current || scrollingToLatest.current) return;
       const viewportResized = saved.width !== list.clientWidth || saved.height !== list.clientHeight;
       if (!viewportResized && (!saved.readingAnchor || saved.readingAnchor.scrollHeight === list.scrollHeight) &&
           Math.abs(list.scrollTop - scrollTop.current) >= 1) return;
@@ -1171,6 +1176,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
   const hasUnreadBelow = unreadBelow > 0 || moreUnread;
   const jumpLabel = t(hasUnreadBelow ? 'К новым сообщениям' : 'К последним сообщениям');
   function jumpToMessage(position: number) {
+    interruptScrollMotion();
     latestJump.current++;
     queuedJump.current = undefined;
     scrollTarget.current = undefined;
@@ -1195,9 +1201,30 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
   }
   function smoothScrollToLatest(list: HTMLDivElement) {
     const bottom = list.scrollHeight - list.clientHeight;
-    following.current = !hasMoreRef.current && list.scrollTop >= bottom - 1;
-    list.scrollTo({ top: bottom, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
-    if (following.current) rememberRead();
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    following.current = !hasMoreRef.current;
+    scrollingToLatest.current = following.current && !reduced && list.scrollTop < bottom - 1;
+    list.scrollTo({ top: bottom, behavior: reduced ? 'instant' : 'smooth' });
+    if (following.current && !scrollingToLatest.current) rememberRead();
+  }
+  function interruptScrollMotion() {
+    incomingMotion.cancel();
+    if (!scrollingToLatest.current) return;
+    scrollingToLatest.current = false;
+    const list = history.current;
+    if (!list) return;
+    list.scrollTo({ top: list.scrollTop, behavior: 'instant' });
+    following.current = !hasMoreRef.current && list.scrollHeight - list.clientHeight - list.scrollTop < 36;
+  }
+  function finishScrollToLatest(list: HTMLDivElement) {
+    if (!scrollingToLatest.current) return;
+    scrollingToLatest.current = false;
+    if (!following.current || hasMoreRef.current) return;
+    list.scrollTop = list.scrollHeight;
+    scrollTop.current = list.scrollTop;
+    setAboveLatest(false);
+    rememberResizePosition(list);
+    rememberRead();
   }
   function acknowledgeUnreadMarker() {
     if (!unreadMarker || unreadMarker.closing) return;
@@ -1229,25 +1256,35 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
       <div className="chat-feed">
       <div className="member-history chat-stream protected-chat-stream" ref={history} tabIndex={0} role="log" aria-label={t('Сообщения')}
         onWheel={event => {
-          incomingMotion.cancel();
+          interruptScrollMotion();
           if (readOnly || !event.deltaY) return;
           const node = event.currentTarget;
           if (event.deltaY < 0) following.current = false;
           if (event.deltaY < 0 && node.scrollTop < 64) void load(false, true);
           if (event.deltaY > 0 && hasMoreRef.current && node.scrollHeight - node.clientHeight - node.scrollTop < 64) void load();
         }}
-        onPointerDown={incomingMotion.cancel} onKeyDown={incomingMotion.cancel} onScroll={event => {
+        onPointerDown={interruptScrollMotion} onKeyDown={interruptScrollMotion}
+        onScrollEnd={event => finishScrollToLatest(event.currentTarget)} onScroll={event => {
           const node = event.currentTarget;
           node.classList.add('is-scrolling');
           clearTimeout(scrollTimer.current);
           scrollTimer.current = setTimeout(() => node.classList.remove('is-scrolling'), 800);
+          if (incomingMotion.frame.current) return;
           const delta = node.scrollTop - scrollTop.current;
           const previous = resizePosition.current;
+          const bottom = node.scrollHeight - node.clientHeight - node.scrollTop;
+          if (scrollingToLatest.current) {
+            if (bottom <= 1) finishScrollToLatest(node);
+            else {
+              scrollTop.current = node.scrollTop;
+              setAboveLatest(bottom >= 36);
+            }
+            return;
+          }
           if (!delta || previous && (previous.width !== node.clientWidth || previous.height !== node.clientHeight)) return;
           const clamped = chatScrollWasClamped(node, scrollTop.current);
           scrollTop.current = node.scrollTop;
           if (clamped) return;
-          const bottom = node.scrollHeight - node.clientHeight - node.scrollTop;
           following.current = !hasMoreRef.current && bottom < 36;
           onViewport?.(following.current);
           setAboveLatest(bottom >= 36);
