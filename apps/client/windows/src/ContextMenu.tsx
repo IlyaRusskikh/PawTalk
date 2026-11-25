@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Icon } from './Controls';
 
-export type MenuItem = { label: string; action(): void; danger?: boolean; disabled?: boolean; icon?: string; separatorBefore?: boolean };
+export type MenuItem = { label: string; action(): void; shiftAction?(): void; danger?: boolean; disabled?: boolean; icon?: string; separatorBefore?: boolean };
 
 export function ContextMenu({ x, y, items, anchor, onClose }: {
   x: number; y: number; items: MenuItem[]; anchor?: HTMLElement; onClose(): void;
@@ -44,5 +44,9 @@ export function ContextMenu({ x, y, items, anchor, onClose }: {
     buttons[next]?.focus();
   }}>{items.map((item, index) => <button type="button" role="menuitem" className={item.danger ? 'text-error' : ''}
     data-separator-before={item.separatorBefore || undefined} key={index} disabled={item.disabled}
-    onClick={() => { onClose(); item.action(); }}>{item.icon && <Icon name={item.icon} size={16}/>}<span>{item.label}</span></button>)}</div>;
+    onClick={event => {
+      onClose();
+      const action = event.shiftKey ? item.shiftAction ?? item.action : item.action;
+      action();
+    }}>{item.icon && <Icon name={item.icon} size={16}/>}<span>{item.label}</span></button>)}</div>;
 }
