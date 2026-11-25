@@ -15,3 +15,9 @@ Open **Settings → Audio and devices → Voice** to select an input and output 
 A passing automated/audio simulation does not establish real microphone, device, gaming or network performance. [Troubleshooting](troubleshooting.en.md).
 
 Per-participant listening volume and local mute are stored on this Client by Server and profile ID. They survive a complete Client restart and a new voice connection; nicknames and temporary voice identities are not used as storage keys. Linked devices use their effective profile.
+
+## Screen sharing
+
+In a voice call, use the monitor icon to choose a window or monitor, resolution and frame rate. On supported Windows builds, enable **Share application audio** for a window or **Share system audio** for a monitor. Application capture can include audio from other windows using the same application process. The presenter's preview is silent.
+
+Open a tile to focus it, select another thumbnail to switch, or click the focused tile to return to the overview. Use the full-screen icon to expand the focused stream. Hover its speaker icon to adjust stream volume. The call chat can stay below the streams, dock to the right or hide. [Screen sharing requirements](../server/compatibility.en.md).

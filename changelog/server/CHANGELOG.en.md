@@ -4,6 +4,12 @@
 
 Server-specific tags and early combined Voicecord/PawTalk history. Early tags do not imply an independently published Server installer.
 
+## Release source: server-v0.15.0
+
+Dedicated screen video and audio grants for encrypted voice rooms in API 2 and API 3.
+
+[Release details](../../releases/server-v0.15.0.en.md)
+
 ## Release source: server-v0.14.3
 
 Protected API 3 rooms can relay Client updates.

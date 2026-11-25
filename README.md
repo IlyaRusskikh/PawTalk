@@ -21,6 +21,7 @@ This is a difference in product approach, **not** a claim that one application i
 
 - Make a temporary server or join a permanent one; joining does not turn on your microphone or enter voice automatically.
 - Create voice and text channels, invite members, use administrator/moderator permissions.
+- Share a window or monitor in a call and watch several streams with Client 0.16.0 and a compatible host. [Screen sharing requirements](docs/server/compatibility.en.md).
 - Send formatted messages, photos, videos, documents and voice messages; organize interactive checklists, reply to messages and link devices within a server.
 - Preview attachments before sending, browse media galleries and use Markdown tools; see [chat features and server requirements](docs/client/chat.en.md).
 - Adjust microphone, output, Push-to-Talk, RNNoise noise reduction and notification sounds.
