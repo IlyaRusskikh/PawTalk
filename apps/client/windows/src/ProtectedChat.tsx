@@ -1,10 +1,11 @@
 import { Fragment, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { Avatar } from './Avatar';
 import { AttachmentDrafts } from './AttachmentDrafts';
 import { ChecklistDialog, type ChecklistContent } from './Checklist';
 import { ChatFile } from './ChatFile';
 import { ChatFileDrop } from './ChatFileDrop';
-import { chatImageLimit } from './chatImages';
+import { chatImageLimit, rememberSentImageSize } from './chatImages';
 import { ChatEmptyState } from './ChatEmptyState';
 import { ChatComposerActivity, useChatComposerActivity } from './ChatComposerActivity';
 import { useMessageHighlight } from './useMessageHighlight';
@@ -18,6 +19,8 @@ import { dropProtectedMemberMention, memberDragType } from './memberMention';
 import { membership, type ChatAttachment, type ChatImageAttachment } from './membership';
 import { FormattingTextarea } from './FormattingTextarea';
 import { animateSendFlight, composerTextOrigin } from './sendFlight';
+import { useIncomingChatMotion } from './useIncomingChatMotion';
+import { captureChatReadingAnchor, chatScrollWasClamped, restoreChatReadingAnchor, type ChatReadingAnchor } from './chatReadingAnchor';
 import { trimMessage } from './trimMessage';
 import { Modal } from './Modal';
 import { ProtectedChecklist } from './ProtectedChecklist';
@@ -123,9 +126,10 @@ function ProtectedComposerLayout({ children }: { children: ReactNode }) {
 
 export function ProtectedHistoryLoading({ keysPending = false }: { keysPending?: boolean }) {
   return <div className="protected-history-loading">
-    <div role="status">
-      <strong>{t(keysPending ? 'Синхронизируем защищённый доступ…' : 'Загружаем сообщения…')}</strong>
-      {keysPending && <p>{t('Получаем доступ к каналу и ключи шифрования. История появится автоматически.')}</p>}
+    <div className={keysPending ? 'protected-key-status' : undefined} role="status">
+      {keysPending && <span className="protected-key-spinner" aria-hidden="true"><Icon name="paw" size={20}/></span>}
+      <div><strong>{t(keysPending ? 'Ждём ключ шифрования…' : 'Загружаем сообщения…')}</strong>
+      {keysPending && <p>{t('Чат откроется автоматически, когда другое устройство с доступом передаст ключ.')}</p>}</div>
     </div>
     <div className="protected-history-skeleton" aria-hidden="true">
       {[0, 1, 2].map(row => <div className="protected-history-skeleton-row" key={row}>
@@ -181,6 +185,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
   const [cacheVersion, setCacheVersion] = useState(0);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
+  const [historyKeyPending, setHistoryKeyPending] = useState(false);
   const [retryMessage, setRetryMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [outgoing, setOutgoing] = useState<ReadableMessage & { position?: number }>();
@@ -205,8 +210,8 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     });
     return () => cancelAnimationFrame(frame);
   }, [offline, historyConfirmed, openedAt]);
-  const preparingAccess = keysPending && !historyConfirmed;
-  const readOnly = offline || !historyConfirmed;
+  const preparingAccess = (keysPending && !historyConfirmed) || (historyKeyPending && messages.length === 0);
+  const readOnly = offline || !historyConfirmed || preparingAccess;
   const loadingHistory = !offline && (preparingAccess || (!historyConfirmed && !readError && !retryMessage));
   const canSend = sendGranted && !pauseSending && !readOnly && (!keysPending || protection?.allowSend === true);
   const [canAttach, setCanAttach] = useState(cached?.window.canAttach ?? false);
@@ -266,6 +271,9 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
   const hasMoreRef = useRef(cached?.more ?? false);
   const composer = useRef<HTMLTextAreaElement>(null);
   const history = useRef<HTMLDivElement>(null);
+  const historyContent = useRef<HTMLDivElement>(null);
+  const incomingMotion = useIncomingChatMotion();
+  const incomingRows = useRef(new Set<number>());
   const following = useRef(cached?.following ?? true);
   const scrollTop = useRef(cached?.scrollTop ?? 0);
   const restoreScroll = useRef(!!cached && !cached.following);
@@ -276,7 +284,19 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
   const cacheInvalidation = useRef(0);
   const needsCachedValidation = useRef(!!cached && !eventsLive);
   const messageNodes = useRef(new Map<number, HTMLElement>());
-  const resizePosition = useRef<{ width: number; height: number; anchor?: { position: number; bottom: number } }>(undefined);
+  const resizePosition = useRef<{ width: number; height: number; anchor?: { position: number; bottom: number }; readingAnchor?: ChatReadingAnchor }>(undefined);
+  const messageTextTop = (row: HTMLElement) => (row.querySelector('.member-message-text') ?? row).getBoundingClientRect().top;
+  function visibleHistoryAnchor(list: HTMLDivElement) {
+    const { top, bottom } = list.getBoundingClientRect();
+    let anchor: { position: number; offset: number } | undefined;
+    for (const [position, row] of messageNodes.current) {
+      const bounds = row.getBoundingClientRect();
+      if (bounds.top < bottom && bounds.bottom > top && (!anchor || position < anchor.position)) {
+        anchor = { position, offset: messageTextTop(row) - top };
+      }
+    }
+    return anchor;
+  }
   function rememberResizePosition(list: HTMLDivElement) {
     const viewport = list.getBoundingClientRect();
     let anchor: { position: number; bottom: number } | undefined;
@@ -287,9 +307,12 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
         anchor = { position, bottom };
       }
     }
-    resizePosition.current = { width: list.clientWidth, height: list.clientHeight, anchor };
+    resizePosition.current = {
+      width: list.clientWidth, height: list.clientHeight, anchor,
+      readingAnchor: following.current ? undefined : captureChatReadingAnchor(list),
+    };
   }
-  const preservedScroll = useRef<{ position: number; top: number } | undefined>(undefined);
+  const preservedScroll = useRef<ReturnType<typeof visibleHistoryAnchor>>(undefined);
   const scrollTarget = useRef<number>(undefined);
   const scrollLatest = useRef(false);
   const queuedJump = useRef<number | 'latest'>(undefined);
@@ -327,6 +350,24 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     const list = history.current;
     if (!list) return;
     const saved = preservedScroll.current;
+    const rows = [...incomingRows.current].flatMap(position => {
+      const row = messageNodes.current.get(position);
+      return row ? [row] : [];
+    });
+    incomingRows.current.clear();
+    const followIncoming = following.current && !saved && !scrollLatest.current &&
+      scrollTarget.current === undefined && initialUnread.current === undefined;
+    if (followIncoming) {
+      const animating = incomingMotion.play(list, rows, () => {
+        scrollTop.current = list.scrollTop;
+        if (!incomingMotion.frame.current) {
+          setAboveLatest(false);
+          rememberResizePosition(list);
+          rememberRead();
+        }
+      });
+      if (animating || incomingMotion.frame.current) return;
+    } else incomingMotion.cancel();
     if (scrollTarget.current !== undefined) {
       const row = messageNodes.current.get(scrollTarget.current);
       scrollTarget.current = undefined;
@@ -336,7 +377,10 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
       smoothScrollToLatest(list);
     } else if (saved) {
       const row = messageNodes.current.get(saved.position);
-      if (row) list.scrollTop += row.getBoundingClientRect().top - saved.top;
+      if (row) {
+        const correction = messageTextTop(row) - list.getBoundingClientRect().top - saved.offset;
+        list.scrollTop += correction;
+      }
       preservedScroll.current = undefined;
     } else if (initialUnread.current !== undefined && messages.length) {
       const firstUnread = messages.find(message => message.position >= initialUnread.current!);
@@ -357,25 +401,28 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
     rememberResizePosition(list);
     const observer = new ResizeObserver(() => {
       const saved = resizePosition.current;
-      if (!saved || !list.clientWidth || !list.clientHeight ||
-          (saved.width === list.clientWidth && saved.height === list.clientHeight)) return;
+      if (!saved || !list.clientWidth || !list.clientHeight || incomingMotion.frame.current) return;
+      const viewportResized = saved.width !== list.clientWidth || saved.height !== list.clientHeight;
+      if (!viewportResized && (!saved.readingAnchor || saved.readingAnchor.scrollHeight === list.scrollHeight) &&
+          Math.abs(list.scrollTop - scrollTop.current) >= 1) return;
       if (following.current) {
         list.scrollTop = list.scrollHeight;
-      } else if (saved.anchor) {
+      } else if (viewportResized && saved.anchor) {
         const row = messageNodes.current.get(saved.anchor.position);
         if (row) {
           const bounds = row.getBoundingClientRect();
           const offset = Math.max(1 - list.clientHeight, Math.min(saved.anchor.bottom, bounds.height - 1));
           list.scrollTop += bounds.bottom - list.getBoundingClientRect().bottom - offset;
         }
-      }
+      } else if (!viewportResized) restoreChatReadingAnchor(list, saved.readingAnchor);
       scrollTop.current = list.scrollTop;
       setAboveLatest(list.scrollHeight - list.clientHeight - list.scrollTop >= 36);
       const entry = cache.get(cacheKey);
       if (entry) entry.scrollTop = list.scrollTop;
-      resizePosition.current = { ...saved, width: list.clientWidth, height: list.clientHeight };
+      rememberResizePosition(list);
     });
     observer.observe(list);
+    if (historyContent.current) observer.observe(historyContent.current);
     return () => observer.disconnect();
   }, [cache, cacheKey]);
   useLayoutEffect(() => {
@@ -615,6 +662,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
         if (!canApply()) return;
         if (started.keysPending && first.current === undefined &&
             (page.retry || !page.messages.length || page.messages.some(message => message.locked))) return;
+        if (!page.retry) setHistoryKeyPending(false);
         clearTimeout(retryTimer.current);
         setRetryMessage('');
         const changed = applyWindow(page);
@@ -643,6 +691,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
         }
         if (page.retry || boundary === undefined && last.current !== after || older && changed) continue;
         setReadError('');
+        const paging = older || hasMoreRef.current;
         if (!older) {
           last.current = page.next ?? Math.max(last.current, page.messages.at(-1)?.position ?? 0, page.last ?? 0);
           hasMoreRef.current = page.next !== undefined && (page.last === undefined || page.next < page.last);
@@ -656,13 +705,20 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
         }
         for (const message of received) versions.current.set(message.position, message.revision ?? 1);
         if (received.length) {
-          if (older && history.current) {
-            const edge = history.current.getBoundingClientRect().top;
-            const anchor = [...messageNodes.current].filter(([, node]) => node.getBoundingClientRect().bottom > edge)
-              .sort(([left], [right]) => left - right)[0];
-            if (anchor) preservedScroll.current = { position: anchor[0], top: anchor[1].getBoundingClientRect().top };
+          if (!paging && hadHistory && following.current && !hasMoreRef.current) {
+            for (const message of received) {
+              if (message.position > after && !message.locked && !message.own) incomingRows.current.add(message.position);
+            }
           }
-          setMessages(previous => older ? [...received, ...previous] : [...previous, ...received]);
+          const list = history.current;
+          const applyPage = () => setMessages(previous => older ? [...received, ...previous] : [...previous, ...received]);
+          if (paging && list) {
+            // Commit the page and restore the reading position before another wheel frame.
+            flushSync(() => {
+              preservedScroll.current = visibleHistoryAnchor(list);
+              applyPage();
+            });
+          } else applyPage();
         }
         await refreshEditions();
         if (canApply()) confirmCache();
@@ -695,7 +751,10 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
           if (canApply() && isAccessDenied(windowError)) clearHistory();
         }
       }
-      if (canApply()) setReadError((failure as Error).message);
+      if (canApply()) {
+        setHistoryKeyPending(code === 'PROTECTED_KEY_PENDING');
+        setReadError(code === 'PROTECTED_KEY_PENDING' ? '' : (failure as Error).message);
+      }
     } finally {
       reading.current = false;
       const nextJump = queuedJump.current;
@@ -764,9 +823,9 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
   }, [load, serverId, channelId]);
   useEffect(() => {
     if (offline) return;
-    const timer = setInterval(() => void load(hasMoreRef.current), eventsLive ? 30_000 : 5_000);
+    const timer = setInterval(() => void load(hasMoreRef.current), eventsLive && !keysPending && !historyKeyPending ? 30_000 : 5_000);
     return () => clearInterval(timer);
-  }, [load, eventsLive, offline]);
+  }, [load, eventsLive, offline, keysPending, historyKeyPending]);
   useEffect(() => () => {
     fittingFiles.current?.abort();
     attachmentDrafts.current.forEach(disposeDraft);
@@ -899,10 +958,14 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
         const playback = views[slot];
         const view = playback && { bytes: new Uint8Array(await playback.arrayBuffer()) };
         if (!mounted.current || sendingPaused.current) return;
-        fileIds.push(await membership<string>('chat.protected.stageAttachment', { serverId, channelId, operationId, slot,
+        const id = await membership<string>('chat.protected.stageAttachment', { serverId, channelId, operationId, slot,
           file: { name: file.name, mime, bytes, duration: media?.duration,
             ...(videoMime(mime) ? { poster } : mediaVariants ? { preview: poster, view } : {}),
-            ...(voice && { voice: { duration: voice.duration, waveform: voice.waveform } }) } }));
+            ...(voice && { voice: { duration: voice.duration, waveform: voice.waveform } }) } });
+        fileIds.push(id);
+        if (imageMime(mime) || (mime === 'image/gif' && mediaVariants && poster)) {
+          rememberSentImageSize(serverId, channelId, id, mediaVariants && poster ? poster.bytes : bytes);
+        }
       }
       if (!mounted.current || sendingPaused.current) return;
       const receipt = await membership<{ Position?: number }>('chat.protected.send', { serverId, channelId, text, operationId, replyTo: reply,
@@ -1150,10 +1213,10 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
       return <div className="member-reply">{t('Исходное сообщение уже недоступно.')}</div>;
     }
     return <button type="button" className="member-reply chat-reply-quote"
+      aria-label={t('К исходному сообщению')} title={original ? messagePreview(original.text, t('Спойлер')).slice(0, 240) : t('К исходному сообщению')}
       onClick={() => jumpToMessage(reference)}>
       <Icon name="reply" size={13}/>
-      {original ? <><strong>{authorName(original)}</strong>
-        <span><MessageText text={excerpt(original)} preview/></span></> : <strong>{t('К исходному сообщению')}</strong>}
+      <span className="chat-reply-text">{original ? messagePreview(original.text, t('Спойлер')) : t('К исходному сообщению')}</span>
     </button>;
   }
   return <ProtectedChatFrame channelName={channelName}>
@@ -1166,12 +1229,14 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
       <div className="chat-feed">
       <div className="member-history chat-stream protected-chat-stream" ref={history} tabIndex={0} role="log" aria-label={t('Сообщения')}
         onWheel={event => {
+          incomingMotion.cancel();
           if (readOnly || !event.deltaY) return;
           const node = event.currentTarget;
+          if (event.deltaY < 0) following.current = false;
           if (event.deltaY < 0 && node.scrollTop < 64) void load(false, true);
           if (event.deltaY > 0 && hasMoreRef.current && node.scrollHeight - node.clientHeight - node.scrollTop < 64) void load();
         }}
-        onLoadCapture={followHistory} onScroll={event => {
+        onPointerDown={incomingMotion.cancel} onKeyDown={incomingMotion.cancel} onScroll={event => {
           const node = event.currentTarget;
           node.classList.add('is-scrolling');
           clearTimeout(scrollTimer.current);
@@ -1179,12 +1244,18 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
           const delta = node.scrollTop - scrollTop.current;
           const previous = resizePosition.current;
           if (!delta || previous && (previous.width !== node.clientWidth || previous.height !== node.clientHeight)) return;
+          const clamped = chatScrollWasClamped(node, scrollTop.current);
           scrollTop.current = node.scrollTop;
+          if (clamped) return;
           const bottom = node.scrollHeight - node.clientHeight - node.scrollTop;
           following.current = !hasMoreRef.current && bottom < 36;
           onViewport?.(following.current);
           setAboveLatest(bottom >= 36);
-          rememberResizePosition(node);
+          // A scroll event can run before the resize observer. Retain the
+          // pre-resize reading position until the observer applies it.
+          if (!previous?.readingAnchor || previous.readingAnchor.scrollHeight === node.scrollHeight) {
+            rememberResizePosition(node);
+          }
           rememberRead();
           if (!readOnly && delta < 0 && node.scrollTop < 64) void load(false, true);
           if (!readOnly && delta > 0 && hasMoreRef.current && bottom < 64) void load();
@@ -1194,6 +1265,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
             entry.following = following.current;
           }
         }}>
+        <div ref={historyContent} className="protected-history-content">
         {!readOnly && !messages.length && !hasMore && !outgoing && !readError && <ChatEmptyState
           onCompose={canSend && !timedOut && !recording && !sending ? () => {
             setShowPreview(false);
@@ -1325,6 +1397,7 @@ export function ProtectedChat({ serverId, channelId, channelName, cache, cacheKe
             </div>
           </div>
         </article>}
+        </div>
       </div>
         {!loadingHistory && (aboveLatest || hasMore && !offline) && <button type="button" className="member-load chat-jump protected-chat-jump"
           aria-label={unreadBelow && !moreUnread ? t('Новых сообщений: {0}', unreadBelow) : jumpLabel} title={jumpLabel} onClick={jumpToLatest}>

@@ -196,18 +196,26 @@ app.whenReady().then(async()=>{
  await until("document.querySelectorAll('.attachment-thumbnail img').length===2&&!document.querySelector('.attachment-preparing')");
  await run("document.querySelector('.member-composer').requestSubmit()");
  await until("document.querySelectorAll('.chat-photo-card .video-poster img').length===2 && [...document.querySelectorAll('.chat-photo-card .video-poster img')].every(img=>img.naturalWidth>0)");
-  assert.ok(await run(`(() => {
+  const tiny = await run(`(() => {
     const card = [...document.querySelectorAll('.chat-photo-card')].find(item => item.querySelector('img')?.naturalWidth === 1);
     const photo = card.querySelector('img');
     const rect = photo.getBoundingClientRect(), frame = card.getBoundingClientRect();
-    return rect.width === 1 && rect.height === 1 && rect.left === frame.left && rect.top === frame.top &&
-      getComputedStyle(card).backgroundColor === 'rgba(0, 0, 0, 0)';
-  })()`), 'Tiny chat images keep their size and sit at the upper left without a dark frame');
+    return {width:rect.width,height:rect.height,left:rect.left-frame.left,top:rect.top-frame.top,
+      background:getComputedStyle(card).backgroundColor};
+  })()`);
+  assert.deepEqual(tiny, {width:1,height:1,left:0,top:0,background:'rgba(0, 0, 0, 0)'},
+    'Tiny chat images keep their size and sit at the upper left without a dark frame');
  const [photo,gif] = await run('window.sendRequests.at(-1).content.files');
  assert.equal(photo.size,originalSize);
  assert.equal(photo.preview.mime,'image/webp');
+ const decodedSize = await run(`(() => {
+   const preview = [...document.querySelectorAll('.chat-photo-card .video-poster img')].find(img => img.naturalWidth > 1);
+   return [preview.naturalWidth, preview.naturalHeight];
+ })()`);
+ assert.deepEqual([photo.preview.width, photo.preview.height], decodedSize);
  assert.ok(photo.preview.size<=80*1024 && photo.view.size<=originalSize/2);
  assert.equal(gif.preview.mime,'image/webp');
+ assert.deepEqual([gif.preview.width, gif.preview.height], [1, 1]);
  assert.equal(gif.view,undefined);
  assert.deepEqual([...new Set(await run('window.attachmentReads'))].sort(),[photo.preview.id,gif.preview.id].sort());
  await run("document.querySelector('.chat-photo-card .chat-video-open').click()");

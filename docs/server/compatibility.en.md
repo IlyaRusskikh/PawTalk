@@ -38,6 +38,8 @@ The optional checklist-events-v1 capability pushes versioned check snapshots thr
 
 ## Protected access (API 3)
 
+Server 0.14.3 and temporary rooms hosted by Client 0.15.3 expose the same Client update relay in API 3 as in API 2. Older API 3 servers can accept chat connections while returning HTTP 404 for `/api/updates/`. Existing Clients with relay support can use the relay once the server host is updated.
+
 Client 0.15.2 inline attachment removal uses the existing encrypted message revision endpoint. Update all Clients in the room to display attachment-removal revisions. The encrypted original remains part of protected history, and recipients may already have saved it.
 
 Client 0.15.1 uses the optional `roleColors` field in the protected channel roster to color verified role mentions. Server 0.14.2 provides this field in permanent rooms. Temporary rooms created with Client 0.15.1 include support. Older peers use the default mention style.
@@ -85,6 +87,8 @@ Updated API 3 Clients and Servers can negotiate partial responses for individual
 With `protectedPollResultTasks`, Server closes voting at the deadline and waits for an updated Client to publish the separate result. The executor must be able to read the original poll and have a ready live package. Previously published results retain their format and system signature.
 
 `media-variants-v1` (API 2) and `protectedMediaVariants` (development API 3) enable new media writes after a Server upgrade. Existing attachments remain readable, and an updated Client uses the legacy send format against a Server without the capability. An earlier API 2 Client with gallery support opens the original and ignores the additional descriptors. In API 3 development rooms, update receiving Clients before sending variants because older development builds only recognize the legacy signed attachment references. Client and Server retain their existing limits and schemas. See [the media contract](../../architecture/chat-features.en.md#media-variants).
+
+Optional preview width and height are carried inside the encrypted message on both APIs. Updated Clients use them when present and retain the existing placeholder for older messages. This addition requires no Server or Manager upgrade.
 
 API 3 servers that advertise protectedEvents accept a pinned, bearer-authenticated WebSocket at /api/v3/events. Existing clients receive resync, state, chat and heartbeat frames. A chat invalidation identifies a channel only after a scope and original-position check at dispatch. Servers advertising `protectedMessageDelivery` also accept the client opt-in `&delivery=1`. These streams can deliver new encrypted records with the current history boundary after checking session and history access in the same bounded transaction that writes the frame. The Client verifies the record through its existing message verifier. History, gaps, unsupported frames and reconnect resync use HTTP. Update Server and Client to enable direct delivery.
 

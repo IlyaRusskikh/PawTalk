@@ -43,7 +43,16 @@ test.extendHistory=(last:number)=>{for(let id=records.at(-1)!.id+1;id<=last;id++
 const attachmentBytes=new Map<string,{bytes:Uint8Array;mime:string}>();let attachmentSequence=32;
 test.attachmentReads = [];
 let releaseUpload:undefined|(()=>void);test.releaseUpload=()=>releaseUpload?.();
-test.attachImage=()=>{const input=document.querySelector<HTMLInputElement>('.chat-compose input[type=file]')!,data=new DataTransfer(),bytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aEAAAAABJRU5ErkJggg=='),c=>c.charCodeAt(0));data.items.add(new File([bytes],'pending.png',{type:'image/png'}));input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));};
+test.attachImage=async()=>{
+ const canvas=document.createElement('canvas');
+ canvas.width=240;canvas.height=300;
+ const context=canvas.getContext('2d')!;
+ context.fillStyle='#7952b3';context.fillRect(0,0,canvas.width,canvas.height);
+ const image=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,'image/png'));
+ const input=document.querySelector<HTMLInputElement>('.chat-compose input[type=file]')!,data=new DataTransfer();
+ data.items.add(new File([image!],'pending.png',{type:'image/png'}));
+ input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+};
 test.confirmPending=()=>{const input=test.sendRequests.at(-1),channel=state.channels.find(c=>c.id===input.channelId)!,previous=channel.messageRevision,id=Math.max(...records.map(m=>m.id))+1,row:Message={id,channelId:input.channelId,authorProfileId:me,requestId:input.requestId,sentAt:Date.now(),content:structuredClone(input.content)};records.push(row);channel.lastMessageId=id;channel.messageRevision++;state.eventsLive=true;for(const fn of liveListeners)fn({serverId:sid,channelId:input.channelId,type:'chat',delivery:true,previous,revision:channel.messageRevision,first:records[0].id,last:id,messages:[structuredClone(row)],deleted:[]});refresh();return id;};
 test.update=(id:number,text:string)=>{const message=records.find(m=>m.id===id)!;message.content.text=text;message.editedAt=Date.now();state.channels[0].messageRevision++;refresh();};
 test.reply=(id:number,target:number)=>{records.find(m=>m.id===id)!.content.reply={id:target,author:'Old name',text:'Stale snapshot'};state.channels[0].messageRevision++;refresh();};

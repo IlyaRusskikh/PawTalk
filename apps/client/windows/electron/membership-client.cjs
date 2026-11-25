@@ -228,6 +228,10 @@ function validatedAttachment(f,images=false){
    if (!supported || result.poster || !part || !hexID(part.id, 32) || part.mime !== 'image/webp' ||
        !Number.isSafeInteger(part.size) || part.size < 1 || part.size > limit) throw failure('INVALID_ATTACHMENT');
    result[kind] = { id: part.id, mime: part.mime, size: part.size };
+   if (kind === 'preview' && [part.width, part.height].every(value =>
+     Number.isSafeInteger(value) && value >= 1 && value <= 480)) {
+     Object.assign(result.preview, { width: part.width, height: part.height });
+   }
  }
  if(f.duration!==undefined){if(!f.mime.startsWith('video/')||!Number.isFinite(f.duration)||f.duration<0||f.duration>7*86400)throw failure('INVALID_ATTACHMENT');result.duration=f.duration;}
  if(f.voice!==undefined){const v=f.voice;if(!f.mime.startsWith('audio/')||!v||!Number.isFinite(v.duration)||v.duration<=0||v.duration>14400||!Array.isArray(v.waveform)||v.waveform.length>128||v.waveform.some(n=>!Number.isFinite(n)||n<0||n>1))throw failure('INVALID_ATTACHMENT');result.voice={duration:v.duration,waveform:v.waveform};}
@@ -3639,6 +3643,7 @@ class MembershipClient {
       if (image?.mime !== 'image/webp' || Math.max(image.width, image.height) > maxSide) throw failure('INVALID_IMAGE');
       variants[kind] = { clear, digest: hash(clear), descriptor: {
         id: draft?.[kind]?.ref.id ?? requestID(), mime: image.mime, size: clear.length,
+        ...(kind === 'preview' && { width: image.width, height: image.height }),
       } };
     }
     const file = validatedAttachment({ id: draft?.ref.id ?? requestID(), name: input.name, mime: input.mime,

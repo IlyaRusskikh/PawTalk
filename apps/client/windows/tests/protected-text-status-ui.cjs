@@ -34,7 +34,7 @@ app.whenReady().then(async () => {
       await win.loadURL(process.env.PAWTALK_UI_TEST_URL + `/tests/notifications.html?language=${language}&protected=text-protection&pending-chat`);
       await until("!!document.querySelector('.member-server-list button')", 'Server with pending keys appears');
       await run("document.querySelector('.member-server-list button').click()");
-      const loading = english ? 'Synchronizing secure access…' : 'Синхронизируем защищённый доступ…';
+      const loading = english ? 'Waiting for the encryption key…' : 'Ждём ключ шифрования…';
       const locked = english ? 'The key for this message is unavailable.' : 'Нет ключа для этого сообщения.';
       await until(`document.querySelector('.protected-history-loading [role=status]')?.textContent.includes(${JSON.stringify(loading)})`, 'Secure access shows its loading state');
       assert.equal(await run("document.querySelectorAll('.protected-history-skeleton-row').length"), 3);
@@ -44,6 +44,14 @@ app.whenReady().then(async () => {
       await until("document.querySelector('.member-history')?.textContent.includes('Synchronized message')", 'Ready access loads the initial history');
       assert.equal(await run("!!document.querySelector('.protected-history-loading')"), false);
       assert.equal(await run(`document.querySelector('.member-history')?.textContent.includes(${JSON.stringify(locked)})`), true);
+
+      await win.loadURL(process.env.PAWTALK_UI_TEST_URL + `/tests/notifications.html?language=${language}&protected=text-protection&pending-chat&pending-key-error`);
+      await until("!!document.querySelector('.member-server-list button')", 'Server appears before it advertises the key wait');
+      await run("document.querySelector('.member-server-list button').click()");
+      await until(`document.querySelector('.protected-key-status')?.textContent.includes(${JSON.stringify(loading)})`, 'A pending-key response shows the waiting state');
+      assert.equal(await run("!!document.querySelector('.member-chat-error')"), false);
+      await run("window.finishChannelSync()");
+      await until("document.querySelector('.member-history')?.textContent.includes('Synchronized message')", 'The pending-key response recovers automatically');
 
       await win.loadURL(process.env.PAWTALK_UI_TEST_URL + `/tests/notifications.html?language=${language}&protected=text-protection&pending-chat`);
       await until("!!document.querySelector('.member-server-list button')", 'Server with readable history appears');

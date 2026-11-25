@@ -118,12 +118,12 @@ async function test(window) {
   await run("[...document.querySelectorAll('.member-message')].find(row=>row.querySelector('.member-message-text')?.textContent.trim()==='Synthetic encrypted message').querySelector('button[aria-label=\"Ответить\"]').click()");
   await set('.member-composer textarea','Synthetic reply');await run("document.querySelector('.member-composer').requestSubmit()");
   // The reply row can render before the authenticated original lookup finishes.
-  await until("!!document.querySelector('.member-reply span strong')",'encrypted reply and original formatting roundtrip');
-  assert.equal(await run("!!document.querySelector('.member-reply span strong')"),true,'reply preview renders bold formatting');
+  await until("document.querySelector('.chat-reply-quote')?.title.includes('Synthetic')",'encrypted reply and original formatting roundtrip');
+  assert.equal(await run("document.querySelector('.chat-reply-quote')?.textContent.trim()"),'Synthetic encrypted message','the reply shows a quote without the author name');
   await run("[...document.querySelectorAll('.member-message')].find(row=>row.querySelector('.member-message-text')?.textContent.trim()==='Synthetic encrypted message').querySelector('button[aria-label=\"Редактировать\"]').click()");
   await set('.chat-inline-edit textarea','**Synthetic updated message**');
   await run("document.querySelector('.chat-inline-edit').requestSubmit()");
-  await until("document.querySelector('.member-reply')?.textContent.includes('Synthetic updated message')&&!document.querySelector('.chat-inline-edit')",'reply reflects original edit');
+  await until("document.querySelector('.member-reply')?.title.includes('Synthetic updated message')&&!document.querySelector('.chat-inline-edit')",'reply reflects original edit');
   await run("document.querySelector('.member-reply').click()");
   await until("!!document.querySelector('.chat-message-target')",'reply scroll highlights original');
   await run("[...document.querySelectorAll('.chat-jump')].find(e=>e.textContent.includes('К новым сообщениям'))?.click()");

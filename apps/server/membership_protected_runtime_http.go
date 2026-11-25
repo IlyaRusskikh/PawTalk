@@ -21,6 +21,11 @@ func (p *protectedRuntime) handler() http.Handler {
 func (p *protectedRuntime) handlerWithVoice(cfg config, upstream *url.URL) http.Handler {
 	limiter := newProtectedRequestLimiter(p.store)
 	mux := http.NewServeMux()
+	updates := newUpdateRelay(cfg.UpdateCacheDir)
+	mux.HandleFunc("GET /api/updates/", func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Del("X-Real-IP")
+		updates.ServeHTTP(w, r)
+	})
 	mux.HandleFunc("GET /api/config", limiter.public.limited(p.configHTTP(upstream != nil)))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		respond(w, http.StatusOK, map[string]any{"status": "ok", "apiProtocolVersion": 3, "cutoverDigest": p.cutoverDigest})

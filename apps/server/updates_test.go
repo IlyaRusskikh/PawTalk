@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,24 @@ import (
 type updateRoundTrip func(*http.Request) (*http.Response, error)
 
 func (f updateRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestProtectedRuntimeExposesUpdateRelay(t *testing.T) {
+	t.Setenv("PAWTALK_UPDATE_PROXY", "false")
+	runtime := &protectedRuntime{store: testMembershipStore(t)}
+	handler := runtime.handler()
+	for _, resource := range []string{
+		"/api/updates/releases?per_page=100&page=1",
+		"/api/updates/assets/client-v0.15.2/update-manifest.json",
+	} {
+		request := httptest.NewRequest(http.MethodGet, "https://localhost"+resource, nil)
+		request.TLS = &tls.ConnectionState{}
+		result := httptest.NewRecorder()
+		handler.ServeHTTP(result, request)
+		if result.Code != http.StatusServiceUnavailable || !strings.Contains(result.Body.String(), "Update relay disabled") {
+			t.Fatalf("%s: expected the disabled relay, got HTTP %d", resource, result.Code)
+		}
+	}
+}
 
 func TestUpdateResourcesAndRedirectsAreRestricted(t *testing.T) {
 	for _, repository := range []string{"IlyaRusskikh/PawTalk", "IlyaRusskikh/pawtalk", "ilyarusskikh/PAWTALK"} {

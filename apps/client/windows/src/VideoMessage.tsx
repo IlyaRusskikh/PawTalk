@@ -3,13 +3,14 @@ import {membership,type ChatAttachment,type MediaVariant} from './membership';
 import {Icon} from './Controls';
 import {VideoViewer} from './VideoViewer';
 import {t} from './i18n';
-import {attachmentBlob,chatImageLimit,inspectImage,withImageSlot,withProtectedFileSlot,withProtectedPreviewSlot} from './chatImages';
+import {attachmentBlob,chatImageLimit,inspectImage,chatImageSize,rememberChatImageSize,withImageSlot,withProtectedFileSlot,withProtectedPreviewSlot} from './chatImages';
 import {imageMime} from './mediaDraft';
 
 function Poster({serverId,channelId,file,enabled,protectedPosition}:{
  serverId:string;channelId:string;file:ChatAttachment;enabled:boolean;protectedPosition?:number;
 }){
- const node=useRef<HTMLSpanElement>(null),[url,setUrl]=useState('');
+ const node=useRef<HTMLSpanElement>(null);
+ const [preview,setPreview]=useState<{url:string; id:string}>();
  const started=useRef<number | undefined>(undefined);
  const record = (stage: 'media.preview.decoded' | 'media.preview.failed') => {
   if(started.current === undefined)return;
@@ -19,9 +20,20 @@ function Poster({serverId,channelId,file,enabled,protectedPosition}:{
  const [error,setError]=useState('');
  const originalPhoto = protectedPosition !== undefined && imageMime(file.mime) && file.size <= chatImageLimit;
  const poster = file.preview ?? file.poster ?? (originalPhoto ? file : undefined);
+ const image = file.mime.startsWith('image/');
+ const photo = !!poster && image;
+ const currentPreview = preview?.id === poster?.id ? preview : undefined;
+ // Keep decoded geometry even when the offscreen bitmap is released.
+ const [dimensions,setDimensions] = useState(() => {
+  const {width,height} = file.preview ?? {};
+  if(width !== undefined && height !== undefined)return {width,height};
+  return chatImageSize(serverId, channelId, file.id);
+ });
+ const {width,height} = dimensions ?? {width:140,height:96};
+ const previewWidth = Math.min(width, 480, 360 * width / height);
  const size = file.preview?.size;
  useEffect(()=>{
-  setUrl('');
+  setPreview(undefined);
   setError('');
   if(!enabled||!poster)return;
   const source = poster;
@@ -29,6 +41,29 @@ function Poster({serverId,channelId,file,enabled,protectedPosition}:{
   let generation = 0, objectURL='';
   let visible = false;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  async function showPreview(current:number, url:string, ownsURL=false) {
+   let retained=false;
+   try {
+    let width = 0, height = 0;
+    if(photo) {
+     const decoder=new Image();
+     decoder.src=url;
+     await decoder.decode();
+     if(current!==generation)return;
+     ({naturalWidth:width,naturalHeight:height}=decoder);
+     if(!width||!height)throw Error(t('Не удалось загрузить изображение.'));
+     rememberChatImageSize(serverId,channelId,file.id,{width,height});
+     setDimensions(previous => previous?.width === width && previous.height === height ? previous : {width,height});
+    }
+    if(current!==generation)return;
+    if(ownsURL)objectURL=url;
+    setPreview({url,id:source.id});
+    setError('');
+    retained=true;
+   } finally {
+    if(ownsURL&&!retained)URL.revokeObjectURL(url);
+   }
+  }
   async function load(current: number, remaining: number) {
    try {
     await queue(async () => {
@@ -36,7 +71,7 @@ function Poster({serverId,channelId,file,enabled,protectedPosition}:{
      const scope = { serverId, channelId, attachmentId: source.id };
      if (size === undefined && protectedPosition === undefined) {
       const data = await membership<string>('image', { ...scope, mime: source.mime });
-      if (current === generation) setUrl(data);
+      if (current === generation) await showPreview(current,data);
       return;
      }
      const action = protectedPosition === undefined ? 'file' : 'chat.protected.attachment';
@@ -48,9 +83,7 @@ function Poster({serverId,channelId,file,enabled,protectedPosition}:{
        throw Error(t('Не удалось загрузить изображение.'));
       }
      }
-     objectURL = URL.createObjectURL(attachmentBlob(bytes, source.mime));
-     setUrl(objectURL);
-     setError('');
+     await showPreview(current,URL.createObjectURL(attachmentBlob(bytes, source.mime)),true);
     });
    } catch (failure) {
     if (current !== generation) return;
@@ -72,7 +105,7 @@ function Poster({serverId,channelId,file,enabled,protectedPosition}:{
     started.current = undefined;
     if (objectURL) URL.revokeObjectURL(objectURL);
     objectURL = '';
-    setUrl('');
+    setPreview(undefined);
     return;
    }
    started.current = performance.now();
@@ -80,8 +113,9 @@ function Poster({serverId,channelId,file,enabled,protectedPosition}:{
   },{root:node.current?.closest('.chat-stream,.member-history'),rootMargin:'200px'});
   if(node.current)observer.observe(node.current);
   return()=>{generation++;clearTimeout(retryTimer);observer.disconnect();if(objectURL)URL.revokeObjectURL(objectURL);};
- },[serverId,channelId,poster?.id,poster?.mime,size,enabled,protectedPosition]);
- return <span ref={node} className="video-poster" title={error || undefined}>{url?<img src={url} decoding="async" alt=""
+ },[serverId,channelId,file.id,poster?.id,poster?.mime,photo,size,enabled,protectedPosition]);
+ return <span ref={node} className="video-poster" title={error || undefined}
+  style={image ? { width: previewWidth, aspectRatio: `${width} / ${height}` } : undefined}>{currentPreview?<img src={currentPreview.url} decoding="async" alt=""
   onLoad={()=>record('media.preview.decoded')} onError={()=>record('media.preview.failed')}/>:<span className="video-poster-placeholder"><Icon name={file.mime.startsWith('image/')?'image':'video'} size={40}/></span>}</span>;
 }
 export function VideoMessage({serverId,channelId,files,group=files,pending=false,author,avatar,date,protectedPosition,saveImageNatively=false}:{
@@ -129,7 +163,7 @@ export function VideoMessage({serverId,channelId,files,group=files,pending=false
  return <div className="chat-videos">
   {files.map(file => {
    const image = file.mime.startsWith('image/');
-   return <div className={`chat-media-card ${image?'chat-photo-card':'chat-video-card'}`} key={file.id}>
+   return <div className={`chat-media-card ${image?'chat-photo-card':'chat-video-card'}`} key={`${serverId}:${channelId}:${file.id}`}>
     <button type="button" className="chat-video-open" disabled={pending}
      aria-label={image ? t('Открыть изображение {0}',file.name) : t('Воспроизвести')+' · '+file.name}
      onClick={()=>setView(group.findIndex(item=>item.id===file.id))}>

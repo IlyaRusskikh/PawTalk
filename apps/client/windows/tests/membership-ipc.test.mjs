@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 const {registerMembershipIPC}=createRequire(import.meta.url)('../electron/membership-ipc.cjs');
 const {clientPerformance}=createRequire(import.meta.url)('../electron/client-performance.cjs');
+const {ProtectedMembershipLive}=createRequire(import.meta.url)('../electron/protected-membership-live.cjs');
 const serverId='a'.repeat(32),channelId='b'.repeat(32),failure=code=>Object.assign(Error(code),{code});
 test('performance diagnostics correlate allowlisted timings and rotate without storing request data', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'pawtalk-client-performance-'));
@@ -1190,6 +1191,39 @@ test('protected ordinary activity uses authenticated recent messages, and readin
     assert.equal(counts.at(-1), 0, 'a deleted protected message clears its taskbar count');
     const other = await f.call('chat.protected.activity', { serverId, channelId: '8'.repeat(32), notify: true });
     assert.equal(other.value, undefined);
+  } finally { f.service.stop(); }
+});
+
+test('consecutive verified live notifications use the local receipt clock and stale HTTP history stays quiet', async t => {
+  let emit;
+  t.mock.method(ProtectedMembershipLive.prototype, 'ensure', function () { emit = this.send; });
+  const counts = [];
+  const f = nativeAlerts({ onNotificationCount: count => counts.push(count) });
+  const profileId = 'd'.repeat(64), cursor = '7'.repeat(32);
+  f.client.loadProtectedRuntimeTrust = async () => ({ serverId });
+  f.client.openStoredProtectedRuntime = async () => ({ serverId, profileId, address: 'https://127.0.0.1' });
+  f.client.readProtectedRuntimeState = async () => ({ apiProtocolVersion: 3, serverId, profileId,
+    channels: [{ id: channelId, kind: 'text', name: 'Protected' }] });
+  const window = last => ({ first: 1, last, cursor, removed: [], edits: [] });
+  const message = (position, sentAt) => ({ position, sentAt, text: 'Synthetic message' });
+  f.client.readProtectedPushedChatPage = async (_connection, _channel, _after, _cursor, _first, [delivery]) =>
+    ({ ...delivery.window, messages: [delivery.message] });
+  f.client.readProtectedHistoryWindow = async () => window(3);
+  f.client.readProtectedChatReference = async () => message(3, Date.now() - 60_000);
+  const activity = after => f.call('chat.protected.activity', { serverId, channelId, after, notify: true });
+  const push = (position, sentAt) => emit({ serverId, channelId, type: 'chat',
+    deliveries: [{ window: window(position), message: message(position, sentAt) }] });
+  try {
+    await f.call('connect', { serverId });
+    await f.call('chat.protected.muteNotifications', { serverId, mutedChannels: [], serverMuted: false });
+    push(1, Date.now());
+    assert.deepEqual((await activity(0)).value, { position: 1, incoming: true, recent: true, notified: true });
+    push(2, Date.now() + 60_000);
+    assert.deepEqual((await activity(1)).value, { position: 2, incoming: true, recent: true, notified: true });
+    assert.equal(f.shown.length, 2);
+    assert.deepEqual(counts, [1, 2]);
+    assert.equal((await activity(2)).value.recent, false);
+    assert.equal(f.shown.length, 2);
   } finally { f.service.stop(); }
 });
 

@@ -20,6 +20,7 @@
 - [client-v0.15.0](client-v0.15.0.ru.md)
 - [client-v0.15.1](client-v0.15.1.ru.md)
 - [client-v0.15.2](client-v0.15.2.ru.md)
+- [client-v0.15.3](client-v0.15.3.ru.md)
 
 ## Server
 
@@ -32,6 +33,7 @@
 - [server-v0.14.0](server-v0.14.0.ru.md)
 - [server-v0.14.1](server-v0.14.1.ru.md)
 - [server-v0.14.2](server-v0.14.2.ru.md)
+- [server-v0.14.3](server-v0.14.3.ru.md)
 
 ## Manager
 

@@ -27,9 +27,17 @@ app.whenReady().then(async()=>{
    assert.equal(await run('window.sendFlights.length'),flights*3,'failure and retry each animate once, never on acknowledgment');
    await run('window.holdUpload=true;window.hold=true;window.attachImage()');await until("!!document.querySelector('.chat-attachment-draft img')",'image attached');await send();
    await until("!!document.querySelector('.chat-message-pending img')",'gray local image appears during upload');assert.equal(await run('window.sendRequests.length'),3,'image is pending before message request');
+   await until("document.querySelector('.chat-message-pending img')?.naturalHeight === 300",'pending photo has decoded');
+   const photoHeight=await run("document.querySelector('.chat-pending-image').getBoundingClientRect().height");
    assert.equal(await run("getComputedStyle(document.querySelector('.chat-message-pending img')).filter"),'grayscale(1)');await run('window.holdUpload=false;window.releaseUpload()');await until('window.sendRequests.length===4','upload finished, send pending');
    await run('window.confirmPending()');await until("!!document.querySelector('[data-message-row=\"183\"]')&&!document.querySelector('.chat-message-pending')",'WS confirms attachment');await run('window.hold=false;window.release()');
    await until("!document.querySelector('.member-composer textarea').readOnly&&!document.querySelector('.chat-attachment-draft')",'attachment confirmed and draft cleared');assert.equal(await run("document.querySelectorAll('[data-message-row=\"183\"]').length"),1);
+   await until("document.querySelector('[data-message-row=\"183\"] .chat-image img')?.naturalHeight === 300",'confirmed photo has decoded');
+   const confirmed=await run(`(() => {
+     const list=document.querySelector('.chat-stream'), photo=list.querySelector('[data-message-row="183"] .chat-image');
+     return {height:photo.getBoundingClientRect().height,bottom:list.scrollHeight-list.scrollTop-list.clientHeight};
+   })()`);
+   assert.ok(Math.abs(confirmed.height-photoHeight)<1 && confirmed.bottom<2,'confirmation preserves photo height and keeps the chat at the bottom');
    assert.equal(await run('window.sendFlights.length'),flights*4,'attachment upload/confirmation does not repeat the flight');
    console.log('PASS pending messages '+lang+'/'+motion+': immediate single flight, gray text/image, upload, HTTP/WS acknowledgment, lost response, deduplication, failure and idempotent retry');
   }

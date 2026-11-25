@@ -6,6 +6,20 @@ export function inspectImage(bytes: Uint8Array): Pick<ChatImage, 'mime' | 'width
   return inspectMetadata(bytes) as Pick<ChatImage, 'mime' | 'width' | 'height'> | undefined;
 }
 
+const imageSizes = new Map<string, Pick<ChatImage, 'width' | 'height'>>();
+export function rememberChatImageSize(serverId: string, channelId: string, id: string, { width, height }: Pick<ChatImage, 'width' | 'height'>) {
+  imageSizes.set(`${serverId}:${channelId}:${id}`, { width, height });
+  if (imageSizes.size > 256) imageSizes.delete(imageSizes.keys().next().value!);
+}
+
+export function rememberSentImageSize(serverId: string, channelId: string, id: string, bytes: Uint8Array) {
+  const image = inspectImage(bytes);
+  if (image) rememberChatImageSize(serverId, channelId, id, image);
+}
+export function chatImageSize(serverId: string, channelId: string, id: string) {
+  return imageSizes.get(`${serverId}:${channelId}:${id}`);
+}
+
 export async function copyChatImage(source: Blob | HTMLImageElement, name: string) {
   const image = source instanceof Blob ? await createImageBitmap(source) : source;
   try {

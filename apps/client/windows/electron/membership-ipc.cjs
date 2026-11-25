@@ -338,7 +338,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     return { name: nickname?.name, avatar: member?.avatar };
   }
 
-  async function showProtectedMention(input, ordinary, initialWindow, deliveredBatch) {
+  async function showProtectedMention(input, ordinary, initialWindow, deliveredBatch, ordinaryUntil) {
     const serverId = id(input.serverId), channelId = id(input.channelId), position = input.position;
     if (!Number.isSafeInteger(position) || position < 1) fail('INVALID_INPUT');
     const connection = protectedConnections.get(serverId);
@@ -346,7 +346,7 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
     const inbox = protectedMentionInboxes.get(connection);
     const mention = inbox?.alerts.get(notificationRef(channelId, position));
     if (ordinary && (mention || ordinary.mentions?.some(item => item.kind === 'profile' && item.id === connection.profileId))) return false;
-    const alert = mention ?? (ordinary && { kind: 'message', until: ordinary.sentAt + 30_000 });
+    const alert = mention ?? (ordinary && { kind: 'message', until: ordinaryUntil });
     const channel = protectedNotificationChannels.get(connection)?.get(channelId);
     const key = `${serverId}:${channelId}`;
     const hasPriorityNotice = () => {
@@ -533,8 +533,9 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       channels.delete(event.channelId);
       if (deliveries?.length) {
         if (channels.size >= 8) channels.delete(channels.keys().next().value);
-        const compatible = previous?.until > Date.now() ? previous.deliveries : [];
-        channels.set(event.channelId, { until: Date.now() + 3000, deliveries: [...compatible, ...deliveries].slice(-16) });
+        const receivedAt = Date.now();
+        const compatible = previous?.until > receivedAt ? previous.deliveries : [];
+        channels.set(event.channelId, { receivedAt, until: receivedAt + 3000, deliveries: [...compatible, ...deliveries].slice(-16) });
       } else {
         protectedHistoryBaselines.get(connection)?.delete(event.channelId);
       }
@@ -1210,9 +1211,16 @@ function registerMembershipIPC({ ipcMain, authorized, client, links, clipboard, 
       const [message] = await Promise.all([delivered?.messages[0] ?? client.readProtectedChatReference(connection, channelId, last, window), inbox]);
       if (protectedConnections.get(serverId) !== connection || !protectedNotificationChannels.get(connection)?.has(channelId)) return;
       if (!message || message.own) return { position: last, incoming: false };
-      const recent = Number.isSafeInteger(message.sentAt) && message.sentAt <= Date.now() && Date.now() - message.sentAt < 30_000;
+      const now = Date.now();
+      const sentAt = Number.isSafeInteger(message.sentAt) && message.sentAt > 0 ? message.sentAt : 0;
+      // The authenticated socket pushes new appends, and resync uses history.
+      // HTTP history still needs the message timestamp. Allow small clock skew.
+      let until = 0;
+      if (delivered && deliveredBatch) until = deliveredBatch.receivedAt + 30_000;
+      else if (sentAt && sentAt <= now + 5_000) until = Math.min(sentAt, now) + 30_000;
+      const recent = until > now;
       const notified = input.notify === true && recent &&
-        await showProtectedMention({ serverId, channelId, position: last }, message, window, delivered && deliveredBatch).catch(() => false);
+        await showProtectedMention({ serverId, channelId, position: last }, message, window, delivered && deliveredBatch, until).catch(() => false);
       return { position: last, incoming: true, recent, notified };
     },
     async 'chat.protected.pins'(input) {

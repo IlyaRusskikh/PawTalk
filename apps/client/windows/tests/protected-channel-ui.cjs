@@ -169,20 +169,64 @@ app.whenReady().then(async () => {
       assert.ok(Math.abs(await run(`${entry(97)}.offsetHeight`) - regroupGeometry.end[0]) <= 1,
         'Regrouping completes without another change in message height');
       assert.equal(await run(`!!${entry(64)} || !!document.querySelector('.member-load:not(.chat-jump)')`), false);
-      await run(`(() => {
+      const offsetBeforePage = await run(`(() => {
         const history = document.querySelector('.member-history');
         history.scrollTop = 0;
+        const offset = ${entry(65)}.querySelector('.member-message-text').getBoundingClientRect().top - history.getBoundingClientRect().top;
         history.dispatchEvent(new WheelEvent('wheel', {deltaY:-120,bubbles:true}));
+        return offset;
       })()`);
       await until(`!!${entry(33)}`, 'Scrolling upward prepends an older page');
-      assert.ok(await run(`Math.abs(${entry(65)}.getBoundingClientRect().top -
-        document.querySelector('.member-history').getBoundingClientRect().top) < 32`), 'Prepending keeps the first visible message in place');
+      assert.equal(await run(`${entry(65)}.classList.contains('chat-message-continuation')`), true);
+      const offsetAfterPage = await run(`${entry(65)}.querySelector('.member-message-text').getBoundingClientRect().top -
+        document.querySelector('.member-history').getBoundingClientRect().top`);
+      assert.ok(Math.abs(offsetAfterPage - offsetBeforePage) < 2, 'Prepending keeps the same text at the same position even when the row regroups');
+      const visibleGrowth = await run(`(async()=>{
+        const history = document.querySelector('.member-history');
+        const viewport = history.getBoundingClientRect(), middle = (viewport.top + viewport.bottom) / 2;
+        const top = ${entry(65)};
+        const distance = row => {
+          const bounds = row.getBoundingClientRect();
+          return Math.max(0, bounds.top - middle, middle - bounds.bottom);
+        };
+        const center = [...history.querySelectorAll('.chat-message-row')].sort((a, b) => distance(a) - distance(b))[0];
+        if (!center || top.contains(center)) throw Error('Expected separate visible messages at the top and center');
+        const before = center.getBoundingClientRect().top;
+        const pendingCard = document.createElement('div');
+        pendingCard.style.height = '64px';
+        top.querySelector('.chat-message-row').append(pendingCard);
+        // The browser can deliver scroll before resize when both land in the same frame.
+        history.scrollTop -= 24;
+        history.dispatchEvent(new Event('scroll'));
+        await new Promise(requestAnimationFrame);
+        await new Promise(requestAnimationFrame);
+        return Math.abs(center.getBoundingClientRect().top - before - 24);
+      })()`);
+      assert.ok(visibleGrowth < 2, 'An expanding card preserves the concurrent upward scroll without adding a layout shift');
       await load('paging-chat', 48);
       await until(`!!${entry(49)} && !!${entry(80)}`, 'A previously read channel opens at the first unread message');
       assert.equal(await run(`!!${entry(48)}`), false);
       assert.equal(await run("document.querySelector('.chat-unread-divider').nextElementSibling.textContent.includes('Entry 49')"), true);
       await run("document.querySelector('.protected-chat-jump').click()");
       await until(`!!${entry(96)} && !document.querySelector('.protected-chat-jump')`, 'The jump loads the final page when history is behind');
+      await until("(()=>{const list=document.querySelector('.protected-chat-stream');return list.scrollHeight-list.clientHeight-list.scrollTop<2})()", 'Jump completes before the next arrival');
+      const incomingMotion = await run(`new Promise(resolve => {
+        const list = document.querySelector('.protected-chat-stream');
+        const start = list.scrollTop;
+        window.pagingChatLast = 97;
+        window.invalidateGeneralChat();
+        let faded = false, moved = false, frames = 0;
+        function observe() {
+          const row = ${entry(97)};
+          const bottom = list.scrollHeight - list.clientHeight;
+          if (row && Number(getComputedStyle(row).opacity) < 0.99) faded = true;
+          if (list.scrollTop > start + 1 && list.scrollTop < bottom - 1) moved = true;
+          if (++frames < 50 && (!faded || !moved || bottom - list.scrollTop >= 2)) requestAnimationFrame(observe);
+          else resolve({ faded, moved, atBottom: bottom - list.scrollTop < 2 });
+        }
+        requestAnimationFrame(observe);
+      })`);
+      assert.deepEqual(incomingMotion, { faded: true, moved: true, atBottom: true }, 'A protected incoming message appears while the chat scrolls smoothly');
       await load('paging-chat', 95);
       await until(`!!${entry(84)} && !!${entry(96)}`, 'A single unread message arrives together with the preceding context');
       assert.deepEqual(await run('window.protectedHistoryReads.map(read => read.after)'), [83]);
@@ -210,6 +254,7 @@ app.whenReady().then(async () => {
       const composerStatus = "document.querySelector('.chat-composer-activity')?.textContent";
       await run("window.emitComposerActivity('typing')");
       await until(`${composerStatus} === ${JSON.stringify(english ? 'Friend is typing…' : 'Friend печатает…')}`, 'An incoming typing event shows the author');
+      assert.equal(await run("getComputedStyle(document.querySelector('.chat-composer-activity-slot')).marginBottom"), '4px');
       assert.deepEqual(await run(composeGeometry), reservedSpace, 'Typing does not shift the chat or input');
       assert.equal(await run("document.querySelectorAll('.chat-typing-paws svg').length"), 3);
       await run("window.emitComposerActivity('recording')");
@@ -349,7 +394,7 @@ app.whenReady().then(async () => {
       if (english) {
         await load('history');
         await until("document.querySelector('.member-history')?.textContent.includes('Old history')", 'First history page is open');
-        assert.match(await run("document.querySelector('.chat-reply-quote')?.textContent"), /Old history/);
+        assert.match(await run("document.querySelector('.chat-reply-quote')?.title"), /Old history/);
         await run("document.querySelector('.member-message button[aria-label=Reply]').click()");
         await until("document.querySelector('.protected-reply-draft')?.textContent.includes('Old history')", 'Reply draft previews its source');
         await enter('.member-composer textarea', 'Local draft');
@@ -643,11 +688,30 @@ app.whenReady().then(async () => {
         await load('public-poll');
         await until("document.querySelector('.poll-voters [aria-label=\"Visible voter\"] img')?.naturalWidth > 0",
           'A public poll renders the visible voter’s channel profile avatar');
+        const optionBefore = await run(`(async () => {
+          const list = document.querySelector('.chat-stream');
+          const content = list.querySelector('.protected-history-content');
+          for (const edge of ['afterbegin', 'beforeend']) {
+            const spacer = document.createElement('div');
+            spacer.style.height = '700px';
+            content.insertAdjacentElement(edge, spacer);
+          }
+          const option = document.querySelectorAll('.poll-answer')[1];
+          option.scrollIntoView({block:'center'});
+          list.dispatchEvent(new Event('scroll'));
+          for (let i = 0; i < 4; i++) await new Promise(requestAnimationFrame);
+          return option.getBoundingClientRect().top;
+        })()`);
         await run('window.pollVoterVisible = false');
         await until("!document.querySelector('.poll-voters') && document.querySelector('.poll-count')?.textContent.includes('1')",
           'Revoking the voter removes the name and preserves the tally', 200);
+        const optionAfter = await run(`(async () => {
+          for (let i = 0; i < 4; i++) await new Promise(requestAnimationFrame);
+          return document.querySelectorAll('.poll-answer')[1].getBoundingClientRect().top;
+        })()`);
+        assert.ok(Math.abs(optionAfter - optionBefore) < 2, 'A changed voter strip keeps the next poll option in place');
       }
-      await load('attachment-grid');
+      await load('attachment-grid&hold-photo-decode');
       await until("document.querySelectorAll('.chat-message-attachments .chat-media-card').length === 4", 'Mixed and single media render');
       assert.ok(await run('performance.now() - window.chatOpenStarted < 1000'), 'Mixed history renders in under a second');
       assert.ok(await run(`(() => {
@@ -657,6 +721,31 @@ app.whenReady().then(async () => {
           third.top >= first.bottom && Math.abs(first.left - third.left) < 1 &&
           getComputedStyle(single).gridTemplateColumns.split(' ').length === 1;
       })()`), 'Combined photos and videos fill two columns, while a single photo keeps its own layout');
+      await until('window.photoDecodes > 0', 'A photo is waiting for its decoder');
+      const heldPhoto = await run(`(async () => {
+        const poster = document.querySelector('.chat-photo-card .video-poster');
+        const height = poster.getBoundingClientRect().height;
+        await new Promise(requestAnimationFrame);
+        await new Promise(requestAnimationFrame);
+        return {height,stable:poster.getBoundingClientRect().height===height,hasImage:!!poster.querySelector('img')};
+      })()`);
+      assert.ok(heldPhoto.height > 0 && heldPhoto.stable && !heldPhoto.hasImage,
+        `The photo placeholder keeps its height during decoding (${JSON.stringify(heldPhoto)})`);
+      const sizedPhoto = `document.querySelectorAll('.chat-photo-card .video-poster')[1]`;
+      assert.equal(await run(`${sizedPhoto}.getBoundingClientRect().height`), 1,
+        'Encrypted preview metadata sets the initial height before decoding');
+      assert.equal(await run(`!!${sizedPhoto}.querySelector('img')`), false);
+      await run('window.releasePhotoDecode()');
+      await until("document.querySelector('.chat-photo-card .video-poster img')?.naturalWidth > 0", 'The decoded photo replaces its placeholder');
+      await until(`${sizedPhoto}.querySelector('img')?.naturalWidth === 1`, 'The sized preview loads');
+      assert.equal(await run(`${sizedPhoto}.getBoundingClientRect().height`), 1, 'Decoding leaves the sized preview in place');
+      const decodedPhoto = await run(`(() => {
+        const poster = document.querySelector('.chat-photo-card .video-poster');
+        const image = poster.querySelector('img');
+        return {frameHeight:poster.getBoundingClientRect().height,imageHeight:image.getBoundingClientRect().height};
+      })()`);
+      assert.ok(decodedPhoto.imageHeight > 0 && Math.abs(decodedPhoto.frameHeight - decodedPhoto.imageHeight) < 1,
+        `A decoded photo leaves no gap under the image (${JSON.stringify(decodedPhoto)})`);
       await run("document.querySelector('.chat-photo-card .chat-video-open').click()");
       await until("document.querySelector('.video-counter')?.textContent === '1 / 3'", 'Protected photo opens the entire message gallery');
       await run("document.querySelector('.video-viewer').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))");
@@ -706,7 +795,7 @@ app.whenReady().then(async () => {
         await until('window.protectedRemoved.includes(2) && !document.querySelector(".chat-inline-edit")', 'Confirming deletes the attachment-only message');
       }
       await load('poll-result-window');
-      await until("document.querySelector('.chat-reply-quote')?.textContent.includes('Protected poll result')", 'Result and quote are initially visible');
+      await until("document.querySelector('.chat-reply-quote')?.title.includes('Protected poll result')", 'Result and quote are initially visible');
       assert.match(await run("document.querySelector('.poll-result').textContent"), /Winning option/);
       assert.equal(await run("!!document.querySelector('.server-app > .member-main :is(.member-toolbar,.member-e2ee,.protected-history-search)')"), false);
       await run("document.querySelector('.chat-file button').click()");
@@ -783,7 +872,7 @@ app.whenReady().then(async () => {
       await load('hidden-original');
       await run('window.openOriginalFixture()');
       await until("document.querySelector('#server-channels .member-channel[aria-current=true], #server-channels .member-channel.selected')?.textContent === 'Private original room' && " +
-        "document.querySelector('.chat-reply-quote')?.textContent.includes('Private original caption') && " +
+        "document.querySelector('.chat-reply-quote')?.title.includes('Private original caption') && " +
         "document.querySelector('.video-poster img')?.naturalWidth === 1 && !!document.querySelector('.protected-pin-banner')",
       'The authorized original has a quote, thumbnail and pin');
       await run('window.historyFirst = 2');

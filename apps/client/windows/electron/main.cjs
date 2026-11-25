@@ -27,7 +27,7 @@ const { setLanguage } = require('../../../../shared/i18n.cjs');
 let notificationCount = 0;
 function updateTaskbarBadge(count = notificationCount) {
   notificationCount = count;
-  if (process.platform === 'win32' && win && !win.isDestroyed() && win.isVisible()) {
+  if (process.platform === 'win32' && win && !win.isDestroyed() && (win.isVisible() || win.isMinimized())) {
     win.setOverlayIcon(taskbarBadge(nativeImage, count), count ? t('Новых сообщений: {0}', count) : '');
   }
 }
