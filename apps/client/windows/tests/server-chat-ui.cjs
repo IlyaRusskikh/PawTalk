@@ -1,13 +1,32 @@
 const {app,BrowserWindow}=require('electron');
 const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
+const {mkdtempSync}=require('node:fs');
+const {tmpdir}=require('node:os');
+const {join}=require('node:path');
+app.setPath('userData',mkdtempSync(join(tmpdir(),'pawtalk-server-chat-ui-')));
 app.disableHardwareAcceleration();
 app.whenReady().then(async()=>{
  const win=new BrowserWindow({show:false,width:1100,height:760,webPreferences:{offscreen:true,sandbox:true,contextIsolation:true,backgroundThrottling:false}});
  const errors=[];win.webContents.on('console-message',event=>{if(event.level==='error'){errors.push(event.message);console.error('renderer:',event.message);}});
+ win.webContents.on('render-process-gone',(_event,details)=>{console.error('chat UI renderer exited:',details.reason,details.exitCode);app.exit(1);});
  const timeout=setTimeout(()=>{console.error('chat UI watchdog timeout');app.exit(1);},90000);
  const run=code=>win.webContents.executeJavaScript(code,true),wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
- const until=async(code,label)=>{for(let i=0;i<180;i++){if(await run(code))return;await wait(50);}throw Error(label+': '+await run('document.body.innerText.slice(-1800)'));};
+ const until=async(code,label)=>{
+  for(let i=0;i<180;i++){if(await run(code))return;await wait(50);}
+  const snapshot=await run(`({
+   page: location.pathname, language: document.documentElement.lang, ready: document.readyState,
+   fixtureInitialized: Array.isArray(window.liveReads), mounted: !!document.querySelector('#root > *'),
+   messages: document.querySelectorAll('[data-message-row]').length,
+   quote: document.querySelector('.chat-reply-quote .chat-reply-text')?.textContent,
+   body: document.body?.innerText.slice(-1800),
+  })`);
+  throw Error(`${label}: ${JSON.stringify(snapshot)}`);
+ };
+ const openChat=async(language,query='')=>{
+  await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/server-chat.html?lang='+language+query);
+  await until("!!document.querySelector('#root .member-history')",'chat fixture mounts');
+ };
  const layout=()=>run('document.fonts.ready.then(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))');
  const settledHistory=async()=>{
   await until("document.querySelector('.member-history')?.getAttribute('aria-busy')==='false'",'history requests complete');
@@ -18,10 +37,11 @@ app.whenReady().then(async()=>{
  const set=(selector,value)=>run(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('missing '+${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
  const enter=extra=>run(`document.querySelector('.member-composer textarea').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...${JSON.stringify(extra||{})}}))`);
  try{
- await win.loadURL('about:blank');win.webContents.debugger.attach('1.3');
+ await win.loadURL('about:blank');
+ win.webContents.debugger.attach('1.3');
  for(const language of ['ru','en'])for(const reduced of ['reduce','no-preference']){
   win.setSize(1100,760);await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:reduced}]});
-  await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/server-chat.html?lang='+language);
+  await openChat(language);
   await until("document.querySelectorAll('[data-message-row]').length===25&&document.querySelector('.chat-reply-quote .chat-reply-text')?.textContent==='Original current'",'fresh off-page quote is visible without the author');
   assert.equal(await run("getComputedStyle(document.querySelector('.chat-reply-quote .chat-reply-text')).textOverflow"),'ellipsis');
   await until("document.activeElement===document.querySelector('.member-composer textarea')",'initial autofocus');
@@ -114,7 +134,7 @@ app.whenReady().then(async()=>{
   await until("!!document.querySelector('.chat-message-menu')",'message context menu');await run("document.querySelector('.chat-message-menu button:nth-child(2)').click()");await until("window.copied==='Edited now'",'copy text');
   await run("document.querySelector('[data-message-row=\"182\"] .member-message-actions button:last-child').dispatchEvent(new MouseEvent('click',{bubbles:true,shiftKey:true}))");await until("!document.querySelector('[data-message-row=\"182\"]')",'Shift delete skips confirmation');assert.equal(await run("!!document.querySelector('dialog[open]')"),false);assert.equal(await run("!!document.querySelector('.chat-jump')"),false,'deleting latest message does not show phantom newer history: '+JSON.stringify(await run("(()=>{const l=document.querySelector('.member-history');return{ids:[...document.querySelectorAll('[data-message-row]')].map(e=>e.dataset.messageRow),loaders:[...document.querySelectorAll('.chat-page-loader')].map(e=>e.textContent),scroll:[l.scrollTop,l.scrollHeight,l.clientHeight]}})()")));
   assert.equal(await run("!!document.querySelector('.member-message-actions')"),true,'quick actions retained');
-  await win.loadURL(process.env.PAWTALK_UI_TEST_URL+'/tests/server-chat.html?lang='+language+'&unread=1');
+  await openChat(language,'&unread=1');
   await until(`(()=>{
     const divider=document.querySelector('.chat-divider');
     return divider?.nextElementSibling?.dataset.messageRow==='101'

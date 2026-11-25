@@ -127,4 +127,5 @@ test.pushLive=(kind:string,id?:number,duplicate=false)=>{
  for(const fn of liveListeners)fn(event);if(delayed)setTimeout(()=>{for(const fn of liveListeners)fn(delayed);},30);refresh();return updates[0]?.id;
 };
 function App(){const[avatar,setAvatar]=useState<File>();openAvatar=setAvatar;const[,render]=useState(0);refresh=()=>render(n=>n+1);const channel=state.channels.find(c=>c.id===selected)!;return <><ServerChat key={selected} state={{...state}} channel={{...channel}} focused onRead={id=>test.read.push(id)} onError={error=>{test.error=error;}}/>{avatar&&<AvatarEditor file={avatar} onClose={()=>setAvatar(undefined)} onSave={()=>true}/>}</>;}
-createRoot(document.getElementById('root')!).render(<App/>);
+const root = createRoot(document.getElementById('root')!);
+flushSync(() => root.render(<App/>));
