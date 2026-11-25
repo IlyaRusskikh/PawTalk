@@ -8,17 +8,19 @@ import { serverDefinition } from '../../tooling/build/server-core.mjs';
 test('shared-core receipt detects uncommitted source changes and toolchain/version drift', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'pawtalk-core-receipt-'));
   const write = (name, value) => writeFile(path.join(root, 'apps/server', name), value);
+  const dockerfile = 'FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS build\nFROM livekit/livekit-server:v1.13.11 AS media\n';
   try {
     await mkdir(path.join(root, 'apps/server/deploy'), {recursive:true});
     await write('VERSION', '0.10.1\n');
-    await write('deploy/standalone.Dockerfile', 'FROM golang:1.27.3-alpine AS build\nFROM livekit/livekit-server:v1.13.11 AS media\n');
+    await write('deploy/standalone.Dockerfile', dockerfile);
     await write('go.mod', 'module example/core\ngo 1.27.0\n');
     await write('main.go', 'package main\nfunc main() {}\n');
     const first = await serverDefinition(root);
     assert.equal(first.version, '0.10.1');
-    await write('deploy/standalone.Dockerfile', 'FROM golang:1.27.3-alpine AS build\r\nFROM livekit/livekit-server:v1.13.11 AS media\r\n');
+    assert.equal(first.goVersion, '1.27.3');
+    await write('deploy/standalone.Dockerfile', dockerfile.replaceAll('\n', '\r\n'));
     assert.equal((await serverDefinition(root)).goVersion, first.goVersion, 'Windows CRLF definitions resolve the same toolchain');
-    await write('deploy/standalone.Dockerfile', 'FROM golang:1.27.3-alpine AS build\nFROM livekit/livekit-server:v1.13.11 AS media\n');
+    await write('deploy/standalone.Dockerfile', dockerfile);
     await write('build.exe', 'ignored generated binary');
     assert.deepEqual(await serverDefinition(root), first);
     await write('membership.sql', 'CREATE TABLE membership(id TEXT PRIMARY KEY);\n');
