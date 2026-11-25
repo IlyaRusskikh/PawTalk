@@ -23,6 +23,7 @@ const { UpdateRooms } = require('./update-rooms.cjs');
 const { confirmUpdateStarted } = require('./update-progress.cjs');
 const { StartupSettings } = require('./startup.cjs');
 const fs = require('node:fs');
+const screenDiagnostics = !app.isPackaged || require('../../../../package.json').pawtalkScreenDiagnostics === true;
 const { setLanguage } = require('../../../../shared/i18n.cjs');
 let notificationCount = 0;
 function updateTaskbarBadge(count = notificationCount) {
@@ -83,14 +84,20 @@ function authorized(event) {
 }
 function registerIPC() {
   require('./screen-capture.cjs').registerScreenCapture({ ipcMain, session: session.defaultSession, authorized, getWindow: () => win, native });
-  if (!app.isPackaged) {
+  if (screenDiagnostics) {
     const directory = path.join(app.getPath('userData'), 'diagnostics');
     const file = path.join(directory, 'screen-share.jsonl');
     const events = new Set(['request', 'captured', 'video-published', 'audio-published', 'start-failed', 'start-cancelled',
       'capture-video-ended', 'capture-video-muted', 'capture-video-unmuted', 'capture-audio-ended', 'publish-gate-closed',
       'sdk-video-unpublished', 'sdk-audio-unpublished', 'manual-stop', 'picker-closed', 'voice-state', 'permissions-changed',
       'transport-disconnected', 'encryption-failed', 'server-voice-lost', 'voice-reset', 'voice-reconnect',
-      'remote-video-subscribed', 'remote-video-unsubscribed', 'remote-video-muted', 'remote-video-unmuted', 'key-paused', 'key-resumed']);
+      'remote-video-subscribed', 'remote-video-unsubscribed', 'remote-video-muted', 'remote-video-unmuted', 'key-paused', 'key-resumed',
+      'key-update-started', 'key-update-finished', 'peer-key-pending', 'sender-stats', 'viewer-stats', 'video-priority-changed']);
+    const statsLimits = { width: 16384, height: 16384, fps: 1000, captureFps: 1000, framesDropped: 1e9,
+      freezeCount: 1e9, freezeMs: 1e9, packetsLost: 1e9, durationMs: 600000,
+      videoBytes: Number.MAX_SAFE_INTEGER, videoFrames: 1e9, qpSum: Number.MAX_SAFE_INTEGER };
+    const limitations = new Set(['none', 'cpu', 'bandwidth', 'other']);
+    const codecs = new Set(['video/VP8', 'video/VP9', 'video/H264', 'video/H265', 'video/AV1']);
     const flags = ['connected', 'encrypted', 'protectedReady', 'publishAllowed', 'videoAllowed', 'audioAllowed',
       'videoLive', 'videoMuted', 'audioLive', 'pending', 'keyPending', 'keyUpdating', 'transportUnverified'];
     const errors = new Set(['AbortError', 'NotAllowedError', 'NotFoundError', 'NotReadableError', 'OverconstrainedError',
@@ -110,6 +117,12 @@ function registerIPC() {
       if (Number.isInteger(data.reason) && data.reason >= 0 && data.reason <= 255) entry.reason = data.reason;
       if (data.source === 'window' || data.source === 'screen') entry.source = data.source;
       if (typeof data.requestedAudio === 'boolean') entry.requestedAudio = data.requestedAudio;
+      for (const [key, max] of Object.entries(statsLimits)) {
+        if (Number.isFinite(data[key]) && data[key] >= 0 && data[key] <= max) entry[key] = Math.round(data[key]);
+      }
+      if (limitations.has(data.limitation)) entry.limitation = data.limitation;
+      if (codecs.has(data.codec)) entry.codec = data.codec;
+      if (data.priority === 'motion' || data.priority === 'detail') entry.priority = data.priority;
       fs.mkdirSync(directory, { recursive: true });
       if ((fs.statSync(file, { throwIfNoEntry: false })?.size || 0) >= 256 * 1024) {
         fs.renameSync(file, file + '.previous');
@@ -327,7 +340,9 @@ else {
     const windowIcon = nativeImage.createFromPath(path.join(__dirname, '../assets/pawtalk.png'));
     const showOnLaunch = !process.argv.includes('--smoke') && !(process.argv.includes('--start-in-tray') && !pendingInvitation);
     win = new BrowserWindow({ show: false, width: 1240, height: 820, minWidth: 940, minHeight: 650, backgroundColor: '#191b22', title: 'PawTalk', icon: windowIcon,
-      webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false, offscreen: process.argv.includes('--offscreen-smoke') },
+      webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false,
+        backgroundThrottling: false, offscreen: process.argv.includes('--offscreen-smoke'),
+        additionalArguments: screenDiagnostics ? ['--pawtalk-screen-diagnostics'] : [] },
     });
     win.removeMenu();
     if (process.platform === 'win32') {

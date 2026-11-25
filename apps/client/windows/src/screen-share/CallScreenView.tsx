@@ -1,68 +1,39 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
-import type { Track } from 'livekit-client';
 import { Avatar } from '../Avatar';
 import { Icon } from '../Controls';
 import { Participants } from '../Participants';
 import type { ScreenStream, Snapshot, VoiceSession } from '../session';
 import { t, useLanguage } from '../i18n';
-import { ScreenSharePicker } from './ScreenSharePicker';
-import { BlindfoldCat, PawSpinner } from './StreamStatus';
+import { ScreenShareControls } from './ScreenShareControls';
+import { StreamPicture } from './StreamPicture';
 import { useStreamPreviewMotion } from './screen-share-motion';
 import './screen-share.css';
 
 export const streamCallCopy = {
   ru: {
-    show: 'Показать экран', stop: 'Остановить стрим', streams: 'Стримы',
+    streams: 'Стримы',
     open: 'Открыть стрим в фокусе', overview: 'Вернуться к обзору',
     volume: 'Громкость стрима',
     mute: 'Выключить звук стрима', unmute: 'Включить звук стрима',
     chatLayout: { hide: 'Скрыть чат', restore: 'Развернуть чат', bottom: 'Перенести чат вниз', right: 'Перенести чат вправо' },
-    call: 'Голосовой звонок', unavailable: 'Демонстрация недоступна в этом звонке',
+    call: 'Голосовой звонок',
     full: 'На весь экран', exitFull: 'Выйти из полноэкранного режима', fullscreenError: 'Не удалось открыть полноэкранный просмотр.',
-    loading: 'Загрузка стрима…', minimized: 'Автор свернул приложение',
   },
   en: {
-    show: 'Share screen', stop: 'Stop stream', streams: 'Streams',
+    streams: 'Streams',
     open: 'Focus stream', overview: 'Return to overview',
     volume: 'Stream volume',
     mute: 'Mute stream', unmute: 'Unmute stream',
     chatLayout: { hide: 'Hide chat', restore: 'Show chat', bottom: 'Move chat down', right: 'Move chat right' },
-    call: 'Voice call', unavailable: 'Screen sharing is unavailable in this call',
+    call: 'Voice call',
     full: 'Full screen', exitFull: 'Exit full screen', fullscreenError: 'Could not open the full-screen view.',
-    loading: 'Loading stream…', minimized: 'The presenter minimized the application',
   },
 };
 
 type Stream = ScreenStream & { name: string; avatar?: string };
 const fullscreenControlsDelay = 2000;
+const fullscreenRecoveryDelay = 6000;
 const defaultStreamAudio = { volume: 1, muted: false };
-
-function StreamPicture({ stream, className, alt }: { stream: Stream; className?: string; alt: string }) {
-  const video = useRef<HTMLVideoElement>(null);
-  const [playingTrack, setPlayingTrack] = useState<Track>();
-  const track = stream.track;
-  const labels = streamCallCopy[useLanguage()];
-  useEffect(() => {
-    const element = video.current;
-    if (!track || !element) return;
-    const ready = () => setPlayingTrack(track);
-    element.addEventListener('loadeddata', ready, { once: true });
-    track.attach(element);
-    const callback = element.requestVideoFrameCallback(ready);
-    return () => {
-      element.removeEventListener('loadeddata', ready);
-      element.cancelVideoFrameCallback(callback);
-      track.detach(element);
-    };
-  }, [track]);
-  const status = stream.minimized ? 'minimized' : !track || playingTrack !== track ? 'loading' : undefined;
-  return <span className={`stream-picture-content ${className ?? ''}`} data-stream-status={status}>
-    {track && <video ref={video} autoPlay muted playsInline aria-label={alt || undefined}/>}
-    {status && <span className="stream-picture-status" role="status">
-      {status === 'minimized' ? <BlindfoldCat/> : <PawSpinner/>}{labels[status]}
-    </span>}
-  </span>;
-}
 
 export default function CallScreenView({ audioControls, deafened, onLeave, participantProps, live }: {
   audioControls: ReactNode; deafened: boolean; onLeave(): void;
@@ -71,9 +42,9 @@ export default function CallScreenView({ audioControls, deafened, onLeave, parti
 }) {
   const language = useLanguage();
   const labels = streamCallCopy[language];
-  const [picker, setPicker] = useState(false);
   const [focusOrder, setFocusOrder] = useState<string[]>([]);
   const [fullscreen, setFullscreen] = useState(false);
+  const [fullscreenStream, setFullscreenStream] = useState<Stream>();
   const [fullscreenControls, setFullscreenControls] = useState(false);
   const [fullscreenError, setFullscreenError] = useState(false);
   const [streamAudio, setStreamAudio] = useState<Record<string, typeof defaultStreamAudio>>({});
@@ -87,7 +58,9 @@ export default function CallScreenView({ audioControls, deafened, onLeave, parti
 
   const streamsById = new Map(streams.map(stream => [stream.id, stream]));
   const single = streams.length === 1;
-  const focused = single ? streams[0] : streamsById.get(focusOrder[0]);
+  const fullscreenSource = fullscreenStream && streamsById.get(fullscreenStream.id);
+  const fullscreenEnded = !!fullscreenStream && live.snapshot.endedScreens?.has(fullscreenStream.id) === true;
+  const focused = fullscreenStream ? fullscreenSource ?? fullscreenStream : single ? streams[0] : streamsById.get(focusOrder[0]);
   const focusedAudio = (focused && streamAudio[focused.id]) ?? defaultStreamAudio;
   const volume = focusedAudio.muted || deafened ? 0 : focusedAudio.volume;
   const session = live.session;
@@ -105,9 +78,6 @@ export default function CallScreenView({ audioControls, deafened, onLeave, parti
   const rows = Math.ceil(streams.length / columns);
   const gridRows = Array.from({ length: rows }, (_, index) => streams.slice(index * columns, (index + 1) * columns));
   const participants = <Participants {...participantProps} compact={streams.length > 0} streaming={new Set(streamsById.keys())}/>;
-  const sharing = streams.some(stream => stream.local);
-  const captureAvailable = !!window.desktop?.screenCaptureSources && !!window.desktop.selectScreenCapture;
-  const canShare = captureAvailable && live.snapshot.canShareScreen === true;
 
   useEffect(() => {
     const sync = () => {
@@ -115,6 +85,7 @@ export default function CallScreenView({ audioControls, deafened, onLeave, parti
       setFullscreen(active);
       if (active) revealFullscreenControls();
       else {
+        setFullscreenStream(undefined);
         window.clearTimeout(fullscreenIdle.current);
         setFullscreenControls(false);
       }
@@ -125,6 +96,18 @@ export default function CallScreenView({ audioControls, deafened, onLeave, parti
       window.clearTimeout(fullscreenIdle.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!fullscreen || fullscreenSource && !fullscreenEnded) return;
+    const exit = () => {
+      if (focusFrame.current && document.fullscreenElement === focusFrame.current) {
+        void document.exitFullscreen().catch(() => {});
+      }
+    };
+    if (fullscreenEnded) { exit(); return; }
+    const timer = window.setTimeout(exit, fullscreenRecoveryDelay);
+    return () => window.clearTimeout(timer);
+  }, [fullscreen, !!fullscreenSource, fullscreenEnded]);
 
   function revealFullscreenControls() {
     setFullscreenControls(true);
@@ -146,11 +129,16 @@ export default function CallScreenView({ audioControls, deafened, onLeave, parti
 
   async function toggleFullscreen() {
     const frame = focusFrame.current;
-    if (!frame) return;
+    if (!frame || !focused) return;
     try {
       if (document.fullscreenElement === frame) await document.exitFullscreen();
-      else await frame.requestFullscreen();
+      else {
+        // Keep the same fullscreen element and author during a temporary loss of the publication.
+        setFullscreenStream({ id: focused.id, name: focused.name, avatar: focused.avatar, local: focused.local, hasAudio: false });
+        await frame.requestFullscreen();
+      }
     } catch {
+      if (document.fullscreenElement !== frame) setFullscreenStream(undefined);
       setFullscreenError(true);
     }
   }
@@ -205,7 +193,7 @@ export default function CallScreenView({ audioControls, deafened, onLeave, parti
 
   return <section ref={motion.scope} className="dev-stream-call" aria-label={labels.call}
     data-voice-only={streams.length === 0 || undefined}>
-    {streams.length === 0 ? <div className="room-participants" aria-label={t('Участники')}>
+    {streams.length === 0 && !focused ? <div className="room-participants" aria-label={t('Участники')}>
       {participants}
     </div> :
     <div className="dev-stream-stage" aria-label={labels.streams}>
@@ -238,22 +226,12 @@ export default function CallScreenView({ audioControls, deafened, onLeave, parti
       <div className="dev-stream-toolbar">
         <div className="member-call-controls call-controls">
           {audioControls}
-          <button type="button" className="icon-button dev-stream-share" aria-pressed={sharing}
-            disabled={!sharing && (!canShare || live.snapshot.screenPending)}
-            aria-label={sharing ? labels.stop : labels.show} title={sharing ? labels.stop : canShare ? labels.show : labels.unavailable}
-            onClick={() => {
-              if (sharing) { motion.capture(); void session.stopScreenShare(); }
-              else setPicker(true);
-            }}>
-            <Icon name={sharing ? 'monitor-stop' : 'monitor'} size={18}/>
-          </button>
+          <ScreenShareControls session={session} snapshot={live.snapshot} onStop={motion.capture}/>
           <button type="button" className="icon-button call-leave member-voice-disconnect" aria-label={t('Отключиться от голоса')}
             title={t('Отключиться от голоса')} onClick={onLeave}><Icon name="exit" size={18}/></button>
         </div>
       </div>
     </footer>
     <div className="dev-stream-motion" ref={motion.overlay} aria-hidden="true" inert/>
-    {picker && <ScreenSharePicker session={session} canShareAudio={!!live.snapshot.canShareScreenAudio}
-      onClose={() => setPicker(false)}/>}
   </section>;
 }

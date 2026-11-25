@@ -3,6 +3,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Participants } from '/src/Participants.tsx';
 import CallScreenView from '/src/screen-share/CallScreenView.tsx';
+import { ChannelStreamBadge } from '/src/screen-share/ChannelStreamBadge.tsx';
 import { applyTheme, defaultTheme } from '/src/theme.ts';
 applyTheme(defaultTheme);
 import '/src/style.css';
@@ -36,6 +37,11 @@ window.renderParticipants = () => {
 window.snapshot = {};
 let renderScreenCall;
 c.onUpdate = value => { window.snapshot = value; renderScreenCall?.(); };
+window.showChannelStreamBadge = () => {
+ const stream = window.snapshot.screens.find(screen => !screen.local);
+ const name = window.snapshot.people.find(person => person.id === stream.id)?.name;
+ root().render(React.createElement(ChannelStreamBadge, { stream, name }));
+};
 window.showScreenCall = visible => {
  renderScreenCall = visible ? () => root().render(React.createElement('div', { style: { height: 340 } },
   React.createElement(CallScreenView, { audioControls: null, deafened: c.deafened, onLeave() {},

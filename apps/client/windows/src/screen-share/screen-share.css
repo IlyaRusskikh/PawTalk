@@ -58,6 +58,16 @@
   background:none;
 }
 .dev-stream-picture:focus-visible { outline-offset:-3px; }
+.channel-stream-preview {
+  position:fixed;
+  z-index:1200;
+  width:min(304px,calc(100vw - 16px));
+  overflow:hidden;
+  border:1px solid var(--line);
+  border-radius:var(--ui-radius);
+  background:#12141c;
+  box-shadow:0 8px 30px color-mix(in srgb,var(--shadow) 36%,transparent);
+}
 .dev-stream-picture :is(img,video,canvas), .dev-stream-sources img {
   display:block;
   width:100%;
@@ -322,7 +332,9 @@
   color:var(--text);
   background:var(--surface);
 }
-.dev-stream-sources button span { display:block; padding:8px 10px; }
+.screen-source-caption { display:block; min-width:0; padding:8px 10px; }
+.screen-source-name { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.audio-quick-menu.dev-stream-options { width:200px; }
 .dev-stream-sources button small { display:block; color:var(--muted); margin-top:3px; }
 .dev-stream-sources button .screen-source-placeholder {
   display:grid;

@@ -49,6 +49,7 @@ export function applyTheme(theme: Theme) {
   style.setProperty('--shade', theme.text);
   style.setProperty('--media-control-ink', '#ffffff');
   style.setProperty('--media-backdrop', '#000000');
+  style.setProperty('--stream-live-bg', '#ad2b40');
   style.setProperty('--ui-radius', theme.radius + 'px');
   style.setProperty('--ui-font-size', theme.fontSize + 'px');
   style.setProperty('--message-spacing', theme.messageSpacing + 'px');

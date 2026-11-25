@@ -341,40 +341,128 @@ async function test(window) {
   await run("document.querySelector('.room-divider').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',shiftKey:true,bubbles:true}));");
   if (process.env.PAWTALK_TEST_SCREEN_CAPTURE === '1') {
     const { BrowserWindow } = require('electron');
-    const target = new BrowserWindow({ width: 480, height: 300, show: false, frame: false });
+    const target = new BrowserWindow({ width: 680, height: 570, show: false, frame: false });
+    const replacement = new BrowserWindow({ width: 480, height: 300, show: false, frame: false });
     try {
       await target.loadURL('data:text/html,' + encodeURIComponent('<title>PawTalk screen capture fixture</title><body style="background:#16a34a"></body>'));
       target.showInactive();
       await until("!!document.querySelector('.member-call-controls .dev-stream-share:not(:disabled)')",'screen publish allowed by the live lease');
       assert.equal(await run('(async()=>{try {const stream=await navigator.mediaDevices.getDisplayMedia({video:true});stream.getTracks().forEach(t=>t.stop());return false;} catch{return true;}})()'),true,'capture requires a selected source');
-      target.minimize();
       await run("document.querySelector('.member-call-controls .dev-stream-share').click()");
+      if (require('electron').screen.getAllDisplays().length === 1) {
+        await run("document.querySelectorAll('.dev-stream-picker-types button')[1].click()");
+        await until(`!!document.querySelector('.dev-stream-sources button[aria-pressed=true]:not(:disabled)') &&
+          !document.querySelector('.dev-stream-picker .modal-actions .primary').disabled`, 'the only monitor is selected automatically');
+        await run("document.querySelectorAll('.dev-stream-picker-types button')[0].click()");
+      }
       const source = ".dev-stream-picker .dev-stream-sources button[title='PawTalk screen capture fixture']";
-      await until('document.querySelector('+JSON.stringify(source)+')?.disabled === true','minimized fixture remains listed with capture disabled');
-      target.restore();
-      await run("window.dispatchEvent(new FocusEvent('focus'))");
-      await until('document.querySelector('+JSON.stringify(source)+')?.disabled === false','restored window becomes selectable');
+      await until('document.querySelector('+JSON.stringify(source)+')?.disabled === false','green fixture is selectable');
       await run('document.querySelector('+JSON.stringify(source)+').click()');
-      const heights = await run("[...document.querySelector('.dev-stream-picker .form-grid select').options].map(option=>Number(option.value))");
+      const heights = await run("[...document.querySelector('.dev-stream-picker .form-grid select').options].filter(option=>option.value!=='original').map(option=>Number(option.value))");
       const physicalHeight = require('electron').screen.dipToScreenRect(target, target.getBounds()).height;
-      assert.ok(heights.length > 0 && heights.every(height => height <= physicalHeight + 2), `picker offers ${heights} for a ${physicalHeight}px window`);
-      if (physicalHeight < 358) assert.equal(await run("document.querySelector('.dev-stream-picker .form-grid select').selectedOptions[0].textContent"), 'Исходное');
+      assert.ok(heights.every(height => height <= physicalHeight + 2), `picker offers ${heights} for a ${physicalHeight}px window`);
+      await run(`const resolution = document.querySelector('.dev-stream-picker .form-grid select');
+        resolution.value = 'original'; resolution.dispatchEvent(new Event('change', { bubbles: true }));`);
       await run("document.querySelector('.dev-stream-picker .modal-actions .primary').click()");
       await until("document.querySelector('.dev-stream-picture video')?.videoWidth>0",'local screen video has frames');
       await until("document.querySelector('.dev-stream-share[aria-pressed=true]')&&!document.querySelector('.dev-stream-picker')",'capture is published to LiveKit');
       await until("(()=>{const v=document.querySelector('.dev-stream-picture video');if(!v?.videoWidth)return false;const c=document.createElement('canvas');c.width=c.height=1;const context=c.getContext('2d');context.drawImage(v,0,0,1,1);const p=context.getImageData(0,0,1,1).data;return p[1]>p[0]*1.7&&p[1]>p[2]*1.5;})()",'the selected green window is the source of the displayed frames');
+      const badge = '.member-channels .channel-stream-badge';
+      await until(`document.querySelector('${badge}')?.textContent.trim() === 'Стримит'`, 'the active voice row shows the stream badge');
+      const badgeGeometry = () => run(`(() => {
+        const badge = document.querySelector('${badge}');
+        const row = badge.closest('.member-channel-person');
+        const box = badge.getBoundingClientRect(), rowBox = row.getBoundingClientRect();
+        const right = rowBox.right - parseFloat(getComputedStyle(row).paddingRight);
+        return { height: box.height, width: box.width, rightOffset: right - box.right };
+      })()`);
+      const compact = await badgeGeometry();
+      assert.ok(compact.height <= 15 && compact.width <= 52 && Math.abs(compact.rightOffset) < 1,
+        `the compact badge fits its label and aligns to the right edge of the row: ${JSON.stringify(compact)}`);
+      await clickMic();
+      await until(`!!document.querySelector('.channel-stream-member .person-status-icons svg')`, 'microphone status appears beside the badge');
+      assert.deepEqual(await badgeGeometry(), compact, 'the microphone status keeps the badge at the same right edge');
+      await clickMic();
+      assert.equal(await run("!!document.querySelector('.channel-stream-preview video')"), false, 'preview is attached on demand');
+      await run(`document.querySelector('${badge}').dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }))`);
+      await until(`(() => {
+        const preview = document.querySelector('.channel-stream-preview video');
+        const main = document.querySelector('.dev-stream-picture video');
+        return preview?.videoWidth > 0 && preview.muted &&
+          preview.srcObject.getVideoTracks()[0].id === main.srcObject.getVideoTracks()[0].id;
+      })()`, 'hovering the badge plays the same stream silently');
+      const anchor = await run(`(() => {
+        const badge = document.querySelector('${badge}').getBoundingClientRect();
+        const preview = document.querySelector('.channel-stream-preview').getBoundingClientRect();
+        return preview.left >= badge.right && preview.right <= innerWidth && preview.top >= 0 && preview.bottom <= innerHeight;
+      })()`);
+      assert.equal(anchor, true, 'the tooltip stays on screen and outside the sidebar row');
+      await run("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))");
+      await until("!document.querySelector('.channel-stream-preview') && document.querySelector('.dev-stream-picture video')?.videoWidth > 0",
+        'dismissal removes only the hover preview');
+      await run(`document.querySelector('${badge}').dispatchEvent(new FocusEvent('focusin', { bubbles: true }))`);
+      await until("!!document.querySelector('.channel-stream-preview')", 'keyboard focus opens the preview');
+      await run(`document.querySelector('${badge}').dispatchEvent(new FocusEvent('focusout', { bubbles: true }))`);
+      await until("!document.querySelector('.channel-stream-preview')", 'losing focus dismisses the preview');
+      const originalConstraints = await run("document.querySelector('.dev-stream-picture video').srcObject.getVideoTracks()[0].getConstraints()");
+      assert.equal(originalConstraints.resizeMode, 'none');
+      assert.equal(originalConstraints.height, undefined, 'original does not cap the captured window dimensions');
+      assert.equal(await run("document.querySelector('.dev-stream-picture video').srcObject.getVideoTracks()[0].contentHint"),
+        'detail', '30 FPS starts with the detail preference automatically');
+      const initialHeight = await run("document.querySelector('.dev-stream-picture video').videoHeight");
+      target.setSize(740, 660);
+      await until(`document.querySelector('.dev-stream-picture video')?.videoHeight > ${initialHeight} + 20`,
+        'the original capture follows a taller window without retaining its initial height cap');
       assert.deepEqual(await audioFlags(),[false,false],'screen capture keeps both voice controls intact');
       target.minimize();
       await until("document.querySelector('[data-stream-status=minimized]')?.textContent === 'Автор свернул приложение'",'minimized window shows the illustrated status');
       target.restore();
       await until("!document.querySelector('[data-stream-status]') && !!document.querySelector('.dev-stream-share[aria-pressed=true]')",'restoring the window resumes the same capture');
+      const replacementTitle = 'PawTalk red replacement fixture ' + 'long application title '.repeat(12).trim();
+      await replacement.loadURL('data:text/html,' + encodeURIComponent(`<title>${replacementTitle}</title><body style="background:#dc2626"></body>`));
+      replacement.showInactive();
+      replacement.minimize();
+      const openReplacement = async () => {
+        await run("document.querySelector('.member-call-controls button[title=\"Настройки стрима\"]').click()");
+        await until("!!document.querySelector('.dev-stream-options:popover-open')", 'the stream arrow opens its menu');
+        await run("document.querySelector('.dev-stream-options button').click()");
+      };
+      const replacementSelector = JSON.stringify(`.dev-stream-picker .dev-stream-sources button[title="${replacementTitle}"]`);
+      await openReplacement();
+      await until(`document.querySelector(${replacementSelector})?.disabled === false`, 'the minimized replacement is selectable');
+      assert.equal(await run(`(() => {
+        const name = document.querySelector(${replacementSelector}).querySelector('.screen-source-name');
+        return getComputedStyle(name).whiteSpace === 'nowrap' && getComputedStyle(name).textOverflow === 'ellipsis' &&
+          name.scrollWidth > name.clientWidth;
+      })()`), true, 'the full title stays on the card tooltip and the visible title is ellipsized');
+      await run("document.querySelector('.dev-stream-picker .modal-actions button').click()");
+      assert.equal(await run("!!document.querySelector('.dev-stream-share[aria-pressed=true]')"), true, 'cancel keeps the current stream');
+      assert.equal(replacement.isMinimized(), true, 'listing and cancelling do not restore the window');
+      await openReplacement();
+      await until(`document.querySelector(${replacementSelector})?.disabled === false`, 'the replacement is still selectable');
+      await run(`document.querySelector(${replacementSelector}).click();
+        const fps = document.querySelectorAll('.dev-stream-picker .form-grid select')[1];
+        fps.value = '60'; fps.dispatchEvent(new Event('change', { bubbles: true }));`);
+      assert.equal(await run("document.querySelectorAll('.dev-stream-picker select').length"), 2,
+        'resolution and frame rate are the only video selectors');
+      await run("document.querySelector('.dev-stream-picker .modal-actions .primary').click()");
+      await until("(()=>{const v=document.querySelector('.dev-stream-picture video');if(!v?.videoWidth)return false;const c=document.createElement('canvas');c.width=c.height=1;const context=c.getContext('2d');context.drawImage(v,0,0,1,1);const p=context.getImageData(0,0,1,1).data;return p[0]>p[1]*2&&p[0]>p[2]*2;})()",
+        'the restored red window replaces the green source');
+      await until("!document.querySelector('.dev-stream-picker') && !!document.querySelector('.dev-stream-share[aria-pressed=true]')", 'replacement is published');
+      assert.equal(replacement.isMinimized(), false, 'explicit confirmation restores the selected window');
+      assert.equal(await run("document.querySelector('.dev-stream-picture video').srcObject.getVideoTracks()[0].contentHint"), 'detail');
       await run("document.querySelector('.dev-stream-share[aria-pressed=true]').click()");
       await until("!document.querySelector('.dev-stream-picture video')&&!document.querySelector('.dev-stream-share[aria-pressed=true]')",'screen share stops and the ordinary voice view returns');
+      assert.equal(await run(`!!document.querySelector('${badge}')`), false, 'stopping the stream removes the sidebar badge');
       const diagnosticFile = path.join(app.getPath('userData'), 'diagnostics', 'screen-share.jsonl');
       const diagnostic = (await fs.readFile(diagnosticFile, 'utf8')).trim().split('\n').map(JSON.parse);
       assert.deepEqual(diagnostic.filter(entry => ['request', 'captured', 'video-published', 'manual-stop'].includes(entry.event))
-        .map(entry => entry.event), ['request', 'captured', 'video-published', 'manual-stop']);
+        .map(entry => entry.event), ['request', 'captured', 'video-published', 'request', 'captured', 'video-published', 'manual-stop']);
       assert.equal(diagnostic.find(entry => entry.event === 'request').source, 'window');
+      assert.ok(diagnostic.some(entry => entry.event === 'captured' && entry.source === 'window' && entry.height > 480),
+        'nearby lower preset does not reduce the captured window to 480p');
+      assert.ok(diagnostic.some(entry => entry.event === 'captured' && entry.fps === 60 && entry.priority === 'detail'),
+        '60 FPS starts with the detail preference automatically');
       assert.equal(diagnostic.find(entry => entry.event === 'manual-stop').videoLive, true);
       assert.ok(!JSON.stringify(diagnostic).includes('PawTalk screen capture fixture'), 'capture titles stay out of diagnostics');
       console.log('PASS Electron selected window transmits real screen frames over the LiveKit publisher');
@@ -401,6 +489,7 @@ async function test(window) {
       } finally { player.kill(); }
     } finally {
       target.destroy();
+      replacement.destroy();
     }
   }
   await channelIconCount(0);

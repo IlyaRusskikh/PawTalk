@@ -151,6 +151,19 @@ app.whenReady().then(async () => {
       await until(() => b.executeJavaScript('window.snapshot.screens.some(s => !s.local && !s.minimized)'), 'second client returns to the same video after restore');
       const screenGain = () => b.executeJavaScript('[...window.voice.screenMixers.values()][0].gain.gain.value');
       assert.equal(await screenGain(),0,'overview starts with screen audio muted');
+      await b.executeJavaScript('window.showChannelStreamBadge()');
+      await until(() => b.executeJavaScript('!!document.querySelector(".channel-stream-badge")'), 'the viewer can inspect a stream badge');
+      await b.executeJavaScript(`document.querySelector('.channel-stream-badge')
+        .dispatchEvent(new PointerEvent('pointerover', { bubbles:true, pointerType:'mouse' }))`);
+      await until(() => b.executeJavaScript(`(() => {
+        const preview = document.querySelector('.channel-stream-preview video');
+        return preview?.videoWidth === 480 && preview.muted &&
+          preview.srcObject.getVideoTracks()[0].id === window.screenFixtureVideo.srcObject.getVideoTracks()[0].id;
+      })()`), 'the sidebar preview plays the existing encrypted remote video');
+      assert.equal(await screenGain(), 0, 'opening the badge preview keeps the remote stream audio silent');
+      await b.executeJavaScript(`document.querySelector('.channel-stream-badge')
+        .dispatchEvent(new PointerEvent('pointerout', { bubbles:true, pointerType:'mouse' }))`);
+      await until(() => b.executeJavaScript('!document.querySelector(".channel-stream-preview")'), 'leaving the badge closes the preview');
       await Promise.all([a, b].map(win => win.executeJavaScript('window.showScreenCall(true)')));
       await until(() => b.executeJavaScript('!!document.querySelector(".dev-stream-volume-button")'), 'focused viewer has stream controls');
       await until(() => a.executeJavaScript('!!document.querySelector(".dev-stream-picture video")'), 'presenter sees the own stream preview');
@@ -192,12 +205,95 @@ app.whenReady().then(async () => {
       await until(async () => await screenGain() === 0, 'leaving the focused view silences the stream');
       assert.ok(await b.executeJavaScript('[...window.voice.mixers.values()].some(m => m.track.getVolume()>0)'),
         'screen focus leaves ordinary voice playback active');
+      await b.executeJavaScript('window.showScreenCall(true)');
+      await until(() => b.executeJavaScript('!!document.querySelector(".dev-stream-expand")'), 'fullscreen control is available');
+      await b.executeJavaScript('document.querySelector(".dev-stream-expand").click()', true);
+      await until(() => b.executeJavaScript('!!document.fullscreenElement?.matches(".dev-stream-main-tile")'), 'viewer enters fullscreen');
+      await b.executeJavaScript('window.screenFullscreenFrame = document.fullscreenElement; undefined');
+      const previousSid = await b.executeJavaScript('window.snapshot.screens[0].track.sid');
+      const replaceScreen = a.executeJavaScript(`window.voice.shareScreen(async prepare => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 640; canvas.height = 360;
+        const paint = canvas.getContext('2d');
+        const stream = canvas.captureStream(60);
+        stream.getVideoTracks()[0].contentHint = 'motion';
+        let frame = 0;
+        window.screenReplacementTimer = setInterval(() => {
+          paint.fillStyle = frame++ % 2 ? '#bf1a21' : '#db2525';
+          paint.fillRect(0, 0, canvas.width, canvas.height);
+        }, 16);
+        prepare();
+        await new Promise(resolve => { window.resumeScreenReplacement = resolve; });
+        return stream;
+      }, { source: 'screen', requestedAudio: false, fps: 60, replace: true }).then(() => {
+        const track = window.voice.room.localParticipant.getTrackPublication('screen_share').track;
+        return [track.mediaStreamTrack.contentHint, track.sender.getParameters().degradationPreference];
+      })`);
+      let initialPriority;
+      try {
+        await until(() => b.executeJavaScript(`window.voice.screenMixers.size === 0 &&
+          document.fullscreenElement === window.screenFullscreenFrame &&
+          window.snapshot.screens[0]?.track?.sid === ${JSON.stringify(previousSid)}`),
+        'the old publication remains visible in signaling while the new source is prepared');
+      } finally {
+        await a.executeJavaScript('window.resumeScreenReplacement?.()');
+        initialPriority = await replaceScreen;
+      }
+      assert.deepEqual(initialPriority, ['detail', 'maintain-resolution'], '60 FPS starts with detail before measuring load');
+      await until(() => a.executeJavaScript(`(() => {
+        const track = window.voice.room.localParticipant.getTrackPublication('screen_share').track;
+        const params = track.sender.getParameters();
+        return params.encodings.some(encoding => encoding.maxFramerate === 60) && !!window.voice.automaticScreenQuality;
+      })()`), 'the real WebRTC sender starts in automatic mode with a 60 FPS ceiling');
+      await until(() => b.executeJavaScript(`(() => {
+        const video = document.fullscreenElement?.querySelector('video');
+        return document.fullscreenElement === window.screenFullscreenFrame && video?.videoWidth === 640 &&
+          window.voice.screenMixers.size === 0 &&
+          window.snapshot.screens.some(s => !s.local && s.track && !s.hasAudio);
+      })()`), 'the viewer decodes the replacement in the same fullscreen element and drops the previous source audio');
+      const switches = await a.executeJavaScript(`(async () => {
+        const voice = window.voice;
+        const publication = voice.room.localParticipant.getTrackPublication('screen_share');
+        const track = publication.track;
+        const originalStats = track.getRTCStatsReport;
+        const actual = () => [track.mediaStreamTrack.contentHint, track.sender.getParameters().degradationPreference];
+        const feed = async (capture, encoded, limitation, count) => {
+          track.getRTCStatsReport = async () => new Map([
+            ['simulated-source', { type: 'media-source', kind: 'video', framesPerSecond: capture }],
+            ['simulated-video', { type: 'outbound-rtp', kind: 'video', mediaSourceId: 'simulated-source',
+              framesPerSecond: encoded, frameWidth: 640, qualityLimitationReason: limitation }],
+          ]);
+          for (let i = 0; i < count; i++) await voice.adjustScreenQuality();
+          return actual();
+        };
+        try {
+          const results = [await feed(1, 1, 'none', 4)];
+          results.push(await feed(60, 30, 'bandwidth', 1));
+          results.push(await feed(60, 30, 'bandwidth', 1));
+          results.push(await feed(60, 60, 'none', 3));
+          results.push(await feed(60, 60, 'none', 1));
+          results.push(await feed(60, 28, 'none', 1));
+          results.push(await feed(60, 28, 'none', 1));
+          results.push(await feed(1, 1, 'none', 4));
+          results.push(voice.room.localParticipant.getTrackPublication('screen_share') === publication);
+          return results;
+        } finally { track.getRTCStatsReport = originalStats; }
+      })()`);
+      const motion = ['motion', 'maintain-framerate'], detail = ['detail', 'maintain-resolution'];
+      assert.deepEqual(switches, [detail, detail, motion, motion, detail, detail, motion, detail, true],
+        'automatic priority reacts to sustained pressure, recovers on a static scene and keeps the publication');
+      const stoppedAt = Date.now();
+      await a.executeJavaScript('window.voice.stopScreenShare()');
+      await until(() => b.executeJavaScript(`!document.fullscreenElement && window.snapshot.screens.length === 0 &&
+        window.snapshot.endedScreens.size === 1`), 'the WebSocket unpublish event closes fullscreen immediately');
+      assert.ok(Date.now() - stoppedAt < 4000, 'explicit stop did not use the six-second recovery delay');
     } finally {
       await Promise.all([a, b].map(win => win.executeJavaScript('window.showScreenCall(false)')));
+      await a.executeJavaScript('clearInterval(window.screenReplacementTimer)');
       await a.executeJavaScript('window.stopScreenFixture?.()');
     }
     await until(() => b.executeJavaScript('window.snapshot.screens.length === 0'), 'screen unpublication reaches the viewer');
-    record('PASS second Electron client plays encrypted stream audio through viewer controls and presenter preview stays silent');
+    record('PASS second Electron client receives encrypted stream audio and replacement video, with a 60 FPS sender ceiling');
   }
   if (firstVoiceEpoch) {
     const next = { epochId: randomBytes(16).toString('hex'), key: randomBytes(32).toString('hex'), expiresAt: Date.now()+90000 };

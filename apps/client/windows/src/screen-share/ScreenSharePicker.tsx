@@ -11,6 +11,7 @@ const strings = {
   ru: {
     title: 'Показать экран', windows: 'Окна', screens: 'Мониторы', resolution: 'Разрешение',
     fps: 'Частота кадров', audio: 'Передавать системный звук', start: 'Начать стрим',
+    replace: 'Сменить источник', replacing: 'Меняем источник…', restore: 'Окно развернётся при запуске',
     loading: 'Загружаем источники…', empty: 'Доступных источников нет.',
     refresh: 'Обновить список', minimized: 'Разверните окно для захвата', unavailable: 'Захват окна недоступен', starting: 'Запускаем стрим…',
     original: 'Исходное',
@@ -22,6 +23,7 @@ const strings = {
   en: {
     title: 'Share screen', windows: 'Windows', screens: 'Monitors', resolution: 'Resolution',
     fps: 'Frame rate', audio: 'Share system audio', start: 'Start stream',
+    replace: 'Change source', replacing: 'Changing source…', restore: 'Window will be restored when sharing starts',
     loading: 'Loading sources…', empty: 'No sources are available.',
     refresh: 'Refresh sources', minimized: 'Restore the window to capture it', unavailable: 'Window capture unavailable', starting: 'Starting stream…',
     original: 'Original',
@@ -33,32 +35,35 @@ const strings = {
 };
 
 type Source = Awaited<ReturnType<NonNullable<NonNullable<Window['desktop']>['screenCaptureSources']>>>[number];
+export type ScreenShareQuality = { resolution: number | 'original'; fps: number };
 const qualityPresets = [
   { height: 360, name: 'SD (360p)' }, { height: 480, name: 'SD (480p)' }, { height: 720, name: 'HD' },
   { height: 1080, name: 'Full HD' }, { height: 1440, name: 'QHD' }, { height: 2160, name: '4K UHD' },
 ];
 
-export function ScreenSharePicker({ session, canShareAudio, onClose }: {
-  session: VoiceSession; canShareAudio: boolean; onClose(): void;
+export function ScreenSharePicker({ session, canShareAudio, replace, quality, onShare, onClose }: {
+  session: VoiceSession; canShareAudio: boolean; replace: boolean; quality: ScreenShareQuality;
+  onShare(quality: ScreenShareQuality): void; onClose(): void;
 }) {
   const labels = strings[useLanguage()];
   const [kind, setKind] = useState<'window' | 'screen'>('window');
   const [sources, setSources] = useState<Source[]>();
   const [selected, setSelected] = useState<string>();
-  const [preferredResolution, setResolution] = useState(1080);
+  const [preferredResolution, setResolution] = useState(quality.resolution);
   const [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [fps, setFps] = useState(30);
+  const [fps, setFps] = useState(quality.fps);
   const [audio, setAudio] = useState(false);
   const [applicationAudio, setApplicationAudio] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
-  const starting = useRef(false);
+  const starting = useRef<AbortController>(undefined);
   const source = sources?.find(item => item.id === selected && item.available);
   const maxHeight = source?.maxHeight ?? 0;
   const presets = qualityPresets.filter(item => item.height <= maxHeight);
-  if (!presets.length && maxHeight) presets.push({ height: maxHeight, name: labels.original });
-  const resolution = presets.filter(item => item.height <= preferredResolution).at(-1)?.height ?? presets[0]?.height;
+  const limit = preferredResolution === 'original' ? 0 : Math.min(preferredResolution, maxHeight);
+  const resolution = limit === maxHeight && !presets.some(item => item.height === limit) ? undefined :
+    presets.filter(item => item.height <= limit).at(-1)?.height;
 
   function refreshSources() {
     setLoading(true);
@@ -69,7 +74,10 @@ export function ScreenSharePicker({ session, canShareAudio, onClose }: {
   useEffect(() => {
     let active = true;
     void window.desktop?.screenCaptureSources?.(kind).then(items => {
-      if (active) { setSources(items); setLoading(false); }
+      if (!active) return;
+      setSources(items);
+      if (kind === 'screen' && items.length === 1 && items[0].available) setSelected(items[0].id);
+      setLoading(false);
     }, () => {
       if (active) { setSources([]); setError(true); setLoading(false); }
     });
@@ -83,41 +91,50 @@ export function ScreenSharePicker({ session, canShareAudio, onClose }: {
   }, [kind, busy, loading]);
 
   useEffect(() => () => {
-    if (starting.current) void session.stopScreenShare('picker-closed');
+    starting.current?.abort();
     void window.desktop?.clearScreenCapture?.().catch(() => {});
   }, [session]);
 
   async function start() {
     if (!source || loading || starting.current) return;
-    starting.current = true;
+    const request = new AbortController();
+    starting.current = request;
     setBusy(true);
     setError(false);
     const shareAudio = kind === 'screen' && canShareAudio && audio;
     const shareApplicationAudio = kind === 'window' && canShareAudio && source.applicationAudio === true && applicationAudio;
     try {
-      await session.shareScreen(async () => {
+      await session.shareScreen(async prepare => {
         await window.desktop!.selectScreenCapture!(source.id, shareAudio, shareApplicationAudio);
+        prepare();
         const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { height: { ideal: resolution, max: resolution }, frameRate: { ideal: fps, max: fps } },
+          video: { ...(resolution ? { height: { ideal: resolution, max: resolution } } : { resizeMode: 'none' }),
+            frameRate: { ideal: fps, max: fps } },
           audio: shareAudio,
         });
-        stream.getVideoTracks().forEach(track => { track.contentHint = 'detail'; });
         if (!shareApplicationAudio) return stream;
         try { return await attachApplicationAudio(stream); }
         catch (error) { stream.getTracks().forEach(track => track.stop()); throw error; }
-      }, { source: kind, requestedAudio: shareAudio || shareApplicationAudio });
-      starting.current = false;
-      onClose();
+      }, { source: kind, requestedAudio: shareAudio || shareApplicationAudio, fps, replace, signal: request.signal });
+      if (!request.signal.aborted) {
+        onShare({ resolution: preferredResolution, fps });
+        onClose();
+      }
     } catch {
-      starting.current = false;
-      setError(true);
-      setBusy(false);
+      if (!request.signal.aborted) {
+        setError(true);
+        setBusy(false);
+      }
+    } finally {
+      starting.current = undefined;
     }
   }
 
-  return <Modal title={labels.title} onClose={onClose} className="dev-stream-picker" footer={<div className="modal-actions">
+  return <Modal title={replace ? labels.replace : labels.title} onClose={onClose} className="dev-stream-picker" footer={<div className="modal-actions">
     <Button onClick={onClose}>{t('Отмена')}</Button>
-    <Button variant="primary" disabled={!source || busy || loading} onClick={() => void start()}>{busy ? <><PawSpinner/>{labels.starting}</> : labels.start}</Button>
+    <Button variant="primary" disabled={!source || busy || loading} onClick={() => void start()}>
+      {busy ? <><PawSpinner/>{replace ? labels.replacing : labels.starting}</> : replace ? labels.replace : labels.start}
+    </Button>
   </div>}>
     <div className="dev-stream-picker-types">
       {(['window', 'screen'] as const).map(type => <Button key={type} disabled={busy} aria-pressed={kind === type} onClick={() => {
@@ -136,14 +153,20 @@ export function ScreenSharePicker({ session, canShareAudio, onClose }: {
         {item.thumbnail ? <img src={item.thumbnail} alt="" draggable={false}/> : <span className="screen-source-placeholder" aria-hidden="true">
           {item.icon ? <img src={item.icon} alt=""/> : <Icon name="monitor" size={24}/>}
         </span>}
-        <span>{item.name}{!item.available && <small>{item.minimized ? labels.minimized : labels.unavailable}</small>}</span>
+        <span className="screen-source-caption">
+          <span className="screen-source-name">{item.name}</span>
+          {item.minimized ? <small>{item.available ? labels.restore : labels.minimized}</small> :
+            !item.available && <small>{labels.unavailable}</small>}
+        </span>
       </button>)}
     </div>
     <div className="form-fields">
       <div className="form-grid">
-        <label>{labels.resolution}<select disabled={busy || !resolution} value={resolution ?? ''} onChange={event => setResolution(Number(event.currentTarget.value))}>
-          {!resolution && <option value="">—</option>}
+        <label>{labels.resolution}<select disabled={busy || !source} value={source ? resolution ?? 'original' : ''}
+          onChange={event => setResolution(event.currentTarget.value === 'original' ? 'original' : Number(event.currentTarget.value))}>
+          {!source && <option value="">—</option>}
           {presets.map(item => <option key={item.height} value={item.height}>{item.name}</option>)}
+          {source && <option value="original">{labels.original}</option>}
         </select></label>
         <label>{labels.fps}<select disabled={busy} value={fps} onChange={event => setFps(Number(event.currentTarget.value))}>
           {[30, 60].map(value => <option key={value} value={value}>{value} FPS</option>)}

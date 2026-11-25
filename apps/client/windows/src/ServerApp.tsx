@@ -19,6 +19,8 @@ import { Modal } from './Modal';
 import { Participants } from './Participants';
 import { RoomSplit } from './RoomSplit';
 import CallScreenView, { streamCallCopy } from './screen-share/CallScreenView';
+import { ChannelStreamBadge } from './screen-share/ChannelStreamBadge';
+import { ScreenShareControls } from './screen-share/ScreenShareControls';
 import { ServerChat } from './ServerChat';
 import { ServerVoicePreview } from './ServerVoicePreview';
 import { VoiceSession, type Snapshot, type ProtectedVoiceTransport } from './session';
@@ -1252,6 +1254,38 @@ export function ServerApp() {
       <Icon size={18} name="exit"/>
     </button>}
   </div>;
+  const liveScreens = new Map(snapshot.screens?.map(stream => [stream.id, stream]));
+  function renderLegacyVoiceMembers(channelId: string) {
+    if (!state) return null;
+    const inVoice = voice?.serverId === selected && voice.channelId === channelId;
+    const members = state.voice.filter(presence => presence.channelId === channelId).map(presence => {
+      const profile = profileFor(state, presence.profileId);
+      const person = inVoice ? snapshot.people.find(peer => peer.id === presence.identity) : undefined;
+      return { id: presence.deviceId, name: profile?.nickname || t('Участник'), avatar: profile?.avatar,
+        person, stream: inVoice ? liveScreens.get(presence.identity) : undefined };
+    });
+    const avatars = members.filter(member => !member.stream);
+    const streamers = members.filter(member => member.stream);
+    return <>
+      {(avatars.length > 0 || streamers.length === 0) && <AvatarStrip className="member-channel-people" size={23}>
+        {avatars.map(({ id, name, avatar, person }) => <span key={id} title={name} aria-label={name}
+          className={`member-channel-person ${person?.speaking && !person.muted ? 'speaking' : ''}`}>
+          <Avatar name={name} image={avatar}/>
+          <AudioStatusIcons className="member-channel-audio-status" size={10} muted={person?.muted} deafened={person?.deafened}/>
+        </span>)}
+      </AvatarStrip>}
+      {streamers.length > 0 && <ul className="channel-stream-members">
+        {streamers.map(({ id, name, avatar, person, stream }) => stream && <li key={id}
+          className="member-channel-person channel-stream-member" title={name}
+          data-speaking={person?.speaking && !person.muted || undefined} data-muted={person?.muted || person?.deafened || undefined}>
+          <Avatar name={name} image={avatar}/>
+          <span className="channel-stream-member-name">{name}</span>
+          <AudioStatusIcons size={12} muted={person?.muted} deafened={person?.deafened}/>
+          <ChannelStreamBadge stream={stream} name={name}/>
+        </li>)}
+      </ul>}
+    </>;
+  }
   function renderVoiceCall(moderation?: { serverId: string; sourceChannelId: string }) {
     const session = controller.current;
     if (session && voice && voice.serverId === selected && active) {
@@ -1430,6 +1464,7 @@ export function ServerApp() {
               </button>}
             </div>
             {voiceMembers.length > 0 && <ul className="protected-voice-members">{voiceMembers.map(person => {
+              const stream = inVoice ? liveScreens.get(person.id) : undefined;
               const target = (!person.local || inVoice) && !protectedOffline && person.sessionId ? {
                 serverId: selected, sourceChannelId: channel.id, targetSessionId: person.sessionId,
               } : undefined;
@@ -1454,15 +1489,16 @@ export function ServerApp() {
                 <span className="protected-voice-member-name">{person.name}</span>
                 <AudioStatusIcons size={12} muted={person.muted} deafened={person.deafened}
                   serverMuted={person.serverMuted} serverDeafened={person.serverDeafened}/>
+                {stream && <ChannelStreamBadge stream={stream} name={person.name}/>}
               </li>;
             })}</ul>}
             </>;
             }}/>
         </section>;
-      }) : selected ? !state ? <p className="member-empty" role="status">{t('Подключение…')}</p> : <>{(['voice', 'text'] as const).map(kind => <section className="member-channel-group" key={kind} {...(kind==='voice'?voiceDrag:textDrag).list}><div className="member-channel-caption"><h2>{kind === 'voice' ? t('Голосовые каналы') : t('Текстовые чаты')}</h2>{admin && <button className="icon-button" title={t('Создать канал')} aria-label={t('Создать канал')} onClick={() => { setChannelName(''); setChannelDialog({ kind }); }}><Icon name="plus" size={16}/></button>}</div>{state.channels.filter(channel => channel.kind === kind).map(channel => <div key={channel.id} {...(kind==='voice'?voiceDrag:textDrag).item(channel.id)}><button draggable={admin} onDragStart={event=>{if(!admin){event.preventDefault();return;}(kind==='voice'?voiceDrag:textDrag).start(event,channel.id);}} onDragEnd={(kind==='voice'?voiceDrag:textDrag).end} className={`member-channel ${(unread[`${selected}:${channel.id}`]||0)>0&&!notificationsMuted(selected,channel.id)?'has-unread':''} ${(kind === 'text' && chat?.id === channel.id) || (kind === 'voice' && voice?.serverId === selected && voice.channelId === channel.id) ? 'selected' : ''}`} disabled={busy && kind === 'voice'} onClick={() => { if((kind==='voice'?voiceDrag:textDrag).suppressClick())return; if (kind === 'voice') { if (!(voice?.serverId === selected && voice.channelId === channel.id)) void joinVoice(channel); } else { setChatIDs(previous => ({ ...previous, [selected]: channel.id }));  } }} onContextMenu={event => channelMenu(event, channel)}><Icon name={kind === 'voice' ? 'sound' : 'chat'} size={18}/><span>{channel.name}</span>{(unread[`${selected}:${channel.id}`] || 0) > 0 && <b className={`member-channel-count ${notificationsMuted(selected,channel.id)?'notifications-muted':''} ${mentionIDs[`${selected}:${channel.id}`]?.length?'has-mention':''}`}>{unread[`${selected}:${channel.id}`]}</b>}</button>{kind === 'voice' && <AvatarStrip className="member-channel-people" size={23}>{state.voice.filter(presence => presence.channelId === channel.id).map(presence => { const profile = profileFor(state, presence.profileId), person = voice?.serverId === selected && voice.channelId === channel.id ? snapshot.people.find(person => person.id === presence.identity) : undefined, speaking = person?.speaking && !person.muted; return <span title={profile?.nickname} aria-label={profile?.nickname||t('Участник')} className={`member-channel-person ${speaking ? 'speaking' : ''}`} key={presence.deviceId}><Avatar name={profile?.nickname || t('Участник')} image={profile?.avatar}/><AudioStatusIcons className="member-channel-audio-status" size={10} muted={person?.muted} deafened={person?.deafened}/></span>; })}</AvatarStrip>}</div>)}</section>)}</> : <div className="member-home-navigation"><button onClick={() => setModal('join')}><Icon name="invite"/>{t('Присоединиться')}</button><button onClick={() => setModal(hostRunning ? 'host-share' : 'create')}><Icon name="plus"/>{hostRunning ? t('Мой сервер') : t('Создать сервер')}</button></div>}</div>
-      <div className="member-user-panel" inert={!!activeRoleView} onContextMenu={event => { if (activeRoleView) return; if (state) memberMenu(event, state.self.effectiveProfileId); else context(event,[{label:t('Скопировать ID профиля'),action:()=>void membership<{profileId:string}>('identity').then(value=>membership('copy',{text:value.profileId})).catch(error=>setError(error.message))}]); }}><div className="member-user-identity"><button className="member-user-name" onClick={() => setModal('settings')}><span className="member-avatar-wrap"><Avatar name={own?.nickname || ownProtectedProfile?.name || nickname} image={state ? own?.avatar : ownAvatar}/><i className={`member-status ${selected&&record?.status!=='online'?'offline':idle?'away':'online'}`}/></span><span className="member-user-text"><strong>{own?.nickname || ownProtectedProfile?.name || nickname}</strong><small>{selected ? record?.status === 'online' ? idle?t('Отошел'):t('В сети') : t('Нет соединения') : idle?t('Отошел'):t('В сети')}</small></span></button></div><div className="member-audio-buttons">{!activeRoleView&&voice&&<ConnectionStatus name={onlineVoice?.name||nickname} delay={snapshot.rtt} loss={snapshot.packetLoss} diagnostics={snapshot.people.find(person=>person.local)?.diagnostics}/>}{audioControls}{!activeRoleView&&voice&&voice.serverId!==selected&&snapshot.screens?.some(screen=>screen.local)&&
-        <button className="icon-button text-error" aria-label={streamCallCopy[language].stop} title={streamCallCopy[language].stop}
-          onClick={()=>void controller.current?.stopScreenShare()}><Icon name="monitor-stop" size={18}/></button>}
+      }) : selected ? !state ? <p className="member-empty" role="status">{t('Подключение…')}</p> : <>{(['voice', 'text'] as const).map(kind => <section className="member-channel-group" key={kind} {...(kind==='voice'?voiceDrag:textDrag).list}><div className="member-channel-caption"><h2>{kind === 'voice' ? t('Голосовые каналы') : t('Текстовые чаты')}</h2>{admin && <button className="icon-button" title={t('Создать канал')} aria-label={t('Создать канал')} onClick={() => { setChannelName(''); setChannelDialog({ kind }); }}><Icon name="plus" size={16}/></button>}</div>{state.channels.filter(channel => channel.kind === kind).map(channel => <div key={channel.id} {...(kind==='voice'?voiceDrag:textDrag).item(channel.id)}><button draggable={admin} onDragStart={event=>{if(!admin){event.preventDefault();return;}(kind==='voice'?voiceDrag:textDrag).start(event,channel.id);}} onDragEnd={(kind==='voice'?voiceDrag:textDrag).end} className={`member-channel ${(unread[`${selected}:${channel.id}`]||0)>0&&!notificationsMuted(selected,channel.id)?'has-unread':''} ${(kind === 'text' && chat?.id === channel.id) || (kind === 'voice' && voice?.serverId === selected && voice.channelId === channel.id) ? 'selected' : ''}`} disabled={busy && kind === 'voice'} onClick={() => { if((kind==='voice'?voiceDrag:textDrag).suppressClick())return; if (kind === 'voice') { if (!(voice?.serverId === selected && voice.channelId === channel.id)) void joinVoice(channel); } else { setChatIDs(previous => ({ ...previous, [selected]: channel.id }));  } }} onContextMenu={event => channelMenu(event, channel)}><Icon name={kind === 'voice' ? 'sound' : 'chat'} size={18}/><span>{channel.name}</span>{(unread[`${selected}:${channel.id}`] || 0) > 0 && <b className={`member-channel-count ${notificationsMuted(selected,channel.id)?'notifications-muted':''} ${mentionIDs[`${selected}:${channel.id}`]?.length?'has-mention':''}`}>{unread[`${selected}:${channel.id}`]}</b>}</button>{kind === 'voice' && renderLegacyVoiceMembers(channel.id)}</div>)}</section>)}</> : <div className="member-home-navigation"><button onClick={() => setModal('join')}><Icon name="invite"/>{t('Присоединиться')}</button><button onClick={() => setModal(hostRunning ? 'host-share' : 'create')}><Icon name="plus"/>{hostRunning ? t('Мой сервер') : t('Создать сервер')}</button></div>}</div>
+      <div className="member-user-panel" inert={!!activeRoleView} onContextMenu={event => { if (activeRoleView) return; if (state) memberMenu(event, state.self.effectiveProfileId); else context(event,[{label:t('Скопировать ID профиля'),action:()=>void membership<{profileId:string}>('identity').then(value=>membership('copy',{text:value.profileId})).catch(error=>setError(error.message))}]); }}><div className="member-user-identity"><button className="member-user-name" onClick={() => setModal('settings')}><span className="member-avatar-wrap"><Avatar name={own?.nickname || ownProtectedProfile?.name || nickname} image={state ? own?.avatar : ownAvatar}/><i className={`member-status ${selected&&record?.status!=='online'?'offline':idle?'away':'online'}`}/></span><span className="member-user-text"><strong>{own?.nickname || ownProtectedProfile?.name || nickname}</strong><small>{selected ? record?.status === 'online' ? idle?t('Отошел'):t('В сети') : t('Нет соединения') : idle?t('Отошел'):t('В сети')}</small></span></button></div><div className="member-audio-buttons">{!activeRoleView&&voice&&<ConnectionStatus name={onlineVoice?.name||nickname} delay={snapshot.rtt} loss={snapshot.packetLoss} diagnostics={snapshot.people.find(person=>person.local)?.diagnostics}/>}{audioControls}
+      {!activeRoleView && voice && voice.serverId !== selected && controller.current &&
+        <ScreenShareControls key={voice.serverId + ':' + voice.channelId} session={controller.current} snapshot={snapshot} allowStart={false}/>}
       {!activeRoleView&&voice&&<button className="icon-button text-error member-voice-disconnect" title={t('Отключиться от голоса')} aria-label={t('Отключиться от голоса')} onClick={()=>void disconnectVoice().catch(error=>setError(error.message))}><Icon size={18} name="exit"/></button>}</div></div>
     </aside>
     <div className="member-sidebar-divider" role="separator" aria-orientation="vertical" aria-label={t('Ширина меню сервера')} aria-controls="server-channels" aria-valuemin={220} aria-valuemax={maxSidebar} aria-valuenow={sidebarPixels} tabIndex={0}
